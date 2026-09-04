@@ -8,12 +8,20 @@ declare global {
 
 export const createPool = () => {
   if (!global._postgresPool) {
+    // Railway injects DATABASE_URL automatically when Postgres plugin is added.
+    // Fall back to individual host/user/pass vars for other environments.
+    const connectionConfig = process.env.DATABASE_URL
+      ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+      : {
+          host: process.env.SQL_HOST || process.env.PGHOST,
+          user: process.env.SQL_USER || process.env.PGUSER,
+          password: process.env.SQL_PASSWORD || process.env.PGPASSWORD,
+          database: process.env.SQL_DB_NAME || process.env.PGDATABASE,
+          port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : undefined,
+        };
+
     global._postgresPool = new Pool({
-      host: process.env.SQL_HOST || process.env.PGHOST,
-      user: process.env.SQL_USER || process.env.PGUSER,
-      password: process.env.SQL_PASSWORD || process.env.PGPASSWORD,
-      database: process.env.SQL_DB_NAME || process.env.PGDATABASE,
-      port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : undefined,
+      ...connectionConfig,
       max: 10,
       connectionTimeoutMillis: 15000,
     });
