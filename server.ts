@@ -104,12 +104,20 @@ async function startServer() {
 
   const sanitizeCashTransaction = (f: any) => ({
     id: String(f.id || crypto.randomUUID()),
+    accountId: String(f.accountId || ''),
     type: String(f.type || 'CASH_IN'),
     date: String(f.date || new Date().toISOString()),
     amount: Number(f.amount) || 0,
     description: String(f.description || ''),
     category: String(f.category || ''),
     referenceId: f.referenceId ? String(f.referenceId) : null,
+  });
+
+  const sanitizeCashAccount = (a: any) => ({
+    id: String(a.id || crypto.randomUUID()),
+    name: String(a.name || ''),
+    type: String(a.type || 'CASH'),
+    isDefault: Boolean(a.isDefault),
   });
 
   const sanitizeSettings = (st: any) => ({
@@ -136,6 +144,7 @@ let offlineState: any = null;
 
   app.get('/api/sync', async (req, res) => {
     try {
+      let cash_accounts: any[] = [];
       let cash_transactions: any[] = [];
       let settings: any[] = [];
       let users: any[] = [];
@@ -148,8 +157,9 @@ let offlineState: any = null;
 
       try {
         [
-          cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs
+          cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs
         ] = await Promise.all([
+          db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
           db.select().from(schema.settings),
           db.select().from(schema.users),
@@ -184,6 +194,7 @@ let offlineState: any = null;
       }
 
       res.json({
+        cash_accounts,
         cash_transactions,
         settings: settings.length > 0 ? settings[0] : initialSettings,
         users,
@@ -210,9 +221,15 @@ let offlineState: any = null;
 
   app.post('/api/sync', async (req, res) => {
     try {
-      const { cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs, suppliers, purchase_orders, shifts } = req.body;
+      const { cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs, suppliers, purchase_orders, shifts } = req.body;
       
       await db.transaction(async (tx) => {
+        if (cash_accounts !== undefined) { 
+          await tx.delete(schema.cashAccounts); 
+          if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
+            await tx.insert(schema.cashAccounts).values(cash_accounts.map(sanitizeCashAccount)); 
+          }
+        }
         if (cash_transactions !== undefined) { 
           await tx.delete(schema.cashTransactions); 
           if (Array.isArray(cash_transactions) && cash_transactions.length > 0) {

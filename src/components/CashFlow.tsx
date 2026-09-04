@@ -53,7 +53,7 @@ export const CashFlow = () => {
     return balances;
   }, [cashTransactions, cashAccounts]);
 
-  const totalBalance = Object.values(accountBalances).reduce((sum, b) => sum + b, 0);
+  const totalBalance: number = Object.values(accountBalances).reduce((sum: number, b: any) => sum + Number(b), 0);
 
   const handleTrxSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
