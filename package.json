@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "build": "echo BUILDING NOW && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && echo BUILD SUCCESS",
     "migrate": "drizzle-kit push --config src/db/drizzle.config.ts --force",
-    "start": "NODE_ENV=production node dist/server.cjs",
+    "start": "npm run migrate && NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
