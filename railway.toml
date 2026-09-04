@@ -2,6 +2,6 @@
 buildCommand = "npm run build"
 
 [deploy]
-startCommand = "npm run migrate && npm start"
+startCommand = "npm run migrate || true && npm start"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
