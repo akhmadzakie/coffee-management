@@ -198,6 +198,7 @@ export interface PurchaseOrder {
 export interface ShiftSession {
   id: string;
   userId: string;
+  cashAccountId: string; // The specific cash drawer account
   startTime: string; // ISO string
   endTime: string | null; // ISO string
   startingCash: number;

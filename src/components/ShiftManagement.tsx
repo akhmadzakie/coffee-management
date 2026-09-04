@@ -7,10 +7,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 import { ShiftSession } from '../types';
 
 export const ShiftManagement = () => {
-  const { shifts, openShift, closeShift, settings, salesTransactions, cashTransactions, currentUser, isReadOnly } = useStore();
+  const { shifts, openShift, closeShift, settings, salesTransactions, cashTransactions, cashAccounts, currentUser, isReadOnly } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [startingCashInput, setStartingCashInput] = useState('');
   const [endingCashInput, setEndingCashInput] = useState('');
+  const [selectedCashAccountId, setSelectedCashAccountId] = useState('');
+
+  const cashOnlyAccounts = cashAccounts.filter(a => a.type === 'CASH');
 
   const isIndo = settings.language === 'id';
   
@@ -31,8 +34,11 @@ export const ShiftManagement = () => {
       .filter(t => new Date(t.date).getTime() >= shiftStartTime)
       .reduce((sum, t) => sum + t.totalPrice, 0);
       
-    // Sum cash transactions after shift started
-    const recentCashTxs = cashTransactions.filter(t => new Date(t.date).getTime() >= shiftStartTime);
+    // Sum cash transactions after shift started, ONLY for the specific cashAccountId
+    const recentCashTxs = cashTransactions.filter(t => 
+      new Date(t.date).getTime() >= shiftStartTime && 
+      t.accountId === currentShift.cashAccountId
+    );
     
     totalCashIn = recentCashTxs
       .filter(t => t.type === 'CASH_IN')
@@ -50,9 +56,10 @@ export const ShiftManagement = () => {
   const handleOpenShift = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(startingCashInput.replace(/\D/g, ''));
-    if (amount >= 0) {
+    if (amount >= 0 && selectedCashAccountId) {
       openShift({
         userId: currentUser?.id || 'unknown',
+        cashAccountId: selectedCashAccountId,
         startTime: new Date().toISOString(),
         endTime: null,
         startingCash: amount,
@@ -71,11 +78,7 @@ export const ShiftManagement = () => {
     
     const actual = Number(endingCashInput.replace(/\D/g, ''));
     if (actual >= 0) {
-      // In a real app, we'd also record the expectedEndingCash so it's frozen in time
-      // For now, closeShift calculates difference based on expected if we pass it, but we can pass actual and let it calculate or we just pass actual.
-      // Wait, StoreContext's closeShift calculates difference using `expectedEndingCash` which is null. I should patch StoreContext to accept `expectedEndingCash`.
-      // Actually, I'll just use closeShift(currentShift.id, actual). The store will calculate difference = actual - expected.
-      closeShift(currentShift.id, actual);
+      closeShift(currentShift.id, actual, expectedEndingCash);
       setEndingCashInput('');
     }
   };
@@ -146,7 +149,29 @@ export const ShiftManagement = () => {
                   <form onSubmit={handleOpenShift} className="max-w-md mx-auto space-y-6">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        {isIndo ? 'Modal Awal (Kasir)' : 'Starting Cash'}
+                        {isIndo ? 'Pilih Laci Kasir (Pos Kas)' : 'Select Cash Drawer'}
+                      </label>
+                      {cashOnlyAccounts.length === 0 ? (
+                        <div className="p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 text-sm">
+                          {isIndo ? 'Anda belum memiliki Pos Kas berjenis Tunai. Buat di menu Keuangan > Arus Kas.' : 'You do not have any Cash Accounts of type CASH. Create one in Finance > Cash Flow.'}
+                        </div>
+                      ) : (
+                        <select
+                          required
+                          value={selectedCashAccountId}
+                          onChange={(e) => setSelectedCashAccountId(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-slate-800 transition-all font-medium"
+                        >
+                          <option value="" disabled>{isIndo ? 'Pilih Pos Kas...' : 'Select account...'}</option>
+                          {cashOnlyAccounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        {isIndo ? 'Modal Awal (Tunai)' : 'Starting Cash'}
                       </label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">Rp</span>
@@ -190,9 +215,12 @@ export const ShiftManagement = () => {
                         {isIndo ? 'Shift Sedang Berjalan' : 'Active Shift'}
                       </h2>
                     </div>
-                    <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 font-medium">
+                    <p className="text-sm text-slate-500 flex items-center gap-1 mt-1 font-medium mb-1">
                       <Clock className="w-4 h-4 text-emerald-600" />
                       {isIndo ? 'Dimulai pada' : 'Started at'} {new Date(currentShift.startTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ({new Date(currentShift.startTime).toLocaleDateString('id-ID')})
+                    </p>
+                    <p className="text-sm font-bold text-slate-700 bg-white/50 inline-block px-2 py-1 rounded-md border border-slate-200/50">
+                      Laci Kasir: {cashAccounts.find(a => a.id === currentShift.cashAccountId)?.name || 'Unknown'}
                     </p>
                   </div>
                   <div className="relative z-10 px-4 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-bold rounded-xl shadow-sm">
@@ -213,14 +241,14 @@ export const ShiftManagement = () => {
                     </div>
                   </div>
                   <div className="p-5 bg-emerald-50 shadow-2xs rounded-xl border border-emerald-100 flex flex-col justify-between group hover:bg-emerald-100 transition-colors">
-                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">{isIndo ? 'Kas Masuk' : 'Cash In'}</p>
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">{isIndo ? 'Kas Masuk (Laci)' : 'Cash In'}</p>
                     <div className="flex items-end justify-between">
                       <p className="text-xl font-black text-emerald-900">+{formatCurrency(totalCashIn)}</p>
                       <TrendingUp className="w-5 h-5 text-emerald-400 opacity-50 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
                   <div className="p-5 bg-rose-50 shadow-2xs rounded-xl border border-rose-100 flex flex-col justify-between group hover:bg-rose-100 transition-colors">
-                    <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">{isIndo ? 'Kas Keluar' : 'Cash Out'}</p>
+                    <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">{isIndo ? 'Kas Keluar (Laci)' : 'Cash Out'}</p>
                     <div className="flex items-end justify-between">
                       <p className="text-xl font-black text-rose-900">-{formatCurrency(totalCashOut)}</p>
                       <TrendingDown className="w-5 h-5 text-rose-400 opacity-50 group-hover:opacity-100 transition-opacity" />

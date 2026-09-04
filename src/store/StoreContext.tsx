@@ -66,7 +66,7 @@ interface StoreContextType {
   deletePurchaseOrder: (id: string) => void;
 
   openShift: (shift: Omit<ShiftSession, 'id'>) => void;
-  closeShift: (id: string, actualEndingCash: number) => void;
+  closeShift: (id: string, actualEndingCash: number, expectedEndingCash: number) => void;
 
   // Actions
   updateSettings: (settings: Settings) => void;
@@ -662,15 +662,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
-  const closeShift = (id: string, actualEndingCash: number) => {
+  const closeShift = (id: string, actualEndingCash: number, expectedEndingCash: number) => {
     setShifts(prev => prev.map(shift => {
       if (shift.id === id) {
-        const expected = shift.expectedEndingCash || shift.startingCash;
         return {
           ...shift,
           endTime: new Date().toISOString(),
+          expectedEndingCash,
           actualEndingCash,
-          difference: actualEndingCash - expected,
+          difference: actualEndingCash - expectedEndingCash,
           status: 'CLOSED'
         };
       }
