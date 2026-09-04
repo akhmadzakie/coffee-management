@@ -1,0 +1,595 @@
+import React, { useState, useMemo, useRef } from 'react';
+import { useStore } from '../store/StoreContext';
+import { 
+  Users, FileText, Target, Calendar, DollarSign, 
+  Plus, Edit2, Trash2, CheckCircle, AlertCircle, Download, Printer, UserCheck
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { 
+  Employee, EmployeeContract, AttendanceRecord, KPIRecord,
+  EmploymentType, EmployeeStatus
+} from '../types';
+
+export function HRManagement() {
+  const { 
+    currentUser, settings, isReadOnly,
+    employees, contracts, attendances, kpiRecords,
+    addEmployee, updateEmployee, deleteEmployee,
+    addContract, updateContract,
+    addAttendance, updateAttendance,
+    addKPI, updateKPI
+  } = useStore();
+
+  const isIndo = settings.language === 'id';
+  const [activeTab, setActiveTab] = useState<'overview' | 'employees' | 'contracts' | 'kpi' | 'attendance' | 'payroll'>('overview');
+  const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
+  const payslipRef = useRef<HTMLDivElement>(null);
+  
+  const isHRD = currentUser?.role === 'HRD' || currentUser?.role === 'SUPER_ADMIN';
+  const isFinance = currentUser?.role === 'FINANCE' || currentUser?.role === 'SUPER_ADMIN';
+  const canEditHR = isHRD && !isReadOnly;
+
+  const formatRupiah = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  const getEmployeeName = (empId: string) => employees.find(e => e.id === empId)?.name || 'Unknown';
+
+  // --- Chart Data ---
+  const attendanceChartData = useMemo(() => {
+    return attendances.map(a => ({
+      name: getEmployeeName(a.employeeId).substring(0, 10),
+      Hadir: a.presentDays,
+      Alpha: a.alphaDays,
+      Izin: a.sickDays + a.permissionDays
+    }));
+  }, [attendances]);
+
+  // --- PDF Generation ---
+  const generatePDF = async () => {
+    if (!payslipRef.current) return;
+    try {
+      const canvas = await html2canvas(payslipRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Slip_Gaji_${selectedPayslip?.employee?.name?.replace(/\\s+/g, '_')}_${selectedPayslip?.period}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    }
+  };
+
+  // ─── PAYROLL CALCULATION ──────────────────────────────────────────────────────────
+  const payrollData = useMemo(() => {
+    // Generate payroll based on attendance records
+    return attendances.map(att => {
+      const emp = employees.find(e => e.id === att.employeeId);
+      const contract = contracts.find(c => c.employeeId === att.employeeId);
+      
+      if (!emp || !contract) return null;
+
+      const basic = contract.basicSalary;
+      const meal = contract.mealAllowance * att.presentDays;
+      const position = contract.positionAllowance;
+      const alphaDeduction = contract.alphaDeductionPerDay * att.alphaDays;
+      
+      // Get KPI Bonus for this quarter if it falls in the attendance period
+      // (Simple approximation: if attendance period month matches quarter end)
+      const month = parseInt(att.period.split('-')[1]);
+      const quarter = Math.ceil(month / 3);
+      const year = parseInt(att.period.split('-')[0]);
+      
+      const kpi = kpiRecords.find(k => k.employeeId === emp.id && k.quarter === quarter && k.year === year);
+      const kpiBonus = kpi ? kpi.kpiBonus : 0;
+
+      const total = basic + meal + position + kpiBonus - alphaDeduction;
+
+      return {
+        id: `pr_${att.id}`,
+        employee: emp,
+        period: att.period,
+        basic, meal, position, alphaDeduction, kpiBonus, total,
+        attendance: att
+      };
+    }).filter(Boolean) as any[];
+  }, [attendances, employees, contracts, kpiRecords]);
+
+  // ─── TABS ──────────────────────────────────────────────────────────
+  const tabs = [
+    { id: 'overview', label: isIndo ? 'Overview' : 'Overview', icon: Target },
+    { id: 'employees', label: isIndo ? 'Data Karyawan' : 'Employees', icon: Users },
+    { id: 'contracts', label: isIndo ? 'Kontrak & Gaji' : 'Contracts & Salary', icon: FileText },
+    { id: 'kpi', label: 'KPI', icon: Target },
+    { id: 'attendance', label: isIndo ? 'Absensi' : 'Attendance', icon: Calendar },
+    { id: 'payroll', label: 'Payroll', icon: DollarSign },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">
+            {isIndo ? 'SDM & Payroll' : 'HR & Payroll'}
+          </h2>
+          <p className="text-slate-500">
+            {isIndo ? 'Kelola karyawan, absensi, dan gaji.' : 'Manage employees, attendance, and salary.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="flex overflow-x-auto border-b border-slate-200 no-scrollbar">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex-1 min-w-[150px] py-4 px-6 flex items-center justify-center gap-2 text-sm font-semibold transition-colors
+                ${activeTab === tab.id 
+                  ? 'border-b-2 border-indigo-600 text-indigo-600 bg-indigo-50/50' 
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+            >
+              <tab.icon className="w-5 h-5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6">
+          {activeTab === 'overview' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <motion.div whileHover={{ y: -4 }} className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-indigo-900 text-sm font-semibold">{isIndo ? 'Total Karyawan' : 'Total Employees'}</h3>
+                    <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl"><Users className="w-5 h-5" /></div>
+                  </div>
+                  <p className="text-3xl font-bold text-indigo-900">{employees.filter(e => e.status === 'ACTIVE').length}</p>
+                  <p className="text-sm text-indigo-600 mt-2">{isIndo ? 'Karyawan Aktif' : 'Active Employees'}</p>
+                </motion.div>
+                
+                <motion.div whileHover={{ y: -4 }} className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-emerald-900 text-sm font-semibold">{isIndo ? 'Rata-rata KPI' : 'Avg KPI Score'}</h3>
+                    <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl"><Target className="w-5 h-5" /></div>
+                  </div>
+                  <p className="text-3xl font-bold text-emerald-900">
+                    {kpiRecords.length > 0 ? (kpiRecords.reduce((sum, k) => sum + k.score, 0) / kpiRecords.length).toFixed(1) : '0.0'}
+                  </p>
+                  <p className="text-sm text-emerald-600 mt-2">{isIndo ? 'Dari skala 100' : 'Out of 100'}</p>
+                </motion.div>
+                
+                <motion.div whileHover={{ y: -4 }} className="bg-gradient-to-br from-amber-50 to-white p-6 rounded-2xl border border-amber-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-amber-900 text-sm font-semibold">{isIndo ? 'Total Gaji Pokok' : 'Total Basic Salary'}</h3>
+                    <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl"><FileText className="w-5 h-5" /></div>
+                  </div>
+                  <p className="text-2xl font-bold text-amber-900">
+                    {formatRupiah(contracts.filter(c => c.isActive).reduce((sum, c) => sum + c.basicSalary, 0))}
+                  </p>
+                  <p className="text-sm text-amber-600 mt-2">{isIndo ? 'Kontrak Aktif' : 'Active Contracts'}</p>
+                </motion.div>
+                
+                <motion.div whileHover={{ y: -4 }} className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-blue-900 text-sm font-semibold">{isIndo ? 'Proyeksi Payroll' : 'Payroll Projection'}</h3>
+                    <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl"><DollarSign className="w-5 h-5" /></div>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {formatRupiah(payrollData.reduce((sum, p) => sum + p.total, 0))}
+                  </p>
+                  <p className="text-sm text-blue-600 mt-2">{isIndo ? 'Periode Berjalan' : 'Current Period'}</p>
+                </motion.div>
+              </div>
+
+              {/* Attendance Chart */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm mt-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">{isIndo ? 'Statistik Kehadiran (Periode Terakhir)' : 'Attendance Stats'}</h3>
+                <div className="h-[300px] w-full">
+                  {attendanceChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={attendanceChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 12 }} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 12 }} dx={-10} />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Bar dataKey="Hadir" stackId="a" fill="#10B981" radius={[0, 0, 4, 4]} />
+                        <Bar dataKey="Izin" stackId="a" fill="#F59E0B" />
+                        <Bar dataKey="Alpha" stackId="a" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 italic">
+                      Belum ada data absensi untuk ditampilkan.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'employees' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{isIndo ? 'Daftar Karyawan' : 'Employee List'}</h3>
+                {canEditHR && (
+                  <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                    <Plus className="w-4 h-4" /> {isIndo ? 'Tambah Karyawan' : 'Add Employee'}
+                  </button>
+                )}
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">NIK</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Nama' : 'Name'}</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Jabatan' : 'Position'}</th>
+                      <th className="py-3 px-4 font-semibold">Departemen</th>
+                      <th className="py-3 px-4 font-semibold">Status</th>
+                      {canEditHR && <th className="py-3 px-4 font-semibold text-right">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                          {isIndo ? 'Belum ada data karyawan.' : 'No employees data yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      employees.map(emp => (
+                        <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-3 px-4 text-slate-600 font-mono text-sm">{emp.nik}</td>
+                          <td className="py-3 px-4 font-medium text-slate-800">{emp.name}</td>
+                          <td className="py-3 px-4 text-slate-600">{emp.position}</td>
+                          <td className="py-3 px-4 text-slate-600">{emp.department}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full 
+                              ${emp.status === 'AKTIF' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                              {emp.status}
+                            </span>
+                          </td>
+                          {canEditHR && (
+                            <td className="py-3 px-4 flex justify-end gap-2">
+                              <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'contracts' && (
+            <div>
+               <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{isIndo ? 'Struktur Gaji & Kontrak' : 'Salary & Contracts'}</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Karyawan' : 'Employee'}</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Gaji Pokok' : 'Basic Salary'}</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Tnjgn Makan' : 'Meal Allow.'}</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Tnjgn Jabatan' : 'Position Allow.'}</th>
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Potongan Alpha' : 'Alpha Deduct'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contracts.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-500 italic">
+                          {isIndo ? 'Belum ada data kontrak.' : 'No contract data yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      contracts.map(c => (
+                        <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(c.employeeId)}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono">{formatRupiah(c.basicSalary)}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono">{formatRupiah(c.mealAllowance)}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono">{formatRupiah(c.positionAllowance)}</td>
+                          <td className="py-3 px-4 text-rose-600 font-mono">{formatRupiah(c.alphaDeductionPerDay)}/hr</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'kpi' && (
+            <div>
+               <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{isIndo ? 'Penilaian KPI (Kuartal)' : 'KPI Assessment (Quarterly)'}</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Karyawan' : 'Employee'}</th>
+                      <th className="py-3 px-4 font-semibold">Qtr/Tahun</th>
+                      <th className="py-3 px-4 font-semibold">Skor Total</th>
+                      <th className="py-3 px-4 font-semibold">Bonus KPI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kpiRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-500 italic">
+                          {isIndo ? 'Belum ada data KPI.' : 'No KPI data yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      kpiRecords.map(k => (
+                        <tr key={k.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(k.employeeId)}</td>
+                          <td className="py-3 px-4 text-slate-600">Q{k.quarter} {k.year}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full 
+                              ${k.totalScore >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {k.totalScore.toFixed(1)} / 100
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-emerald-600 font-mono font-medium">{formatRupiah(k.kpiBonus)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'attendance' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{isIndo ? 'Rekap Absensi Bulanan' : 'Monthly Attendance Recap'}</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">{isIndo ? 'Karyawan' : 'Employee'}</th>
+                      <th className="py-3 px-4 font-semibold">Periode</th>
+                      <th className="py-3 px-4 font-semibold text-emerald-600">Hadir</th>
+                      <th className="py-3 px-4 font-semibold text-amber-500">Izin/Sakit</th>
+                      <th className="py-3 px-4 font-semibold text-rose-600">Alpha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendances.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-500 italic">
+                          {isIndo ? 'Belum ada data absensi.' : 'No attendance data yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      attendances.map(a => (
+                        <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(a.employeeId)}</td>
+                          <td className="py-3 px-4 text-slate-600">{a.period}</td>
+                          <td className="py-3 px-4 font-semibold text-emerald-600">{a.presentDays}</td>
+                          <td className="py-3 px-4 font-semibold text-amber-500">{a.sickDays + a.permissionDays}</td>
+                          <td className="py-3 px-4 font-semibold text-rose-600">{a.alphaDays}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* PAYROLL TAB & PAYSLIP */}
+          {activeTab === 'payroll' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              
+              {selectedPayslip ? (
+                /* --- SLIP GAJI VIEW --- */
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex justify-between items-center mb-6">
+                    <button 
+                      onClick={() => setSelectedPayslip(null)}
+                      className="text-slate-500 hover:text-slate-800 font-medium text-sm transition-colors"
+                    >
+                      ← {isIndo ? 'Kembali ke Daftar Payroll' : 'Back to Payroll List'}
+                    </button>
+                    <button 
+                      onClick={generatePDF}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
+                    >
+                      <Download className="w-4 h-4" /> Download PDF
+                    </button>
+                  </div>
+
+                  {/* Printable Area */}
+                  <div 
+                    ref={payslipRef} 
+                    className="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600"></div>
+                    
+                    {/* Header */}
+                    <div className="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
+                      <div>
+                        <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{settings.brandName || 'PERUSAHAAN'}</h1>
+                        <p className="text-sm text-slate-500 mt-1">{settings.companyAddress || 'Alamat Perusahaan Lengkap'}</p>
+                      </div>
+                      <div className="text-right">
+                        <h2 className="text-xl font-bold text-indigo-900 tracking-tight">SLIP GAJI</h2>
+                        <p className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-md inline-block mt-2">Periode: {selectedPayslip.period}</p>
+                      </div>
+                    </div>
+
+                    {/* Employee Info */}
+                    <div className="grid grid-cols-2 gap-6 mb-8 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                      <div>
+                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Data Karyawan</p>
+                        <p className="font-bold text-slate-800 text-lg">{selectedPayslip.employee.name}</p>
+                        <p className="text-sm text-slate-600">{selectedPayslip.employee.nik} — {selectedPayslip.employee.position}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Status Kehadiran</p>
+                        <p className="text-sm text-slate-700"><span className="font-semibold text-emerald-600">{selectedPayslip.attendance.presentDays}</span> Hari Hadir</p>
+                        <p className="text-sm text-slate-700"><span className="font-semibold text-rose-600">{selectedPayslip.attendance.alphaDays}</span> Hari Alpha</p>
+                      </div>
+                    </div>
+
+                    {/* Financials */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                      {/* Pendapatan */}
+                      <div>
+                        <h3 className="font-bold text-slate-800 border-b-2 border-indigo-100 pb-2 mb-3">PENDAPATAN</h3>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-600">Gaji Pokok</span>
+                            <span className="font-mono text-slate-800 font-medium">{formatRupiah(selectedPayslip.basic)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-600">Tunjangan Jabatan</span>
+                            <span className="font-mono text-slate-800 font-medium">{formatRupiah(selectedPayslip.position)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-600">Tunjangan Makan ({selectedPayslip.attendance.presentDays}x)</span>
+                            <span className="font-mono text-slate-800 font-medium">{formatRupiah(selectedPayslip.meal)}</span>
+                          </div>
+                          {selectedPayslip.kpiBonus > 0 && (
+                            <div className="flex justify-between items-center text-emerald-600 bg-emerald-50 p-1.5 rounded -mx-1.5 px-1.5">
+                              <span>Bonus KPI</span>
+                              <span className="font-mono font-medium">+{formatRupiah(selectedPayslip.kpiBonus)}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-slate-200 pt-3 flex justify-between items-center font-bold text-slate-800">
+                            <span>Total Pendapatan</span>
+                            <span className="font-mono">{formatRupiah(selectedPayslip.basic + selectedPayslip.position + selectedPayslip.meal + selectedPayslip.kpiBonus)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Potongan */}
+                      <div>
+                        <h3 className="font-bold text-slate-800 border-b-2 border-rose-100 pb-2 mb-3">POTONGAN</h3>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between items-center text-rose-600">
+                            <span>Potongan Alpha ({selectedPayslip.attendance.alphaDays}x)</span>
+                            <span className="font-mono font-medium">-{formatRupiah(selectedPayslip.alphaDeduction)}</span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-3 flex justify-between items-center font-bold text-slate-800">
+                            <span>Total Potongan</span>
+                            <span className="font-mono text-rose-600">{formatRupiah(selectedPayslip.alphaDeduction)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* THP */}
+                    <div className="bg-indigo-600 text-white rounded-xl p-6 flex justify-between items-center shadow-lg shadow-indigo-200">
+                      <div>
+                        <p className="text-indigo-100 text-sm font-medium uppercase tracking-wider mb-1">TAKE HOME PAY</p>
+                        <p className="text-3xl font-black font-mono">{formatRupiah(selectedPayslip.total)}</p>
+                      </div>
+                      <UserCheck className="w-12 h-12 text-indigo-400 opacity-50" />
+                    </div>
+                    
+                    {/* Footer / Signatures */}
+                    <div className="mt-12 pt-8 border-t border-dashed border-slate-200 flex justify-between">
+                      <div className="text-center">
+                        <p className="text-sm text-slate-500 mb-12">Penerima,</p>
+                        <p className="font-bold text-slate-800 underline decoration-slate-300 underline-offset-4">{selectedPayslip.employee.name}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-slate-500 mb-12">Manajemen / Keuangan,</p>
+                        <p className="font-bold text-slate-800 underline decoration-slate-300 underline-offset-4">{settings.brandName}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* --- PAYROLL TABLE --- */
+                <>
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-slate-800">{isIndo ? 'Summary Payroll' : 'Payroll Summary'}</h3>
+                  </div>
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 mb-6 flex gap-3 text-amber-900 shadow-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                    <div className="text-sm">
+                      <p className="font-bold mb-1">
+                        {isIndo ? 'Payroll Dihitung Otomatis' : 'Auto-Calculated Payroll'}
+                      </p>
+                      <p className="text-amber-700">
+                        {isIndo 
+                          ? 'Klik baris karyawan untuk melihat dan mencetak rincian Slip Gaji resmi.' 
+                          : 'Click an employee row to view and print the official Payslip.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                          <th className="py-3 px-4 font-semibold">{isIndo ? 'Karyawan' : 'Employee'}</th>
+                          <th className="py-3 px-4 font-semibold">Periode</th>
+                          <th className="py-3 px-4 font-semibold">Gaji Pokok</th>
+                          <th className="py-3 px-4 font-semibold">Tunjangan</th>
+                          <th className="py-3 px-4 font-semibold">Potongan</th>
+                          <th className="py-3 px-4 font-semibold text-right text-indigo-700">Take Home Pay</th>
+                          <th className="py-3 px-4"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payrollData.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-500 italic">
+                              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                              {isIndo ? 'Data payroll belum tersedia. Pastikan ada data absensi.' : 'Payroll data not available. Ensure attendance data exists.'}
+                            </td>
+                          </tr>
+                        ) : (
+                          payrollData.map(p => (
+                            <tr 
+                              key={p.id} 
+                              onClick={() => setSelectedPayslip(p)}
+                              className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors group"
+                            >
+                              <td className="py-4 px-4 font-bold text-slate-800">{p.employee.name}</td>
+                              <td className="py-4 px-4 text-slate-600 font-medium">{p.period}</td>
+                              <td className="py-4 px-4 text-slate-600 font-mono text-sm">{formatRupiah(p.basic)}</td>
+                              <td className="py-4 px-4 text-emerald-600 font-mono text-sm">+{formatRupiah(p.meal + p.position + p.kpiBonus)}</td>
+                              <td className="py-4 px-4 text-rose-600 font-mono text-sm">-{formatRupiah(p.alphaDeduction)}</td>
+                              <td className="py-4 px-4 font-bold text-right text-indigo-700 font-mono text-lg">{formatRupiah(p.total)}</td>
+                              <td className="py-4 px-4 text-right">
+                                <button className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                  Slip Gaji
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}

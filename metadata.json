@@ -1,0 +1,8 @@
+{
+  "name": "The Node Supply Management system",
+  "description": "Sistem manajemen operasional, inventaris, penjualan (POS), komisi sales, master data, dan multi-device database sync The Node Supply.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
