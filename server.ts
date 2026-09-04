@@ -42,6 +42,7 @@ async function startServer() {
 
   const getTable = (tableName: string) => {
     switch (tableName) {
+      case 'cash_accounts': return schema.cashAccounts;
       case 'cash_transactions': return schema.cashTransactions;
       case 'settings': return schema.settings;
       case 'users': return schema.users;

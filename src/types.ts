@@ -104,9 +104,17 @@ export interface Settings {
   language: 'id' | 'en';
 }
 
+export interface CashAccount {
+  id: string;
+  name: string;
+  type: 'BANK' | 'CASH' | 'SAVINGS';
+  isDefault: boolean;
+}
+
 export interface CashTransaction {
   id: string;
-  type: 'CASH_IN' | 'CASH_OUT';
+  accountId: string;
+  type: 'CASH_IN' | 'CASH_OUT' | 'TRANSFER';
   date: string; // ISO string
   amount: number;
   description: string;

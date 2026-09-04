@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { 
   User, DeviceSession, Settings, 
-  CashTransaction, Ingredient, StockMovement, 
+  CashAccount, CashTransaction, Ingredient, StockMovement, 
   SalesTransaction, SalesImportLog, AuditLog,
   Supplier, PurchaseOrder, ShiftSession,
   Employee, EmployeeContract, AttendanceRecord, KPIRecord
@@ -25,6 +25,7 @@ interface StoreContextType {
   users: User[];
   sessions: DeviceSession[];
   settings: Settings;
+  cashAccounts: CashAccount[];
   cashTransactions: CashTransaction[];
   ingredients: Ingredient[];
   stockMovements: StockMovement[];
@@ -75,6 +76,10 @@ interface StoreContextType {
   updateUser: (user: User) => void;
   deleteUser: (id: string) => void;
   
+  addCashAccount: (account: Omit<CashAccount, 'id'>) => void;
+  updateCashAccount: (account: CashAccount) => void;
+  deleteCashAccount: (id: string) => void;
+  
   addCashTransaction: (transaction: Omit<CashTransaction, 'id'>) => void;
   deleteCashTransaction: (id: string) => void;
   
@@ -118,6 +123,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     language: 'id'
   });
   
+  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
   const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
@@ -195,6 +201,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         
         isApplyingServerUpdate.current = true;
         
+        if (Array.isArray(data.cash_accounts)) setCashAccounts(data.cash_accounts);
         if (Array.isArray(data.cash_transactions)) setCashTransactions(data.cash_transactions);
         if (data.settings) setSettings(data.settings);
         if (Array.isArray(data.users) && data.users.length > 0) setUsers(data.users);
@@ -358,6 +365,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-user-role': currentUser?.role || '', 'x-user-id': currentUser?.id || '' },
           body: JSON.stringify({
+            cash_accounts: cashAccounts,
             cash_transactions: cashTransactions,
             settings: settings,
             users: users,
@@ -388,7 +396,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [cashTransactions, settings, users, sessions, ingredients, stockMovements, salesTransactions, salesImportLogs, auditLogs, suppliers, purchaseOrders, shifts]);
+  }, [cashAccounts, cashTransactions, settings, users, sessions, ingredients, stockMovements, salesTransactions, salesImportLogs, auditLogs, suppliers, purchaseOrders, shifts]);
 
   const markChanged = () => {
     if (!isApplyingServerUpdate.current) {
@@ -523,6 +531,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const deleteUser = (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
     writeAuditLog('DELETE', 'users', id);
+    markChanged();
+  };
+
+  const addCashAccount = (acc: Omit<CashAccount, 'id'>) => {
+    const id = generateId();
+    setCashAccounts(prev => [...prev, { ...acc, id }]);
+    writeAuditLog('CREATE', 'cash_accounts', id);
+    markChanged();
+  };
+
+  const updateCashAccount = (acc: CashAccount) => {
+    setCashAccounts(prev => prev.map(a => a.id === acc.id ? acc : a));
+    writeAuditLog('UPDATE', 'cash_accounts', acc.id);
+    markChanged();
+  };
+
+  const deleteCashAccount = (id: string) => {
+    setCashAccounts(prev => prev.filter(a => a.id !== id));
+    writeAuditLog('DELETE', 'cash_accounts', id);
     markChanged();
   };
 
@@ -678,7 +705,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   return (
     <StoreContext.Provider value={{
       currentUser, users, sessions, settings,
-      cashTransactions, ingredients, stockMovements, salesTransactions, salesImportLogs, auditLogs, suppliers, purchaseOrders, shifts,
+      cashAccounts, cashTransactions, ingredients, stockMovements, salesTransactions, salesImportLogs, auditLogs, suppliers, purchaseOrders, shifts,
       employees, contracts, attendances, kpiRecords,
       updateSettings, login, logout,
       addUser, updateUser, deleteUser,
@@ -686,6 +713,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       addContract, updateContract,
       addAttendance, updateAttendance,
       addKPI, updateKPI,
+      addCashAccount, updateCashAccount, deleteCashAccount,
       addCashTransaction, deleteCashTransaction,
       addIngredient, updateIngredient, deleteIngredient,
       addStockMovement, addSupplier, updateSupplier, deleteSupplier,

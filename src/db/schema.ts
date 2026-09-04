@@ -1,8 +1,16 @@
 import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from 'drizzle-orm/pg-core';
 
+export const cashAccounts = pgTable('cash_accounts', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: text('name').notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'BANK', 'CASH', 'SAVINGS'
+  isDefault: boolean('is_default').default(false).notNull(),
+});
+
 export const cashTransactions = pgTable('cash_transactions', {
   id: varchar('id', { length: 255 }).primaryKey(),
-  type: varchar('type', { length: 50 }).notNull(),
+  accountId: varchar('account_id', { length: 255 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'IN', 'OUT', 'TRANSFER'
   date: text('date').notNull(),
   amount: real('amount').notNull(),
   description: text('description').notNull(),

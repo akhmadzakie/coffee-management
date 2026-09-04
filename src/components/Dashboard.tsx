@@ -9,7 +9,7 @@ import { TrendingUp, TrendingDown, DollarSign, Package, ReceiptText, AlertTriang
 import { useTranslation } from '../utils/i18n';
 
 export const Dashboard = () => {
-  const { salesTransactions, ingredients, stockMovements, cashTransactions, settings, shifts, currentUser } = useStore();
+  const { salesTransactions, ingredients, stockMovements, cashTransactions, cashAccounts, settings, shifts, currentUser } = useStore();
   const { t } = useTranslation(settings.language || 'id');
   const isIndo = settings.language === 'id';
   
@@ -33,6 +33,19 @@ export const Dashboard = () => {
   const totalCashOut = filteredFinance.filter(f => f.type === 'CASH_OUT').reduce((sum, f) => sum + f.amount, 0);
   const netProfit = totalCashIn - totalCashOut;
   const totalSalesRevenue = filteredSales.reduce((sum, s) => sum + s.totalPrice, 0);
+
+  // Account Balances
+  const accountBalances = useMemo(() => {
+    const balances: Record<string, number> = {};
+    cashAccounts.forEach(acc => balances[acc.id] = 0);
+    
+    cashTransactions.forEach(trx => {
+      if (balances[trx.accountId] === undefined) balances[trx.accountId] = 0;
+      if (trx.type === 'CASH_IN') balances[trx.accountId] += trx.amount;
+      else if (trx.type === 'CASH_OUT') balances[trx.accountId] -= trx.amount;
+    });
+    return balances;
+  }, [cashTransactions, cashAccounts]);
 
   // Best Sellers (from Sales)
   const productSalesCount: Record<string, number> = {};
@@ -138,6 +151,33 @@ export const Dashboard = () => {
       </div>
 
       {/* Metrics Grid */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, staggerChildren: 0.1 }}
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+      >
+        {cashAccounts.map((acc, idx) => (
+          <motion.div 
+            key={acc.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
+            className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-sm transition-all relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-bl-full -z-10" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-slate-300 text-sm font-medium">{acc.name}</h3>
+              <div className="p-2.5 bg-white/10 rounded-xl">
+                <DollarSign className="w-5 h-5 text-white" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold">{formatCurrency(accountBalances[acc.id] || 0)}</p>
+            <p className="text-sm text-slate-400 mt-2">{acc.type === 'BANK' ? 'Rekening Bank' : acc.type === 'CASH' ? 'Tunai' : 'Tabungan'}</p>
+          </motion.div>
+        ))}
+      </motion.div>
+
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
