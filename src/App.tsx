@@ -3,30 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { StoreProvider, useStore } from './store/StoreContext';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { Inventory } from './components/Inventory';
-import { Sales } from './components/Sales';
-import { CashFlow } from './components/CashFlow';
-import { AuditLogViewer } from './components/AuditLogViewer';
-import { SettingsComponent } from './components/Settings';
-import { Login } from './components/Login';
-import { UsersComponent } from './components/Users';
-import { ShiftManagement } from './components/ShiftManagement';
-import { Suppliers } from './components/Suppliers';
-import { Purchases } from './components/Purchases';
-import { HRManagement } from './components/HRManagement';
-import { ViewState } from './types';
+import React, { useState } from "react";
+import { StoreProvider, useStore } from "./store/StoreContext";
+import { Layout } from "./components/Layout";
+import { Dashboard } from "./components/Dashboard";
+import { Inventory } from "./components/Inventory";
+import { Sales } from "./components/Sales";
+import { CashFlow } from "./components/CashFlow";
+import { AuditLogViewer } from "./components/AuditLogViewer";
+import { SettingsComponent } from "./components/Settings";
+import { Login } from "./components/Login";
+import { UsersComponent } from "./components/Users";
+import { ShiftManagement } from "./components/ShiftManagement";
+import { Suppliers } from "./components/Suppliers";
+import { Purchases } from "./components/Purchases";
+import { HRManagement } from "./components/HRManagement";
+import { ViewState } from "./types";
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewState>("dashboard");
   const { currentUser } = useStore();
 
   React.useEffect(() => {
     if (!currentUser) {
-      setCurrentView('dashboard');
+      setCurrentView("dashboard");
     }
   }, [currentUser]);
 
@@ -36,27 +36,27 @@ function AppContent() {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard':
+      case "dashboard":
         return <Dashboard />;
-      case 'inventory':
+      case "inventory":
         return <Inventory />;
-      case 'import_sales':
+      case "import_sales":
         return <Sales />;
-      case 'cash_flow':
+      case "cash_flow":
         return <CashFlow />;
-      case 'audit_log':
+      case "audit_log":
         return <AuditLogViewer />;
-      case 'users':
+      case "users":
         return <UsersComponent />;
-      case 'settings':
+      case "settings":
         return <SettingsComponent />;
-      case 'shifts':
+      case "shifts":
         return <ShiftManagement />;
-      case 'suppliers':
+      case "suppliers":
         return <Suppliers />;
-      case 'purchases':
+      case "purchases":
         return <Purchases />;
-      case 'hr':
+      case "hr":
         return <HRManagement />;
       default:
         return <Dashboard />;

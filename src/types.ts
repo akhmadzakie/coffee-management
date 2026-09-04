@@ -1,4 +1,16 @@
-export type Role = 'SUPER_ADMIN' | 'OWNER' | 'MANAGER_CABANG' | 'KASIR' | 'ADMIN_OPERASIONAL' | 'FINANCE' | 'PURCHASING' | 'BARISTA' | 'WAITER' | 'HRD' | 'MARKETING' | 'AUDITOR';
+export type Role =
+  | "SUPER_ADMIN"
+  | "OWNER"
+  | "MANAGER_CABANG"
+  | "KASIR"
+  | "ADMIN_OPERASIONAL"
+  | "FINANCE"
+  | "PURCHASING"
+  | "BARISTA"
+  | "WAITER"
+  | "HRD"
+  | "MARKETING"
+  | "AUDITOR";
 
 export interface User {
   id: string;
@@ -8,11 +20,22 @@ export interface User {
   role: Role;
 }
 
-export type ViewState = 'dashboard' | 'cash_flow' | 'inventory' | 'import_sales' | 'settings' | 'users' | 'audit_log' | 'shifts' | 'suppliers' | 'purchases' | 'hr';
+export type ViewState =
+  | "dashboard"
+  | "cash_flow"
+  | "inventory"
+  | "import_sales"
+  | "settings"
+  | "users"
+  | "audit_log"
+  | "shifts"
+  | "suppliers"
+  | "purchases"
+  | "hr";
 
-export type EmploymentType = 'TETAP' | 'KONTRAK' | 'PARUH_WAKTU' | 'MAGANG';
-export type EmployeeStatus = 'AKTIF' | 'TIDAK_AKTIF' | 'RESIGN' | 'PHK';
-export type AttendanceStatus = 'HADIR' | 'IZIN' | 'SAKIT' | 'ALPHA' | 'LIBUR';
+export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
+export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
+export type AttendanceStatus = "HADIR" | "IZIN" | "SAKIT" | "ALPHA" | "LIBUR";
 
 export interface Employee {
   id: string;
@@ -76,7 +99,6 @@ export interface KPITarget {
   score: number; // Skor 0-100
 }
 
-
 export interface DeviceSession {
   id: string;
   userId: string;
@@ -85,12 +107,12 @@ export interface DeviceSession {
   deviceName: string;
   browser: string;
   os: string;
-  deviceType: 'desktop' | 'mobile' | 'tablet';
+  deviceType: "desktop" | "mobile" | "tablet";
   ipAddress?: string | null;
   location?: string | null;
   lastActive: string; // ISO string
   createdAt: string; // ISO string
-  status: 'ACTIVE' | 'REVOKED';
+  status: "ACTIVE" | "REVOKED";
   isCurrent?: boolean;
 }
 
@@ -101,20 +123,20 @@ export interface Settings {
   bankDetails: string;
   salesPerson: string;
   footerMessage: string;
-  language: 'id' | 'en';
+  language: "id" | "en";
 }
 
 export interface CashAccount {
   id: string;
   name: string;
-  type: 'BANK' | 'CASH' | 'SAVINGS' | 'E_WALLET';
+  type: "BANK" | "CASH" | "SAVINGS" | "E_WALLET";
   isDefault: boolean;
 }
 
 export interface CashTransaction {
   id: string;
   accountId: string;
-  type: 'CASH_IN' | 'CASH_OUT' | 'TRANSFER';
+  type: "CASH_IN" | "CASH_OUT" | "TRANSFER";
   date: string; // ISO string
   amount: number;
   description: string;
@@ -134,7 +156,7 @@ export interface Ingredient {
 export interface StockMovement {
   id: string;
   ingredientId: string;
-  type: 'IN' | 'OUT';
+  type: "IN" | "OUT";
   quantity: number;
   date: string; // ISO string
   note: string;
@@ -162,7 +184,7 @@ export interface SalesImportLog {
 export interface AuditLog {
   id: string;
   userId: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  action: "CREATE" | "UPDATE" | "DELETE";
   tableName: string;
   recordId: string;
   timestamp: string; // ISO string
@@ -191,8 +213,8 @@ export interface PurchaseOrder {
   date: string; // ISO string
   items: PurchaseOrderItem[];
   totalAmount: number;
-  status: 'PAID' | 'UNPAID';
-  deliveryStatus: 'PENDING' | 'RECEIVED';
+  status: "PAID" | "UNPAID";
+  deliveryStatus: "PENDING" | "RECEIVED";
 }
 
 export interface ShiftSession {
@@ -205,5 +227,5 @@ export interface ShiftSession {
   expectedEndingCash: number | null;
   actualEndingCash: number | null;
   difference: number | null;
-  status: 'OPEN' | 'CLOSED';
+  status: "OPEN" | "CLOSED";
 }

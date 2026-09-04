@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #1F3B57;
-  --color-accent: #B8863B;
-  --color-secondary: #F2ECE4;
+  --color-primary: #1f3b57;
+  --color-accent: #b8863b;
+  --color-secondary: #f2ece4;
 }
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {

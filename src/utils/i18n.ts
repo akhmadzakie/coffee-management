@@ -32,7 +32,7 @@ export const translations = {
     users: "Users",
     audit_log: "Audit Log",
     shifts: "Shift & Cashier",
-    hr: "HR & Payroll"
+    hr: "HR & Payroll",
   },
   id: {
     dashboard: "Dasbor",
@@ -67,17 +67,17 @@ export const translations = {
     users: "Pengguna",
     audit_log: "Audit Log",
     shifts: "Shift & Kasir",
-    hr: "SDM & Payroll"
-  }
+    hr: "SDM & Payroll",
+  },
 };
 
-export type Language = 'en' | 'id';
+export type Language = "en" | "id";
 export type TranslationKey = keyof typeof translations.en;
 
 export const useTranslation = (lang: Language) => {
   return {
     t: (key: TranslationKey): string => {
       return translations[lang][key] || translations.en[key] || key;
-    }
+    },
   };
 };
