@@ -24,6 +24,12 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const { currentUser } = useStore();
 
+  React.useEffect(() => {
+    if (!currentUser) {
+      setCurrentView('dashboard');
+    }
+  }, [currentUser]);
+
   if (!currentUser) {
     return <Login />;
   }

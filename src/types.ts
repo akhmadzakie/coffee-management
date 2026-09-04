@@ -107,7 +107,7 @@ export interface Settings {
 export interface CashAccount {
   id: string;
   name: string;
-  type: 'BANK' | 'CASH' | 'SAVINGS';
+  type: 'BANK' | 'CASH' | 'SAVINGS' | 'E_WALLET';
   isDefault: boolean;
 }
 

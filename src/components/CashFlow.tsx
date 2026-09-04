@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { formatCurrency } from '../utils/format';
 import { useStore } from '../store/StoreContext';
-import { TrendingUp, TrendingDown, Plus, Search, Trash2, Wallet, Building2, Landmark, Settings2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, Search, Trash2, Wallet, Building2, Landmark, Settings2, Smartphone } from 'lucide-react';
 import { CashAccount } from '../types';
 
 export const CashFlow = () => {
@@ -79,7 +79,7 @@ export const CashFlow = () => {
     
     addCashAccount({
       name: formData.get('name') as string,
-      type: formData.get('type') as 'BANK' | 'CASH' | 'SAVINGS',
+      type: formData.get('type') as 'BANK' | 'CASH' | 'SAVINGS' | 'E_WALLET',
       isDefault: cashAccounts.length === 0, // First account is default
     });
     
@@ -90,6 +90,7 @@ export const CashFlow = () => {
     switch (type) {
       case 'BANK': return <Building2 className="w-5 h-5" />;
       case 'SAVINGS': return <Landmark className="w-5 h-5" />;
+      case 'E_WALLET': return <Smartphone className="w-5 h-5" />;
       default: return <Wallet className="w-5 h-5" />;
     }
   };
@@ -396,6 +397,7 @@ export const CashFlow = () => {
                   >
                     <option value="CASH">Tunai (Kas)</option>
                     <option value="BANK">Rekening Bank</option>
+                    <option value="E_WALLET">Dompet Digital (Gojek/Grab/OVO)</option>
                     <option value="SAVINGS">Tabungan / Investasi</option>
                   </select>
                 </div>

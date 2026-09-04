@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 import { motion } from 'motion/react';
-import { TrendingUp, TrendingDown, DollarSign, Package, ReceiptText, AlertTriangle, Download, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Package, ReceiptText, AlertTriangle, Download, Calendar, Wallet, Building2, Landmark, Smartphone } from 'lucide-react';
 import { useTranslation } from '../utils/i18n';
 
 export const Dashboard = () => {
@@ -15,6 +15,15 @@ export const Dashboard = () => {
   
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+
+  const getAccountIcon = (type: string) => {
+    switch (type) {
+      case 'BANK': return <Building2 className="w-5 h-5 text-indigo-500" />;
+      case 'SAVINGS': return <Landmark className="w-5 h-5 text-purple-500" />;
+      case 'E_WALLET': return <Smartphone className="w-5 h-5 text-sky-500" />;
+      default: return <Wallet className="w-5 h-5 text-blue-500" />;
+    }
+  };
 
   const isDateInFilter = (dateStr: string) => {
     if (filterMonth === -1) return true;
@@ -163,17 +172,16 @@ export const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
-            className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-sm transition-all relative overflow-hidden"
+            className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-bl-full -z-10" />
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-300 text-sm font-medium">{acc.name}</h3>
-              <div className="p-2.5 bg-white/10 rounded-xl">
-                <DollarSign className="w-5 h-5 text-white" />
+              <h3 className="text-slate-500 text-sm font-medium">{acc.name}</h3>
+              <div className="p-2.5 bg-slate-100 rounded-xl">
+                {getAccountIcon(acc.type)}
               </div>
             </div>
-            <p className="text-2xl font-bold">{formatCurrency(accountBalances[acc.id] || 0)}</p>
-            <p className="text-sm text-slate-400 mt-2">{acc.type === 'BANK' ? 'Rekening Bank' : acc.type === 'CASH' ? 'Tunai' : 'Tabungan'}</p>
+            <p className="text-2xl font-bold text-slate-800">{formatCurrency(accountBalances[acc.id] || 0)}</p>
+            <p className="text-sm text-slate-400 mt-2">{acc.type === 'BANK' ? 'Bank' : acc.type === 'CASH' ? 'Cash' : acc.type === 'E_WALLET' ? 'E-Wallet' : 'Savings'}</p>
           </motion.div>
         ))}
       </motion.div>
