@@ -98,3 +98,91 @@ export const auditLogs = pgTable('audit_logs', {
   recordId: varchar('record_id', { length: 255 }).notNull(),
   timestamp: text('timestamp').notNull(), // ISO String
 });
+
+export const employees = pgTable('employees', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  nik: text('nik').notNull(),
+  name: text('name').notNull(),
+  position: text('position').notNull(),
+  department: text('department').notNull(),
+  employmentType: varchar('employment_type', { length: 50 }).notNull(),
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date'),
+  phone: text('phone').notNull(),
+  address: text('address').notNull(),
+  status: varchar('status', { length: 50 }).notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const employeeContracts = pgTable('employee_contracts', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  employeeId: varchar('employee_id', { length: 255 }).notNull(),
+  effectiveDate: text('effective_date').notNull(),
+  basicSalary: real('basic_salary').notNull(),
+  mealAllowance: real('meal_allowance').notNull(),
+  positionAllowance: real('position_allowance').notNull(),
+  alphaDeductionPerDay: real('alpha_deduction_per_day').notNull(),
+  workingDaysPerMonth: integer('working_days_per_month').notNull(),
+  notes: text('notes').notNull(),
+});
+
+export const attendanceRecords = pgTable('attendance_records', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  employeeId: varchar('employee_id', { length: 255 }).notNull(),
+  period: text('period').notNull(),
+  presentDays: integer('present_days').notNull(),
+  sickDays: integer('sick_days').notNull(),
+  permissionDays: integer('permission_days').notNull(),
+  alphaDays: integer('alpha_days').notNull(),
+  holidayDays: integer('holiday_days').notNull(),
+  workingDays: integer('working_days').notNull(),
+  notes: text('notes').notNull(),
+  createdBy: varchar('created_by', { length: 255 }).notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const kpiRecords = pgTable('kpi_records', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  employeeId: varchar('employee_id', { length: 255 }).notNull(),
+  quarter: integer('quarter').notNull(),
+  year: integer('year').notNull(),
+  targets: jsonb('targets').notNull(),
+  totalScore: real('total_score').notNull(),
+  kpiBonus: real('kpi_bonus').notNull(),
+  notes: text('notes').notNull(),
+  evaluatedBy: varchar('evaluated_by', { length: 255 }).notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+export const suppliers = pgTable('suppliers', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: text('name').notNull(),
+  picName: text('pic_name').notNull(),
+  contact: text('contact').notNull(),
+  address: text('address').notNull(),
+  notes: text('notes').notNull(),
+});
+
+export const purchaseOrders = pgTable('purchase_orders', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  poNumber: text('po_number').notNull(),
+  supplierId: varchar('supplier_id', { length: 255 }).notNull(),
+  date: text('date').notNull(),
+  items: jsonb('items').notNull(),
+  totalAmount: real('total_amount').notNull(),
+  status: varchar('status', { length: 50 }).notNull(),
+  deliveryStatus: varchar('delivery_status', { length: 50 }).notNull(),
+});
+
+export const shifts = pgTable('shifts', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  cashAccountId: varchar('cash_account_id', { length: 255 }).notNull(),
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time'),
+  startingCash: real('starting_cash').notNull(),
+  expectedEndingCash: real('expected_ending_cash'),
+  actualEndingCash: real('actual_ending_cash'),
+  difference: real('difference'),
+  status: varchar('status', { length: 50 }).notNull(),
+});

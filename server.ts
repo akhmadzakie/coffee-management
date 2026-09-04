@@ -139,6 +139,94 @@ async function startServer() {
     role: String(u.role || 'ADMIN_OPERASIONAL'),
   });
 
+  const sanitizeEmployee = (e: any) => ({
+    id: String(e.id || crypto.randomUUID()),
+    nik: String(e.nik || ''),
+    name: String(e.name || ''),
+    position: String(e.position || ''),
+    department: String(e.department || ''),
+    employmentType: String(e.employmentType || ''),
+    startDate: String(e.startDate || ''),
+    endDate: e.endDate ? String(e.endDate) : null,
+    phone: String(e.phone || ''),
+    address: String(e.address || ''),
+    status: String(e.status || ''),
+    createdAt: String(e.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeEmployeeContract = (c: any) => ({
+    id: String(c.id || crypto.randomUUID()),
+    employeeId: String(c.employeeId || ''),
+    effectiveDate: String(c.effectiveDate || ''),
+    basicSalary: Number(c.basicSalary) || 0,
+    mealAllowance: Number(c.mealAllowance) || 0,
+    positionAllowance: Number(c.positionAllowance) || 0,
+    alphaDeductionPerDay: Number(c.alphaDeductionPerDay) || 0,
+    workingDaysPerMonth: Number(c.workingDaysPerMonth) || 0,
+    notes: String(c.notes || ''),
+  });
+
+  const sanitizeAttendanceRecord = (a: any) => ({
+    id: String(a.id || crypto.randomUUID()),
+    employeeId: String(a.employeeId || ''),
+    period: String(a.period || ''),
+    presentDays: Number(a.presentDays) || 0,
+    sickDays: Number(a.sickDays) || 0,
+    permissionDays: Number(a.permissionDays) || 0,
+    alphaDays: Number(a.alphaDays) || 0,
+    holidayDays: Number(a.holidayDays) || 0,
+    workingDays: Number(a.workingDays) || 0,
+    notes: String(a.notes || ''),
+    createdBy: String(a.createdBy || ''),
+    createdAt: String(a.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeKPIRecord = (k: any) => ({
+    id: String(k.id || crypto.randomUUID()),
+    employeeId: String(k.employeeId || ''),
+    quarter: Number(k.quarter) || 1,
+    year: Number(k.year) || new Date().getFullYear(),
+    targets: Array.isArray(k.targets) ? k.targets : [],
+    totalScore: Number(k.totalScore) || 0,
+    kpiBonus: Number(k.kpiBonus) || 0,
+    notes: String(k.notes || ''),
+    evaluatedBy: String(k.evaluatedBy || ''),
+    createdAt: String(k.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeSupplier = (s: any) => ({
+    id: String(s.id || crypto.randomUUID()),
+    name: String(s.name || ''),
+    picName: String(s.picName || ''),
+    contact: String(s.contact || ''),
+    address: String(s.address || ''),
+    notes: String(s.notes || ''),
+  });
+
+  const sanitizePurchaseOrder = (p: any) => ({
+    id: String(p.id || crypto.randomUUID()),
+    poNumber: String(p.poNumber || ''),
+    supplierId: String(p.supplierId || ''),
+    date: String(p.date || new Date().toISOString()),
+    items: Array.isArray(p.items) ? p.items : [],
+    totalAmount: Number(p.totalAmount) || 0,
+    status: String(p.status || 'UNPAID'),
+    deliveryStatus: String(p.deliveryStatus || 'PENDING'),
+  });
+
+  const sanitizeShift = (s: any) => ({
+    id: String(s.id || crypto.randomUUID()),
+    userId: String(s.userId || ''),
+    cashAccountId: String(s.cashAccountId || ''),
+    startTime: String(s.startTime || new Date().toISOString()),
+    endTime: s.endTime ? String(s.endTime) : null,
+    startingCash: Number(s.startingCash) || 0,
+    expectedEndingCash: s.expectedEndingCash !== null && s.expectedEndingCash !== undefined ? Number(s.expectedEndingCash) : null,
+    actualEndingCash: s.actualEndingCash !== null && s.actualEndingCash !== undefined ? Number(s.actualEndingCash) : null,
+    difference: s.difference !== null && s.difference !== undefined ? Number(s.difference) : null,
+    status: String(s.status || 'OPEN'),
+  });
+
 // In-memory fallback state for offline usage
 let offlineState: any = null;
 
@@ -154,10 +242,18 @@ let offlineState: any = null;
       let sales_transactions: any[] = [];
       let sales_import_logs: any[] = [];
       let audit_logs: any[] = [];
+      let employees: any[] = [];
+      let employee_contracts: any[] = [];
+      let attendance_records: any[] = [];
+      let kpi_records: any[] = [];
+      let suppliers: any[] = [];
+      let purchase_orders: any[] = [];
+      let shifts: any[] = [];
 
       try {
         [
-          cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs
+          cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs,
+          employees, employee_contracts, attendance_records, kpi_records, suppliers, purchase_orders, shifts
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -169,6 +265,13 @@ let offlineState: any = null;
           db.select().from(schema.salesTransactions),
           db.select().from(schema.salesImportLogs),
           db.select().from(schema.auditLogs),
+          db.select().from(schema.employees),
+          db.select().from(schema.employeeContracts),
+          db.select().from(schema.attendanceRecords),
+          db.select().from(schema.kpiRecords),
+          db.select().from(schema.suppliers),
+          db.select().from(schema.purchaseOrders),
+          db.select().from(schema.shifts),
         ]);
         
         // Auto seed if completely new database
@@ -204,13 +307,13 @@ let offlineState: any = null;
         sales_transactions,
         sales_import_logs,
         audit_logs,
-        suppliers: [],
-        purchase_orders: [],
-        shifts: [],
-        employees: [],
-        contracts: [],
-        attendances: [],
-        kpiRecords: [],
+        suppliers,
+        purchase_orders,
+        shifts,
+        employees,
+        contracts: employee_contracts,
+        attendances: attendance_records,
+        kpiRecords: kpi_records,
         serverTime: new Date().toISOString(),
       });
     } catch (e) {
@@ -221,7 +324,11 @@ let offlineState: any = null;
 
   app.post('/api/sync', async (req, res) => {
     try {
-      const { cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, stock_movements, sales_transactions, sales_import_logs, audit_logs, suppliers, purchase_orders, shifts } = req.body;
+      const { 
+        cash_accounts, cash_transactions, settings, users, device_sessions, ingredients, 
+        stock_movements, sales_transactions, sales_import_logs, audit_logs, 
+        suppliers, purchase_orders, shifts, employees, contracts, attendances, kpiRecords 
+      } = req.body;
       
       await db.transaction(async (tx) => {
         if (cash_accounts !== undefined) { 
@@ -274,6 +381,48 @@ let offlineState: any = null;
           await tx.delete(schema.auditLogs); 
           if (Array.isArray(audit_logs) && audit_logs.length > 0) {
             await tx.insert(schema.auditLogs).values(audit_logs.map(sanitizeAuditLog)); 
+          }
+        }
+        if (employees !== undefined) {
+          await tx.delete(schema.employees);
+          if (Array.isArray(employees) && employees.length > 0) {
+            await tx.insert(schema.employees).values(employees.map(sanitizeEmployee));
+          }
+        }
+        if (contracts !== undefined) {
+          await tx.delete(schema.employeeContracts);
+          if (Array.isArray(contracts) && contracts.length > 0) {
+            await tx.insert(schema.employeeContracts).values(contracts.map(sanitizeEmployeeContract));
+          }
+        }
+        if (attendances !== undefined) {
+          await tx.delete(schema.attendanceRecords);
+          if (Array.isArray(attendances) && attendances.length > 0) {
+            await tx.insert(schema.attendanceRecords).values(attendances.map(sanitizeAttendanceRecord));
+          }
+        }
+        if (kpiRecords !== undefined) {
+          await tx.delete(schema.kpiRecords);
+          if (Array.isArray(kpiRecords) && kpiRecords.length > 0) {
+            await tx.insert(schema.kpiRecords).values(kpiRecords.map(sanitizeKPIRecord));
+          }
+        }
+        if (suppliers !== undefined) {
+          await tx.delete(schema.suppliers);
+          if (Array.isArray(suppliers) && suppliers.length > 0) {
+            await tx.insert(schema.suppliers).values(suppliers.map(sanitizeSupplier));
+          }
+        }
+        if (purchase_orders !== undefined) {
+          await tx.delete(schema.purchaseOrders);
+          if (Array.isArray(purchase_orders) && purchase_orders.length > 0) {
+            await tx.insert(schema.purchaseOrders).values(purchase_orders.map(sanitizePurchaseOrder));
+          }
+        }
+        if (shifts !== undefined) {
+          await tx.delete(schema.shifts);
+          if (Array.isArray(shifts) && shifts.length > 0) {
+            await tx.insert(schema.shifts).values(shifts.map(sanitizeShift));
           }
         }
       });
