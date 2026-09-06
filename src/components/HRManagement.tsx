@@ -63,6 +63,59 @@ export function HRManagement() {
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
   const payslipRef = useRef<HTMLDivElement>(null);
 
+  // --- Modals State ---
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+  const [editingContract, setEditingContract] = useState<any | null>(null);
+
+  // --- Modal Form State ---
+  const [empForm, setEmpForm] = useState({ nik: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
+  const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
+
+  const handleOpenEmployeeModal = (emp?: any) => {
+    if (emp && emp.id) {
+      setEditingEmployee(emp);
+      setEmpForm({ nik: emp.nik, name: emp.name, position: emp.position, department: emp.department, status: emp.status, employmentType: emp.employmentType });
+    } else {
+      setEditingEmployee(null);
+      setEmpForm({ nik: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP" });
+    }
+    setIsEmployeeModalOpen(true);
+  };
+
+  const handleSaveEmployee = () => {
+    if (!empForm.nik || !empForm.name) return alert("NIK dan Nama wajib diisi");
+    if (editingEmployee) {
+      updateEmployee({ ...editingEmployee, ...empForm });
+    } else {
+      addEmployee(empForm);
+    }
+    setIsEmployeeModalOpen(false);
+  };
+
+  const handleOpenContractModal = (contract?: any, employeeId?: string) => {
+    if (contract && contract.id) {
+      setEditingContract(contract);
+      setContractForm({ ...contract });
+    } else {
+      setEditingContract(null);
+      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: new Date().toISOString().split("T")[0], endDate: "", status: "ACTIVE" });
+    }
+    setIsContractModalOpen(true);
+  };
+
+  const handleSaveContract = () => {
+    if (!contractForm.employeeId) return alert("Pilih karyawan terlebih dahulu");
+    if (editingContract) {
+      updateContract({ ...editingContract, ...contractForm });
+    } else {
+      addContract(contractForm);
+    }
+    setIsContractModalOpen(false);
+  };
+
+
   const isHRD =
     currentUser?.role === "HRD" || currentUser?.role === "SUPER_ADMIN";
   const isFinance =
@@ -381,7 +434,7 @@ export function HRManagement() {
                   {isIndo ? "Daftar Karyawan" : "Employee List"}
                 </h3>
                 {canEditHR && (
-                  <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                  <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"> onClick={() => handleOpenEmployeeModal()}
                     <Plus className="w-4 h-4" />{" "}
                     {isIndo ? "Tambah Karyawan" : "Add Employee"}
                   </button>
@@ -464,10 +517,15 @@ export function HRManagement() {
 
           {activeTab === "contracts" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
+                            <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
                 </h3>
+                {canEditHR && (
+                  <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
+                  </button>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
