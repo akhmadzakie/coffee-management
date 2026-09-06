@@ -74,6 +74,60 @@ export function HRManagement() {
   const [empForm, setEmpForm] = useState({ nik: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
   const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
 
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
+  const [isKpiModalOpen, setIsKpiModalOpen] = useState(false);
+  const [editingKpi, setEditingKpi] = useState<any | null>(null);
+
+  const [attendanceForm, setAttendanceForm] = useState({ employeeId: "", period: "", presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
+  const [kpiForm, setKpiForm] = useState({ employeeId: "", period: "", quarter: 1, year: new Date().getFullYear(), totalScore: 0, evaluatorNotes: "", kpiBonus: 0 });
+
+  const handleOpenAttendanceModal = (att?: any, employeeId?: string) => {
+    if (att && att.id) {
+      setEditingAttendance(att);
+      setAttendanceForm({ ...att });
+    } else {
+      setEditingAttendance(null);
+      const currentPeriod = new Date().toISOString().substring(0, 7);
+      setAttendanceForm({ employeeId: employeeId || "", period: currentPeriod, presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
+    }
+    setIsAttendanceModalOpen(true);
+  };
+
+  const handleSaveAttendance = () => {
+    if (!attendanceForm.employeeId || !attendanceForm.period) return alert("Pilih Karyawan dan Periode");
+    if (editingAttendance) {
+      updateAttendance({ ...editingAttendance, ...attendanceForm });
+    } else {
+      addAttendance(attendanceForm);
+    }
+    setIsAttendanceModalOpen(false);
+  };
+
+  const handleOpenKpiModal = (kpi?: any, employeeId?: string) => {
+    if (kpi && kpi.id) {
+      setEditingKpi(kpi);
+      setKpiForm({ ...kpi });
+    } else {
+      setEditingKpi(null);
+      const currentYear = new Date().getFullYear();
+      setKpiForm({ employeeId: employeeId || "", period: `Q1-${currentYear}`, quarter: 1, year: currentYear, totalScore: 0, evaluatorNotes: "", kpiBonus: 0 });
+    }
+    setIsKpiModalOpen(true);
+  };
+
+  const handleSaveKpi = () => {
+    if (!kpiForm.employeeId) return alert("Pilih Karyawan");
+    const kpiToSave = { ...kpiForm, period: `Q${kpiForm.quarter}-${kpiForm.year}` };
+    if (editingKpi) {
+      updateKPI({ ...editingKpi, ...kpiToSave });
+    } else {
+      addKPI(kpiToSave);
+    }
+    setIsKpiModalOpen(false);
+  };
+
+
   const handleOpenEmployeeModal = (emp?: any) => {
     if (emp && emp.id) {
       setEditingEmployee(emp);
@@ -625,11 +679,17 @@ export function HRManagement() {
           {activeTab === "kpi" && (
             <div>
               <div className="flex justify-between items-center mb-6">
+                
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo
                     ? "Penilaian KPI (Kuartal)"
                     : "KPI Assessment (Quarterly)"}
                 </h3>
+                {canEditHR && (
+                  <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
+                  </button>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -688,11 +748,17 @@ export function HRManagement() {
           {activeTab === "attendance" && (
             <div>
               <div className="flex justify-between items-center mb-6">
+                
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo
                     ? "Rekap Absensi Bulanan"
                     : "Monthly Attendance Recap"}
                 </h3>
+                {canEditHR && (
+                  <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
+                  </button>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -1175,6 +1241,125 @@ export function HRManagement() {
       )}
 
       </div>
+
+      {/* Attendance Modal */}
+      {isAttendanceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-bold text-slate-800">
+                {editingAttendance ? (isIndo ? "Edit Absensi" : "Edit Attendance") : (isIndo ? "Tambah Absensi" : "Add Attendance")}
+              </h3>
+              <button onClick={() => setIsAttendanceModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
+                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={attendanceForm.employeeId} onChange={e => setAttendanceForm({...attendanceForm, employeeId: e.target.value})}>
+                  <option value="">Pilih Karyawan</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Periode (YYYY-MM)</label>
+                <input type="month" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.period} onChange={e => setAttendanceForm({...attendanceForm, period: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Hadir (Hari)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.presentDays || 0} onChange={e => setAttendanceForm({...attendanceForm, presentDays: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Sakit (Hari)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.sickDays || 0} onChange={e => setAttendanceForm({...attendanceForm, sickDays: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Izin (Hari)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.permissionDays || 0} onChange={e => setAttendanceForm({...attendanceForm, permissionDays: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Alpha (Hari)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.alphaDays || 0} onChange={e => setAttendanceForm({...attendanceForm, alphaDays: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Catatan</label>
+                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.notes || ""} onChange={e => setAttendanceForm({...attendanceForm, notes: e.target.value})} rows={2}></textarea>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
+              <button onClick={() => setIsAttendanceModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
+              <button onClick={handleSaveAttendance} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Modal */}
+      {isKpiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-bold text-slate-800">
+                {editingKpi ? (isIndo ? "Edit KPI" : "Edit KPI") : (isIndo ? "Tambah KPI" : "Add KPI")}
+              </h3>
+              <button onClick={() => setIsKpiModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
+                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.employeeId} onChange={e => setKpiForm({...kpiForm, employeeId: e.target.value})}>
+                  <option value="">Pilih Karyawan</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kuartal</label>
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.quarter} onChange={e => setKpiForm({...kpiForm, quarter: Number(e.target.value)})}>
+                    <option value={1}>Q1 (Jan-Mar)</option>
+                    <option value={2}>Q2 (Apr-Jun)</option>
+                    <option value={3}>Q3 (Jul-Sep)</option>
+                    <option value={4}>Q4 (Okt-Des)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tahun</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.year} onChange={e => setKpiForm({...kpiForm, year: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Skor Total (0-100)</label>
+                  <input type="number" step="0.1" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.totalScore || 0} onChange={e => setKpiForm({...kpiForm, totalScore: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Bonus Nominal (Rp)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.kpiBonus || 0} onChange={e => setKpiForm({...kpiForm, kpiBonus: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Catatan Evaluator</label>
+                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.evaluatorNotes || ""} onChange={e => setKpiForm({...kpiForm, evaluatorNotes: e.target.value})} rows={2}></textarea>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
+              <button onClick={() => setIsKpiModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
+              <button onClick={handleSaveKpi} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
