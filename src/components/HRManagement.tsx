@@ -14,6 +14,7 @@ import {
   Download,
   Printer,
   UserCheck,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
