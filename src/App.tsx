@@ -18,7 +18,24 @@ import { ShiftManagement } from "./components/ShiftManagement";
 import { Suppliers } from "./components/Suppliers";
 import { Purchases } from "./components/Purchases";
 import { HRManagement } from "./components/HRManagement";
+import { ExpenseCategories } from "./components/ExpenseCategories";
+import { Payroll } from "./components/Payroll";
 import { ViewState } from "./types";
+import BankReconciliationComponent from "./components/BankReconciliation";
+import FinanceReports from "./components/FinanceReports";
+
+// Lazy placeholder for modules not yet built
+const ComingSoon = ({ title }: { title: string }) => (
+  <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center p-8">
+    <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+      <span className="text-3xl">🚧</span>
+    </div>
+    <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
+    <p className="text-gray-400 text-sm max-w-xs">
+      Modul ini sedang dalam pengembangan dan akan segera tersedia.
+    </p>
+  </div>
+);
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>("dashboard");
@@ -58,6 +75,17 @@ function AppContent() {
         return <Purchases />;
       case "hr":
         return <HRManagement />;
+      // Fase 1: Expense Categories
+      case "expense_categories":
+        return <ExpenseCategories />;
+      // Fase 2: Finance
+      case "finance_reports":
+        return <FinanceReports />;
+      case "bank_reconciliation":
+        return <BankReconciliationComponent />;
+      // Fase 4: Payroll (Coming Soon)
+      case "payroll":
+        return <Payroll />;
       default:
         return <Dashboard />;
     }

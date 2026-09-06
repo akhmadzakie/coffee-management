@@ -4,35 +4,34 @@ import {
   Plus,
   Search,
   Trash2,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   Package,
   AlertTriangle,
+  ClipboardList,
+  CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Ingredient } from "../types";
 
 export const Inventory = () => {
   const {
     ingredients,
     stockMovements,
+    stockOpnames,
     addIngredient,
     deleteIngredient,
     addStockMovement,
+    addStockOpname,
+    addStockOpnameItem,
     currentUser,
     isReadOnly,
   } = useStore();
-  const [activeTab, setActiveTab] = useState<"ingredients" | "movements">(
-    "ingredients",
-  );
+  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames">("ingredients");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Modals
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [isAddMovementOpen, setIsAddMovementOpen] = useState(false);
-  const [selectedIngredientForMove, setSelectedIngredientForMove] =
-    useState<string>("");
-  const [movementType, setMovementType] = useState<"IN" | "OUT">("IN");
+  const [selectedIngredientForMove, setSelectedIngredientForMove] = useState<string>("");
+  const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN">("OUT");
 
   const filteredIngredients = ingredients.filter(
     (i) =>
@@ -48,6 +47,13 @@ export const Inventory = () => {
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // OPNAME STATE
+  const [isOpnameMode, setIsOpnameMode] = useState(false);
+  const [opnameId, setOpnameId] = useState("");
+  const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
+
+  const totalValuation = ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
+
   const handleAddIngredient = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -57,6 +63,7 @@ export const Inventory = () => {
       currentStock: Number(formData.get("currentStock")),
       minStock: Number(formData.get("minStock")),
       category: formData.get("category") as string,
+      costPerUnit: Number(formData.get("costPerUnit")),
     });
     setIsAddIngredientOpen(false);
   };
@@ -67,7 +74,7 @@ export const Inventory = () => {
 
     addStockMovement({
       ingredientId: formData.get("ingredientId") as string,
-      type: movementType,
+      type: movementType as any,
       quantity: Number(formData.get("quantity")),
       date: new Date().toISOString(),
       note: formData.get("note") as string,
@@ -75,6 +82,75 @@ export const Inventory = () => {
     });
 
     setIsAddMovementOpen(false);
+  };
+
+  const startOpname = () => {
+    setOpnameId(crypto.randomUUID());
+    setOpnameItems(
+      ingredients.map((ing) => ({
+        ingredientId: ing.id,
+        physicalStock: ing.currentStock,
+        difference: 0,
+        notes: "",
+      }))
+    );
+    setIsOpnameMode(true);
+  };
+
+  const handleOpnameChange = (ingredientId: string, physicalStock: number) => {
+    setOpnameItems((prev) =>
+      prev.map((item) => {
+        if (item.ingredientId === ingredientId) {
+          const ing = ingredients.find((i) => i.id === ingredientId);
+          const systemStock = ing ? ing.currentStock : 0;
+          return {
+            ...item,
+            physicalStock,
+            difference: physicalStock - systemStock,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const saveOpname = (status: "DRAFT" | "FINAL") => {
+    const opname = {
+      id: opnameId,
+      date: new Date().toISOString(),
+      status,
+      notes: "Stock Opname Periodik",
+      createdBy: currentUser?.name || "System",
+      createdAt: new Date().toISOString(),
+    };
+    addStockOpname(opname);
+
+    opnameItems.forEach((item) => {
+      const ing = ingredients.find((i) => i.id === item.ingredientId);
+      addStockOpnameItem({
+        id: crypto.randomUUID(),
+        opnameId: opname.id,
+        ingredientId: item.ingredientId,
+        systemStock: ing ? ing.currentStock : 0,
+        physicalStock: item.physicalStock,
+        difference: item.difference,
+        notes: item.notes,
+      });
+
+      // Jika final, kita catat selisih
+      if (status === "FINAL" && item.difference !== 0) {
+        addStockMovement({
+          ingredientId: item.ingredientId,
+          type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
+          quantity: Math.abs(item.difference),
+          date: new Date().toISOString(),
+          note: `Opname Diff (Sys: ${ing?.currentStock}, Phys: ${item.physicalStock})`,
+          createdBy: currentUser?.name || "System",
+        });
+      }
+    });
+
+    setIsOpnameMode(false);
   };
 
   return (
@@ -99,7 +175,17 @@ export const Inventory = () => {
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Riwayat Stok
+            Pemakaian Harian
+          </button>
+          <button
+            onClick={() => setActiveTab("opnames")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === "opnames"
+                ? "bg-white text-primary shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Opname Stok
           </button>
         </div>
 
@@ -125,147 +211,164 @@ export const Inventory = () => {
                 Tambah Bahan
               </button>
             ) : null
-          ) : !isReadOnly ? (
-            <button
-              onClick={() => {
-                if (ingredients.length === 0) {
-                  alert("Tambahkan bahan baku terlebih dahulu");
-                  return;
-                }
-                setSelectedIngredientForMove(ingredients[0].id);
-                setMovementType("IN");
-                setIsAddMovementOpen(true);
-              }}
-              className="flex items-center px-4 py-2 bg-accent text-white rounded-lg hover:bg-yellow-600 transition-colors shrink-0"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Input Stok
-            </button>
+          ) : activeTab === "movements" ? (
+            !isReadOnly ? (
+              <button
+                onClick={() => {
+                  if (ingredients.length === 0) {
+                    alert("Tambahkan bahan baku terlebih dahulu");
+                    return;
+                  }
+                  setSelectedIngredientForMove(ingredients[0].id);
+                  setMovementType("OUT");
+                  setIsAddMovementOpen(true);
+                }}
+                className="flex items-center px-4 py-2 bg-accent text-white rounded-lg hover:bg-yellow-600 transition-colors shrink-0"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Catat Pemakaian
+              </button>
+            ) : null
+          ) : activeTab === "opnames" ? (
+             !isReadOnly && !isOpnameMode ? (
+              <button
+                onClick={startOpname}
+                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <ClipboardList className="w-4 h-4 mr-2" />
+                Mulai Opname
+              </button>
+             ) : null
           ) : null}
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
         {activeTab === "ingredients" ? (
-          <div className="overflow-x-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-              <AnimatePresence>
-                {filteredIngredients.map((item, index) => {
-                  const isLow = item.currentStock <= item.minStock;
+          <div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 rounded-t-xl flex justify-between items-center">
+                <h3 className="font-semibold text-slate-700">Total Nilai Persediaan (Valuation)</h3>
+                <span className="text-xl font-black text-emerald-600">
+                    Rp {totalValuation.toLocaleString("id-ID")}
+                </span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+                <AnimatePresence>
+                  {filteredIngredients.map((item, index) => {
+                    const isLow = item.currentStock <= item.minStock;
 
-                  // Generate color based on category
-                  const categoryColors: Record<string, string> = {
-                    "Biji Kopi": "bg-amber-100 text-amber-800 border-amber-200",
-                    Susu: "bg-blue-100 text-blue-800 border-blue-200",
-                    Sirup: "bg-pink-100 text-pink-800 border-pink-200",
-                    Gelas: "bg-slate-100 text-slate-800 border-slate-200",
-                  };
+                    const categoryColors: Record<string, string> = {
+                      "Biji Kopi": "bg-amber-100 text-amber-800 border-amber-200",
+                      Susu: "bg-blue-100 text-blue-800 border-blue-200",
+                      Sirup: "bg-pink-100 text-pink-800 border-pink-200",
+                      Gelas: "bg-slate-100 text-slate-800 border-slate-200",
+                    };
 
-                  const catColor =
-                    categoryColors[item.category] ||
-                    "bg-slate-100 text-slate-700 border-slate-200";
+                    const catColor =
+                      categoryColors[item.category] ||
+                      "bg-slate-100 text-slate-700 border-slate-200";
 
-                  return (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.2, delay: index * 0.05 }}
-                      whileHover={{
-                        y: -4,
-                        boxShadow:
-                          "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-                      }}
-                      className={`relative bg-white rounded-2xl p-5 border shadow-sm transition-all flex flex-col justify-between overflow-hidden group ${isLow ? "border-rose-200" : "border-slate-200"}`}
-                    >
-                      {/* Danger indicator strip */}
-                      {isLow && (
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500" />
-                      )}
-
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <span
-                            className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${catColor} mb-2`}
-                          >
-                            {item.category}
-                          </span>
-                          <h3 className="font-bold text-slate-800 text-lg leading-tight">
-                            {item.name}
-                          </h3>
-                        </div>
-                        {!isReadOnly && (
-                          <button
-                            onClick={() => {
-                              if (
-                                confirm("Yakin ingin menghapus bahan baku ini?")
-                              ) {
-                                deleteIngredient(item.id);
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.2, delay: index * 0.05 }}
+                        whileHover={{
+                          y: -4,
+                          boxShadow:
+                            "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                        }}
+                        className={`relative bg-white rounded-2xl p-5 border shadow-sm transition-all flex flex-col justify-between overflow-hidden group ${isLow ? "border-rose-200" : "border-slate-200"}`}
+                      >
+                        {isLow && (
+                          <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500" />
                         )}
-                      </div>
 
-                      <div className="mt-2 pt-4 border-t border-slate-100 flex justify-between items-end">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1 font-medium">
-                            Sisa Stok
-                          </p>
-                          <div className="flex items-baseline gap-1">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
                             <span
-                              className={`text-2xl font-black tracking-tight ${isLow ? "text-rose-600" : "text-slate-800"}`}
+                              className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${catColor} mb-2`}
                             >
-                              {item.currentStock}
+                              {item.category}
                             </span>
-                            <span className="text-sm text-slate-500 font-medium">
-                              {item.unit}
-                            </span>
+                            <h3 className="font-bold text-slate-800 text-lg leading-tight">
+                              {item.name}
+                            </h3>
                           </div>
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm("Yakin ingin menghapus bahan baku ini?")
+                                ) {
+                                  deleteIngredient(item.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
 
-                        {isLow ? (
-                          <div className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-100 animate-pulse">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span className="text-xs font-bold">
-                              Stok Menipis!
-                            </span>
+                        <div className="mt-2 pt-4 border-t border-slate-100 flex justify-between items-end">
+                          <div>
+                            <p className="text-xs text-slate-500 mb-1 font-medium">
+                              Sisa Stok
+                            </p>
+                            <div className="flex items-baseline gap-1">
+                              <span
+                                className={`text-2xl font-black tracking-tight ${isLow ? "text-rose-600" : "text-slate-800"}`}
+                              >
+                                {item.currentStock}
+                              </span>
+                              <span className="text-sm text-slate-500 font-medium">
+                                {item.unit}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">@ Rp {(item.costPerUnit || 0).toLocaleString('id-ID')}</p>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] font-bold">Aman</span>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
 
-              {filteredIngredients.length === 0 && (
-                <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  <Package className="w-12 h-12 mb-3 text-slate-300" />
-                  <p className="font-medium text-slate-500">
-                    Tidak ada bahan baku ditemukan.
-                  </p>
-                </div>
-              )}
+                          {isLow ? (
+                            <div className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-100 animate-pulse">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span className="text-xs font-bold">
+                                Stok Menipis!
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              <span className="text-[10px] font-bold">Aman</span>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+
+                {filteredIngredients.length === 0 && (
+                  <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <Package className="w-12 h-12 mb-3 text-slate-300" />
+                    <p className="font-medium text-slate-500">
+                      Tidak ada bahan baku ditemukan.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === "movements" ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="p-4 font-semibold text-slate-600">Tanggal</th>
-                  <th className="p-4 font-semibold text-slate-600">
-                    Bahan Baku
-                  </th>
+                  <th className="p-4 font-semibold text-slate-600">Bahan Baku</th>
                   <th className="p-4 font-semibold text-slate-600">Jenis</th>
                   <th className="p-4 font-semibold text-slate-600">Jumlah</th>
                   <th className="p-4 font-semibold text-slate-600">Catatan</th>
@@ -274,42 +377,29 @@ export const Inventory = () => {
               </thead>
               <tbody>
                 {filteredMovements.map((mov) => {
-                  const ingredient = ingredients.find(
-                    (i) => i.id === mov.ingredientId,
-                  );
+                  const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
                   return (
-                    <tr
-                      key={mov.id}
-                      className="border-b border-slate-100 hover:bg-slate-50"
-                    >
+                    <tr key={mov.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="p-4 text-slate-800">
                         {new Date(mov.date).toLocaleDateString("id-ID", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
+                          year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                         })}
                       </td>
-                      <td className="p-4 font-medium text-slate-800">
-                        {ingredient?.name || "Unknown"}
-                      </td>
+                      <td className="p-4 font-medium text-slate-800">{ingredient?.name || "Unknown"}</td>
                       <td className="p-4">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            mov.type === "IN"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-rose-100 text-rose-800"
+                            mov.type === "IN" ? "bg-emerald-100 text-emerald-800"
+                              : mov.type === "RETURN" ? "bg-blue-100 text-blue-800"
+                              : mov.type === "WASTE" ? "bg-rose-100 text-rose-800"
+                              : "bg-orange-100 text-orange-800"
                           }`}
                         >
-                          {mov.type === "IN" ? "Barang Masuk" : "Barang Keluar"}
+                          {mov.type}
                         </span>
                       </td>
-                      <td
-                        className={`p-4 font-medium ${mov.type === "IN" ? "text-emerald-600" : "text-rose-600"}`}
-                      >
-                        {mov.type === "IN" ? "+" : "-"}
-                        {mov.quantity} {ingredient?.unit}
+                      <td className={`p-4 font-medium ${mov.type === "IN" || mov.type === "RETURN" ? "text-emerald-600" : "text-rose-600"}`}>
+                        {mov.type === "IN" || mov.type === "RETURN" ? "+" : "-"}{mov.quantity} {ingredient?.unit}
                       </td>
                       <td className="p-4 text-slate-600">{mov.note || "-"}</td>
                       <td className="p-4 text-slate-600">{mov.createdBy}</td>
@@ -325,6 +415,100 @@ export const Inventory = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        ) : (
+          <div className="p-6">
+            {isOpnameMode ? (
+              <div className="space-y-6">
+                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Sesi Opname Baru</h3>
+                        <p className="text-sm text-slate-500">Sesuaikan stok fisik dengan stok sistem.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => setIsOpnameMode(false)} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">Batal</button>
+                        <button onClick={() => saveOpname("DRAFT")} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Simpan Draft</button>
+                        <button onClick={() => saveOpname("FINAL")} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Finalisasi
+                        </button>
+                    </div>
+                 </div>
+
+                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="p-3 font-semibold text-slate-600">Bahan Baku</th>
+                                <th className="p-3 font-semibold text-slate-600 text-center">Stok Sistem</th>
+                                <th className="p-3 font-semibold text-slate-600 text-center">Stok Fisik</th>
+                                <th className="p-3 font-semibold text-slate-600 text-center">Selisih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {opnameItems.map((item) => {
+                                const ing = ingredients.find(i => i.id === item.ingredientId);
+                                if (!ing) return null;
+                                return (
+                                    <tr key={item.ingredientId} className="border-b border-slate-100">
+                                        <td className="p-3 font-medium">{ing.name} <span className="text-xs text-slate-400">({ing.unit})</span></td>
+                                        <td className="p-3 text-center text-slate-600">{ing.currentStock}</td>
+                                        <td className="p-3 text-center">
+                                            <input 
+                                                type="number" 
+                                                className="w-24 px-2 py-1 border border-slate-300 rounded text-center mx-auto"
+                                                value={item.physicalStock}
+                                                onChange={(e) => handleOpnameChange(ing.id, Number(e.target.value))}
+                                                min="0"
+                                            />
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <span className={`px-2 py-1 rounded-lg text-sm font-bold ${item.difference > 0 ? "bg-emerald-100 text-emerald-700" : item.difference < 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}>
+                                                {item.difference > 0 ? "+" : ""}{item.difference}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                 </div>
+              </div>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="p-4 font-semibold text-slate-600">Tanggal</th>
+                        <th className="p-4 font-semibold text-slate-600">Status</th>
+                        <th className="p-4 font-semibold text-slate-600">Catatan</th>
+                        <th className="p-4 font-semibold text-slate-600">Dibuat Oleh</th>
+                        <th className="p-4 font-semibold text-slate-600">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {stockOpnames.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((opname) => (
+                            <tr key={opname.id} className="border-b border-slate-100">
+                                <td className="p-4 text-slate-800">{new Date(opname.date).toLocaleDateString('id-ID')}</td>
+                                <td className="p-4">
+                                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${opname.status === 'FINAL' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                                        {opname.status}
+                                    </span>
+                                </td>
+                                <td className="p-4 text-slate-600">{opname.notes}</td>
+                                <td className="p-4 text-slate-600">{opname.createdBy}</td>
+                                <td className="p-4">
+                                    <button className="text-primary hover:underline text-sm font-medium">Lihat Detail</button>
+                                </td>
+                            </tr>
+                        ))}
+                        {stockOpnames.length === 0 && (
+                            <tr><td colSpan={5} className="p-8 text-center text-slate-500">Belum ada riwayat Opname Stok.</td></tr>
+                        )}
+                    </tbody>
+                    </table>
+                </div>
+            )}
           </div>
         )}
       </div>
@@ -393,6 +577,7 @@ export const Inventory = () => {
                     name="currentStock"
                     required
                     min="0"
+                    step="any"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   />
                 </div>
@@ -405,8 +590,25 @@ export const Inventory = () => {
                     name="minStock"
                     required
                     min="0"
+                    step="any"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Harga per Satuan (Cost / Unit)
+                </label>
+                <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">Rp</span>
+                    <input
+                        type="number"
+                        name="costPerUnit"
+                        required
+                        min="0"
+                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg"
+                        placeholder="0"
+                    />
                 </div>
               </div>
 
@@ -434,7 +636,7 @@ export const Inventory = () => {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-800">Input Stok</h2>
+              <h2 className="text-xl font-bold text-slate-800">Catat Pemakaian Harian</h2>
               <button
                 onClick={() => setIsAddMovementOpen(false)}
                 className="text-slate-400 hover:text-slate-600"
@@ -444,7 +646,29 @@ export const Inventory = () => {
             </div>
 
             <form onSubmit={handleAddMovement} className="p-6 space-y-4">
-              <div className="flex gap-4 p-1 bg-slate-100 rounded-lg">
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setMovementType("OUT")}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                    movementType === "OUT"
+                      ? "bg-white text-orange-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Pemakaian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementType("WASTE")}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                    movementType === "WASTE"
+                      ? "bg-white text-rose-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Terbuang
+                </button>
                 <button
                   type="button"
                   onClick={() => setMovementType("IN")}
@@ -454,18 +678,7 @@ export const Inventory = () => {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  Barang Masuk
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMovementType("OUT")}
-                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                    movementType === "OUT"
-                      ? "bg-white text-rose-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Barang Keluar / Retur
+                  Masuk / PO
                 </button>
               </div>
 
@@ -496,7 +709,7 @@ export const Inventory = () => {
                   type="number"
                   name="quantity"
                   required
-                  min="1"
+                  min="0.01"
                   step="any"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 />
@@ -510,7 +723,7 @@ export const Inventory = () => {
                   name="note"
                   rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="Opsional (misal: Pembelian Supplier A)"
+                  placeholder="Opsional (misal: Tumpah, Kadaluarsa)"
                 ></textarea>
               </div>
 

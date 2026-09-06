@@ -3,7 +3,7 @@ import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
-import { db } from "./src/db/db.ts";
+import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
 import { eq } from "drizzle-orm";
 
@@ -29,7 +29,106 @@ const initialUsers = [
 ];
 
 async function ensureTables() {
-  // Database schema is managed via Drizzle migration
+  // Auto-create new Fase 1-4 tables if they don't exist (schema evolution without migration)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'LAINNYA',
+        parent_id TEXT REFERENCES expense_categories(id) ON DELETE SET NULL,
+        color TEXT NOT NULL DEFAULT '#6B7280',
+        icon TEXT NOT NULL DEFAULT 'tag',
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      );
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY,
+        category_id TEXT REFERENCES expense_categories(id),
+        period TEXT NOT NULL,
+        amount NUMERIC NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      );
+      CREATE TABLE IF NOT EXISTS bank_reconciliations (
+        id TEXT PRIMARY KEY,
+        period TEXT NOT NULL,
+        bank_name TEXT NOT NULL,
+        account_number TEXT,
+        opening_balance NUMERIC NOT NULL DEFAULT 0,
+        closing_balance NUMERIC NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        notes TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      );
+      CREATE TABLE IF NOT EXISTS bank_statement_lines (
+        id TEXT PRIMARY KEY,
+        reconciliation_id TEXT NOT NULL REFERENCES bank_reconciliations(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        description TEXT NOT NULL,
+        amount NUMERIC NOT NULL DEFAULT 0,
+        transaction_type TEXT NOT NULL DEFAULT 'CREDIT',
+        matched_transaction_id TEXT,
+        is_matched BOOLEAN NOT NULL DEFAULT false,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      );
+      CREATE TABLE IF NOT EXISTS stock_opnames (
+        id TEXT PRIMARY KEY,
+        period TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        notes TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT,
+        approved_by TEXT,
+        approved_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS stock_opname_items (
+        id TEXT PRIMARY KEY,
+        opname_id TEXT NOT NULL REFERENCES stock_opnames(id) ON DELETE CASCADE,
+        ingredient_id TEXT NOT NULL,
+        system_stock NUMERIC NOT NULL DEFAULT 0,
+        physical_stock NUMERIC NOT NULL DEFAULT 0,
+        difference NUMERIC GENERATED ALWAYS AS (physical_stock - system_stock) STORED,
+        unit_cost NUMERIC NOT NULL DEFAULT 0,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS payroll_records (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL,
+        period TEXT NOT NULL,
+        basic_salary NUMERIC NOT NULL DEFAULT 0,
+        meal_allowance NUMERIC NOT NULL DEFAULT 0,
+        position_allowance NUMERIC NOT NULL DEFAULT 0,
+        kpi_bonus NUMERIC NOT NULL DEFAULT 0,
+        alpha_deduction NUMERIC NOT NULL DEFAULT 0,
+        other_deductions NUMERIC NOT NULL DEFAULT 0,
+        gross_pay NUMERIC NOT NULL DEFAULT 0,
+        net_pay NUMERIC NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        paid_date TEXT,
+        paid_via TEXT,
+        notes TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      );
+      -- Add categoryId to cash_transactions if missing
+      ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id);
+      -- Add cost_per_unit to ingredients if missing
+      ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0;
+      -- Add extra fields to stock_movements if missing
+      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT;
+    `);
+    console.log("✅ Schema ensured: Fase 1-4 tables ready.");
+  } catch (err: any) {
+    // "column already exists" etc are OK to ignore
+    if (!err?.message?.includes("already exists") && !err?.message?.includes("duplicate")) {
+      console.warn("⚠️  ensureTables warning:", err?.message || err);
+    }
+  }
 }
 
 async function startServer() {
@@ -62,6 +161,24 @@ async function startServer() {
         return schema.salesImportLogs;
       case "audit_logs":
         return schema.auditLogs;
+      // Fase 1
+      case "expense_categories":
+        return schema.expenseCategories;
+      // Fase 2
+      case "budgets":
+        return schema.budgets;
+      case "bank_reconciliations":
+        return schema.bankReconciliations;
+      case "bank_statement_lines":
+        return schema.bankStatementLines;
+      // Fase 3
+      case "stock_opnames":
+        return schema.stockOpnames;
+      case "stock_opname_items":
+        return schema.stockOpnameItems;
+      // Fase 4
+      case "payroll_records":
+        return schema.payrollRecords;
       default:
         return null;
     }
@@ -74,6 +191,7 @@ async function startServer() {
     currentStock: Number(i.currentStock) || 0,
     minStock: Number(i.minStock) || 0,
     category: String(i.category || ""),
+    costPerUnit: Number(i.costPerUnit) || 0,
   });
 
   const sanitizeStockMovement = (m: any) => ({
@@ -83,6 +201,9 @@ async function startServer() {
     quantity: Number(m.quantity) || 0,
     date: String(m.date || new Date().toISOString()),
     note: m.note ? String(m.note) : null,
+    unitCost: m.unitCost != null ? Number(m.unitCost) : null,
+    totalCost: m.totalCost != null ? Number(m.totalCost) : null,
+    referenceId: m.referenceId ? String(m.referenceId) : null,
     createdBy: String(m.createdBy || "System"),
   });
 
@@ -121,7 +242,93 @@ async function startServer() {
     amount: Number(f.amount) || 0,
     description: String(f.description || ""),
     category: String(f.category || ""),
+    categoryId: f.categoryId ? String(f.categoryId) : null,
     referenceId: f.referenceId ? String(f.referenceId) : null,
+  });
+
+  // ─── New sanitizers (Fase 1-4) ───────────────────────────────────────────
+  const sanitizeExpenseCategory = (c: any) => ({
+    id: String(c.id || crypto.randomUUID()),
+    name: String(c.name || ""),
+    type: String(c.type || "LAINNYA"),
+    parentId: c.parentId ? String(c.parentId) : null,
+    color: String(c.color || "#6B7280"),
+    icon: String(c.icon || "tag"),
+    isActive: c.isActive !== undefined ? Boolean(c.isActive) : true,
+    sortOrder: Number(c.sortOrder) || 0,
+  });
+
+  const sanitizeBudget = (b: any) => ({
+    id: String(b.id || crypto.randomUUID()),
+    categoryId: b.categoryId ? String(b.categoryId) : null,
+    period: String(b.period || ""),
+    amount: Number(b.amount) || 0,
+    notes: b.notes ? String(b.notes) : null,
+    createdAt: String(b.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeBankReconciliation = (r: any) => ({
+    id: String(r.id || crypto.randomUUID()),
+    period: String(r.period || ""),
+    bankName: String(r.bankName || ""),
+    accountNumber: r.accountNumber ? String(r.accountNumber) : null,
+    openingBalance: Number(r.openingBalance) || 0,
+    closingBalance: Number(r.closingBalance) || 0,
+    status: String(r.status || "DRAFT"),
+    notes: r.notes ? String(r.notes) : null,
+    createdBy: r.createdBy ? String(r.createdBy) : null,
+    createdAt: String(r.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeBankStatementLine = (l: any) => ({
+    id: String(l.id || crypto.randomUUID()),
+    reconciliationId: String(l.reconciliationId || ""),
+    date: String(l.date || ""),
+    description: String(l.description || ""),
+    amount: Number(l.amount) || 0,
+    transactionType: String(l.transactionType || "CREDIT"),
+    isMatched: Boolean(l.isMatched),
+    matchedTransactionId: l.matchedTransactionId ? String(l.matchedTransactionId) : null,
+    createdAt: String(l.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeStockOpname = (o: any) => ({
+    id: String(o.id || crypto.randomUUID()),
+    date: String(o.date || new Date().toISOString()),
+    status: String(o.status || "DRAFT"),
+    notes: o.notes ? String(o.notes) : null,
+    createdBy: String(o.createdBy || "System"),
+    createdAt: String(o.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeStockOpnameItem = (i: any) => ({
+    id: String(i.id || crypto.randomUUID()),
+    opnameId: String(i.opnameId || ""),
+    ingredientId: String(i.ingredientId || ""),
+    systemStock: Number(i.systemStock) || 0,
+    physicalStock: Number(i.physicalStock) || 0,
+    difference: Number(i.difference) || 0,
+    notes: i.notes ? String(i.notes) : null,
+  });
+
+  const sanitizePayrollRecord = (p: any) => ({
+    id: String(p.id || crypto.randomUUID()),
+    employeeId: String(p.employeeId || ""),
+    period: String(p.period || ""),
+    basicSalary: Number(p.basicSalary) || 0,
+    mealAllowance: Number(p.mealAllowance) || 0,
+    positionAllowance: Number(p.positionAllowance) || 0,
+    kpiBonus: Number(p.kpiBonus) || 0,
+    alphaDeduction: Number(p.alphaDeduction) || 0,
+    otherDeductions: Number(p.otherDeductions) || 0,
+    grossPay: Number(p.grossPay) || 0,
+    netPay: Number(p.netPay) || 0,
+    status: String(p.status || "DRAFT"),
+    paidDate: p.paidDate ? String(p.paidDate) : null,
+    paidVia: p.paidVia ? String(p.paidVia) : null,
+    notes: p.notes ? String(p.notes) : null,
+    createdBy: String(p.createdBy || "System"),
+    createdAt: String(p.createdAt || new Date().toISOString()),
   });
 
   const sanitizeCashAccount = (a: any) => ({
@@ -269,6 +476,14 @@ async function startServer() {
       let suppliers: any[] = [];
       let purchase_orders: any[] = [];
       let shifts: any[] = [];
+      // Fase 1-4 tables
+      let expense_categories: any[] = [];
+      let budgets: any[] = [];
+      let bank_reconciliations: any[] = [];
+      let bank_statement_lines: any[] = [];
+      let stock_opnames: any[] = [];
+      let stock_opname_items: any[] = [];
+      let payroll_records: any[] = [];
 
       try {
         [
@@ -289,6 +504,13 @@ async function startServer() {
           suppliers,
           purchase_orders,
           shifts,
+          expense_categories,
+          budgets,
+          bank_reconciliations,
+          bank_statement_lines,
+          stock_opnames,
+          stock_opname_items,
+          payroll_records,
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -307,7 +529,58 @@ async function startServer() {
           db.select().from(schema.suppliers),
           db.select().from(schema.purchaseOrders),
           db.select().from(schema.shifts),
+          db.select().from(schema.expenseCategories),
+          db.select().from(schema.budgets),
+          db.select().from(schema.bankReconciliations),
+          db.select().from(schema.bankStatementLines),
+          db.select().from(schema.stockOpnames),
+          db.select().from(schema.stockOpnameItems),
+          db.select().from(schema.payrollRecords),
         ]);
+
+        // Seed default expense categories if empty
+        if (expense_categories.length === 0) {
+          const defaultCategories = [
+            { id: "cat-pendapatan", name: "Pendapatan", type: "PENDAPATAN", parentId: null, color: "#10B981", icon: "trending-up", isActive: true, sortOrder: 1 },
+            { id: "cat-pengeluaran", name: "Pengeluaran Operasional", type: "PENGELUARAN", parentId: null, color: "#EF4444", icon: "trending-down", isActive: true, sortOrder: 2 },
+            { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "#F59E0B", icon: "package", isActive: true, sortOrder: 3 },
+            { id: "cat-utilitas", name: "Utilitas", type: "UTILITAS", parentId: null, color: "#3B82F6", icon: "zap", isActive: true, sortOrder: 4 },
+            { id: "cat-hrd", name: "HRD & Personalia", type: "HRD", parentId: null, color: "#8B5CF6", icon: "users", isActive: true, sortOrder: 5 },
+            { id: "cat-aset", name: "Pembelian Aset", type: "ASET", parentId: null, color: "#6366F1", icon: "briefcase", isActive: true, sortOrder: 6 },
+            { id: "cat-lainnya", name: "Lainnya", type: "LAINNYA", parentId: null, color: "#6B7280", icon: "more-horizontal", isActive: true, sortOrder: 7 },
+            // Children: Pendapatan
+            { id: "cat-penjualan", name: "Penjualan Minuman", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
+            { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
+            { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 3 },
+            // Children: Pengeluaran
+            { id: "cat-sewa", name: "Sewa Tempat", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "home", isActive: true, sortOrder: 1 },
+            { id: "cat-kebersihan", name: "Kebersihan & Sanitasi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "trash-2", isActive: true, sortOrder: 2 },
+            { id: "cat-marketing-ops", name: "Marketing & Promosi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "megaphone", isActive: true, sortOrder: 3 },
+            { id: "cat-opex-lain", name: "Operasional Lainnya", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "settings", isActive: true, sortOrder: 4 },
+            // Children: Bahan Baku
+            { id: "cat-kopi", name: "Kopi & Espresso", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "coffee", isActive: true, sortOrder: 1 },
+            { id: "cat-susu", name: "Susu & Dairy", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "droplets", isActive: true, sortOrder: 2 },
+            { id: "cat-minuman", name: "Minuman & Sirup", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "cup-soda", isActive: true, sortOrder: 3 },
+            { id: "cat-packaging", name: "Packaging & Kemasan", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "box", isActive: true, sortOrder: 4 },
+            { id: "cat-bahan-lain", name: "Bahan Baku Lainnya", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "shopping-cart", isActive: true, sortOrder: 5 },
+            // Children: Utilitas
+            { id: "cat-listrik", name: "Listrik", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "zap", isActive: true, sortOrder: 1 },
+            { id: "cat-air", name: "Air & PDAM", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "droplets", isActive: true, sortOrder: 2 },
+            { id: "cat-internet", name: "Internet & Telepon", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "wifi", isActive: true, sortOrder: 3 },
+            { id: "cat-gas", name: "Gas", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "flame", isActive: true, sortOrder: 4 },
+            // Children: HRD
+            { id: "cat-gaji", name: "Gaji Karyawan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "wallet", isActive: true, sortOrder: 1 },
+            { id: "cat-bpjs", name: "BPJS & Asuransi", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "shield", isActive: true, sortOrder: 2 },
+            { id: "cat-tunjangan", name: "Tunjangan & Bonus", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "gift", isActive: true, sortOrder: 3 },
+            { id: "cat-pelatihan", name: "Pelatihan Karyawan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "book-open", isActive: true, sortOrder: 4 },
+          ];
+          try {
+            await db.insert(schema.expenseCategories).values(defaultCategories.map(sanitizeExpenseCategory));
+            expense_categories = defaultCategories as any;
+          } catch (seedErr) {
+            console.warn("Expense category seed skipped:", seedErr);
+          }
+        }
 
         // Auto seed if completely new database
         if (users.length === 0) {
@@ -359,6 +632,14 @@ async function startServer() {
         contracts: employee_contracts,
         attendances: attendance_records,
         kpiRecords: kpi_records,
+        // Fase 1-4
+        expense_categories,
+        budgets,
+        bank_reconciliations,
+        bank_statement_lines,
+        stock_opnames,
+        stock_opname_items,
+        payroll_records,
         serverTime: new Date().toISOString(),
       });
     } catch (e) {
@@ -387,6 +668,14 @@ async function startServer() {
         contracts,
         attendances,
         kpiRecords,
+        // Fase 1-4
+        expense_categories,
+        budgets,
+        bank_reconciliations,
+        bank_statement_lines,
+        stock_opnames,
+        stock_opname_items,
+        payroll_records,
       } = req.body;
 
       await db.transaction(async (tx) => {
@@ -517,6 +806,53 @@ async function startServer() {
           await tx.delete(schema.shifts);
           if (Array.isArray(shifts) && shifts.length > 0) {
             await tx.insert(schema.shifts).values(shifts.map(sanitizeShift));
+          }
+        }
+        // Fase 1: Expense Categories
+        if (expense_categories !== undefined) {
+          await tx.delete(schema.expenseCategories);
+          if (Array.isArray(expense_categories) && expense_categories.length > 0) {
+            await tx.insert(schema.expenseCategories).values(expense_categories.map(sanitizeExpenseCategory));
+          }
+        }
+        // Fase 2: Budgets
+        if (budgets !== undefined) {
+          await tx.delete(schema.budgets);
+          if (Array.isArray(budgets) && budgets.length > 0) {
+            await tx.insert(schema.budgets).values(budgets.map(sanitizeBudget));
+          }
+        }
+        // Fase 2: Bank Reconciliations
+        if (bank_reconciliations !== undefined) {
+          await tx.delete(schema.bankReconciliations);
+          if (Array.isArray(bank_reconciliations) && bank_reconciliations.length > 0) {
+            await tx.insert(schema.bankReconciliations).values(bank_reconciliations.map(sanitizeBankReconciliation));
+          }
+        }
+        if (bank_statement_lines !== undefined) {
+          await tx.delete(schema.bankStatementLines);
+          if (Array.isArray(bank_statement_lines) && bank_statement_lines.length > 0) {
+            await tx.insert(schema.bankStatementLines).values(bank_statement_lines.map(sanitizeBankStatementLine));
+          }
+        }
+        // Fase 3: Stock Opnames
+        if (stock_opnames !== undefined) {
+          await tx.delete(schema.stockOpnames);
+          if (Array.isArray(stock_opnames) && stock_opnames.length > 0) {
+            await tx.insert(schema.stockOpnames).values(stock_opnames.map(sanitizeStockOpname));
+          }
+        }
+        if (stock_opname_items !== undefined) {
+          await tx.delete(schema.stockOpnameItems);
+          if (Array.isArray(stock_opname_items) && stock_opname_items.length > 0) {
+            await tx.insert(schema.stockOpnameItems).values(stock_opname_items.map(sanitizeStockOpnameItem));
+          }
+        }
+        // Fase 4: Payroll
+        if (payroll_records !== undefined) {
+          await tx.delete(schema.payrollRecords);
+          if (Array.isArray(payroll_records) && payroll_records.length > 0) {
+            await tx.insert(schema.payrollRecords).values(payroll_records.map(sanitizePayrollRecord));
           }
         }
       });
@@ -862,6 +1198,164 @@ async function startServer() {
       }
     },
   );
+
+  // ─── Payroll Calculator API (Fase 4) ─────────────────────────────────────
+  app.post("/api/payroll/calculate", async (req, res) => {
+    try {
+      const { period } = req.body; // YYYY-MM
+      if (!period) return res.status(400).json({ error: "Period required" });
+
+      // Get all active employees
+      const allEmployees = await db.select().from(schema.employees);
+      const activeEmployees = allEmployees.filter((e) => e.status === "AKTIF");
+
+      // Get latest contracts for each employee
+      const allContracts = await db.select().from(schema.employeeContracts);
+      const allAttendances = await db.select().from(schema.attendanceRecords);
+      const allKpi = await db.select().from(schema.kpiRecords);
+
+      const results = activeEmployees.map((emp) => {
+        // Get latest contract (highest effectiveDate)
+        const contracts = allContracts
+          .filter((c) => c.employeeId === emp.id)
+          .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+        const contract = contracts[0];
+        if (!contract) return null;
+
+        // Get attendance for this period
+        const attendance = allAttendances.find(
+          (a) => a.employeeId === emp.id && a.period === period
+        );
+
+        // Get latest KPI bonus (current quarter)
+        const [year, month] = period.split("-").map(Number);
+        const quarter = Math.ceil(month / 3);
+        const kpi = allKpi.find(
+          (k) => k.employeeId === emp.id && k.year === year && k.quarter === quarter
+        );
+
+        const alphaDays = attendance?.alphaDays ?? 0;
+        const alphaDeduction = alphaDays * contract.alphaDeductionPerDay;
+        const kpiBonus = kpi?.kpiBonus ?? 0;
+
+        const grossPay =
+          contract.basicSalary +
+          contract.mealAllowance +
+          contract.positionAllowance +
+          kpiBonus;
+        const netPay = grossPay - alphaDeduction;
+
+        return {
+          id: crypto.randomUUID(),
+          employeeId: emp.id,
+          period,
+          basicSalary: contract.basicSalary,
+          mealAllowance: contract.mealAllowance,
+          positionAllowance: contract.positionAllowance,
+          kpiBonus,
+          alphaDeduction,
+          otherDeductions: 0,
+          grossPay,
+          netPay,
+          status: "DRAFT",
+          paidDate: null,
+          paidVia: null,
+          notes: null,
+          createdBy: (req.headers["x-user-id"] as string) || "System",
+          createdAt: new Date().toISOString(),
+          // Employee info for UI
+          employeeName: emp.name,
+          employeeNik: emp.nik,
+          position: emp.position,
+          alphaDays,
+          attendancePresentDays: attendance?.presentDays ?? 0,
+        };
+      }).filter(Boolean);
+
+      res.json({ success: true, payrolls: results, period });
+    } catch (e) {
+      console.error("Payroll calculate error:", e);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  // ─── Dashboard Summary API ─────────────────────────────────────────────────
+  app.get("/api/dashboard/summary", async (req, res) => {
+    try {
+      const now = new Date();
+      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevPeriod = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}`;
+
+      const [transactions, employees, ingredients, payrolls] = await Promise.all([
+        db.select().from(schema.cashTransactions),
+        db.select().from(schema.employees),
+        db.select().from(schema.ingredients),
+        db.select().from(schema.payrollRecords),
+      ]);
+
+      // Filter by period (date starts with YYYY-MM)
+      const currentTx = transactions.filter((t) => t.date.startsWith(currentPeriod));
+      const prevTx = transactions.filter((t) => t.date.startsWith(prevPeriod));
+
+      const sumIn = (txs: any[]) => txs.filter((t) => t.type === "CASH_IN").reduce((s, t) => s + t.amount, 0);
+      const sumOut = (txs: any[]) => txs.filter((t) => t.type === "CASH_OUT").reduce((s, t) => s + t.amount, 0);
+
+      const currentRevenue = sumIn(currentTx);
+      const currentExpense = sumOut(currentTx);
+      const prevRevenue = sumIn(prevTx);
+      const prevExpense = sumOut(prevTx);
+
+      // Expense breakdown by categoryId
+      const expenseCategories = await db.select().from(schema.expenseCategories);
+      const expenseBreakdown = expenseCategories
+        .filter((c) => !c.parentId) // root only
+        .map((cat) => {
+          const childIds = expenseCategories.filter((c) => c.parentId === cat.id).map((c) => c.id);
+          const allIds = [cat.id, ...childIds];
+          const total = currentTx
+            .filter((t) => t.type === "CASH_OUT" && t.categoryId && allIds.includes(t.categoryId))
+            .reduce((s, t) => s + t.amount, 0);
+          return { categoryId: cat.id, name: cat.name, color: cat.color, total };
+        })
+        .filter((b) => b.total > 0)
+        .sort((a, b) => b.total - a.total);
+
+      // Low stock count
+      const lowStockCount = ingredients.filter((i) => i.currentStock <= i.minStock).length;
+
+      // Active employees & expiring contracts
+      const activeEmployeeCount = employees.filter((e) => e.status === "AKTIF").length;
+      const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const expiringContracts = employees.filter(
+        (e) => e.endDate && e.endDate <= thirtyDaysLater && e.endDate >= now.toISOString().slice(0, 10)
+      ).length;
+
+      // Payroll status for current period
+      const currentPayrolls = payrolls.filter((p) => p.period === currentPeriod);
+      const payrollStatus = {
+        draft: currentPayrolls.filter((p) => p.status === "DRAFT").length,
+        approved: currentPayrolls.filter((p) => p.status === "APPROVED").length,
+        paid: currentPayrolls.filter((p) => p.status === "PAID").length,
+        total: currentPayrolls.length,
+      };
+
+      res.json({
+        currentPeriod,
+        revenue: { current: currentRevenue, previous: prevRevenue },
+        expense: { current: currentExpense, previous: prevExpense },
+        profit: { current: currentRevenue - currentExpense, previous: prevRevenue - prevExpense },
+        expenseBreakdown,
+        lowStockCount,
+        activeEmployeeCount,
+        expiringContracts,
+        payrollStatus,
+      });
+    } catch (e) {
+      console.error("Dashboard summary error:", e);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

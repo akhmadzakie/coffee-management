@@ -11,6 +11,10 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
 import { motion } from "motion/react";
 import {
@@ -26,6 +30,9 @@ import {
   Building2,
   Landmark,
   Smartphone,
+  Users,
+  Clock,
+  AlertCircle
 } from "lucide-react";
 import { useTranslation } from "../utils/i18n";
 
@@ -39,6 +46,9 @@ export const Dashboard = () => {
     settings,
     shifts,
     currentUser,
+    expenseCategories,
+    contracts,
+    employees,
   } = useStore();
   const { t } = useTranslation(settings.language || "id");
   const isIndo = settings.language === "id";
@@ -132,11 +142,21 @@ export const Dashboard = () => {
             return d.getMonth() === i && d.getFullYear() === filterYear;
           })
           .reduce((sum, s) => sum + s.totalPrice, 0);
+          
+        const monthExpense = cashTransactions
+          .filter((c) => {
+            if (c.type !== 'CASH_OUT') return false;
+            const d = new Date(c.date);
+            return d.getMonth() === i && d.getFullYear() === filterYear;
+          })
+          .reduce((sum, c) => sum + c.amount, 0);
+          
         return {
           name: new Date(filterYear, i).toLocaleString("default", {
             month: "short",
           }),
           sales: monthSales,
+          expense: monthExpense,
         };
       });
       return monthlyData;
@@ -146,14 +166,56 @@ export const Dashboard = () => {
         const daySales = filteredSales
           .filter((s) => new Date(s.date).getDate() === i + 1)
           .reduce((sum, s) => sum + s.totalPrice, 0);
+          
+        const dayExpense = filteredFinance
+          .filter((c) => c.type === 'CASH_OUT' && new Date(c.date).getDate() === i + 1)
+          .reduce((sum, c) => sum + c.amount, 0);
+          
         return {
           name: `${i + 1}`,
           sales: daySales,
+          expense: dayExpense,
         };
       });
       return dailyData;
     }
-  }, [filterMonth, filterYear, filteredSales, salesTransactions, daysInMonth]);
+  }, [filterMonth, filterYear, filteredSales, salesTransactions, filteredFinance, cashTransactions, daysInMonth]);
+
+  // Inventory Valuation
+  const totalInventoryValue = ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
+
+  // Expiring Contracts (within 30 days)
+  const expiringContracts = useMemo(() => {
+    const today = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(today.getDate() + 30);
+    
+    return contracts.filter(c => {
+      if (c.status !== 'ACTIVE' || !c.endDate) return false;
+      const end = new Date(c.endDate);
+      return end >= today && end <= thirtyDaysFromNow;
+    });
+  }, [contracts]);
+  
+  // Expense by Category (Donut Chart)
+  const expenseByCategory = useMemo(() => {
+    const expenses: Record<string, number> = {};
+    filteredFinance.filter(f => f.type === 'CASH_OUT').forEach(f => {
+      const catName = expenseCategories.find(c => c.id === f.categoryId)?.name || 'Lainnya';
+      expenses[catName] = (expenses[catName] || 0) + f.amount;
+    });
+    
+    // Sort and take top 5 + Others
+    const sorted = Object.entries(expenses).sort((a, b) => b[1] - a[1]);
+    const top = sorted.slice(0, 5).map(([name, value]) => ({ name, value }));
+    const others = sorted.slice(5).reduce((sum, [_, val]) => sum + val, 0);
+    if (others > 0) {
+      top.push({ name: 'Lainnya', value: others });
+    }
+    return top;
+  }, [filteredFinance, expenseCategories]);
+  
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#ff7300'];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -407,11 +469,70 @@ export const Dashboard = () => {
         </motion.div>
       </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, staggerChildren: 0.1 }}
+        className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-6"
+      >
+        {/* HRD KPI */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
+          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-full -z-10" />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Status SDM & Kontrak" : "HR & Contracts"}</h3>
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-slate-800">
+            {employees.filter(e => e.status === 'ACTIVE').length} <span className="text-sm font-normal text-slate-500">{isIndo ? "Aktif" : "Active"}</span>
+          </p>
+          {expiringContracts.length > 0 ? (
+            <div className="flex items-center gap-1.5 mt-2 text-sm text-amber-600 font-medium">
+              <AlertCircle className="w-4 h-4 mr-1" />
+              {expiringContracts.length} {isIndo ? "Kontrak segera berakhir" : "Contracts expiring soon"}
+            </div>
+          ) : (
+             <div className="flex items-center gap-1.5 mt-2 text-sm text-emerald-600 font-medium">
+               <Clock className="w-4 h-4 mr-1" />
+               {isIndo ? "Semua kontrak aman" : "All contracts safe"}
+             </div>
+          )}
+        </motion.div>
+
+        {/* Inventory KPI */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
+          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-10" />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Valuasi Stok" : "Inventory Valuation"}</h3>
+            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+              <Package className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-slate-800">
+            {formatCurrency(totalInventoryValue)}
+          </p>
+          <p className="text-sm text-slate-500 mt-2">
+            {ingredients.length} {isIndo ? "Bahan Baku" : "Ingredients"}
+          </p>
+        </motion.div>
+      </motion.div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
           <h3 className="text-lg font-bold text-slate-800 mb-6">
-            {isIndo ? "Tren Penjualan" : "Sales Trend"}
+            {isIndo ? "Tren Pendapatan vs Pengeluaran" : "Revenue vs Expense Trend"}
           </h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -421,53 +542,61 @@ export const Dashboard = () => {
                     <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#F43F5E" stopOpacity={0} />
+                  </linearGradient>
                 </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="#E2E8F0"
-                />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748B", fontSize: 12 }}
-                  dy={10}
-                />
-                <YAxis
-                  tickFormatter={(value) =>
-                    `Rp${(value / 1000000).toFixed(1)}M`
-                  }
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748B", fontSize: 12 }}
-                  dx={-10}
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748B", fontSize: 12 }} dy={10} />
+                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(1)}M`} axisLine={false} tickLine={false} tick={{ fill: "#64748B", fontSize: 12 }} dx={-10} />
                 <Tooltip
-                  formatter={(value: number) => [
-                    formatCurrency(value),
-                    "Penjualan",
-                  ]}
-                  contentStyle={{
-                    borderRadius: "12px",
-                    border: "none",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                  }}
+                  formatter={(value: number, name: string) => [formatCurrency(value), name === 'sales' ? (isIndo ? 'Pendapatan' : 'Revenue') : (isIndo ? 'Pengeluaran' : 'Expense')]}
+                  contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="sales"
-                  stroke="#3B82F6"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#colorSales)"
-                />
+                <Legend verticalAlign="top" height={36}/>
+                <Area type="monotone" dataKey="sales" name="sales" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
+                <Area type="monotone" dataKey="expense" name="expense" stroke="#F43F5E" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="space-y-6">
+          {/* Expense Category Chart */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">
+              {isIndo ? "Pengeluaran Berdasarkan Kategori" : "Expense by Category"}
+            </h3>
+            {expenseByCategory.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-sm">
+                {isIndo ? "Belum ada data pengeluaran." : "No expense data yet."}
+              </div>
+            ) : (
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={expenseByCategory}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {expenseByCategory.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+          
           {/* Low Stock Alerts */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
             <div className="flex items-center justify-between mb-4">
@@ -503,39 +632,6 @@ export const Dashboard = () => {
                     <span className="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg">
                       {ing.currentStock} {ing.unit}
                     </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Top Products */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
-              {isIndo ? "Menu Terlaris" : "Top Menu Items"}
-            </h3>
-            {bestSellers.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">
-                {isIndo ? "Belum ada data penjualan." : "No sales data yet."}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {bestSellers.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-sm">
-                        #{index + 1}
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {item.menuName}
-                      </p>
-                    </div>
-                    <p className="text-sm font-medium text-slate-600">
-                      {item.quantity} terjual
-                    </p>
                   </div>
                 ))}
               </div>

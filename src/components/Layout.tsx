@@ -28,6 +28,10 @@ import {
   FileSpreadsheet,
   BadgePercent,
   X,
+  Tag,
+  BarChart3,
+  CreditCard,
+  Calculator,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -68,17 +72,34 @@ export const Layout: React.FC<LayoutProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  let navigation = [
+  const allNavigation = [
     {
       name: t("dashboard") || "Dashboard",
       view: "dashboard" as ViewState,
       icon: LayoutDashboard,
     },
+    // ─── Finance Group ───────────────────────────────────────────
     {
       name: t("cash_flow") || "Arus Kas",
       view: "cash_flow" as ViewState,
       icon: Wallet,
     },
+    {
+      name: "Kategori Keuangan",
+      view: "expense_categories" as ViewState,
+      icon: Tag,
+    },
+    {
+      name: "Laporan Keuangan",
+      view: "finance_reports" as ViewState,
+      icon: BarChart3,
+    },
+    {
+      name: "Rekonsiliasi Bank",
+      view: "bank_reconciliation" as ViewState,
+      icon: CreditCard,
+    },
+    // ─── Operations Group ────────────────────────────────────────
     {
       name: t("inventory") || "Inventori",
       view: "inventory" as ViewState,
@@ -89,11 +110,18 @@ export const Layout: React.FC<LayoutProps> = ({
       view: "import_sales" as ViewState,
       icon: ReceiptText,
     },
+    // ─── HR Group ────────────────────────────────────────────────
     {
-      name: t("hr") || "SDM & Payroll",
+      name: "SDM & HRD",
       view: "hr" as ViewState,
       icon: UserCheck,
     },
+    {
+      name: "Penggajian (Payroll)",
+      view: "payroll" as ViewState,
+      icon: Calculator,
+    },
+    // ─── Admin Group ─────────────────────────────────────────────
     { name: t("users") || "Pengguna", view: "users" as ViewState, icon: Users },
     {
       name: t("audit_log") || "Audit Log",
@@ -122,193 +150,23 @@ export const Layout: React.FC<LayoutProps> = ({
     },
   ];
 
-  if (currentUser?.role === "KASIR") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("shifts") || "Shift & Kasir",
-        view: "shifts" as ViewState,
-        icon: Coffee,
-      },
-      {
-        name: t("import_sales") || "Impor Penjualan",
-        view: "import_sales" as ViewState,
-        icon: ReceiptText,
-      },
-    ];
-  } else if (currentUser?.role === "BARISTA") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("shifts") || "Shift & Kasir",
-        view: "shifts" as ViewState,
-        icon: Coffee,
-      },
-    ];
-  } else if (currentUser?.role === "WAITER") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-    ];
-  } else if (currentUser?.role === "HRD") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("hr") || "SDM & Payroll",
-        view: "hr" as ViewState,
-        icon: UserCheck,
-      },
-      {
-        name: t("users") || "Pengguna",
-        view: "users" as ViewState,
-        icon: Users,
-      },
-    ];
-  } else if (currentUser?.role === "MARKETING") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("import_sales") || "Impor Penjualan",
-        view: "import_sales" as ViewState,
-        icon: ReceiptText,
-      },
-    ];
-  } else if (currentUser?.role === "PURCHASING") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("inventory") || "Inventori",
-        view: "inventory" as ViewState,
-        icon: Warehouse,
-      },
-      {
-        name: t("suppliers") || "Supplier",
-        view: "suppliers" as ViewState,
-        icon: Truck,
-      },
-      {
-        name: t("purchases") || "Pembelian (PO)",
-        view: "purchases" as ViewState,
-        icon: ShoppingBag,
-      },
-    ];
-  } else if (currentUser?.role === "FINANCE") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("cash_flow") || "Arus Kas",
-        view: "cash_flow" as ViewState,
-        icon: Wallet,
-      },
-      {
-        name: t("purchases") || "Pembelian (PO)",
-        view: "purchases" as ViewState,
-        icon: ShoppingBag,
-      },
-      {
-        name: t("hr") || "SDM & Payroll",
-        view: "hr" as ViewState,
-        icon: UserCheck,
-      },
-    ];
-  } else if (currentUser?.role === "ADMIN_OPERASIONAL") {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("inventory") || "Inventori",
-        view: "inventory" as ViewState,
-        icon: Warehouse,
-      },
-      {
-        name: t("import_sales") || "Impor Penjualan",
-        view: "import_sales" as ViewState,
-        icon: ReceiptText,
-      },
-    ];
-  } else if (
-    currentUser?.role === "OWNER" ||
-    currentUser?.role === "MANAGER_CABANG" ||
-    currentUser?.role === "AUDITOR"
-  ) {
-    navigation = [
-      {
-        name: t("dashboard") || "Dashboard",
-        view: "dashboard" as ViewState,
-        icon: LayoutDashboard,
-      },
-      {
-        name: t("cash_flow") || "Arus Kas",
-        view: "cash_flow" as ViewState,
-        icon: Wallet,
-      },
-      {
-        name: t("inventory") || "Inventori",
-        view: "inventory" as ViewState,
-        icon: Warehouse,
-      },
-      {
-        name: t("import_sales") || "Impor Penjualan",
-        view: "import_sales" as ViewState,
-        icon: ReceiptText,
-      },
-      {
-        name: t("shifts") || "Shift & Kasir",
-        view: "shifts" as ViewState,
-        icon: Coffee,
-      },
-      {
-        name: t("suppliers") || "Supplier",
-        view: "suppliers" as ViewState,
-        icon: Truck,
-      },
-      {
-        name: t("purchases") || "Pembelian (PO)",
-        view: "purchases" as ViewState,
-        icon: ShoppingBag,
-      },
-      {
-        name: t("hr") || "SDM & Payroll",
-        view: "hr" as ViewState,
-        icon: UserCheck,
-      },
-      {
-        name: t("audit_log") || "Audit Log",
-        view: "audit_log" as ViewState,
-        icon: ShieldCheck,
-      },
-    ];
-  }
+  const roleAccess: Record<string, ViewState[]> = {
+    SUPER_ADMIN: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
+    OWNER: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
+    MANAGER_CABANG: ["dashboard", "cash_flow", "inventory", "import_sales", "hr", "shifts", "suppliers", "purchases"],
+    ADMIN_OPERASIONAL: ["dashboard", "cash_flow", "inventory", "import_sales", "shifts", "hr", "suppliers", "purchases"],
+    FINANCE: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "import_sales", "payroll", "purchases", "audit_log"],
+    AUDITOR: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "import_sales", "payroll", "purchases", "audit_log"],
+    KASIR: ["shifts", "import_sales"],
+    WAITER: ["shifts", "import_sales"],
+    BARISTA: ["shifts", "import_sales", "inventory"],
+    HRD: ["hr", "payroll"],
+    PURCHASING: ["inventory", "suppliers", "purchases"],
+    MARKETING: ["dashboard", "import_sales"],
+  };
+
+  const allowedViews = currentUser ? roleAccess[currentUser.role] || [] : [];
+  const navigation = allNavigation.filter((nav) => allowedViews.includes(nav.view));
 
   return (
     <div className="min-h-screen bg-slate-50 flex">

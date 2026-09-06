@@ -9,6 +9,96 @@ import {
   real,
 } from "drizzle-orm/pg-core";
 
+// ─── Expense Categories (Fase 1) ────────────────────────────────────────────
+export const expenseCategories = pgTable("expense_categories", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  name: text("name").notNull(),
+  // PENDAPATAN | PENGELUARAN | BAHAN_BAKU | UTILITAS | HRD | ASET | LAINNYA
+  type: varchar("type", { length: 50 }).notNull(),
+  parentId: varchar("parent_id", { length: 255 }), // null = root category
+  color: varchar("color", { length: 20 }).default("#6B7280").notNull(),
+  icon: varchar("icon", { length: 50 }).default("tag").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+});
+
+// ─── Budgets (Fase 2) ────────────────────────────────────────────────────────
+export const budgets = pgTable("budgets", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  categoryId: varchar("category_id", { length: 255 }),
+  period: text("period").notNull(),
+  amount: real("amount").notNull().default(0),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+// ─── Bank Reconciliations (Fase 2) ───────────────────────────────────────────
+export const bankReconciliations = pgTable("bank_reconciliations", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  period: text("period").notNull(),
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number"),
+  openingBalance: real("opening_balance").notNull().default(0),
+  closingBalance: real("closing_balance").notNull().default(0),
+  status: varchar("status", { length: 50 }).notNull().default("DRAFT"),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 255 }),
+  createdAt: text("created_at").notNull(),
+});
+
+export const bankStatementLines = pgTable("bank_statement_lines", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  reconciliationId: varchar("reconciliation_id", { length: 255 }).notNull(),
+  date: text("date").notNull(),
+  description: text("description").notNull(),
+  amount: real("amount").notNull().default(0),
+  transactionType: varchar("transaction_type", { length: 50 }).notNull().default("CREDIT"),
+  matchedTransactionId: varchar("matched_transaction_id", { length: 255 }),
+  isMatched: boolean("is_matched").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+// ─── Stock Opnames (Fase 3) ──────────────────────────────────────────────────
+export const stockOpnames = pgTable("stock_opnames", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  date: text("date").notNull(),
+  status: varchar("status", { length: 50 }).default("DRAFT").notNull(), // DRAFT | FINAL
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 255 }).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const stockOpnameItems = pgTable("stock_opname_items", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  opnameId: varchar("opname_id", { length: 255 }).notNull(),
+  ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
+  systemStock: real("system_stock").notNull(),
+  physicalStock: real("physical_stock").notNull(),
+  difference: real("difference").notNull(), // physicalStock - systemStock
+  notes: text("notes"),
+});
+
+// ─── Payroll Records (Fase 4) ─────────────────────────────────────────────────
+export const payrollRecords = pgTable("payroll_records", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  employeeId: varchar("employee_id", { length: 255 }).notNull(),
+  period: varchar("period", { length: 7 }).notNull(), // YYYY-MM
+  basicSalary: real("basic_salary").notNull(),
+  mealAllowance: real("meal_allowance").notNull(),
+  positionAllowance: real("position_allowance").notNull(),
+  kpiBonus: real("kpi_bonus").default(0).notNull(),
+  alphaDeduction: real("alpha_deduction").default(0).notNull(),
+  otherDeductions: real("other_deductions").default(0).notNull(),
+  grossPay: real("gross_pay").notNull(),
+  netPay: real("net_pay").notNull(),
+  status: varchar("status", { length: 50 }).default("DRAFT").notNull(), // DRAFT | APPROVED | PAID
+  paidDate: text("paid_date"),
+  paidVia: varchar("paid_via", { length: 255 }), // accountId
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 255 }).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const cashAccounts = pgTable("cash_accounts", {
   id: varchar("id", { length: 255 }).primaryKey(),
   name: text("name").notNull(),
@@ -19,11 +109,12 @@ export const cashAccounts = pgTable("cash_accounts", {
 export const cashTransactions = pgTable("cash_transactions", {
   id: varchar("id", { length: 255 }).primaryKey(),
   accountId: varchar("account_id", { length: 255 }).notNull(),
-  type: varchar("type", { length: 50 }).notNull(), // 'IN', 'OUT', 'TRANSFER'
+  type: varchar("type", { length: 50 }).notNull(), // 'CASH_IN', 'CASH_OUT', 'TRANSFER'
   date: text("date").notNull(),
   amount: real("amount").notNull(),
   description: text("description").notNull(),
-  category: text("category").notNull(),
+  category: text("category").notNull(), // kept for backward compat
+  categoryId: varchar("category_id", { length: 255 }), // FK to expenseCategories
   referenceId: varchar("reference_id", { length: 255 }),
 });
 
@@ -69,15 +160,20 @@ export const ingredients = pgTable("ingredients", {
   currentStock: real("current_stock").notNull(),
   minStock: real("min_stock").notNull(),
   category: text("category").notNull(),
+  costPerUnit: real("cost_per_unit").default(0).notNull(), // Fase 3: valuation
 });
 
 export const stockMovements = pgTable("stock_movements", {
   id: varchar("id", { length: 255 }).primaryKey(),
   ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
-  type: varchar("type", { length: 50 }).notNull(), // 'IN' | 'OUT'
+  // Fase 3: expanded types
+  type: varchar("type", { length: 50 }).notNull(), // 'IN' | 'OUT' | 'ADJUSTMENT' | 'WASTE' | 'RETURN'
   quantity: real("quantity").notNull(),
   date: text("date").notNull(), // ISO String
   note: text("note"),
+  unitCost: real("unit_cost"), // harga per unit saat transaksi (untuk IN)
+  totalCost: real("total_cost"), // unitCost × quantity
+  referenceId: varchar("reference_id", { length: 255 }), // link ke PO
   createdBy: varchar("created_by", { length: 255 }).notNull(),
 });
 
@@ -195,3 +291,5 @@ export const shifts = pgTable("shifts", {
   difference: real("difference"),
   status: varchar("status", { length: 50 }).notNull(),
 });
+
+

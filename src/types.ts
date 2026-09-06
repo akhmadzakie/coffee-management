@@ -31,11 +31,129 @@ export type ViewState =
   | "shifts"
   | "suppliers"
   | "purchases"
-  | "hr";
+  | "hr"
+  | "expense_categories"
+  | "payroll"
+  | "finance_reports"
+  | "bank_reconciliation";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
 export type AttendanceStatus = "HADIR" | "IZIN" | "SAKIT" | "ALPHA" | "LIBUR";
+
+// ─── Expense Categories (Fase 1) ───────────────────────────────────────────
+export type ExpenseCategoryType =
+  | "PENDAPATAN"
+  | "PENGELUARAN"
+  | "BAHAN_BAKU"
+  | "UTILITAS"
+  | "HRD"
+  | "ASET"
+  | "LAINNYA";
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  type: ExpenseCategoryType;
+  parentId: string | null;
+  color: string;
+  icon: string;
+  isActive: boolean;
+  sortOrder: number;
+  // UI-only: children populated from flat list
+  children?: ExpenseCategory[];
+}
+
+export interface Budget {
+  id: string;
+  categoryId: string;
+  period: string; // YYYY-MM
+  targetAmount: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+// ─── Payroll (Fase 4) ───────────────────────────────────────────────────────────
+export type PayrollStatus = "DRAFT" | "APPROVED" | "PAID";
+
+export interface PayrollRecord {
+  id: string;
+  employeeId: string;
+  period: string; // YYYY-MM
+  basicSalary: number;
+  mealAllowance: number;
+  positionAllowance: number;
+  kpiBonus: number;
+  alphaDeduction: number;
+  otherDeductions: number;
+  grossPay: number;
+  netPay: number;
+  status: PayrollStatus;
+  paidDate: string | null;
+  paidVia: string | null; // accountId
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+// ─── Stock Opname (Fase 3) ───────────────────────────────────────────────────
+export type OpnameStatus = "DRAFT" | "FINAL";
+
+export interface StockOpname {
+  id: string;
+  date: string;
+  status: OpnameStatus;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface StockOpnameItem {
+  id: string;
+  opnameId: string;
+  ingredientId: string;
+  systemStock: number;
+  physicalStock: number;
+  difference: number;
+  notes: string | null;
+}
+
+// ─── Bank Reconciliation (Fase 2) ────────────────────────────────────────────
+export type ReconciliationStatus = "DRAFT" | "FINAL";
+
+export interface BankReconciliation {
+  id: string;
+  period: string; // YYYY-MM
+  bankName: string;
+  accountNumber: string | null;
+  openingBalance: number;
+  closingBalance: number;
+  status: ReconciliationStatus;
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface BankStatementLine {
+  id: string;
+  reconciliationId: string;
+  date: string;
+  description: string;
+  amount: number;
+  transactionType: "DEBIT" | "CREDIT";
+  isMatched: boolean;
+  matchedTransactionId: string | null;
+  createdAt: string;
+}
+
+export interface Budget {
+  id: string;
+  categoryId: string | null;
+  period: string; // YYYY-MM
+  amount: number;
+  notes: string | null;
+  createdAt: string;
+}
 
 export interface Employee {
   id: string;
@@ -140,7 +258,8 @@ export interface CashTransaction {
   date: string; // ISO string
   amount: number;
   description: string;
-  category: string;
+  category: string; // kept for backward compat
+  categoryId?: string | null; // FK to ExpenseCategory
   referenceId?: string;
 }
 
@@ -151,15 +270,20 @@ export interface Ingredient {
   currentStock: number;
   minStock: number;
   category: string;
+  costPerUnit: number; // Fase 3: untuk valuation stok
 }
 
 export interface StockMovement {
   id: string;
   ingredientId: string;
-  type: "IN" | "OUT";
+  // Fase 3: extended types
+  type: "IN" | "OUT" | "ADJUSTMENT" | "WASTE" | "RETURN";
   quantity: number;
   date: string; // ISO string
   note: string;
+  unitCost?: number | null;
+  totalCost?: number | null;
+  referenceId?: string | null; // link ke PO
   createdBy: string;
 }
 

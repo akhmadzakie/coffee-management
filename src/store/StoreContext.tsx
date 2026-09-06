@@ -24,6 +24,14 @@ import {
   EmployeeContract,
   AttendanceRecord,
   KPIRecord,
+  // Fase 1-4
+  ExpenseCategory,
+  Budget,
+  PayrollRecord,
+  BankReconciliation,
+  BankStatementLine,
+  StockOpname,
+  StockOpnameItem,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -62,6 +70,41 @@ interface StoreContextType {
   contracts: EmployeeContract[];
   attendances: AttendanceRecord[];
   kpiRecords: KPIRecord[];
+
+  // Fase 1: Expense Categories
+  expenseCategories: ExpenseCategory[];
+  addExpenseCategory: (cat: ExpenseCategory) => void;
+  updateExpenseCategory: (cat: ExpenseCategory) => void;
+  deleteExpenseCategory: (id: string) => void;
+
+  // Fase 2: Finance
+  budgets: Budget[];
+  addBudget: (b: Budget) => void;
+  updateBudget: (b: Budget) => void;
+  deleteBudget: (id: string) => void;
+  bankReconciliations: BankReconciliation[];
+  addBankReconciliation: (r: BankReconciliation) => void;
+  updateBankReconciliation: (r: BankReconciliation) => void;
+  
+  bankStatementLines: BankStatementLine[];
+  addBankStatementLine: (l: BankStatementLine) => void;
+  updateBankStatementLine: (l: BankStatementLine) => void;
+  bulkAddBankStatementLines: (lines: BankStatementLine[]) => void;
+
+  // Fase 3: Inventory
+  stockOpnames: StockOpname[];
+  stockOpnameItems: StockOpnameItem[];
+
+  // Fase 4: Payroll
+  payrollRecords: PayrollRecord[];
+  addPayrollRecord: (p: PayrollRecord) => void;
+  updatePayrollRecord: (p: PayrollRecord) => void;
+  deletePayrollRecord: (id: string) => void;
+  bulkAddPayrollRecords: (records: PayrollRecord[]) => void;
+
+  // Generic state access (for new modules)
+  state: any;
+  dispatch: (action: any) => void;
 
   addEmployee: (emp: Omit<Employee, "id" | "createdAt">) => void;
   updateEmployee: (emp: Employee) => void;
@@ -170,6 +213,84 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [kpiRecords, setKpiRecords] = useState<KPIRecord[]>([]);
 
+  // Fase 1-4 state
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [bankReconciliations, setBankReconciliations] = useState<BankReconciliation[]>([]);
+  const [bankStatementLines, setBankStatementLines] = useState<BankStatementLine[]>([]);
+  const [stockOpnames, setStockOpnames] = useState<StockOpname[]>([]);
+  const [stockOpnameItems, setStockOpnameItems] = useState<StockOpnameItem[]>([]);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+
+  // Generic dispatch for new modules
+  const dispatch = (action: any) => {
+    hasLocalChanges.current = true;
+    switch (action.type) {
+      case "ADD_EXPENSE_CATEGORY":
+        setExpenseCategories((prev) => [...prev, action.payload]);
+        break;
+      case "UPDATE_EXPENSE_CATEGORY":
+        setExpenseCategories((prev) => prev.map((c) => c.id === action.payload.id ? action.payload : c));
+        break;
+      case "DELETE_EXPENSE_CATEGORY": {
+        const toDelete = expenseCategories.find((c) => c.id === action.payload);
+        if (toDelete) {
+          const childIds = expenseCategories.filter((c) => c.parentId === toDelete.id).map((c) => c.id);
+          setExpenseCategories((prev) => prev.filter((c) => c.id !== action.payload && !childIds.includes(c.id)));
+        }
+        break;
+      }
+      case "ADD_PAYROLL_RECORD":
+        setPayrollRecords((prev) => [...prev, action.payload]);
+        break;
+      case "UPDATE_PAYROLL_RECORD":
+        setPayrollRecords((prev) => prev.map((p) => p.id === action.payload.id ? action.payload : p));
+        break;
+      case "DELETE_PAYROLL_RECORD":
+        setPayrollRecords((prev) => prev.filter((p) => p.id !== action.payload));
+        break;
+      case "BULK_ADD_PAYROLL_RECORDS":
+        setPayrollRecords((prev) => [...prev, ...action.payload]);
+        break;
+      case "ADD_BUDGET":
+        setBudgets((prev) => [...prev, action.payload]);
+        break;
+      case "UPDATE_BUDGET":
+        setBudgets((prev) => prev.map((b) => b.id === action.payload.id ? action.payload : b));
+        break;
+      case "DELETE_BUDGET":
+        setBudgets((prev) => prev.filter((b) => b.id !== action.payload));
+        break;
+      case "ADD_BANK_RECONCILIATION":
+        setBankReconciliations((prev) => [...prev, action.payload]);
+        break;
+      case "UPDATE_BANK_RECONCILIATION":
+        setBankReconciliations((prev) => prev.map((r) => r.id === action.payload.id ? action.payload : r));
+        break;
+      case "ADD_BANK_STATEMENT_LINE":
+        setBankStatementLines((prev) => [...prev, action.payload]);
+        break;
+      case "UPDATE_BANK_STATEMENT_LINE":
+        setBankStatementLines((prev) => prev.map((l) => l.id === action.payload.id ? action.payload : l));
+        break;
+      case "BULK_ADD_BANK_STATEMENT_LINES":
+        setBankStatementLines((prev) => [...prev, ...action.payload]);
+        break;
+      case "SET_BANK_RECONCILIATIONS":
+        setBankReconciliations(action.payload);
+        break;
+      case "SET_BANK_STATEMENT_LINES":
+        setBankStatementLines(action.payload);
+        break;
+      case "SET_STOCK_OPNAMES":
+        setStockOpnames(action.payload);
+        break;
+      case "SET_STOCK_OPNAME_ITEMS":
+        setStockOpnameItems(action.payload);
+        break;
+    }
+  };
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -256,6 +377,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.contracts)) setContracts(data.contracts);
         if (Array.isArray(data.attendances)) setAttendances(data.attendances);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
+        // Fase 1-4
+        if (Array.isArray(data.expense_categories)) setExpenseCategories(data.expense_categories);
+        if (Array.isArray(data.budgets)) setBudgets(data.budgets);
+        if (Array.isArray(data.bank_reconciliations)) setBankReconciliations(data.bank_reconciliations);
+        if (Array.isArray(data.bank_statement_lines)) setBankStatementLines(data.bank_statement_lines);
+        if (Array.isArray(data.stock_opnames)) setStockOpnames(data.stock_opnames);
+        if (Array.isArray(data.stock_opname_items)) setStockOpnameItems(data.stock_opname_items);
+        if (Array.isArray(data.payroll_records)) setPayrollRecords(data.payroll_records);
 
         setLastSyncTime(new Date());
         hasLocalChanges.current = false;
@@ -437,6 +566,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             contracts,
             attendances,
             kpiRecords,
+            // Fase 1-4
+            expense_categories: expenseCategories,
+            budgets,
+            bank_reconciliations: bankReconciliations,
+            bank_statement_lines: bankStatementLines,
+            stock_opnames: stockOpnames,
+            stock_opname_items: stockOpnameItems,
+            payroll_records: payrollRecords,
           }),
         });
         if (res.ok) {
@@ -788,17 +925,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const addStockMovement = (mov: Omit<StockMovement, "id">) => {
     setStockMovements((prev) => [...prev, { ...mov, id: generateId() }]);
 
-    // Update current stock automatically
+    // Update current stock automatically based on movement type
     setIngredients((prev) =>
       prev.map((ing) => {
         if (ing.id === mov.ingredientId) {
-          return {
-            ...ing,
-            currentStock:
-              mov.type === "IN"
-                ? ing.currentStock + mov.quantity
-                : ing.currentStock - mov.quantity,
-          };
+          let newStock = ing.currentStock;
+          if (mov.type === "IN" || mov.type === "RETURN") {
+            newStock += mov.quantity;
+          } else if (mov.type === "OUT" || mov.type === "WASTE") {
+            newStock -= mov.quantity;
+          } else if (mov.type === "ADJUSTMENT") {
+            // For ADJUSTMENT, quantity is the target stock (physical stock)
+            newStock = mov.quantity;
+          }
+          return { ...ing, currentStock: Math.max(0, newStock) };
         }
         return ing;
       }),
@@ -879,6 +1019,44 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         dismissForceLogoutAlert,
         isReadOnly:
           currentUser?.role === "OWNER" || currentUser?.role === "AUDITOR",
+        // Fase 1-4
+        expenseCategories,
+        addExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: cat }),
+        updateExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "UPDATE_EXPENSE_CATEGORY", payload: cat }),
+        deleteExpenseCategory: (id: string) => dispatch({ type: "DELETE_EXPENSE_CATEGORY", payload: id }),
+        budgets,
+        addBudget: (b: Budget) => dispatch({ type: "ADD_BUDGET", payload: b }),
+        updateBudget: (b: Budget) => dispatch({ type: "UPDATE_BUDGET", payload: b }),
+        deleteBudget: (id: string) => dispatch({ type: "DELETE_BUDGET", payload: id }),
+        bankReconciliations,
+        addBankReconciliation: (r: BankReconciliation) => dispatch({ type: "ADD_BANK_RECONCILIATION", payload: r }),
+        updateBankReconciliation: (r: BankReconciliation) => dispatch({ type: "UPDATE_BANK_RECONCILIATION", payload: r }),
+        bankStatementLines,
+        addBankStatementLine: (l: BankStatementLine) => dispatch({ type: "ADD_BANK_STATEMENT_LINE", payload: l }),
+        updateBankStatementLine: (l: BankStatementLine) => dispatch({ type: "UPDATE_BANK_STATEMENT_LINE", payload: l }),
+        bulkAddBankStatementLines: (lines: BankStatementLine[]) => dispatch({ type: "BULK_ADD_BANK_STATEMENT_LINES", payload: lines }),
+        stockOpnames,
+        addStockOpname: (o: StockOpname) => dispatch({ type: "ADD_STOCK_OPNAME", payload: o }),
+        updateStockOpname: (o: StockOpname) => dispatch({ type: "UPDATE_STOCK_OPNAME", payload: o }),
+        stockOpnameItems,
+        addStockOpnameItem: (i: StockOpnameItem) => dispatch({ type: "ADD_STOCK_OPNAME_ITEM", payload: i }),
+        bulkAddStockOpnameItems: (items: StockOpnameItem[]) => dispatch({ type: "BULK_ADD_STOCK_OPNAME_ITEMS", payload: items }),
+        updateStockOpnameItem: (i: StockOpnameItem) => dispatch({ type: "UPDATE_STOCK_OPNAME_ITEM", payload: i }),
+        payrollRecords,
+        addPayrollRecord: (p: PayrollRecord) => dispatch({ type: "ADD_PAYROLL_RECORD", payload: p }),
+        updatePayrollRecord: (p: PayrollRecord) => dispatch({ type: "UPDATE_PAYROLL_RECORD", payload: p }),
+        deletePayrollRecord: (id: string) => dispatch({ type: "DELETE_PAYROLL_RECORD", payload: id }),
+        bulkAddPayrollRecords: (records: PayrollRecord[]) => dispatch({ type: "BULK_ADD_PAYROLL_RECORDS", payload: records }),
+        state: {
+          expenseCategories,
+          budgets,
+          bankReconciliations,
+          bankStatementLines,
+          stockOpnames,
+          stockOpnameItems,
+          payrollRecords,
+        },
+        dispatch,
       }}
     >
       {children}

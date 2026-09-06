@@ -477,6 +477,9 @@ export function HRManagement() {
                         {isIndo ? "Karyawan" : "Employee"}
                       </th>
                       <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Batas Kontrak" : "End Date"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
                         {isIndo ? "Gaji Pokok" : "Basic Salary"}
                       </th>
                       <th className="py-3 px-4 font-semibold">
@@ -494,7 +497,7 @@ export function HRManagement() {
                     {contracts.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="py-8 text-center text-slate-500 italic"
                         >
                           {isIndo
@@ -503,28 +506,56 @@ export function HRManagement() {
                         </td>
                       </tr>
                     ) : (
-                      contracts.map((c) => (
-                        <tr
-                          key={c.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
-                        >
-                          <td className="py-3 px-4 font-medium text-slate-800">
-                            {getEmployeeName(c.employeeId)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 font-mono">
-                            {formatRupiah(c.basicSalary)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 font-mono">
-                            {formatRupiah(c.mealAllowance)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600 font-mono">
-                            {formatRupiah(c.positionAllowance)}
-                          </td>
-                          <td className="py-3 px-4 text-rose-600 font-mono">
-                            {formatRupiah(c.alphaDeductionPerDay)}/hr
-                          </td>
-                        </tr>
-                      ))
+                      contracts.map((c) => {
+                        const isExpiring = (() => {
+                          if (!c.endDate || c.status !== 'ACTIVE') return false;
+                          const end = new Date(c.endDate);
+                          const thirtyDays = new Date();
+                          thirtyDays.setDate(new Date().getDate() + 30);
+                          return end >= new Date() && end <= thirtyDays;
+                        })();
+                        
+                        return (
+                          <tr
+                            key={c.id}
+                            className={`border-b border-slate-100 hover:bg-slate-50 ${isExpiring ? 'bg-amber-50/50' : ''}`}
+                          >
+                            <td className="py-3 px-4 font-medium text-slate-800">
+                              {getEmployeeName(c.employeeId)}
+                            </td>
+                            <td className="py-3 px-4">
+                              {c.endDate ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-slate-600 font-medium">
+                                    {new Date(c.endDate).toLocaleDateString("id-ID")}
+                                  </span>
+                                  {isExpiring && (
+                                    <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full inline-block w-max">
+                                      {isIndo ? "Segera Berakhir" : "Expiring Soon"}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic">
+                                  {isIndo ? "Tetap" : "Permanent"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.basicSalary)}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.mealAllowance)}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.positionAllowance)}
+                            </td>
+                            <td className="py-3 px-4 text-rose-600 font-mono">
+                              {formatRupiah(c.alphaDeductionPerDay)}/hr
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

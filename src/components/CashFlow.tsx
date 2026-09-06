@@ -25,6 +25,8 @@ export const CashFlow = () => {
     deleteCashAccount,
     isReadOnly,
   } = useStore();
+  
+  const expenseCategories = (useStore() as any).expenseCategories || [];
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
@@ -82,6 +84,8 @@ export const CashFlow = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const accId = formData.get("accountId") as string;
+    const catId = formData.get("categoryId") as string;
+    const catName = expenseCategories.find((c: any) => c.id === catId)?.name || "Lainnya";
 
     addCashTransaction({
       accountId: accId,
@@ -89,7 +93,8 @@ export const CashFlow = () => {
       date: new Date().toISOString(),
       amount: Number(formData.get("amount")),
       description: formData.get("description") as string,
-      category: formData.get("category") as string,
+      category: catName,
+      categoryId: catId || null,
       referenceId: null,
     });
 
@@ -446,13 +451,20 @@ export const CashFlow = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Kategori
                   </label>
-                  <input
-                    type="text"
-                    name="category"
+                  <select
+                    name="categoryId"
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent"
-                    placeholder="Contoh: Operasional, Penjualan, Gaji"
-                  />
+                  >
+                    <option value="" disabled selected>Pilih Kategori...</option>
+                    {expenseCategories
+                      .filter((c: any) => c.isActive)
+                      .map((cat: any) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.parentId ? "— " : ""}{cat.name} ({cat.type})
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div>
