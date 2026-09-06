@@ -94,7 +94,55 @@ async function ensureTables() {
         unit_cost NUMERIC NOT NULL DEFAULT 0,
         notes TEXT
       );
-      CREATE TABLE IF NOT EXISTS payroll_records (
+            CREATE TABLE IF NOT EXISTS employees (
+        id TEXT PRIMARY KEY,
+        nik TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position TEXT NOT NULL,
+        department TEXT NOT NULL,
+        employment_type TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        phone TEXT NOT NULL,
+        address TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS employee_contracts (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        effective_date TEXT NOT NULL,
+        basic_salary NUMERIC NOT NULL DEFAULT 0,
+        meal_allowance NUMERIC NOT NULL DEFAULT 0,
+        position_allowance NUMERIC NOT NULL DEFAULT 0,
+        alpha_deduction_per_day NUMERIC NOT NULL DEFAULT 0,
+        working_days_per_month INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS attendance_records (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        period TEXT NOT NULL,
+        present_days INTEGER NOT NULL DEFAULT 0,
+        sick_days INTEGER NOT NULL DEFAULT 0,
+        permission_days INTEGER NOT NULL DEFAULT 0,
+        alpha_days INTEGER NOT NULL DEFAULT 0,
+        holiday_days INTEGER NOT NULL DEFAULT 0,
+        working_days INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS kpi_records (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        period TEXT NOT NULL,
+        score NUMERIC NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        evaluated_by TEXT NOT NULL
+      );
+CREATE TABLE IF NOT EXISTS payroll_records (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL,
         period TEXT NOT NULL,
@@ -179,6 +227,17 @@ async function startServer() {
       // Fase 4
       case "payroll_records":
         return schema.payrollRecords;
+      case "employees":
+        return schema.employees;
+      case "employee_contracts":
+      case "contracts":
+        return schema.employeeContracts;
+      case "attendance_records":
+      case "attendances":
+        return schema.attendanceRecords;
+      case "kpi_records":
+        return schema.kpiRecords;
+
       default:
         return null;
     }
