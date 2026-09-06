@@ -434,7 +434,7 @@ export function HRManagement() {
                   {isIndo ? "Daftar Karyawan" : "Employee List"}
                 </h3>
                 {canEditHR && (
-                  <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"> onClick={() => handleOpenEmployeeModal()}
+                  <button onClick={() => handleOpenEmployeeModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                     <Plus className="w-4 h-4" />{" "}
                     {isIndo ? "Tambah Karyawan" : "Add Employee"}
                   </button>
