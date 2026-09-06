@@ -1049,6 +1049,131 @@ export function HRManagement() {
             </motion.div>
           )}
         </div>
+
+      {/* Modals */}
+      {isEmployeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">
+                {editingEmployee ? (isIndo ? "Edit Karyawan" : "Edit Employee") : (isIndo ? "Tambah Karyawan" : "Add Employee")}
+              </h3>
+              <button onClick={() => setIsEmployeeModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">NIK</label>
+                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.nik} onChange={e => setEmpForm({...empForm, nik: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
+                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.name} onChange={e => setEmpForm({...empForm, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Departemen</label>
+                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.department} onChange={e => setEmpForm({...empForm, department: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Jabatan</label>
+                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.position} onChange={e => setEmpForm({...empForm, position: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={empForm.status} onChange={e => setEmpForm({...empForm, status: e.target.value as any})}>
+                    <option value="AKTIF">Aktif</option>
+                    <option value="TIDAK_AKTIF">Tidak Aktif</option>
+                    <option value="RESIGN">Resign</option>
+                    <option value="PHK">PHK</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tipe</label>
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={empForm.employmentType} onChange={e => setEmpForm({...empForm, employmentType: e.target.value as any})}>
+                    <option value="TETAP">Tetap</option>
+                    <option value="KONTRAK">Kontrak</option>
+                    <option value="PARUH_WAKTU">Paruh Waktu</option>
+                    <option value="MAGANG">Magang</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+              <button onClick={() => setIsEmployeeModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
+              <button onClick={handleSaveEmployee} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isContractModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-lg font-bold text-slate-800">
+                {editingContract ? "Edit Kontrak" : "Tambah Kontrak"}
+              </h3>
+              <button onClick={() => setIsContractModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
+                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={contractForm.employeeId} onChange={e => setContractForm({...contractForm, employeeId: e.target.value})}>
+                  <option value="">Pilih Karyawan</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Gaji Pokok (Rp)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.basicSalary || ""} onChange={e => setContractForm({...contractForm, basicSalary: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Potongan Alpha/Hari (Rp)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.alphaDeductionPerDay || ""} onChange={e => setContractForm({...contractForm, alphaDeductionPerDay: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Jabatan</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.positionAllowance || ""} onChange={e => setContractForm({...contractForm, positionAllowance: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Makan</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.mealAllowance || ""} onChange={e => setContractForm({...contractForm, mealAllowance: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Transport</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.transportAllowance || ""} onChange={e => setContractForm({...contractForm, transportAllowance: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tgl Mulai</label>
+                  <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.startDate} onChange={e => setContractForm({...contractForm, startDate: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tgl Berakhir (Kosongkan jika tetap)</label>
+                  <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.endDate || ""} onChange={e => setContractForm({...contractForm, endDate: e.target.value})} />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
+              <button onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
+              <button onClick={handleSaveContract} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   );
