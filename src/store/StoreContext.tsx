@@ -342,10 +342,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   // Sync Logic
   const fetchFromServer = async (isManual = false) => {
     if (isSyncingRef.current && !isManual) return;
+    if (hasLocalChanges.current && !isManual) return;
 
     try {
       if (isManual) setIsSyncing(true);
-      const res = await fetch("/api/sync");
+      const res = await fetch("/api/sync", {
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      });
       if (res.ok) {
         const data = await res.json();
 
