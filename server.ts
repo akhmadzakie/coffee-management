@@ -743,180 +743,197 @@ async function startServer() {
       } = req.body;
 
       await db.transaction(async (tx) => {
-        if (cash_accounts !== undefined) {
-          await tx.delete(schema.cashAccounts);
-          if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
-            await tx
-              .insert(schema.cashAccounts)
-              .values(cash_accounts.map(sanitizeCashAccount));
-          }
+        // --- PHASE 1: DELETES (Child -> Parent) ---
+        if (device_sessions !== undefined) {
+          await tx.delete(schema.deviceSessions);
+        }
+        if (stock_opname_items !== undefined) {
+          await tx.delete(schema.stockOpnameItems);
+        }
+        if (stock_opnames !== undefined) {
+          await tx.delete(schema.stockOpnames);
+        }
+        if (bank_statement_lines !== undefined) {
+          await tx.delete(schema.bankStatementLines);
+        }
+        if (bank_reconciliations !== undefined) {
+          await tx.delete(schema.bankReconciliations);
+        }
+        if (shifts !== undefined) {
+          await tx.delete(schema.shifts);
+        }
+        if (audit_logs !== undefined) {
+          await tx.delete(schema.auditLogs);
+        }
+        if (sales_import_logs !== undefined) {
+          await tx.delete(schema.salesImportLogs);
+        }
+        if (sales_transactions !== undefined) {
+          await tx.delete(schema.salesTransactions);
+        }
+        if (stock_movements !== undefined) {
+          await tx.delete(schema.stockMovements);
         }
         if (cash_transactions !== undefined) {
           await tx.delete(schema.cashTransactions);
-          if (
-            Array.isArray(cash_transactions) &&
-            cash_transactions.length > 0
-          ) {
-            await tx
-              .insert(schema.cashTransactions)
-              .values(cash_transactions.map(sanitizeCashTransaction));
-          }
         }
-        if (settings !== undefined && settings !== null) {
-          await tx.delete(schema.settings);
-          await tx.insert(schema.settings).values([sanitizeSettings(settings)]);
+        if (purchase_orders !== undefined) {
+          await tx.delete(schema.purchaseOrders);
+        }
+        if (ingredients !== undefined) {
+          await tx.delete(schema.ingredients);
+        }
+        if (suppliers !== undefined) {
+          await tx.delete(schema.suppliers);
+        }
+        if (payroll_records !== undefined) {
+          await tx.delete(schema.payrollRecords);
+        }
+        if (kpiRecords !== undefined) {
+          await tx.delete(schema.kpiRecords);
+        }
+        if (attendances !== undefined) {
+          await tx.delete(schema.attendanceRecords);
+        }
+        if (contracts !== undefined) {
+          await tx.delete(schema.employeeContracts);
+        }
+        if (employees !== undefined) {
+          await tx.delete(schema.employees);
+        }
+        if (budgets !== undefined) {
+          await tx.delete(schema.budgets);
+        }
+        if (expense_categories !== undefined) {
+          await tx.delete(schema.expenseCategories);
         }
         if (users !== undefined) {
           await tx.delete(schema.users);
+        }
+        if (cash_accounts !== undefined) {
+          await tx.delete(schema.cashAccounts);
+        }
+        if (settings !== undefined && settings !== null) {
+          await tx.delete(schema.settings);
+        }
+
+        // --- PHASE 2: INSERTS (Parent -> Child) ---
+        if (settings !== undefined && settings !== null) {
+          await tx.insert(schema.settings).values([sanitizeSettings(settings)]);
+        }
+        if (cash_accounts !== undefined) {
+          if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
+            await tx.insert(schema.cashAccounts).values(cash_accounts.map(sanitizeCashAccount));
+          }
+        }
+        if (users !== undefined) {
           if (Array.isArray(users) && users.length > 0) {
             await tx.insert(schema.users).values(users.map(sanitizeUser));
           }
         }
-        if (ingredients !== undefined) {
-          await tx.delete(schema.ingredients);
-          if (Array.isArray(ingredients) && ingredients.length > 0) {
-            await tx
-              .insert(schema.ingredients)
-              .values(ingredients.map(sanitizeIngredient));
-          }
-        }
-        if (stock_movements !== undefined) {
-          await tx.delete(schema.stockMovements);
-          if (Array.isArray(stock_movements) && stock_movements.length > 0) {
-            await tx
-              .insert(schema.stockMovements)
-              .values(stock_movements.map(sanitizeStockMovement));
-          }
-        }
-        if (sales_transactions !== undefined) {
-          await tx.delete(schema.salesTransactions);
-          if (
-            Array.isArray(sales_transactions) &&
-            sales_transactions.length > 0
-          ) {
-            await tx
-              .insert(schema.salesTransactions)
-              .values(sales_transactions.map(sanitizeSalesTransaction));
-          }
-        }
-        if (sales_import_logs !== undefined) {
-          await tx.delete(schema.salesImportLogs);
-          if (
-            Array.isArray(sales_import_logs) &&
-            sales_import_logs.length > 0
-          ) {
-            await tx
-              .insert(schema.salesImportLogs)
-              .values(sales_import_logs.map(sanitizeSalesImportLog));
-          }
-        }
-        if (audit_logs !== undefined) {
-          await tx.delete(schema.auditLogs);
-          if (Array.isArray(audit_logs) && audit_logs.length > 0) {
-            await tx
-              .insert(schema.auditLogs)
-              .values(audit_logs.map(sanitizeAuditLog));
-          }
-        }
-        if (employees !== undefined) {
-          await tx.delete(schema.employees);
-          if (Array.isArray(employees) && employees.length > 0) {
-            await tx
-              .insert(schema.employees)
-              .values(employees.map(sanitizeEmployee));
-          }
-        }
-        if (contracts !== undefined) {
-          await tx.delete(schema.employeeContracts);
-          if (Array.isArray(contracts) && contracts.length > 0) {
-            await tx
-              .insert(schema.employeeContracts)
-              .values(contracts.map(sanitizeEmployeeContract));
-          }
-        }
-        if (attendances !== undefined) {
-          await tx.delete(schema.attendanceRecords);
-          if (Array.isArray(attendances) && attendances.length > 0) {
-            await tx
-              .insert(schema.attendanceRecords)
-              .values(attendances.map(sanitizeAttendanceRecord));
-          }
-        }
-        if (kpiRecords !== undefined) {
-          await tx.delete(schema.kpiRecords);
-          if (Array.isArray(kpiRecords) && kpiRecords.length > 0) {
-            await tx
-              .insert(schema.kpiRecords)
-              .values(kpiRecords.map(sanitizeKPIRecord));
-          }
-        }
-        if (suppliers !== undefined) {
-          await tx.delete(schema.suppliers);
-          if (Array.isArray(suppliers) && suppliers.length > 0) {
-            await tx
-              .insert(schema.suppliers)
-              .values(suppliers.map(sanitizeSupplier));
-          }
-        }
-        if (purchase_orders !== undefined) {
-          await tx.delete(schema.purchaseOrders);
-          if (Array.isArray(purchase_orders) && purchase_orders.length > 0) {
-            await tx
-              .insert(schema.purchaseOrders)
-              .values(purchase_orders.map(sanitizePurchaseOrder));
-          }
-        }
-        if (shifts !== undefined) {
-          await tx.delete(schema.shifts);
-          if (Array.isArray(shifts) && shifts.length > 0) {
-            await tx.insert(schema.shifts).values(shifts.map(sanitizeShift));
-          }
-        }
-        // Fase 1: Expense Categories
         if (expense_categories !== undefined) {
-          await tx.delete(schema.expenseCategories);
           if (Array.isArray(expense_categories) && expense_categories.length > 0) {
             await tx.insert(schema.expenseCategories).values(expense_categories.map(sanitizeExpenseCategory));
           }
         }
-        // Fase 2: Budgets
         if (budgets !== undefined) {
-          await tx.delete(schema.budgets);
           if (Array.isArray(budgets) && budgets.length > 0) {
             await tx.insert(schema.budgets).values(budgets.map(sanitizeBudget));
           }
         }
-        // Fase 2: Bank Reconciliations
+        if (employees !== undefined) {
+          if (Array.isArray(employees) && employees.length > 0) {
+            await tx.insert(schema.employees).values(employees.map(sanitizeEmployee));
+          }
+        }
+        if (contracts !== undefined) {
+          if (Array.isArray(contracts) && contracts.length > 0) {
+            await tx.insert(schema.employeeContracts).values(contracts.map(sanitizeEmployeeContract));
+          }
+        }
+        if (attendances !== undefined) {
+          if (Array.isArray(attendances) && attendances.length > 0) {
+            await tx.insert(schema.attendanceRecords).values(attendances.map(sanitizeAttendanceRecord));
+          }
+        }
+        if (kpiRecords !== undefined) {
+          if (Array.isArray(kpiRecords) && kpiRecords.length > 0) {
+            await tx.insert(schema.kpiRecords).values(kpiRecords.map(sanitizeKPIRecord));
+          }
+        }
+        if (payroll_records !== undefined) {
+          if (Array.isArray(payroll_records) && payroll_records.length > 0) {
+            await tx.insert(schema.payrollRecords).values(payroll_records.map(sanitizePayrollRecord));
+          }
+        }
+        if (suppliers !== undefined) {
+          if (Array.isArray(suppliers) && suppliers.length > 0) {
+            await tx.insert(schema.suppliers).values(suppliers.map(sanitizeSupplier));
+          }
+        }
+        if (ingredients !== undefined) {
+          if (Array.isArray(ingredients) && ingredients.length > 0) {
+            await tx.insert(schema.ingredients).values(ingredients.map(sanitizeIngredient));
+          }
+        }
+        if (purchase_orders !== undefined) {
+          if (Array.isArray(purchase_orders) && purchase_orders.length > 0) {
+            await tx.insert(schema.purchaseOrders).values(purchase_orders.map(sanitizePurchaseOrder));
+          }
+        }
+        if (cash_transactions !== undefined) {
+          if (Array.isArray(cash_transactions) && cash_transactions.length > 0) {
+            await tx.insert(schema.cashTransactions).values(cash_transactions.map(sanitizeCashTransaction));
+          }
+        }
+        if (stock_movements !== undefined) {
+          if (Array.isArray(stock_movements) && stock_movements.length > 0) {
+            await tx.insert(schema.stockMovements).values(stock_movements.map(sanitizeStockMovement));
+          }
+        }
+        if (sales_transactions !== undefined) {
+          if (Array.isArray(sales_transactions) && sales_transactions.length > 0) {
+            await tx.insert(schema.salesTransactions).values(sales_transactions.map(sanitizeSalesTransaction));
+          }
+        }
+        if (sales_import_logs !== undefined) {
+          if (Array.isArray(sales_import_logs) && sales_import_logs.length > 0) {
+            await tx.insert(schema.salesImportLogs).values(sales_import_logs.map(sanitizeSalesImportLog));
+          }
+        }
+        if (audit_logs !== undefined) {
+          if (Array.isArray(audit_logs) && audit_logs.length > 0) {
+            await tx.insert(schema.auditLogs).values(audit_logs.map(sanitizeAuditLog));
+          }
+        }
+        if (shifts !== undefined) {
+          if (Array.isArray(shifts) && shifts.length > 0) {
+            await tx.insert(schema.shifts).values(shifts.map(sanitizeShift));
+          }
+        }
         if (bank_reconciliations !== undefined) {
-          await tx.delete(schema.bankReconciliations);
           if (Array.isArray(bank_reconciliations) && bank_reconciliations.length > 0) {
             await tx.insert(schema.bankReconciliations).values(bank_reconciliations.map(sanitizeBankReconciliation));
           }
         }
         if (bank_statement_lines !== undefined) {
-          await tx.delete(schema.bankStatementLines);
           if (Array.isArray(bank_statement_lines) && bank_statement_lines.length > 0) {
             await tx.insert(schema.bankStatementLines).values(bank_statement_lines.map(sanitizeBankStatementLine));
           }
         }
-        // Fase 3: Stock Opnames
         if (stock_opnames !== undefined) {
-          await tx.delete(schema.stockOpnames);
           if (Array.isArray(stock_opnames) && stock_opnames.length > 0) {
             await tx.insert(schema.stockOpnames).values(stock_opnames.map(sanitizeStockOpname));
           }
         }
         if (stock_opname_items !== undefined) {
-          await tx.delete(schema.stockOpnameItems);
           if (Array.isArray(stock_opname_items) && stock_opname_items.length > 0) {
             await tx.insert(schema.stockOpnameItems).values(stock_opname_items.map(sanitizeStockOpnameItem));
           }
         }
-        // Fase 4: Payroll
-        if (payroll_records !== undefined) {
-          await tx.delete(schema.payrollRecords);
-          if (Array.isArray(payroll_records) && payroll_records.length > 0) {
-            await tx.insert(schema.payrollRecords).values(payroll_records.map(sanitizePayrollRecord));
+        if (device_sessions !== undefined) {
+          if (Array.isArray(device_sessions) && device_sessions.length > 0) {
+            await tx.insert(schema.deviceSessions).values(device_sessions.map(sanitizeDeviceSession));
           }
         }
       });
@@ -924,15 +941,9 @@ async function startServer() {
     } catch (e) {
       console.error("Save error (running in offline mode):", e);
       // Store in memory for offline usage so it doesn't get overwritten on next GET
-      offlineState = {
-        ...req.body,
-        settings: req.body.settings || initialSettings,
-      };
-      res.json({
-        success: true,
-        serverTime: new Date().toISOString(),
-        offline: true,
-      });
+      // Do NOT mask the error as offline if the db is reachable. We want the client to know it failed.
+      console.error("Transaction failed due to constraint or logic error. Returning 500.");
+      return res.status(500).json({ error: e.message || "Sync transaction failed" });
     }
   });
 
