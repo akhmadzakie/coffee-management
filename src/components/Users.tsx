@@ -5,12 +5,13 @@ import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { CsvImportExport } from "./common/CsvImportExport";
 
-const ROLES: { value: Role; label: string }[] = [
+const ROLES: { value: string; label: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
   { value: "OWNER", label: "Owner / Pemilik" },
   { value: "MANAGER", label: "Manager" },
   { value: "FINANCE", label: "Finance / Keuangan" },
   { value: "KASIR", label: "Kasir" },
+  { value: "ADMIN_OPERASIONAL", label: "Admin Operasional (Legacy)" },
 ];
 
 export const UsersComponent = () => {
