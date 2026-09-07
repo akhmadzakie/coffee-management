@@ -579,6 +579,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (res.ok) {
           hasLocalChanges.current = false;
           setLastSyncTime(new Date());
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Sync API failed:", errData);
+          alert("Gagal sinkronisasi data ke server: " + (errData.error || "Unknown error"));
         }
       } catch (err) {
         console.error("Error saving data:", err);

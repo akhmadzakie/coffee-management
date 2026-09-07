@@ -919,7 +919,13 @@ async function startServer() {
         }
         if (shifts !== undefined) {
           if (Array.isArray(shifts) && shifts.length > 0) {
-            await tx.insert(schema.shifts).values(shifts.map(sanitizeShift));
+            let filteredItems = shifts;
+            if (validUserIds !== null) {
+              filteredItems = shifts.filter((item: any) => validUserIds!.has(String(item.userId)));
+            }
+            if (filteredItems.length > 0) {
+              await tx.insert(schema.shifts).values(filteredItems.map(sanitizeShift));
+            }
           }
         }
         if (bank_reconciliations !== undefined) {
