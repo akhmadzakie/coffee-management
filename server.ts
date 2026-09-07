@@ -818,6 +818,11 @@ async function startServer() {
         }
 
         // --- PHASE 2: INSERTS (Parent -> Child) ---
+        let validUserIds: Set<string> | null = null;
+        if (users !== undefined && Array.isArray(users)) {
+          validUserIds = new Set(users.map((u: any) => String(u.id)));
+        }
+
         if (settings !== undefined && settings !== null) {
           await tx.insert(schema.settings).values([sanitizeSettings(settings)]);
         }
@@ -903,7 +908,13 @@ async function startServer() {
         }
         if (audit_logs !== undefined) {
           if (Array.isArray(audit_logs) && audit_logs.length > 0) {
-            await tx.insert(schema.auditLogs).values(audit_logs.map(sanitizeAuditLog));
+            let filteredItems = audit_logs;
+            if (validUserIds !== null) {
+              filteredItems = audit_logs.filter((item: any) => validUserIds!.has(String(item.userId)));
+            }
+            if (filteredItems.length > 0) {
+              await tx.insert(schema.auditLogs).values(filteredItems.map(sanitizeAuditLog));
+            }
           }
         }
         if (shifts !== undefined) {
@@ -933,7 +944,13 @@ async function startServer() {
         }
         if (device_sessions !== undefined) {
           if (Array.isArray(device_sessions) && device_sessions.length > 0) {
-            await tx.insert(schema.deviceSessions).values(device_sessions.map(sanitizeDeviceSession));
+            let filteredItems = device_sessions;
+            if (validUserIds !== null) {
+              filteredItems = device_sessions.filter((item: any) => validUserIds!.has(String(item.userId)));
+            }
+            if (filteredItems.length > 0) {
+              await tx.insert(schema.deviceSessions).values(filteredItems.map(sanitizeDeviceSession));
+            }
           }
         }
       });
