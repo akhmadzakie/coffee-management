@@ -152,17 +152,10 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const roleAccess: Record<string, ViewState[]> = {
     SUPER_ADMIN: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
-    OWNER: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
-    MANAGER_CABANG: ["dashboard", "cash_flow", "inventory", "import_sales", "hr", "shifts", "suppliers", "purchases"],
-    ADMIN_OPERASIONAL: ["dashboard", "cash_flow", "inventory", "import_sales", "shifts", "hr", "suppliers", "purchases"],
-    FINANCE: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "import_sales", "payroll", "purchases", "audit_log"],
-    AUDITOR: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "import_sales", "payroll", "purchases", "audit_log"],
+    OWNER: ["dashboard", "cash_flow", "finance_reports", "hr", "payroll", "inventory", "shifts"],
+    MANAGER: ["dashboard", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
+    FINANCE: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
     KASIR: ["shifts", "import_sales"],
-    WAITER: ["shifts", "import_sales"],
-    BARISTA: ["shifts", "import_sales", "inventory"],
-    HRD: ["hr", "payroll"],
-    PURCHASING: ["inventory", "suppliers", "purchases"],
-    MARKETING: ["dashboard", "import_sales"],
   };
 
   const allowedViews = currentUser ? roleAccess[currentUser.role] || [] : [];

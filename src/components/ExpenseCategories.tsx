@@ -8,6 +8,7 @@ import {
   Coffee, Home, Shield, Gift, BookOpen, Wallet,
   Flame, Wifi, Droplets, ShoppingCart, Box, Settings,
 } from "lucide-react";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 // ─── Icon map ───────────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, React.FC<any>> = {
@@ -308,8 +309,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function ExpenseCategories() {
-  const { state, dispatch } = useStore();
-  const categories: ExpenseCategory[] = (state as any).expenseCategories ?? [];
+  const { expenseCategories, dispatch } = useStore() as any;
+  const categories: ExpenseCategory[] = expenseCategories ?? [];
 
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null);
@@ -376,6 +377,30 @@ export function ExpenseCategories() {
     setShowForm(true);
   };
 
+  const handleImportCategories = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const name = row["Nama Kategori"] || row.name;
+      const type = (row["Tipe"] || row.type || "LAINNYA").toUpperCase() as ExpenseCategoryType;
+      const color = row["Warna"] || row.color || "#6B7280";
+      const icon = row["Icon"] || row.icon || "tag";
+      
+      if (name) {
+        const newCat: ExpenseCategory = {
+          id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name, type, color, icon,
+          parentId: null,
+          isActive: true,
+          sortOrder: 0
+        };
+        dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: newCat });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} kategori.`);
+    else alert("Tidak ada data valid yang diimport.");
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -386,12 +411,21 @@ export function ExpenseCategories() {
             Kelola hierarki kategori pendapatan & pengeluaran
           </p>
         </div>
-        <button
-          onClick={handleAddRoot}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
-        >
-          <Plus size={16} /> Tambah Kategori
-        </button>
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            onImport={handleImportCategories}
+            templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
+            templateExampleRow={["Gaji Karyawan", "HRD", "#8B5CF6", "users"]}
+            templateFilename="template_kategori"
+            buttonLabel="Import Kategori"
+          />
+          <button
+            onClick={handleAddRoot}
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            <Plus size={16} /> Tambah Kategori
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

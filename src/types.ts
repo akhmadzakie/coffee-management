@@ -1,16 +1,9 @@
 export type Role =
   | "SUPER_ADMIN"
   | "OWNER"
-  | "MANAGER_CABANG"
-  | "KASIR"
-  | "ADMIN_OPERASIONAL"
+  | "MANAGER"
   | "FINANCE"
-  | "PURCHASING"
-  | "BARISTA"
-  | "WAITER"
-  | "HRD"
-  | "MARKETING"
-  | "AUDITOR";
+  | "KASIR";
 
 export interface User {
   id: string;

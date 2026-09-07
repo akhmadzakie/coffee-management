@@ -170,7 +170,7 @@ interface StoreContextType {
   revokeOtherSessions: () => Promise<boolean>;
   wasForceLoggedOut: boolean;
   dismissForceLogoutAlert: () => void;
-  isReadOnly: boolean; // true for OWNER & AUDITOR — can view but not edit
+  isReadOnly: boolean; // true for OWNER — can view but not edit
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -1017,8 +1017,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         revokeOtherSessions,
         wasForceLoggedOut,
         dismissForceLogoutAlert,
-        isReadOnly:
-          currentUser?.role === "OWNER" || currentUser?.role === "AUDITOR",
+        isReadOnly: currentUser?.role === "OWNER",
         // Fase 1-4
         expenseCategories,
         addExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: cat }),

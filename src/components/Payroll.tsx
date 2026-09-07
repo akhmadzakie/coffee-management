@@ -38,7 +38,7 @@ export function Payroll() {
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollRecord | null>(null);
 
   const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
-  const isHRD = currentUser?.role === "HRD" || currentUser?.role === "SUPER_ADMIN";
+  const isHRD = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
   const canApprove = isHRD || currentUser?.role === "OWNER";
   const canPay = isFinance || currentUser?.role === "OWNER";
 

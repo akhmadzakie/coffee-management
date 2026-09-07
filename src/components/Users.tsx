@@ -3,20 +3,14 @@ import { useStore } from "../store/StoreContext";
 import { ShieldCheck, Plus, Trash2, Edit } from "lucide-react";
 import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 const ROLES: { value: Role; label: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
   { value: "OWNER", label: "Owner / Pemilik" },
-  { value: "MANAGER_CABANG", label: "Manager Cabang" },
-  { value: "KASIR", label: "Kasir" },
-  { value: "ADMIN_OPERASIONAL", label: "Admin Operasional" },
+  { value: "MANAGER", label: "Manager" },
   { value: "FINANCE", label: "Finance / Keuangan" },
-  { value: "PURCHASING", label: "Purchasing" },
-  { value: "BARISTA", label: "Barista" },
-  { value: "WAITER", label: "Waiter" },
-  { value: "HRD", label: "HRD" },
-  { value: "MARKETING", label: "Marketing" },
-  { value: "AUDITOR", label: "Auditor" },
+  { value: "KASIR", label: "Kasir" },
 ];
 
 export const UsersComponent = () => {
@@ -61,6 +55,26 @@ export const UsersComponent = () => {
     }
   };
 
+  const handleImportUsers = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const name = row["Nama Lengkap"] || row.name;
+      const username = row["Username"] || row.username;
+      const pin = row["PIN"] || row.pin;
+      const role = row["Role"] || row.role;
+
+      if (name && username && pin && role) {
+        addUser({ name, username, pin: String(pin), role });
+        imported++;
+      }
+    });
+    if (imported > 0) {
+      alert(`Berhasil mengimport ${imported} pengguna.`);
+    } else {
+      alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col gap-6 max-w-7xl mx-auto pb-12 w-full">
       <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
@@ -72,13 +86,22 @@ export const UsersComponent = () => {
             Kelola akses role pengguna dalam sistem Kedai Kopi Manager.
           </p>
         </div>
-        <button
-          onClick={handleAddNew}
-          className="px-4 py-2.5 bg-blue-600 text-white rounded-xl flex items-center font-bold hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Tambah Pengguna
-        </button>
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            onImport={handleImportUsers}
+            templateHeaders={["Nama Lengkap", "Username", "PIN", "Role"]}
+            templateExampleRow={["Budi Santoso", "budi123", "1234", "KASIR"]}
+            templateFilename="template_pengguna"
+            buttonLabel="Import User"
+          />
+          <button
+            onClick={handleAddNew}
+            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl flex items-center font-bold hover:bg-blue-700 transition-colors shadow-sm shrink-0"
+          >
+            <Plus className="w-5 h-5 sm:mr-2" />
+            <span className="hidden sm:inline">Tambah Pengguna</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

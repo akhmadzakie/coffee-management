@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 export const Inventory = () => {
   const {
@@ -66,6 +67,25 @@ export const Inventory = () => {
       costPerUnit: Number(formData.get("costPerUnit")),
     });
     setIsAddIngredientOpen(false);
+  };
+
+  const handleImportIngredients = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const name = row["Nama Bahan"] || row.name;
+      const unit = row["Satuan"] || row.unit;
+      const currentStock = Number(row["Stok Saat Ini"]) || 0;
+      const minStock = Number(row["Stok Minimum"]) || 0;
+      const category = row["Kategori"] || row.category || "General";
+      const costPerUnit = Number(row["Harga per Satuan"]) || 0;
+
+      if (name && unit) {
+        addIngredient({ name, unit, currentStock, minStock, category, costPerUnit });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} bahan baku.`);
+    else alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
   };
 
   const handleAddMovement = (e: React.FormEvent<HTMLFormElement>) => {
@@ -203,13 +223,22 @@ export const Inventory = () => {
 
           {activeTab === "ingredients" ? (
             !isReadOnly ? (
-              <button
-                onClick={() => setIsAddIngredientOpen(true)}
-                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Tambah Bahan
-              </button>
+              <>
+                <CsvImportExport
+                  onImport={handleImportIngredients}
+                  templateHeaders={["Nama Bahan", "Satuan", "Stok Saat Ini", "Stok Minimum", "Kategori", "Harga per Satuan"]}
+                  templateExampleRow={["Biji Kopi Arabica", "kg", "50", "10", "Biji Kopi", "150000"]}
+                  templateFilename="template_bahan_baku"
+                  buttonLabel="Import Bahan"
+                />
+                <button
+                  onClick={() => setIsAddIngredientOpen(true)}
+                  className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 shadow-sm"
+                >
+                  <Plus className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Tambah Bahan</span>
+                </button>
+              </>
             ) : null
           ) : activeTab === "movements" ? (
             !isReadOnly ? (

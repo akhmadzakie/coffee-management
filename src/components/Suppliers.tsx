@@ -6,11 +6,9 @@ import {
   Edit2,
   Trash2,
   Phone,
-  Upload,
-  Download,
 } from "lucide-react";
 import { Supplier } from "../types";
-import Papa from "papaparse";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 export const Suppliers = () => {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier, isReadOnly } =
@@ -40,73 +38,23 @@ export const Suppliers = () => {
     setEditingSupplier(null);
   };
 
-  const handleDownloadTemplate = () => {
-    let csvContent = "";
-
-    if (suppliers && suppliers.length > 0) {
-      const dataToExport = suppliers.map((s) => ({
-        "Nama Supplier": s.name,
-        "Nama PIC": s.picName || "",
-        Kontak: s.contact || "",
-        Alamat: s.address || "",
-        Catatan: s.notes || "",
-      }));
-      csvContent = Papa.unparse(dataToExport);
-    } else {
-      csvContent =
-        "Nama Supplier,Nama PIC,Kontak,Alamat,Catatan\nPT Kopi Nikmat Nusantara,Agus Riyadi,08123456789,Jl. Industri Raya No. 45,Supplier biji kopi Robusta";
-    }
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      suppliers && suppliers.length > 0
-        ? "data_supplier.csv"
-        : "template_import_supplier.csv",
-    );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const data = results.data as any[];
-        let importedCount = 0;
-
-        data.forEach((row) => {
-          if (row["Nama Supplier"] || row.name) {
-            const supplierData = {
-              name: row["Nama Supplier"] || row.name || "-",
-              picName: row["Nama PIC"] || row.picName || row.pic || "-",
-              contact: row["Kontak"] || row.contact || row.phone || "-",
-              address: row["Alamat"] || row.address || "-",
-              notes: row["Catatan"] || row.notes || "-",
-            };
-            addSupplier(supplierData);
-            importedCount++;
-          }
-        });
-
-        alert(`Berhasil mengimpor ${importedCount} supplier!`);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      },
-      error: (error) => {
-        alert(`Gagal mengimpor CSV: ${error.message}`);
-      },
+  const handleImportSuppliers = (data: any[]) => {
+    let importedCount = 0;
+    data.forEach((row) => {
+      if (row["Nama Supplier"] || row.name) {
+        const supplierData = {
+          name: row["Nama Supplier"] || row.name || "-",
+          picName: row["Nama PIC"] || row.picName || row.pic || "-",
+          contact: row["Kontak"] || row.contact || row.phone || "-",
+          address: row["Alamat"] || row.address || "-",
+          notes: row["Catatan"] || row.notes || "-",
+        };
+        addSupplier(supplierData);
+        importedCount++;
+      }
     });
+    if (importedCount > 0) alert(`Berhasil mengimpor ${importedCount} supplier!`);
+    else alert("Tidak ada data valid yang diimpor.");
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -145,27 +93,13 @@ export const Suppliers = () => {
         </div>
         {!isReadOnly && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <input
-              type="file"
-              accept=".csv"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={handleImportCSV}
+            <CsvImportExport
+              onImport={handleImportSuppliers}
+              templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
+              templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
+              templateFilename="template_supplier"
+              buttonLabel="Import Supplier"
             />
-            <button
-              onClick={handleDownloadTemplate}
-              className="flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium justify-center"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export / Template CSV
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium justify-center"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import CSV
-            </button>
             <button
               onClick={() => handleOpenModal()}
               className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm text-sm font-medium w-full sm:w-auto justify-center"

@@ -58,6 +58,30 @@ export const exportToCSV = (filename: string, rows: any[]) => {
   }
 };
 
+export const downloadCsvTemplate = (filename: string, headers: string[], exampleRow?: string[]) => {
+  const separator = ",";
+  let csvContent = headers.map(h => `"${h}"`).join(separator);
+  
+  if (exampleRow && exampleRow.length > 0) {
+    csvContent += "\n" + exampleRow.map(cell => `"${cell}"`).join(separator);
+  }
+
+  const blob = new Blob(["\uFEFF" + csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const link = document.createElement("a");
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+};
+
 export const filterByDateRange = <
   T extends { date?: string; importDate?: string; timestamp?: string },
 >(

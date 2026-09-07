@@ -36,6 +36,7 @@ import {
   EmploymentType,
   EmployeeStatus,
 } from "../types";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 export function HRManagement() {
   const {
@@ -149,6 +150,94 @@ export function HRManagement() {
     setIsEmployeeModalOpen(false);
   };
 
+  const handleImportEmployees = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const nik = row["NIK"] || row.nik;
+      const name = row["Nama Karyawan"] || row.name;
+      const position = row["Posisi"] || row.position;
+      const department = row["Departemen"] || row.department;
+      if (nik && name) {
+        addEmployee({
+          nik, name, position, department,
+          status: (row["Status"] || "AKTIF") as EmployeeStatus,
+          employmentType: (row["Tipe"] || "TETAP") as EmploymentType
+        });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} karyawan.`);
+    else alert("Tidak ada data valid yang diimport.");
+  };
+
+  const handleImportContracts = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      if (empId) {
+        addContract({
+          employeeId: empId,
+          basicSalary: Number(row["Gaji Pokok"]) || 0,
+          positionAllowance: Number(row["Tunjangan Jabatan"]) || 0,
+          mealAllowance: Number(row["Tunjangan Makan"]) || 0,
+          transportAllowance: Number(row["Tunjangan Transport"]) || 0,
+          kpiBonusTarget: Number(row["Target Bonus KPI"]) || 0,
+          alphaDeductionPerDay: Number(row["Potongan Alpha/Hari"]) || 0,
+          startDate: row["Mulai Kontrak"] || new Date().toISOString().split('T')[0],
+          endDate: row["Selesai Kontrak"] || new Date().toISOString().split('T')[0],
+          status: "ACTIVE"
+        });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} kontrak.`);
+    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+  };
+
+  const handleImportAttendances = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      const period = row["Periode (YYYY-MM)"];
+      if (empId && period) {
+        addAttendance({
+          employeeId: empId,
+          period,
+          presentDays: Number(row["Hadir"]) || 0,
+          sickDays: Number(row["Sakit"]) || 0,
+          permissionDays: Number(row["Izin"]) || 0,
+          alphaDays: Number(row["Alpha"]) || 0,
+          notes: row["Catatan"] || ""
+        });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} absensi.`);
+    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+  };
+
+  const handleImportKPI = (data: any[]) => {
+    let imported = 0;
+    data.forEach(row => {
+      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      const quarter = Number(row["Kuartal (1-4)"]);
+      const year = Number(row["Tahun"]);
+      if (empId && quarter && year) {
+        addKPI({
+          employeeId: empId,
+          period: `Q${quarter}-${year}`,
+          quarter, year,
+          totalScore: Number(row["Total Skor"]) || 0,
+          kpiBonus: Number(row["Bonus KPI"]) || 0,
+          evaluatorNotes: row["Catatan Evaluator"] || ""
+        });
+        imported++;
+      }
+    });
+    if (imported > 0) alert(`Berhasil mengimport ${imported} KPI.`);
+    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+  };
+
   const handleOpenContractModal = (contract?: any, employeeId?: string) => {
     if (contract && contract.id) {
       setEditingContract(contract);
@@ -172,7 +261,7 @@ export function HRManagement() {
 
 
   const isHRD =
-    currentUser?.role === "HRD" || currentUser?.role === "SUPER_ADMIN";
+    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
   const isFinance =
     currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
   const canEditHR = isHRD && !isReadOnly;
@@ -486,13 +575,25 @@ export function HRManagement() {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Daftar Karyawan" : "Employee List"}
+                  {isIndo ? "Data Karyawan" : "Employee Data"}
                 </h3>
                 {canEditHR && (
-                  <button onClick={() => handleOpenEmployeeModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                    <Plus className="w-4 h-4" />{" "}
-                    {isIndo ? "Tambah Karyawan" : "Add Employee"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportEmployees}
+                      templateHeaders={["NIK", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
+                      templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
+                      templateFilename="template_karyawan"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button
+                      onClick={() => handleOpenEmployeeModal()}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />{" "}
+                      {isIndo ? "Tambah Karyawan" : "Add Employee"}
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -572,14 +673,23 @@ export function HRManagement() {
 
           {activeTab === "contracts" && (
             <div>
-                            <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
                 </h3>
                 {canEditHR && (
-                  <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportContracts}
+                      templateHeaders={["NIK", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Potongan Alpha/Hari", "Mulai Kontrak", "Selesai Kontrak"]}
+                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
+                      templateFilename="template_kontrak"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="overflow-x-auto">
@@ -679,16 +789,22 @@ export function HRManagement() {
           {activeTab === "kpi" && (
             <div>
               <div className="flex justify-between items-center mb-6">
-                
                 <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo
-                    ? "Penilaian KPI (Kuartal)"
-                    : "KPI Assessment (Quarterly)"}
+                  {isIndo ? "Penilaian KPI (Kuartal)" : "KPI Assessment (Quarterly)"}
                 </h3>
                 {canEditHR && (
-                  <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportKPI}
+                      templateHeaders={["NIK", "Kuartal (1-4)", "Tahun", "Total Skor", "Bonus KPI", "Catatan Evaluator"]}
+                      templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
+                      templateFilename="template_kpi"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="overflow-x-auto">
@@ -755,9 +871,18 @@ export function HRManagement() {
                     : "Monthly Attendance Recap"}
                 </h3>
                 {canEditHR && (
-                  <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                    <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportAttendances}
+                      templateHeaders={["NIK", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
+                      templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
+                      templateFilename="template_absensi"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="overflow-x-auto">
