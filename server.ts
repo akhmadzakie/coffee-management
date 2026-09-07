@@ -421,6 +421,22 @@ async function startServer() {
     };
   };
 
+  const sanitizeDeviceSession = (s: any) => ({
+    id: String(s.id || crypto.randomUUID()),
+    userId: String(s.userId || ""),
+    username: String(s.username || ""),
+    userName: String(s.userName || ""),
+    deviceName: String(s.deviceName || "Unknown"),
+    browser: String(s.browser || "Unknown"),
+    os: String(s.os || "Unknown"),
+    deviceType: String(s.deviceType || "desktop"),
+    ipAddress: s.ipAddress ? String(s.ipAddress) : null,
+    location: s.location ? String(s.location) : null,
+    lastActive: String(s.lastActive || new Date().toISOString()),
+    createdAt: String(s.createdAt || new Date().toISOString()),
+    status: String(s.status || "ACTIVE"),
+  });
+
   const sanitizeEmployee = (e: any) => ({
     id: String(e.id || crypto.randomUUID()),
     nik: String(e.nik || ""),
@@ -1476,3 +1492,4 @@ async function startServer() {
 }
 
 startServer();
+
