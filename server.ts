@@ -408,13 +408,18 @@ async function startServer() {
     language: String(st?.language || "id"),
   });
 
-  const sanitizeUser = (u: any) => ({
-    id: String(u.id || crypto.randomUUID()),
-    username: String(u.username || ""),
-    pin: String(u.pin || "1234"),
-    name: String(u.name || ""),
-    role: String(u.role || "ADMIN_OPERASIONAL"),
-  });
+  const sanitizeUser = (u: any) => {
+    let role = String(u.role || "MANAGER");
+    if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
+    if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
+    return {
+      id: String(u.id || crypto.randomUUID()),
+      username: String(u.username || ""),
+      pin: String(u.pin || "1234"),
+      name: String(u.name || ""),
+      role,
+    };
+  };
 
   const sanitizeEmployee = (e: any) => ({
     id: String(e.id || crypto.randomUUID()),
@@ -677,7 +682,7 @@ async function startServer() {
         cash_accounts,
         cash_transactions,
         settings: settings.length > 0 ? settings[0] : initialSettings,
-        users,
+        users: users.map(sanitizeUser),
         device_sessions,
         ingredients,
         stock_movements,

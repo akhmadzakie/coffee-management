@@ -11,7 +11,6 @@ const ROLES: { value: string; label: string }[] = [
   { value: "MANAGER", label: "Manager" },
   { value: "FINANCE", label: "Finance / Keuangan" },
   { value: "KASIR", label: "Kasir" },
-  { value: "ADMIN_OPERASIONAL", label: "Admin Operasional (Legacy)" },
 ];
 
 export const UsersComponent = () => {
