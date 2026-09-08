@@ -124,6 +124,7 @@ export const users = pgTable("users", {
   pin: text("pin").notNull(),
   name: text("name").notNull(),
   role: varchar("role", { length: 50 }).notNull(),
+  department: varchar("department", { length: 50 }),
 });
 
 export const settings = pgTable("settings", {
@@ -167,7 +168,7 @@ export const stockMovements = pgTable("stock_movements", {
   id: varchar("id", { length: 255 }).primaryKey(),
   ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
   // Fase 3: expanded types
-  type: varchar("type", { length: 50 }).notNull(), // 'IN' | 'OUT' | 'ADJUSTMENT' | 'WASTE' | 'RETURN'
+  type: varchar("type", { length: 50 }).notNull(), // 'IN' | 'OUT' | 'ADJUSTMENT' | 'WASTE' | 'RETURN' | 'TRANSFER' | 'USAGE'
   quantity: real("quantity").notNull(),
   date: text("date").notNull(), // ISO String
   note: text("note"),
@@ -175,6 +176,7 @@ export const stockMovements = pgTable("stock_movements", {
   totalCost: real("total_cost"), // unitCost × quantity
   referenceId: varchar("reference_id", { length: 255 }), // link ke PO
   createdBy: varchar("created_by", { length: 255 }).notNull(),
+  location: varchar("location", { length: 50 }),
 });
 
 export const salesTransactions = pgTable("sales_transactions", {

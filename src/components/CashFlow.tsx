@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
+import Papa from "papaparse";
 import {
   TrendingUp,
   TrendingDown,
@@ -12,6 +13,8 @@ import {
   Landmark,
   Settings2,
   Smartphone,
+  Download,
+  Upload,
 } from "lucide-react";
 import { CashAccount } from "../types";
 
@@ -112,6 +115,89 @@ export const CashFlow = () => {
     });
 
     setIsAccountModalOpen(false);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      alert("Tidak ada data untuk diexport.");
+      return;
+    }
+    const csvData = filteredTransactions.map((trx) => ({
+      Tanggal: new Date(trx.date).toISOString(),
+      "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
+      Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+      Kategori: trx.category,
+      Deskripsi: trx.description,
+      Jumlah: trx.amount,
+    }));
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `arus_kas_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (cashAccounts.length === 0) {
+      alert("Silakan buat Pos Kas terlebih dahulu sebelum mengimport transaksi.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        let importedCount = 0;
+        let errors = 0;
+
+        results.data.forEach((row: any) => {
+          try {
+            const date = row["Tanggal"] || new Date().toISOString();
+            const rawJenis = String(row["Jenis"] || "").toLowerCase();
+            const type = rawJenis.includes("masuk") ? "CASH_IN" : "CASH_OUT";
+            const category = row["Kategori"] || "Lainnya";
+            const description = row["Deskripsi"] || "Import CSV";
+            const amount = parseFloat(row["Jumlah"]) || 0;
+
+            if (amount > 0) {
+              const defaultAccountId = cashAccounts[0].id; // Use first account for simplicity, could map by name later
+              addCashTransaction({
+                accountId: defaultAccountId,
+                type: type,
+                date: date,
+                amount: amount,
+                description: description,
+                category: category,
+                categoryId: null,
+                referenceId: null,
+              });
+              importedCount++;
+            } else {
+              errors++;
+            }
+          } catch (err) {
+            errors++;
+          }
+        });
+
+        alert(`Import selesai. Berhasil: ${importedCount}, Gagal/Dilewati: ${errors}`);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      },
+      error: () => {
+        alert("Gagal membaca file CSV. Pastikan format sudah benar.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    });
   };
 
   const getAccountIcon = (type: string) => {
@@ -264,16 +350,41 @@ export const CashFlow = () => {
             </div>
 
             {!isReadOnly && cashAccounts.length > 0 && (
-              <button
-                onClick={() => {
-                  setTrxType("CASH_IN");
-                  setIsModalOpen(true);
-                }}
-                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Tambah Transaksi
-              </button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleImportCSV}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
+                  title="Import CSV"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
+                  title="Export CSV"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </button>
+                <button
+                  onClick={() => {
+                    setTrxType("CASH_IN");
+                    setIsModalOpen(true);
+                  }}
+                  className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 text-sm font-medium"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Tambah Transaksi
+                </button>
+              </div>
             )}
           </div>
         </div>

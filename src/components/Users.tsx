@@ -11,6 +11,13 @@ const ROLES: { value: string; label: string }[] = [
   { value: "MANAGER", label: "Manager" },
   { value: "FINANCE", label: "Finance / Keuangan" },
   { value: "KASIR", label: "Kasir" },
+  { value: "LEADER", label: "Leader (Bar/Kitchen)" },
+];
+
+const DEPARTMENTS = [
+  { value: "MAIN", label: "Gudang Utama" },
+  { value: "BAR", label: "Bar" },
+  { value: "KITCHEN", label: "Kitchen / Dapur" },
 ];
 
 export const UsersComponent = () => {
@@ -23,12 +30,18 @@ export const UsersComponent = () => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const userData = {
+    const role = formData.get("role") as Role;
+    const userData: any = {
       username: formData.get("username") as string,
       pin: formData.get("pin") as string,
       name: formData.get("name") as string,
-      role: formData.get("role") as Role,
+      role: role,
     };
+    if (role === "LEADER") {
+      userData.department = formData.get("department");
+    } else {
+      userData.department = null;
+    }
 
     if (editingUser) {
       updateUser({ ...userData, id: editingUser.id });
@@ -39,13 +52,17 @@ export const UsersComponent = () => {
     setEditingUser(null);
   };
 
+  const [selectedRole, setSelectedRole] = useState<Role>("KASIR");
+
   const startEdit = (user: User) => {
     setEditingUser(user);
+    setSelectedRole(user.role);
     setIsEditing(true);
   };
 
   const handleAddNew = () => {
     setEditingUser(null);
+    setSelectedRole("KASIR");
     setIsEditing(true);
   };
 
@@ -231,7 +248,8 @@ export const UsersComponent = () => {
                 <select
                   name="role"
                   required
-                  defaultValue={editingUser?.role || "KASIR"}
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as Role)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   {ROLES.map((r) => (
@@ -241,6 +259,26 @@ export const UsersComponent = () => {
                   ))}
                 </select>
               </div>
+
+              {selectedRole === "LEADER" && (
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">
+                    Departemen / Lokasi
+                  </label>
+                  <select
+                    name="department"
+                    required
+                    defaultValue={editingUser?.department || "BAR"}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    {DEPARTMENTS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

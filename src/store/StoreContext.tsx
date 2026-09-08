@@ -941,12 +941,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           let newStock = ing.currentStock;
           if (mov.type === "IN" || mov.type === "RETURN") {
             newStock += mov.quantity;
-          } else if (mov.type === "OUT" || mov.type === "WASTE") {
+          } else if (mov.type === "OUT" || mov.type === "WASTE" || mov.type === "USAGE" as any) {
             newStock -= mov.quantity;
           } else if (mov.type === "ADJUSTMENT") {
             // For ADJUSTMENT, quantity is the target stock (physical stock)
             newStock = mov.quantity;
           }
+          // Note: TRANSFER does not affect the global physical stock count, it's just movement tracking.
           return { ...ing, currentStock: Math.max(0, newStock) };
         }
         return ing;

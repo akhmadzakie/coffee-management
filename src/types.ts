@@ -1,9 +1,12 @@
+export type LocationType = "MAIN" | "BAR" | "KITCHEN";
+
 export type Role =
   | "SUPER_ADMIN"
   | "OWNER"
   | "MANAGER"
   | "FINANCE"
-  | "KASIR";
+  | "KASIR"
+  | "LEADER";
 
 export interface User {
   id: string;
@@ -11,6 +14,7 @@ export interface User {
   pin: string;
   name: string;
   role: Role;
+  department?: LocationType | null;
 }
 
 export type ViewState =
@@ -270,7 +274,7 @@ export interface StockMovement {
   id: string;
   ingredientId: string;
   // Fase 3: extended types
-  type: "IN" | "OUT" | "ADJUSTMENT" | "WASTE" | "RETURN";
+  type: "IN" | "OUT" | "ADJUSTMENT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE";
   quantity: number;
   date: string; // ISO string
   note: string;
@@ -278,6 +282,7 @@ export interface StockMovement {
   totalCost?: number | null;
   referenceId?: string | null; // link ke PO
   createdBy: string;
+  location?: LocationType | null; // Tempat mutasi/pemakaian
 }
 
 export interface SalesTransaction {

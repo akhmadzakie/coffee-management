@@ -169,6 +169,8 @@ CREATE TABLE IF NOT EXISTS payroll_records (
       ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0;
       ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0;
       ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT;
+      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     `);
     console.log("✅ Schema ensured: Fase 1-4 tables ready.");
   } catch (err: any) {
@@ -263,6 +265,7 @@ async function startServer() {
     unitCost: m.unitCost != null ? Number(m.unitCost) : null,
     totalCost: m.totalCost != null ? Number(m.totalCost) : null,
     referenceId: m.referenceId ? String(m.referenceId) : null,
+    location: m.location ? String(m.location) : null,
     createdBy: String(m.createdBy || "System"),
   });
 
@@ -418,6 +421,7 @@ async function startServer() {
       pin: String(u.pin || "1234"),
       name: String(u.name || ""),
       role,
+      department: u.department ? String(u.department) : null,
     };
   };
 

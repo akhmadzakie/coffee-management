@@ -32,7 +32,7 @@ export const Inventory = () => {
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [isAddMovementOpen, setIsAddMovementOpen] = useState(false);
   const [selectedIngredientForMove, setSelectedIngredientForMove] = useState<string>("");
-  const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN">("OUT");
+  const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE">("OUT");
 
   const filteredIngredients = ingredients.filter(
     (i) =>
@@ -99,7 +99,8 @@ export const Inventory = () => {
       date: new Date().toISOString(),
       note: formData.get("note") as string,
       createdBy: currentUser?.name || "System",
-    });
+      location: currentUser?.department || "MAIN",
+    } as any);
 
     setIsAddMovementOpen(false);
   };
@@ -222,7 +223,7 @@ export const Inventory = () => {
           </div>
 
           {activeTab === "ingredients" ? (
-            !isReadOnly ? (
+            !isReadOnly && currentUser?.role !== "LEADER" ? (
               <>
                 <CsvImportExport
                   onImport={handleImportIngredients}
@@ -249,7 +250,7 @@ export const Inventory = () => {
                     return;
                   }
                   setSelectedIngredientForMove(ingredients[0].id);
-                  setMovementType("OUT");
+                  setMovementType(currentUser?.role === "LEADER" ? "USAGE" : "OUT");
                   setIsAddMovementOpen(true);
                 }}
                 className="flex items-center px-4 py-2 bg-accent text-white rounded-lg hover:bg-yellow-600 transition-colors shrink-0"
@@ -259,7 +260,7 @@ export const Inventory = () => {
               </button>
             ) : null
           ) : activeTab === "opnames" ? (
-             !isReadOnly && !isOpnameMode ? (
+             !isReadOnly && !isOpnameMode && currentUser?.role !== "LEADER" ? (
               <button
                 onClick={startOpname}
                 className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
@@ -327,7 +328,7 @@ export const Inventory = () => {
                               {item.name}
                             </h3>
                           </div>
-                          {!isReadOnly && (
+                          {!isReadOnly && currentUser?.role !== "LEADER" && (
                             <button
                               onClick={() => {
                                 if (
@@ -399,6 +400,7 @@ export const Inventory = () => {
                   <th className="p-4 font-semibold text-slate-600">Tanggal</th>
                   <th className="p-4 font-semibold text-slate-600">Bahan Baku</th>
                   <th className="p-4 font-semibold text-slate-600">Jenis</th>
+                  <th className="p-4 font-semibold text-slate-600">Lokasi</th>
                   <th className="p-4 font-semibold text-slate-600">Jumlah</th>
                   <th className="p-4 font-semibold text-slate-600">Catatan</th>
                   <th className="p-4 font-semibold text-slate-600">Operator</th>
@@ -421,13 +423,16 @@ export const Inventory = () => {
                             mov.type === "IN" ? "bg-emerald-100 text-emerald-800"
                               : mov.type === "RETURN" ? "bg-blue-100 text-blue-800"
                               : mov.type === "WASTE" ? "bg-rose-100 text-rose-800"
+                              : mov.type === "USAGE" ? "bg-indigo-100 text-indigo-800"
+                              : mov.type === "TRANSFER" ? "bg-purple-100 text-purple-800"
                               : "bg-orange-100 text-orange-800"
                           }`}
                         >
                           {mov.type}
                         </span>
                       </td>
-                      <td className={`p-4 font-medium ${mov.type === "IN" || mov.type === "RETURN" ? "text-emerald-600" : "text-rose-600"}`}>
+                      <td className="p-4 text-slate-600 font-medium">{(mov as any).location || "MAIN"}</td>
+                      <td className={`p-4 font-medium ${mov.type === "IN" || mov.type === "RETURN" || mov.type === "TRANSFER" ? "text-emerald-600" : "text-rose-600"}`}>
                         {mov.type === "IN" || mov.type === "RETURN" ? "+" : "-"}{mov.quantity} {ingredient?.unit}
                       </td>
                       <td className="p-4 text-slate-600">{mov.note || "-"}</td>
@@ -675,40 +680,70 @@ export const Inventory = () => {
             </div>
 
             <form onSubmit={handleAddMovement} className="p-6 space-y-4">
-              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setMovementType("OUT")}
-                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                    movementType === "OUT"
-                      ? "bg-white text-orange-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Pemakaian
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMovementType("WASTE")}
-                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                    movementType === "WASTE"
-                      ? "bg-white text-rose-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Terbuang
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMovementType("IN")}
-                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                    movementType === "IN"
-                      ? "bg-white text-emerald-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Masuk / PO
-                </button>
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg flex-wrap">
+                {currentUser?.role !== "LEADER" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType("OUT")}
+                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
+                        movementType === "OUT"
+                          ? "bg-white text-orange-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Keluar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType("WASTE")}
+                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
+                        movementType === "WASTE"
+                          ? "bg-white text-rose-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Terbuang
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType("IN")}
+                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
+                        movementType === "IN"
+                          ? "bg-white text-emerald-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Masuk/PO
+                    </button>
+                  </>
+                )}
+                {currentUser?.role === "LEADER" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType("USAGE")}
+                      className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                        movementType === "USAGE"
+                          ? "bg-white text-blue-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Pemakaian {currentUser?.department ? `(${currentUser.department})` : ""}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType("TRANSFER")}
+                      className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                        movementType === "TRANSFER"
+                          ? "bg-white text-purple-700 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Minta/Mutasi
+                    </button>
+                  </>
+                )}
               </div>
 
               <div>
