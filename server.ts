@@ -29,10 +29,8 @@ const initialUsers = [
 ];
 
 async function ensureTables() {
-  // Auto-create new Fase 1-4 tables if they don't exist (schema evolution without migration)
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS expense_categories (
+  const queries = [
+    `CREATE TABLE IF NOT EXISTS expense_categories (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         type TEXT NOT NULL DEFAULT 'LAINNYA',
@@ -42,16 +40,16 @@ async function ensureTables() {
         is_active BOOLEAN NOT NULL DEFAULT true,
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
-      );
-      CREATE TABLE IF NOT EXISTS budgets (
+      )`,
+    `CREATE TABLE IF NOT EXISTS budgets (
         id TEXT PRIMARY KEY,
         category_id TEXT REFERENCES expense_categories(id),
         period TEXT NOT NULL,
         amount NUMERIC NOT NULL DEFAULT 0,
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
-      );
-      CREATE TABLE IF NOT EXISTS bank_reconciliations (
+      )`,
+    `CREATE TABLE IF NOT EXISTS bank_reconciliations (
         id TEXT PRIMARY KEY,
         period TEXT NOT NULL,
         bank_name TEXT NOT NULL,
@@ -62,8 +60,8 @@ async function ensureTables() {
         notes TEXT,
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
-      );
-      CREATE TABLE IF NOT EXISTS bank_statement_lines (
+      )`,
+    `CREATE TABLE IF NOT EXISTS bank_statement_lines (
         id TEXT PRIMARY KEY,
         reconciliation_id TEXT NOT NULL REFERENCES bank_reconciliations(id) ON DELETE CASCADE,
         date TEXT NOT NULL,
@@ -73,8 +71,8 @@ async function ensureTables() {
         matched_transaction_id TEXT,
         is_matched BOOLEAN NOT NULL DEFAULT false,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stock_opnames (
+      )`,
+    `CREATE TABLE IF NOT EXISTS stock_opnames (
         id TEXT PRIMARY KEY,
         period TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'DRAFT',
@@ -83,8 +81,8 @@ async function ensureTables() {
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT,
         approved_by TEXT,
         approved_at TEXT
-      );
-      CREATE TABLE IF NOT EXISTS stock_opname_items (
+      )`,
+    `CREATE TABLE IF NOT EXISTS stock_opname_items (
         id TEXT PRIMARY KEY,
         opname_id TEXT NOT NULL REFERENCES stock_opnames(id) ON DELETE CASCADE,
         ingredient_id TEXT NOT NULL,
@@ -93,8 +91,8 @@ async function ensureTables() {
         difference NUMERIC GENERATED ALWAYS AS (physical_stock - system_stock) STORED,
         unit_cost NUMERIC NOT NULL DEFAULT 0,
         notes TEXT
-      );
-            CREATE TABLE IF NOT EXISTS employees (
+      )`,
+    `CREATE TABLE IF NOT EXISTS employees (
         id TEXT PRIMARY KEY,
         nik TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -107,8 +105,8 @@ async function ensureTables() {
         address TEXT NOT NULL,
         status TEXT NOT NULL,
         created_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS employee_contracts (
+      )`,
+    `CREATE TABLE IF NOT EXISTS employee_contracts (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         effective_date TEXT NOT NULL,
@@ -118,8 +116,8 @@ async function ensureTables() {
         alpha_deduction_per_day NUMERIC NOT NULL DEFAULT 0,
         working_days_per_month INTEGER NOT NULL DEFAULT 0,
         notes TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS attendance_records (
+      )`,
+    `CREATE TABLE IF NOT EXISTS attendance_records (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         period TEXT NOT NULL,
@@ -132,8 +130,8 @@ async function ensureTables() {
         notes TEXT NOT NULL,
         created_by TEXT NOT NULL,
         created_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS kpi_records (
+      )`,
+    `CREATE TABLE IF NOT EXISTS kpi_records (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         period TEXT NOT NULL,
@@ -141,8 +139,8 @@ async function ensureTables() {
         notes TEXT NOT NULL,
         created_at TEXT NOT NULL,
         evaluated_by TEXT NOT NULL
-      );
-CREATE TABLE IF NOT EXISTS payroll_records (
+      )`,
+    `CREATE TABLE IF NOT EXISTS payroll_records (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL,
         period TEXT NOT NULL,
@@ -160,25 +158,26 @@ CREATE TABLE IF NOT EXISTS payroll_records (
         notes TEXT,
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
-      );
-      -- Add categoryId to cash_transactions if missing
-      ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id);
-      -- Add cost_per_unit to ingredients if missing
-      ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0;
-      -- Add extra fields to stock_movements if missing
-      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0;
-      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0;
-      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT;
-      ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
-    `);
-    console.log("✅ Schema ensured: Fase 1-4 tables ready.");
-  } catch (err: any) {
-    // "column already exists" etc are OK to ignore
-    if (!err?.message?.includes("already exists") && !err?.message?.includes("duplicate")) {
-      console.warn("⚠️  ensureTables warning:", err?.message || err);
+      )`,
+    `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT`,
+    `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`
+  ];
+
+  for (const q of queries) {
+    try {
+      await pool.query(q);
+    } catch (err: any) {
+      if (!err?.message?.includes("already exists") && !err?.message?.includes("duplicate") && !err?.message?.includes("does not exist")) {
+        console.warn("⚠️  ensureTables warning for query:", q, err?.message);
+      }
     }
   }
+  console.log("✅ Schema ensured: Fase 1-4 tables ready.");
 }
 
 async function startServer() {
