@@ -156,6 +156,7 @@ export const Layout: React.FC<LayoutProps> = ({
     MANAGER: ["dashboard", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
     FINANCE: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
     KASIR: ["shifts", "import_sales"],
+    LEADER: ["dashboard", "inventory"],
   };
 
   const allowedViews = currentUser ? roleAccess[currentUser.role] || [] : [];
