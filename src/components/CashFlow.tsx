@@ -143,6 +143,34 @@ export const CashFlow = () => {
     document.body.removeChild(link);
   };
 
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        Tanggal: new Date().toISOString(),
+        Jenis: "Pemasukan",
+        Kategori: "Pendapatan Lain",
+        Deskripsi: "Contoh transaksi pemasukan",
+        Jumlah: 50000,
+      },
+      {
+        Tanggal: new Date().toISOString(),
+        Jenis: "Pengeluaran",
+        Kategori: "Operasional Lainnya",
+        Deskripsi: "Contoh transaksi pengeluaran",
+        Jumlah: 15000,
+      },
+    ];
+    const csv = Papa.unparse(templateData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `template_arus_kas.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -367,12 +395,20 @@ export const CashFlow = () => {
                   Import
                 </button>
                 <button
-                  onClick={handleExportCSV}
+                  onClick={handleDownloadTemplate}
                   className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
-                  title="Export CSV"
+                  title="Download Template CSV"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Export
+                  Template
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
+                  title="Export Data CSV"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export Data
                 </button>
                 <button
                   onClick={() => {
