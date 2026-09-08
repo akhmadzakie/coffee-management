@@ -262,383 +262,171 @@ export const Dashboard = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-1.5 flex items-center shadow-xs">
-            <Calendar className="w-4 h-4 text-slate-400 ml-2 mr-1" />
-            <select
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(Number(e.target.value))}
-              className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer py-1"
-            >
-              <option value={-1}>{isIndo ? "Semua Waktu" : "All Time"}</option>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i}>
-                  {new Date(0, i).toLocaleString(isIndo ? "id-ID" : "en-US", {
-                    month: "long",
-                  })}
-                </option>
-              ))}
-            </select>
-            <div className="w-px h-4 bg-slate-300 mx-2" />
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(Number(e.target.value))}
-              className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer py-1 pr-4"
-            >
-              {[2023, 2024, 2025, 2026].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+          {canViewFinance ? (
+            <div className="flex bg-slate-200/50 p-1 rounded-xl w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab("FINANCE")}
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  activeTab === "FINANCE"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                {isIndo ? "Keuangan" : "Finance"}
+              </button>
+              <button
+                onClick={() => setActiveTab("INVENTORY")}
+                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  activeTab === "INVENTORY"
+                    ? "bg-white text-amber-600 shadow-sm"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                {isIndo ? "Inventori" : "Inventory"}
+              </button>
+            </div>
+          ) : (
+             <div className="text-sm font-bold text-slate-600 px-4 py-2">
+               {isIndo ? "Ringkasan Inventori" : "Inventory Summary"}
+             </div>
+          )}
+          
+          {activeTab === "FINANCE" && (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 shadow-xs w-full sm:w-auto">
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(Number(e.target.value))}
+                className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer py-1"
+              >
+                <option value={-1}>{isIndo ? "Semua" : "All"}</option>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {new Date(0, i).toLocaleString(isIndo ? "id-ID" : "en-US", { month: "long" })}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterYear}
+                onChange={(e) => setFilterYear(Number(e.target.value))}
+                className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer py-1"
+              >
+                {[2023, 2024, 2025, 2026].map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Metrics Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, staggerChildren: 0.1 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6"
-      >
-        {cashAccounts.map((acc, idx) => (
-          <motion.div
-            key={acc.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{
-              y: -4,
-              shadow:
-                "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-            }}
-            className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-500 text-sm font-medium">{acc.name}</h3>
-              <div className="p-2.5 bg-slate-100 rounded-xl">
-                {getAccountIcon(acc.type)}
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-slate-800">
-              {formatCurrency(accountBalances[acc.id] || 0)}
-            </p>
-            <p className="text-sm text-slate-400 mt-2">
-              {acc.type === "BANK"
-                ? "Bank"
-                : acc.type === "CASH"
-                  ? "Cash"
-                  : acc.type === "E_WALLET"
-                    ? "E-Wallet"
-                    : "Savings"}
-            </p>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, staggerChildren: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-      >
-        {/* Net Profit */}
+      {activeTab === "FINANCE" && canViewFinance && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          key="finance-tab"
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          whileHover={{
-            y: -4,
-            shadow:
-              "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-          }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all group relative overflow-hidden"
+          transition={{ duration: 0.3 }}
+          className="space-y-6"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">
-              {isIndo ? "Laba Bersih" : "Net Profit"}
-            </h3>
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-              <DollarSign className="w-5 h-5" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {cashAccounts.map((acc, idx) => (
+              <motion.div key={acc.id} className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+                <h3 className="text-slate-500 text-sm font-medium mb-2">{acc.name}</h3>
+                <p className="text-2xl font-bold text-slate-800">{formatCurrency(accountBalances[acc.id] || 0)}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Laba Bersih" : "Net Profit"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(netProfit)}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Total Penjualan" : "Total Sales"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalSalesRevenue)}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Uang Masuk" : "Cash In"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalCashIn)}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Uang Keluar" : "Cash Out"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalCashOut)}</p>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {formatCurrency(netProfit)}
-          </p>
-          <div className="flex items-center gap-1.5 mt-2 text-sm">
-            {netProfit >= 0 ? (
-              <span className="flex items-center text-emerald-600 font-medium">
-                <TrendingUp className="w-4 h-4 mr-1" />
-                Positif
-              </span>
-            ) : (
-              <span className="flex items-center text-rose-600 font-medium">
-                <TrendingDown className="w-4 h-4 mr-1" />
-                Negatif
-              </span>
-            )}
-            <span className="text-slate-400">
-              {isIndo ? "Bulan Ini" : "This Month"}
-            </span>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="sales" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} />
+                  <Area type="monotone" dataKey="expense" stroke="#F43F5E" fill="#F43F5E" fillOpacity={0.1} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-lg font-bold mb-4">{isIndo ? "Pengeluaran per Kategori" : "Expenses by Category"}</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={expenseByCategory} dataKey="value" nameKey="name" outerRadius={80} fill="#8884d8">
+                    {expenseByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </motion.div>
+      )}
 
-        {/* Total Sales */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{
-            y: -4,
-            shadow:
-              "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-          }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all group relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">
-              {isIndo ? "Total Penjualan" : "Total Sales"}
-            </h3>
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-              <ReceiptText className="w-5 h-5" />
+      {activeTab === "INVENTORY" && (
+        <motion.div key="inventory-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Valuasi Stok" : "Inventory Valuation"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{canViewFinance ? formatCurrency(totalInventoryValue) : "---"}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Stok Kritis" : "Low Stock"}</h3>
+              <p className="text-2xl font-bold text-rose-600">{lowStockIngredients.length}</p>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Aktivitas Bulan Ini" : "Monthly Activity"}</h3>
+              <p className="text-2xl font-bold text-slate-800">{stockMovements.filter(m => new Date(m.date).getMonth() === new Date().getMonth()).length}</p>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {formatCurrency(totalSalesRevenue)}
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            {filteredSales.length}{" "}
-            {isIndo ? "Transaksi Terimpor" : "Imported Transactions"}
-          </p>
-        </motion.div>
 
-        {/* Cash In */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{
-            y: -4,
-            shadow:
-              "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-          }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all group relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">
-              {isIndo ? "Uang Masuk" : "Cash In"}
-            </h3>
-            <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {formatCurrency(totalCashIn)}
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            {isIndo ? "Semua Kategori" : "All Categories"}
-          </p>
-        </motion.div>
-
-        {/* Cash Out */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{
-            y: -4,
-            shadow:
-              "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-          }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all group relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">
-              {isIndo ? "Uang Keluar" : "Cash Out"}
-            </h3>
-            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
-              <TrendingDown className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {formatCurrency(totalCashOut)}
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            {isIndo ? "Semua Kategori" : "All Categories"}
-          </p>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, staggerChildren: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-6"
-      >
-        {/* HRD KPI */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-full -z-10" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Status SDM & Kontrak" : "HR & Contracts"}</h3>
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-              <Users className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {employees.filter(e => e.status === 'ACTIVE').length} <span className="text-sm font-normal text-slate-500">{isIndo ? "Aktif" : "Active"}</span>
-          </p>
-          {expiringContracts.length > 0 ? (
-            <div className="flex items-center gap-1.5 mt-2 text-sm text-amber-600 font-medium">
-              <AlertCircle className="w-4 h-4 mr-1" />
-              {expiringContracts.length} {isIndo ? "Kontrak segera berakhir" : "Contracts expiring soon"}
-            </div>
-          ) : (
-             <div className="flex items-center gap-1.5 mt-2 text-sm text-emerald-600 font-medium">
-               <Clock className="w-4 h-4 mr-1" />
-               {isIndo ? "Semua kontrak aman" : "All contracts safe"}
-             </div>
-          )}
-        </motion.div>
-
-        {/* Inventory KPI */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{ y: -4, shadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
-          className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm transition-all relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-10" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Valuasi Stok" : "Inventory Valuation"}</h3>
-            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
-              <Package className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">
-            {formatCurrency(totalInventoryValue)}
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            {ingredients.length} {isIndo ? "Bahan Baku" : "Ingredients"}
-          </p>
-        </motion.div>
-      </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">
-            {isIndo ? "Tren Pendapatan vs Pengeluaran" : "Revenue vs Expense Trend"}
-          </h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#F43F5E" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#64748B", fontSize: 12 }} dy={10} />
-                <YAxis tickFormatter={(value) => `Rp${(value / 1000000).toFixed(1)}M`} axisLine={false} tickLine={false} tick={{ fill: "#64748B", fontSize: 12 }} dx={-10} />
-                <Tooltip
-                  formatter={(value: number, name: string) => [formatCurrency(value), name === 'sales' ? (isIndo ? 'Pendapatan' : 'Revenue') : (isIndo ? 'Pengeluaran' : 'Expense')]}
-                  contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                />
-                <Legend verticalAlign="top" height={36}/>
-                <Area type="monotone" dataKey="sales" name="sales" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
-                <Area type="monotone" dataKey="expense" name="expense" stroke="#F43F5E" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          {/* Expense Category Chart */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
-              {isIndo ? "Pengeluaran Berdasarkan Kategori" : "Expense by Category"}
-            </h3>
-            {expenseByCategory.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">
-                {isIndo ? "Belum ada data pengeluaran." : "No expense data yet."}
-              </div>
-            ) : (
-              <div className="h-[250px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={expenseByCategory}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {expenseByCategory.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    <Legend verticalAlign="bottom" height={36} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-          
-          {/* Low Stock Alerts */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-800">
-                {isIndo ? "Stok Menipis" : "Low Stock"}
-              </h3>
-              <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-            </div>
-            {lowStockIngredients.length === 0 ? (
-              <div className="text-center py-6">
-                <Package className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-                <p className="text-sm text-slate-500">
-                  {isIndo ? "Semua stok aman." : "All stock is safe."}
-                </p>
-              </div>
-            ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="font-bold text-lg mb-4">{isIndo ? "Stok Menipis" : "Low Stock Alerts"}</h3>
               <div className="space-y-3">
                 {lowStockIngredients.slice(0, 5).map((ing) => (
-                  <div
-                    key={ing.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {ing.name}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {isIndo ? "Min:" : "Min:"} {ing.minStock} {ing.unit}
-                      </p>
-                    </div>
-                    <span className="px-2.5 py-1 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg">
-                      {ing.currentStock} {ing.unit}
+                  <div key={ing.id} className="flex justify-between p-3 bg-slate-50 rounded-xl">
+                    <span>{ing.name}</span>
+                    <span className="font-bold text-rose-600">{ing.currentStock} {ing.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+              <h3 className="font-bold text-lg mb-4">{isIndo ? "Aktivitas Terbaru" : "Recent Activities"}</h3>
+              <div className="space-y-3">
+                {recentMovements.map((m) => (
+                  <div key={m.id} className="flex justify-between p-3 bg-slate-50 rounded-xl text-sm">
+                    <span>{ingredients.find(i => i.id === m.ingredientId)?.name}</span>
+                    <span className={m.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}>
+                      {m.type === 'IN' ? '+' : '-'}{m.quantity}
                     </span>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      )}
     </div>
   );
 };
