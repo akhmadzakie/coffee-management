@@ -176,8 +176,8 @@ export const Inventory = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+        <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-lg w-full xl:w-auto">
           <button
             onClick={() => setActiveTab("ingredients")}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -210,15 +210,15 @@ export const Inventory = () => {
           </button>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-none">
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end mt-2 sm:mt-0">
+          <div className="relative w-full sm:w-64">
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Cari..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent w-full"
+              className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent w-full shadow-sm"
             />
           </div>
 
