@@ -58,6 +58,15 @@ export const Dashboard = () => {
     new Date().getFullYear(),
   );
 
+  const [activeTab, setActiveTab] = useState<"FINANCE" | "INVENTORY">("FINANCE");
+  const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER";
+  
+  const recentMovements = useMemo(() => {
+    return [...stockMovements]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+  }, [stockMovements]);
+
   const getAccountIcon = (type: string) => {
     switch (type) {
       case "BANK":
