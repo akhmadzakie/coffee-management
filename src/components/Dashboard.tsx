@@ -59,7 +59,7 @@ export const Dashboard = () => {
   );
 
   const [activeTab, setActiveTab] = useState<"FINANCE" | "INVENTORY">("FINANCE");
-  const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER";
+  const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER" || currentUser?.role === "OWNER" || currentUser?.role === "FINANCE";
   
   const recentMovements = useMemo(() => {
     return [...stockMovements]
