@@ -46,6 +46,7 @@ export const Layout: React.FC<LayoutProps> = ({
   onViewChange,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSwitchAccountOpen, setIsSwitchAccountOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -74,9 +75,14 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const allNavigation = [
     {
-      name: t("dashboard") || "Dashboard",
-      view: "dashboard" as ViewState,
+      name: "Dashboard Keuangan",
+      view: "dashboard_finance" as ViewState,
       icon: LayoutDashboard,
+    },
+    {
+      name: "Dashboard Inventori",
+      view: "dashboard_inventory" as ViewState,
+      icon: Package,
     },
     // ─── Finance Group ───────────────────────────────────────────
     {
@@ -151,12 +157,12 @@ export const Layout: React.FC<LayoutProps> = ({
   ];
 
   const roleAccess: Record<string, ViewState[]> = {
-    SUPER_ADMIN: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
-    OWNER: ["dashboard", "cash_flow", "finance_reports", "hr", "payroll", "inventory", "shifts"],
-    MANAGER: ["dashboard", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
-    FINANCE: ["dashboard", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
+    SUPER_ADMIN: ["dashboard_finance", "dashboard_inventory", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
+    OWNER: ["dashboard_finance", "dashboard_inventory", "cash_flow", "finance_reports", "hr", "payroll", "inventory", "shifts"],
+    MANAGER: ["dashboard_finance", "dashboard_inventory", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
+    FINANCE: ["dashboard_finance", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
     KASIR: ["shifts", "import_sales"],
-    LEADER: ["dashboard", "inventory"],
+    LEADER: ["dashboard_inventory", "inventory"],
   };
 
   const allowedViews = currentUser ? roleAccess[currentUser.role] || [] : [];
@@ -178,29 +184,33 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-primary border-r border-slate-700/50 text-secondary">
-        <div className="p-6 border-b border-slate-700/50 flex items-center gap-3">
+      <aside className={`hidden md:flex flex-col bg-primary border-r border-slate-700/50 text-secondary transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div className={`p-6 border-b border-slate-700/50 flex items-center ${isSidebarCollapsed ? 'justify-center px-4' : 'gap-3'}`}>
           {settings.logoDataUrl ? (
             <img
               src={settings.logoDataUrl}
               alt={settings.brandName}
-              className="h-8 w-auto max-w-[120px] object-contain"
+              className={`h-8 w-auto object-contain ${isSidebarCollapsed ? 'max-w-[40px]' : 'max-w-[120px]'}`}
             />
           ) : (
-            <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
+            <div className="w-8 h-8 shrink-0 bg-accent rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
               {settings.brandName
                 ? settings.brandName.substring(0, 2).toUpperCase()
                 : "NS"}
             </div>
           )}
-          <span className="text-lg font-bold tracking-tight text-white line-clamp-1">
-            {settings.brandName}
-          </span>
+          {!isSidebarCollapsed && (
+            <span className="text-lg font-bold tracking-tight text-white line-clamp-1">
+              {settings.brandName}
+            </span>
+          )}
         </div>
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 mt-2">
-            Modules
-          </div>
+          {!isSidebarCollapsed && (
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 mt-2">
+              Modules
+            </div>
+          )}
           {navigation.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.view;
@@ -208,58 +218,83 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 key={item.name}
                 onClick={() => onViewChange(item.view)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                title={isSidebarCollapsed ? item.name : undefined}
+                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'} rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-accent/20 text-accent font-medium"
                     : "text-slate-300 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 <Icon
-                  className={`w-5 h-5 ${isActive ? "text-accent" : "text-slate-400"}`}
+                  className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`}
                 />
-                <span>{item.name}</span>
+                {!isSidebarCollapsed && <span>{item.name}</span>}
               </button>
             );
           })}
         </nav>
 
         {/* User Card & Actions - Desktop Sidebar */}
-        <div className="p-4 border-t border-slate-700/50 bg-black/20 space-y-3">
+        <div className={`p-4 border-t border-slate-700/50 bg-black/20 ${isSidebarCollapsed ? 'flex flex-col items-center gap-4' : 'space-y-3'}`}>
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold border border-accent/30">
+            <div 
+              title={isSidebarCollapsed ? currentUser?.name : undefined}
+              className="w-10 h-10 shrink-0 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold border border-accent/30"
+            >
               {currentUser?.name.charAt(0).toUpperCase() || "U"}
             </div>
-            <div className="ml-3 min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white truncate">
-                {currentUser?.name}
-              </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent uppercase border border-accent/30">
-                  {currentUser?.role}
-                </span>
-                <span className="text-xs text-slate-400 truncate">
-                  @{currentUser?.username}
-                </span>
+            {!isSidebarCollapsed && (
+              <div className="ml-3 min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">
+                  {currentUser?.name}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent uppercase border border-accent/30">
+                    {currentUser?.role}
+                  </span>
+                  <span className="text-xs text-slate-400 truncate">
+                    @{currentUser?.username}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <button
-              onClick={() => setIsSwitchAccountOpen(true)}
-              className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-slate-300 bg-[#132F4C] hover:bg-[#1A3A5A] border border-[#1A3A5A] rounded-lg transition-colors shadow-2xs"
-            >
-              <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-400" />
-              Ganti Akun
-            </button>
-            <button
-              onClick={() => logout()}
-              className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors shadow-2xs"
-            >
-              <LogOut className="w-3.5 h-3.5 mr-1" />
-              Keluar
-            </button>
-          </div>
+          {!isSidebarCollapsed ? (
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={() => setIsSwitchAccountOpen(true)}
+                className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-slate-300 bg-[#132F4C] hover:bg-[#1A3A5A] border border-[#1A3A5A] rounded-lg transition-colors shadow-2xs"
+              >
+                <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                Ganti Akun
+              </button>
+              <button
+                onClick={() => logout()}
+                className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors shadow-2xs"
+              >
+                <LogOut className="w-3.5 h-3.5 mr-1" />
+                Keluar
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 w-full">
+              <button
+                onClick={() => setIsSwitchAccountOpen(true)}
+                title="Ganti Akun"
+                className="flex items-center justify-center p-2 text-slate-300 bg-[#132F4C] hover:bg-[#1A3A5A] border border-[#1A3A5A] rounded-lg transition-colors shadow-2xs"
+              >
+                <UserCheck className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => logout()}
+                title="Keluar"
+                className="flex items-center justify-center p-2 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors shadow-2xs"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -267,9 +302,15 @@ export const Layout: React.FC<LayoutProps> = ({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Mobile & Desktop */}
         <header className="flex justify-between items-center p-4 sm:p-6 bg-transparent relative z-20">
-          <div className="flex items-center md:hidden">
+          <div className="flex items-center">
             <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              onClick={() => {
+                if (window.innerWidth >= 768) {
+                  setIsSidebarCollapsed(!isSidebarCollapsed);
+                } else {
+                  setIsMobileMenuOpen(!isMobileMenuOpen);
+                }
+              }}
               className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg bg-white border border-slate-200 mr-2.5 shadow-2xs"
               aria-label="Toggle Menu"
             >
@@ -283,10 +324,10 @@ export const Layout: React.FC<LayoutProps> = ({
               <img
                 src={settings.logoDataUrl}
                 alt={settings.brandName}
-                className="h-6 w-auto object-contain mr-2"
+                className="h-6 w-auto object-contain mr-2 md:hidden"
               />
             ) : null}
-            <span className="font-bold text-slate-800 text-sm line-clamp-1">
+            <span className="font-bold text-slate-800 text-sm line-clamp-1 md:hidden">
               {settings.brandName}
             </span>
           </div>
@@ -294,7 +335,8 @@ export const Layout: React.FC<LayoutProps> = ({
           <div className="hidden md:block">
             <h2 className="text-2xl font-bold text-slate-800 capitalize">
               {{
-                dashboard: "Ringkasan Dashboard",
+                dashboard_finance: "Dashboard Keuangan",
+                dashboard_inventory: "Dashboard Inventori",
                 cash_flow: "Arus Kas",
                 inventory: "Manajemen Inventori",
                 import_sales: "Impor Data Penjualan",
