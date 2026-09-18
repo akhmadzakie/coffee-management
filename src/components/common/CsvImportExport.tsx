@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Upload, Download, FileSpreadsheet, ChevronDown } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, ChevronDown, Database } from "lucide-react";
 import { downloadCsvTemplate } from "../../utils/export";
 import { GenericImportModal } from "./GenericImportModal";
+import { downloadInteractiveTemplate } from "../../utils/genericImport";
 
 interface CsvImportExportProps {
   onImport: (data: any[]) => void;
@@ -9,6 +10,7 @@ interface CsvImportExportProps {
   templateExampleRow?: string[];
   templateFilename?: string;
   buttonLabel?: string;
+  currentData?: any[]; // For export-to-edit
 }
 
 export const CsvImportExport: React.FC<CsvImportExportProps> = ({
@@ -17,6 +19,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   templateExampleRow,
   templateFilename = "template.csv",
   buttonLabel = "Import Data",
+  currentData,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -37,6 +40,21 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
     setIsOpen(false);
   };
 
+  const handleDownloadInteractive = () => {
+    downloadInteractiveTemplate(
+      templateFilename.replace(".csv", ""),
+      templateHeaders,
+      currentData,
+      templateExampleRow
+    );
+    setIsOpen(false);
+  };
+
+  // We add ID_SISTEM to the expected headers for the modal if currentData is provided
+  const expectedHeadersWithId = currentData 
+    ? ["ID_SISTEM (JANGAN DIUBAH)", ...templateHeaders] 
+    : templateHeaders;
+
   return (
     <>
       <div className="relative inline-block text-left" ref={dropdownRef}>
@@ -51,15 +69,26 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
+          <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
             <div className="py-1">
               <button
                 onClick={handleDownloadTemplate}
                 className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
               >
-                <Download className="w-4 h-4 mr-3 text-slate-400" />
-                Download Template CSV
+                <Download className="w-4 h-4 mr-3 text-slate-400 shrink-0" />
+                Download Template Kosong
               </button>
+              
+              {currentData && (
+                <button
+                  onClick={handleDownloadInteractive}
+                  className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
+                >
+                  <Database className="w-4 h-4 mr-3 text-blue-500 shrink-0" />
+                  Download Template & Data Saat Ini (Edit Massal)
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setIsOpen(false);
@@ -67,7 +96,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
                 }}
                 className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
               >
-                <Upload className="w-4 h-4 mr-3 text-emerald-600" />
+                <Upload className="w-4 h-4 mr-3 text-emerald-600 shrink-0" />
                 Upload Excel / CSV
               </button>
             </div>
@@ -79,7 +108,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={`Import ${buttonLabel}`}
-        expectedHeaders={templateHeaders}
+        expectedHeaders={expectedHeadersWithId}
         onImport={(data) => {
           onImport(data);
         }}

@@ -18,6 +18,7 @@ export const Inventory = () => {
     stockMovements,
     stockOpnames,
     addIngredient,
+    updateIngredient,
     deleteIngredient,
     addStockMovement,
     addStockOpname,
@@ -71,7 +72,10 @@ export const Inventory = () => {
 
   const handleImportIngredients = (data: any[]) => {
     let imported = 0;
+    let updated = 0;
     data.forEach(row => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
+      const code = row["Kode"] || row.code;
       const name = row["Nama Bahan"] || row.name;
       const unit = row["Satuan"] || row.unit;
       const currentStock = Number(row["Stok Saat Ini"]) || 0;
@@ -80,11 +84,30 @@ export const Inventory = () => {
       const costPerUnit = Number(row["Harga per Satuan"]) || 0;
 
       if (name && unit) {
-        addIngredient({ name, unit, currentStock, minStock, category, costPerUnit });
-        imported++;
+        if (idSistem) {
+          // Edit
+          const existing = ingredients.find(i => i.id === idSistem);
+          if (existing) {
+            updateIngredient({
+              ...existing,
+              code: code || existing.code,
+              name,
+              unit,
+              currentStock,
+              minStock,
+              category,
+              costPerUnit
+            });
+            updated++;
+          }
+        } else {
+          // Insert
+          addIngredient({ code, name, unit, currentStock, minStock, category, costPerUnit });
+          imported++;
+        }
       }
     });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} bahan baku.`);
+    if (imported > 0 || updated > 0) alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data.`);
     else alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
   };
 
@@ -227,10 +250,36 @@ export const Inventory = () => {
               <>
                 <CsvImportExport
                   onImport={handleImportIngredients}
-                  templateHeaders={["Nama Bahan", "Satuan", "Stok Saat Ini", "Stok Minimum", "Kategori", "Harga per Satuan"]}
-                  templateExampleRow={["Biji Kopi Arabica", "kg", "50", "10", "Biji Kopi", "150000"]}
-                  templateFilename="template_bahan_baku"
-                  buttonLabel="Import Bahan"
+                  templateHeaders={[
+                    "Kode",
+                    "Nama Bahan",
+                    "Kategori",
+                    "Stok Saat Ini",
+                    "Satuan",
+                    "Stok Minimum",
+                    "Harga per Satuan",
+                  ]}
+                  templateExampleRow={[
+                    "BB-001",
+                    "Kopi Arabica",
+                    "Biji Kopi",
+                    "100",
+                    "Kg",
+                    "10",
+                    "150000",
+                  ]}
+                  currentData={ingredients.map(i => ({
+                    id: i.id,
+                    "Kode": i.code || "",
+                    "Nama Bahan": i.name,
+                    "Kategori": i.category,
+                    "Stok Saat Ini": i.currentStock,
+                    "Satuan": i.unit,
+                    "Stok Minimum": i.minStock,
+                    "Harga per Satuan": i.costPerUnit || 0
+                  }))}
+                  templateFilename="Template_Import_Bahan_Baku.csv"
+                  buttonLabel="Bahan Baku"
                 />
                 <button
                   onClick={() => setIsAddIngredientOpen(true)}

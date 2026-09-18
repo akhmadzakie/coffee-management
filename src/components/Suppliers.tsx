@@ -40,7 +40,9 @@ export const Suppliers = () => {
 
   const handleImportSuppliers = (data: any[]) => {
     let importedCount = 0;
+    let updatedCount = 0;
     data.forEach((row) => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
       if (row["Nama Supplier"] || row.name) {
         const supplierData = {
           name: row["Nama Supplier"] || row.name || "-",
@@ -49,11 +51,20 @@ export const Suppliers = () => {
           address: row["Alamat"] || row.address || "-",
           notes: row["Catatan"] || row.notes || "-",
         };
-        addSupplier(supplierData);
-        importedCount++;
+
+        if (idSistem) {
+          const existing = suppliers.find(s => s.id === idSistem);
+          if (existing) {
+            updateSupplier({ ...supplierData, id: idSistem });
+            updatedCount++;
+          }
+        } else {
+          addSupplier(supplierData);
+          importedCount++;
+        }
       }
     });
-    if (importedCount > 0) alert(`Berhasil mengimpor ${importedCount} supplier!`);
+    if (importedCount > 0 || updatedCount > 0) alert(`Berhasil menambahkan ${importedCount} data baru dan memperbarui ${updatedCount} data supplier.`);
     else alert("Tidak ada data valid yang diimpor.");
   };
 
@@ -97,6 +108,14 @@ export const Suppliers = () => {
               onImport={handleImportSuppliers}
               templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
               templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
+              currentData={suppliers.map(s => ({
+                id: s.id,
+                "Nama Supplier": s.name,
+                "Nama PIC": s.picName,
+                "Kontak": s.contact,
+                "Alamat": s.address,
+                "Catatan": s.notes
+              }))}
               templateFilename="template_supplier"
               buttonLabel="Import Supplier"
             />

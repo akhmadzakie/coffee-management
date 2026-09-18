@@ -379,25 +379,35 @@ export function ExpenseCategories() {
 
   const handleImportCategories = (data: any[]) => {
     let imported = 0;
+    let updated = 0;
     data.forEach(row => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
       const name = row["Nama Kategori"] || row.name;
       const type = (row["Tipe"] || row.type || "LAINNYA").toUpperCase() as ExpenseCategoryType;
       const color = row["Warna"] || row.color || "#6B7280";
       const icon = row["Icon"] || row.icon || "tag";
       
       if (name) {
-        const newCat: ExpenseCategory = {
-          id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name, type, color, icon,
-          parentId: null,
-          isActive: true,
-          sortOrder: 0
-        };
-        dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: newCat });
-        imported++;
+        if (idSistem) {
+          const existing = categories.find(c => c.id === idSistem);
+          if (existing) {
+            dispatch({ type: "UPDATE_EXPENSE_CATEGORY", payload: { ...existing, name, type, color, icon } });
+            updated++;
+          }
+        } else {
+          const newCat: ExpenseCategory = {
+            id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name, type, color, icon,
+            parentId: null,
+            isActive: true,
+            sortOrder: 0
+          };
+          dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: newCat });
+          imported++;
+        }
       }
     });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} kategori.`);
+    if (imported > 0 || updated > 0) alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} kategori.`);
     else alert("Tidak ada data valid yang diimport.");
   };
 
@@ -416,6 +426,13 @@ export function ExpenseCategories() {
             onImport={handleImportCategories}
             templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
             templateExampleRow={["Gaji Karyawan", "HRD", "#8B5CF6", "users"]}
+            currentData={categories.map(c => ({
+              id: c.id,
+              "Nama Kategori": c.name,
+              "Tipe": c.type,
+              "Warna": c.color,
+              "Icon": c.icon
+            }))}
             templateFilename="template_kategori"
             buttonLabel="Import Kategori"
           />

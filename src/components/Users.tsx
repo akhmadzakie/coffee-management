@@ -74,19 +74,43 @@ export const UsersComponent = () => {
 
   const handleImportUsers = (data: any[]) => {
     let imported = 0;
+    let updated = 0;
     data.forEach(row => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
       const name = row["Nama Lengkap"] || row.name;
       const username = row["Username"] || row.username;
       const pin = row["PIN"] || row.pin;
       const role = row["Role"] || row.role;
+      const department = row["Departemen"] || row.department;
 
       if (name && username && pin && role) {
-        addUser({ name, username, pin: String(pin), role });
-        imported++;
+        if (idSistem) {
+          const existing = users.find(u => u.id === idSistem);
+          if (existing) {
+            updateUser({
+              ...existing,
+              name,
+              username,
+              pin: String(pin),
+              role,
+              department: role === "LEADER" ? department : null
+            });
+            updated++;
+          }
+        } else {
+          addUser({ 
+            name, 
+            username, 
+            pin: String(pin), 
+            role, 
+            department: role === "LEADER" ? department : null 
+          });
+          imported++;
+        }
       }
     });
-    if (imported > 0) {
-      alert(`Berhasil mengimport ${imported} pengguna.`);
+    if (imported > 0 || updated > 0) {
+      alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} pengguna.`);
     } else {
       alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
     }
@@ -106,10 +130,18 @@ export const UsersComponent = () => {
         <div className="flex items-center gap-3">
           <CsvImportExport
             onImport={handleImportUsers}
-            templateHeaders={["Nama Lengkap", "Username", "PIN", "Role"]}
-            templateExampleRow={["Budi Santoso", "budi123", "1234", "KASIR"]}
+            templateHeaders={["Nama Lengkap", "Username", "PIN", "Role", "Departemen"]}
+            templateExampleRow={["Budi Santoso", "budi", "123456", "KASIR", ""]}
+            currentData={users.map(u => ({
+              id: u.id,
+              "Nama Lengkap": u.name,
+              "Username": u.username,
+              "PIN": u.pin,
+              "Role": u.role,
+              "Departemen": u.department || ""
+            }))}
             templateFilename="template_pengguna"
-            buttonLabel="Import User"
+            buttonLabel="Import Pengguna"
           />
           <button
             onClick={handleAddNew}

@@ -67,3 +67,50 @@ export const parseGenericImportFile = async (
     reader.readAsBinaryString(file);
   });
 };
+
+export const downloadInteractiveTemplate = (
+  filename: string,
+  headers: string[],
+  currentData: any[] = [],
+  exampleRow?: string[]
+) => {
+  const wb = XLSX.utils.book_new();
+
+  // First column is always ID_SISTEM
+  const finalHeaders = ["ID_SISTEM (JANGAN DIUBAH)", ...headers];
+
+  const wsData = [];
+  wsData.push(finalHeaders);
+
+  if (currentData.length > 0) {
+    // Map current data to the exact header structure
+    currentData.forEach((row) => {
+      const mappedRow = finalHeaders.map((h) => {
+        if (h === "ID_SISTEM (JANGAN DIUBAH)") return row.id || "";
+        return row[h] !== undefined ? row[h] : "";
+      });
+      wsData.push(mappedRow);
+    });
+  } else if (exampleRow) {
+    // If no data, provide an example row, leaving ID blank
+    wsData.push(["", ...exampleRow]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Style the header
+  for (let C = 0; C < finalHeaders.length; C++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (!ws[addr]) continue;
+    ws[addr].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: C === 0 ? "94A3B8" : "10B981" } }, // Grey for ID, Green for others
+    };
+  }
+
+  // Set column widths
+  ws["!cols"] = finalHeaders.map((h) => ({ wch: Math.max(h.length + 5, 15) }));
+
+  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}; 

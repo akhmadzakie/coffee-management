@@ -152,21 +152,39 @@ export function HRManagement() {
 
   const handleImportEmployees = (data: any[]) => {
     let imported = 0;
+    let updated = 0;
     data.forEach(row => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
       const nik = row["NIK"] || row.nik;
       const name = row["Nama Karyawan"] || row.name;
       const position = row["Posisi"] || row.position;
       const department = row["Departemen"] || row.department;
       if (nik && name) {
-        addEmployee({
-          nik, name, position, department,
-          status: (row["Status"] || "AKTIF") as EmployeeStatus,
-          employmentType: (row["Tipe"] || "TETAP") as EmploymentType
-        });
-        imported++;
+        if (idSistem) {
+          const existing = employees.find(e => e.id === idSistem);
+          if (existing) {
+            updateEmployee({
+              ...existing,
+              nik: nik || existing.nik,
+              name,
+              position,
+              department,
+              status: (row["Status"] || existing.status) as EmployeeStatus,
+              employmentType: (row["Tipe"] || existing.employmentType) as EmploymentType
+            });
+            updated++;
+          }
+        } else {
+          addEmployee({
+            nik, name, position, department,
+            status: (row["Status"] || "AKTIF") as EmployeeStatus,
+            employmentType: (row["Tipe"] || "TETAP") as EmploymentType
+          });
+          imported++;
+        }
       }
     });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} karyawan.`);
+    if (imported > 0 || updated > 0) alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data karyawan.`);
     else alert("Tidak ada data valid yang diimport.");
   };
 
@@ -583,6 +601,15 @@ export function HRManagement() {
                       onImport={handleImportEmployees}
                       templateHeaders={["NIK", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
                       templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
+                      currentData={employees.map(e => ({
+                        id: e.id,
+                        "NIK": e.nik || "",
+                        "Nama Karyawan": e.name,
+                        "Posisi": e.position,
+                        "Departemen": e.department,
+                        "Status": e.status,
+                        "Tipe": e.employmentType
+                      }))}
                       templateFilename="template_karyawan"
                       buttonLabel={isIndo ? "Import" : "Import"}
                     />
