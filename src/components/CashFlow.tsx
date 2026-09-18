@@ -17,11 +17,14 @@ import {
   Upload,
 } from "lucide-react";
 import { CashAccount } from "../types";
+import { CsvImportExport } from "./common/CsvImportExport";
+import { downloadInteractiveTemplate } from "../utils/genericImport";
 
 export const CashFlow = () => {
   const {
     cashTransactions,
     addCashTransaction,
+    updateCashTransaction,
     deleteCashTransaction,
     cashAccounts,
     addCashAccount,
@@ -117,15 +120,14 @@ export const CashFlow = () => {
     setIsAccountModalOpen(false);
   };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) {
       alert("Tidak ada data untuk diexport.");
       return;
     }
     const csvData = filteredTransactions.map((trx) => ({
-      Tanggal: new Date(trx.date).toISOString(),
+      "ID_SISTEM (JANGAN DIUBAH)": trx.id,
+      Tanggal: new Date(trx.date).toISOString().split("T")[0],
       "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
       Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
       Kategori: trx.category,
@@ -146,38 +148,34 @@ export const CashFlow = () => {
   const handleDownloadTemplate = () => {
     const templateData = [
       {
-        Tanggal: new Date().toISOString(),
+        "ID_SISTEM (JANGAN DIUBAH)": "",
+        Tanggal: new Date().toISOString().split("T")[0],
+        "Pos Kas": cashAccounts[0]?.name || "Kas Utama",
         Jenis: "Pemasukan",
         Kategori: "Pendapatan Lain",
         Deskripsi: "Contoh transaksi pemasukan",
         Jumlah: 50000,
       },
-      {
-        Tanggal: new Date().toISOString(),
-        Jenis: "Pengeluaran",
-        Kategori: "Operasional Lainnya",
-        Deskripsi: "Contoh transaksi pengeluaran",
-        Jumlah: 15000,
-      },
     ];
-    const csv = Papa.unparse(templateData);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `template_arus_kas.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadInteractiveTemplate(
+      "Template_Import_Arus_Kas.csv",
+      ["ID_SISTEM (JANGAN DIUBAH)", "Tanggal", "Pos Kas", "Jenis", "Kategori", "Deskripsi", "Jumlah"],
+      templateData,
+      filteredTransactions.map((trx) => ({
+        "ID_SISTEM (JANGAN DIUBAH)": trx.id,
+        Tanggal: new Date(trx.date).toISOString().split("T")[0],
+        "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
+        Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+        Kategori: trx.category,
+        Deskripsi: trx.description,
+        Jumlah: trx.amount,
+      }))
+    );
   };
 
-  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleImport = (file: File) => {
     if (cashAccounts.length === 0) {
       alert("Silakan buat Pos Kas terlebih dahulu sebelum mengimport transaksi.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -185,31 +183,48 @@ export const CashFlow = () => {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        let importedCount = 0;
+        let addedCount = 0;
+        let updatedCount = 0;
         let errors = 0;
 
         results.data.forEach((row: any) => {
           try {
+            const systemId = row["ID_SISTEM (JANGAN DIUBAH)"]?.trim();
             const date = row["Tanggal"] || new Date().toISOString();
             const rawJenis = String(row["Jenis"] || "").toLowerCase();
             const type = rawJenis.includes("masuk") ? "CASH_IN" : "CASH_OUT";
             const category = row["Kategori"] || "Lainnya";
             const description = row["Deskripsi"] || "Import CSV";
             const amount = parseFloat(row["Jumlah"]) || 0;
+            const accountName = row["Pos Kas"];
+            const posKas = cashAccounts.find((a) => a.name.toLowerCase() === (accountName || "").toLowerCase()) || cashAccounts[0];
 
             if (amount > 0) {
-              const defaultAccountId = cashAccounts[0].id; // Use first account for simplicity, could map by name later
-              addCashTransaction({
-                accountId: defaultAccountId,
-                type: type,
-                date: date,
-                amount: amount,
-                description: description,
-                category: category,
-                categoryId: null,
-                referenceId: null,
-              });
-              importedCount++;
+              const existingTrx = cashTransactions.find((t) => t.id === systemId);
+              if (existingTrx) {
+                updateCashTransaction({
+                  ...existingTrx,
+                  accountId: posKas.id,
+                  type: type,
+                  date: date,
+                  amount: amount,
+                  description: description,
+                  category: category,
+                });
+                updatedCount++;
+              } else {
+                addCashTransaction({
+                  accountId: posKas.id,
+                  type: type,
+                  date: date,
+                  amount: amount,
+                  description: description,
+                  category: category,
+                  categoryId: null,
+                  referenceId: null,
+                });
+                addedCount++;
+              }
             } else {
               errors++;
             }
@@ -218,12 +233,10 @@ export const CashFlow = () => {
           }
         });
 
-        alert(`Import selesai. Berhasil: ${importedCount}, Gagal/Dilewati: ${errors}`);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        alert(`Import selesai.\nDitambahkan: ${addedCount} data baru\nDiperbarui: ${updatedCount} data lama\nGagal/Dilewati: ${errors} baris`);
       },
       error: () => {
         alert("Gagal membaca file CSV. Pastikan format sudah benar.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     });
   };
@@ -379,6 +392,11 @@ export const CashFlow = () => {
 
             {!isReadOnly && cashAccounts.length > 0 && (
               <div className="flex items-center gap-2">
+                <CsvImportExport 
+                  onImport={handleImport}
+                  onExport={handleExportCSV}
+                  onDownloadTemplate={handleDownloadTemplate}
+                />
                 <button
                   onClick={() => {
                     setTrxType("CASH_IN");

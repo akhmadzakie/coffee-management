@@ -150,6 +150,7 @@ interface StoreContextType {
   deleteCashAccount: (id: string) => void;
 
   addCashTransaction: (transaction: Omit<CashTransaction, "id">) => void;
+  updateCashTransaction: (transaction: CashTransaction) => void;
   deleteCashTransaction: (id: string) => void;
 
   addIngredient: (ingredient: Omit<Ingredient, "id">) => void;
@@ -794,6 +795,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const updateCashTransaction = (trx: CashTransaction) => {
+    setCashTransactions((prev) =>
+      prev.map((t) => (t.id === trx.id ? trx : t)),
+    );
+    writeAuditLog("UPDATE", "cash_transactions", trx.id);
+    markChanged();
+  };
+
   const deleteCashTransaction = (id: string) => {
     setCashTransactions((prev) => prev.filter((t) => t.id !== id));
     writeAuditLog("DELETE", "cash_transactions", id);
@@ -1004,6 +1013,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         updateCashAccount,
         deleteCashAccount,
         addCashTransaction,
+        updateCashTransaction,
         deleteCashTransaction,
         addIngredient,
         updateIngredient,
