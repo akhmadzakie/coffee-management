@@ -3,7 +3,7 @@ import { useStore } from "../store/StoreContext";
 import { ShieldCheck, Plus, Trash2, Edit } from "lucide-react";
 import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
-
+import { CsvImportExport } from "./common/CsvImportExport";
 
 const ROLES: { value: string; label: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
@@ -104,7 +104,13 @@ export const UsersComponent = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
-
+          <CsvImportExport
+            onImport={handleImportUsers}
+            templateHeaders={["Nama Lengkap", "Username", "PIN", "Role"]}
+            templateExampleRow={["Budi Santoso", "budi123", "1234", "KASIR"]}
+            templateFilename="template_pengguna"
+            buttonLabel="Import User"
+          />
           <button
             onClick={handleAddNew}
             className="px-4 py-2.5 bg-blue-600 text-white rounded-xl flex items-center font-bold hover:bg-blue-700 transition-colors shadow-sm shrink-0"

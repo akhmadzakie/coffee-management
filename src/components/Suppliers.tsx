@@ -8,7 +8,7 @@ import {
   Phone,
 } from "lucide-react";
 import { Supplier } from "../types";
-
+import { CsvImportExport } from "./common/CsvImportExport";
 
 export const Suppliers = () => {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier, isReadOnly } =
@@ -93,7 +93,13 @@ export const Suppliers = () => {
         </div>
         {!isReadOnly && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-
+            <CsvImportExport
+              onImport={handleImportSuppliers}
+              templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
+              templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
+              templateFilename="template_supplier"
+              buttonLabel="Import Supplier"
+            />
             <button
               onClick={() => handleOpenModal()}
               className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm text-sm font-medium w-full sm:w-auto justify-center"
