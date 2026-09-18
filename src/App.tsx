@@ -3,28 +3,78 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { StoreProvider, useStore } from "./store/StoreContext";
 import { Layout } from "./components/Layout";
-import { Dashboard } from "./components/Dashboard";
-import { Inventory } from "./components/Inventory";
-import { Sales } from "./components/Sales";
-import { CashFlow } from "./components/CashFlow";
-import { AuditLogViewer } from "./components/AuditLogViewer";
-import { SettingsComponent } from "./components/Settings";
 import { Login } from "./components/Login";
-import { UsersComponent } from "./components/Users";
-import { ShiftManagement } from "./components/ShiftManagement";
-import { Suppliers } from "./components/Suppliers";
-import { Purchases } from "./components/Purchases";
-import { HRManagement } from "./components/HRManagement";
-import { ExpenseCategories } from "./components/ExpenseCategories";
-import { Payroll } from "./components/Payroll";
 import { ViewState } from "./types";
-import BankReconciliationComponent from "./components/BankReconciliation";
-import FinanceReports from "./components/FinanceReports";
 
-// Lazy placeholder for modules not yet built
+// ─── Lazy-loaded page components ─────────────────────────────────────────────
+// These are only downloaded when the user navigates to that page,
+// dramatically reducing the initial bundle size.
+const Dashboard = React.lazy(() =>
+  import("./components/Dashboard").then((m) => ({ default: m.Dashboard })),
+);
+const Inventory = React.lazy(() =>
+  import("./components/Inventory").then((m) => ({ default: m.Inventory })),
+);
+const Sales = React.lazy(() =>
+  import("./components/Sales").then((m) => ({ default: m.Sales })),
+);
+const CashFlow = React.lazy(() =>
+  import("./components/CashFlow").then((m) => ({ default: m.CashFlow })),
+);
+const AuditLogViewer = React.lazy(() =>
+  import("./components/AuditLogViewer").then((m) => ({ default: m.AuditLogViewer })),
+);
+const SettingsComponent = React.lazy(() =>
+  import("./components/Settings").then((m) => ({ default: m.SettingsComponent })),
+);
+const UsersComponent = React.lazy(() =>
+  import("./components/Users").then((m) => ({ default: m.UsersComponent })),
+);
+const ShiftManagement = React.lazy(() =>
+  import("./components/ShiftManagement").then((m) => ({ default: m.ShiftManagement })),
+);
+const Suppliers = React.lazy(() =>
+  import("./components/Suppliers").then((m) => ({ default: m.Suppliers })),
+);
+const Purchases = React.lazy(() =>
+  import("./components/Purchases").then((m) => ({ default: m.Purchases })),
+);
+const HRManagement = React.lazy(() =>
+  import("./components/HRManagement").then((m) => ({ default: m.HRManagement })),
+);
+const ExpenseCategories = React.lazy(() =>
+  import("./components/ExpenseCategories").then((m) => ({ default: m.ExpenseCategories })),
+);
+const Payroll = React.lazy(() =>
+  import("./components/Payroll").then((m) => ({ default: m.Payroll })),
+);
+const BankReconciliationComponent = React.lazy(() =>
+  import("./components/BankReconciliation"),
+);
+const FinanceReports = React.lazy(() =>
+  import("./components/FinanceReports"),
+);
+
+// Page loading skeleton — shown while a lazy chunk is downloading
+const PageLoader = () => (
+  <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-4">
+    <div className="flex gap-1.5">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-2.5 h-2.5 rounded-full bg-slate-300 animate-bounce"
+          style={{ animationDelay: `${i * 150}ms` }}
+        />
+      ))}
+    </div>
+    <p className="text-xs text-slate-400">Memuat...</p>
+  </div>
+);
+
+// Placeholder for modules not yet built
 const ComingSoon = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center p-8">
     <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
@@ -110,7 +160,9 @@ function AppContent() {
 
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView}>
-      {renderView()}
+      <Suspense fallback={<PageLoader />}>
+        {renderView()}
+      </Suspense>
     </Layout>
   );
 }

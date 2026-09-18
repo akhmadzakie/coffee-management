@@ -338,6 +338,9 @@ export const Layout: React.FC<LayoutProps> = ({
                 dashboard_finance: "Dashboard Keuangan",
                 dashboard_inventory: "Dashboard Inventori",
                 cash_flow: "Arus Kas",
+                expense_categories: "Kategori Keuangan",
+                finance_reports: "Laporan Keuangan",
+                bank_reconciliation: "Rekonsiliasi Bank",
                 inventory: "Manajemen Inventori",
                 import_sales: "Impor Data Penjualan",
                 users: "Manajemen Pengguna",
@@ -346,10 +349,29 @@ export const Layout: React.FC<LayoutProps> = ({
                 suppliers: "Manajemen Pemasok",
                 purchases: "Pembelian & Purchase Order",
                 settings: "Pengaturan Sistem",
+                hr: "SDM & Karyawan",
+                payroll: "Penggajian (Payroll)",
               }[currentView] || currentView}
             </h2>
             <p className="text-sm text-slate-500">
-              Pantau dan kelola operasional kedai kopi Anda.
+              {{
+                dashboard_finance: "Ringkasan keuangan dan arus kas bisnis Anda.",
+                dashboard_inventory: "Pantau stok dan pergerakan inventori.",
+                cash_flow: "Kelola pemasukan, pengeluaran, dan posisi kas.",
+                expense_categories: "Atur kategori pengeluaran untuk pelaporan.",
+                finance_reports: "Laporan keuangan bulanan dan tahunan.",
+                bank_reconciliation: "Cocokkan transaksi dengan rekening bank.",
+                inventory: "Kelola stok bahan baku dan pergerakan gudang.",
+                import_sales: "Catat dan impor data penjualan harian.",
+                users: "Kelola akun dan hak akses pengguna sistem.",
+                audit_log: "Riwayat aktivitas dan perubahan data sistem.",
+                shifts: "Buka, tutup, dan kelola sesi kasir.",
+                suppliers: "Data pemasok dan kontak pengiriman.",
+                purchases: "Pembelian bahan baku dan purchase order.",
+                settings: "Konfigurasi sistem dan preferensi aplikasi.",
+                hr: "Data karyawan, kontrak, dan absensi.",
+                payroll: "Hitung dan kelola penggajian karyawan.",
+              }[currentView] || "Pantau dan kelola operasional kedai kopi Anda."}
             </p>
           </div>
 

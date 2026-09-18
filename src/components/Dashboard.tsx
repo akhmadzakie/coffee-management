@@ -32,7 +32,10 @@ import {
   Smartphone,
   Users,
   Clock,
-  AlertCircle
+  AlertCircle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
 } from "lucide-react";
 import { useTranslation } from "../utils/i18n";
 
@@ -225,6 +228,37 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#ff7300'];
 
+  // Dynamic year options: 5 years back to current
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  // Custom Recharts tooltip with Rupiah formatting
+  const RupiahTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2.5 text-xs">
+        <p className="font-bold text-slate-700 mb-1.5">{label}</p>
+        {payload.map((entry: any) => (
+          <div key={entry.dataKey} className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
+            <span className="text-slate-600">{entry.name === "sales" ? "Penjualan" : "Pengeluaran"}:</span>
+            <span className="font-bold" style={{ color: entry.color }}>{formatCurrency(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const PieTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2 text-xs">
+        <p className="font-semibold text-slate-700">{payload[0].name}</p>
+        <p className="text-slate-600">{formatCurrency(payload[0].value)}</p>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Active Shift Banner */}
@@ -292,7 +326,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                 onChange={(e) => setFilterYear(Number(e.target.value))}
                 className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer py-1"
               >
-                {[2023, 2024, 2025, 2026].map((y) => <option key={y} value={y}>{y}</option>)}
+                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           )}
@@ -307,57 +341,165 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           transition={{ duration: 0.3 }}
           className="space-y-6"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {cashAccounts.map((acc, idx) => (
-              <motion.div key={acc.id} className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-                <h3 className="text-slate-500 text-sm font-medium mb-2">{acc.name}</h3>
-                <p className="text-2xl font-bold text-slate-800">{formatCurrency(accountBalances[acc.id] || 0)}</p>
+          {/* Cash Account Balances */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {cashAccounts.map((acc, idx) => {
+              const bal = accountBalances[acc.id] || 0;
+              return (
+                <motion.div
+                  key={acc.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: idx * 0.06 }}
+                  className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide truncate mr-2">{acc.name}</span>
+                    {getAccountIcon(acc.type)}
+                  </div>
+                  <p className={`text-2xl font-bold ${bal < 0 ? "text-rose-600" : "text-slate-800"}`}>
+                    {formatCurrency(bal)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">{acc.type}</p>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              {
+                label: isIndo ? "Laba Bersih" : "Net Profit",
+                value: netProfit,
+                icon: <Activity className="w-5 h-5" />,
+                color: netProfit >= 0 ? "text-emerald-700" : "text-rose-600",
+                bg: netProfit >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-rose-50 border-rose-200",
+                iconBg: netProfit >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700",
+                trend: netProfit >= 0 ? <ArrowUpRight className="w-4 h-4 text-emerald-600" /> : <ArrowDownRight className="w-4 h-4 text-rose-600" />,
+              },
+              {
+                label: isIndo ? "Total Penjualan" : "Total Sales",
+                value: totalSalesRevenue,
+                icon: <ReceiptText className="w-5 h-5" />,
+                color: "text-blue-700",
+                bg: "bg-blue-50 border-blue-200",
+                iconBg: "bg-blue-100 text-blue-700",
+                trend: <ArrowUpRight className="w-4 h-4 text-blue-600" />,
+              },
+              {
+                label: isIndo ? "Uang Masuk" : "Cash In",
+                value: totalCashIn,
+                icon: <TrendingUp className="w-5 h-5" />,
+                color: "text-emerald-700",
+                bg: "bg-emerald-50 border-emerald-200",
+                iconBg: "bg-emerald-100 text-emerald-700",
+                trend: <ArrowUpRight className="w-4 h-4 text-emerald-600" />,
+              },
+              {
+                label: isIndo ? "Uang Keluar" : "Cash Out",
+                value: totalCashOut,
+                icon: <TrendingDown className="w-5 h-5" />,
+                color: "text-rose-700",
+                bg: "bg-rose-50 border-rose-200",
+                iconBg: "bg-rose-100 text-rose-700",
+                trend: <ArrowDownRight className="w-4 h-4 text-rose-600" />,
+              },
+            ].map((kpi, idx) => (
+              <motion.div
+                key={kpi.label}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: (cashAccounts.length + idx) * 0.06 }}
+                className={`bg-white p-5 rounded-2xl border shadow-sm hover:shadow-md transition-shadow ${kpi.bg}`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${kpi.iconBg}`}>
+                    {kpi.icon}
+                  </div>
+                  {kpi.trend}
+                </div>
+                <p className={`text-2xl font-bold ${kpi.color}`}>{formatCurrency(kpi.value)}</p>
+                <p className="text-xs text-slate-500 mt-1 font-medium">{kpi.label}</p>
               </motion.div>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Laba Bersih" : "Net Profit"}</h3>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(netProfit)}</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Total Penjualan" : "Total Sales"}</h3>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalSalesRevenue)}</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Uang Masuk" : "Cash In"}</h3>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalCashIn)}</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <h3 className="text-slate-500 text-sm font-medium">{isIndo ? "Uang Keluar" : "Cash Out"}</h3>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalCashOut)}</p>
-            </div>
-          </div>
-
+          {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="sales" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} />
-                  <Area type="monotone" dataKey="expense" stroke="#F43F5E" fill="#F43F5E" fillOpacity={0.1} />
+              <div className="mb-4">
+                <h3 className="text-base font-bold text-slate-800">
+                  {isIndo ? "Tren Penjualan & Pengeluaran" : "Sales & Expense Trend"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {filterMonth === -1 ? (isIndo ? "Agregasi per bulan" : "Monthly aggregation") : (isIndo ? "Agregasi per hari" : "Daily aggregation")}
+                </p>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#F43F5E" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<RupiahTooltip />} />
+                  <Area type="monotone" dataKey="sales" name="sales" stroke="#3B82F6" strokeWidth={2} fill="url(#colorSales)" dot={false} />
+                  <Area type="monotone" dataKey="expense" name="expense" stroke="#F43F5E" strokeWidth={2} fill="url(#colorExpense)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
+              <div className="flex items-center gap-4 mt-2 justify-center">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-blue-500 rounded" />
+                  <span className="text-xs text-slate-500">{isIndo ? "Penjualan" : "Sales"}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-rose-500 rounded" />
+                  <span className="text-xs text-slate-500">{isIndo ? "Pengeluaran" : "Expenses"}</span>
+                </div>
+              </div>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
-              <h3 className="text-lg font-bold mb-4">{isIndo ? "Pengeluaran per Kategori" : "Expenses by Category"}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={expenseByCategory} dataKey="value" nameKey="name" outerRadius={80} fill="#8884d8">
-                    {expenseByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="mb-4">
+                <h3 className="text-base font-bold text-slate-800">{isIndo ? "Pengeluaran per Kategori" : "Expenses by Category"}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{isIndo ? "Periode yang dipilih" : "Selected period"}</p>
+              </div>
+              {expenseByCategory.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={expenseByCategory}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      innerRadius={40}
+                    >
+                      {expenseByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip content={<PieTooltip />} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      formatter={(val) => <span className="text-xs text-slate-600">{val}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-[240px] text-slate-400">
+                  <AlertCircle className="w-8 h-8 mb-2 opacity-40" />
+                  <p className="text-xs">{isIndo ? "Belum ada data pengeluaran" : "No expense data"}</p>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

@@ -27,9 +27,9 @@ export const CashFlow = () => {
     addCashAccount,
     deleteCashAccount,
     isReadOnly,
+    expenseCategories,
   } = useStore();
-  
-  const expenseCategories = (useStore() as any).expenseCategories || [];
+
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
