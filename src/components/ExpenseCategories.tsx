@@ -8,7 +8,7 @@ import {
   Coffee, Home, Shield, Gift, BookOpen, Wallet,
   Flame, Wifi, Droplets, ShoppingCart, Box, Settings,
 } from "lucide-react";
-import { CsvImportExport } from "./common/CsvImportExport";
+
 
 // ─── Icon map ───────────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, React.FC<any>> = {
@@ -412,13 +412,7 @@ export function ExpenseCategories() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <CsvImportExport
-            onImport={handleImportCategories}
-            templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
-            templateExampleRow={["Gaji Karyawan", "HRD", "#8B5CF6", "users"]}
-            templateFilename="template_kategori"
-            buttonLabel="Import Kategori"
-          />
+
           <button
             onClick={handleAddRoot}
             className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"

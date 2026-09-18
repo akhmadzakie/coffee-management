@@ -10,7 +10,6 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { CsvImportExport } from "./common/CsvImportExport";
 
 export const Inventory = () => {
   const {
@@ -225,13 +224,6 @@ export const Inventory = () => {
           {activeTab === "ingredients" ? (
             !isReadOnly && currentUser?.role !== "LEADER" ? (
               <>
-                <CsvImportExport
-                  onImport={handleImportIngredients}
-                  templateHeaders={["Nama Bahan", "Satuan", "Stok Saat Ini", "Stok Minimum", "Kategori", "Harga per Satuan"]}
-                  templateExampleRow={["Biji Kopi Arabica", "kg", "50", "10", "Biji Kopi", "150000"]}
-                  templateFilename="template_bahan_baku"
-                  buttonLabel="Import Bahan"
-                />
                 <button
                   onClick={() => setIsAddIngredientOpen(true)}
                   className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 shadow-sm"

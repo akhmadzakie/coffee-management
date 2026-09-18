@@ -36,7 +36,7 @@ import {
   EmploymentType,
   EmployeeStatus,
 } from "../types";
-import { CsvImportExport } from "./common/CsvImportExport";
+
 
 export function HRManagement() {
   const {
@@ -579,13 +579,7 @@ export function HRManagement() {
                 </h3>
                 {canEditHR && (
                   <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportEmployees}
-                      templateHeaders={["NIK", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
-                      templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
-                      templateFilename="template_karyawan"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
+
                     <button
                       onClick={() => handleOpenEmployeeModal()}
                       className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"
@@ -679,13 +673,7 @@ export function HRManagement() {
                 </h3>
                 {canEditHR && (
                   <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportContracts}
-                      templateHeaders={["NIK", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Potongan Alpha/Hari", "Mulai Kontrak", "Selesai Kontrak"]}
-                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
-                      templateFilename="template_kontrak"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
+
                     <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
                     </button>
@@ -794,13 +782,7 @@ export function HRManagement() {
                 </h3>
                 {canEditHR && (
                   <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportKPI}
-                      templateHeaders={["NIK", "Kuartal (1-4)", "Tahun", "Total Skor", "Bonus KPI", "Catatan Evaluator"]}
-                      templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
-                      templateFilename="template_kpi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
+
                     <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
                     </button>
@@ -872,13 +854,7 @@ export function HRManagement() {
                 </h3>
                 {canEditHR && (
                   <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportAttendances}
-                      templateHeaders={["NIK", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
-                      templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
-                      templateFilename="template_absensi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
+
                     <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
                     </button>

@@ -16,7 +16,7 @@ import {
   Clock,
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
-import { exportToCSV } from "../utils/export";
+
 
 export const Purchases = () => {
   const {
@@ -137,21 +137,7 @@ export const Purchases = () => {
     setSelectedSupplier("");
   };
 
-  const handleExportHistory = () => {
-    const dataToExport = purchaseOrders.map((po) => {
-      const supplier = suppliers.find((s) => s.id === po.supplierId);
-      return {
-        PONumber: po.poNumber,
-        Date: new Date(po.date).toLocaleDateString(),
-        Supplier: supplier?.name || "Unknown",
-        TotalAmount: po.totalAmount,
-        Status: po.status,
-        DeliveryStatus: po.deliveryStatus,
-        ItemsCount: po.items.reduce((sum, item) => sum + item.quantity, 0),
-      };
-    });
-    exportToCSV("Node_Supply_Purchase_Orders", dataToExport);
-  };
+
 
   return (
     <div className="flex-1 flex flex-col gap-6">
@@ -477,13 +463,7 @@ export const Purchases = () => {
                 ? "Riwayat Purchase Order (PO)"
                 : "Purchase Order History"}
             </h3>
-            <button
-              onClick={handleExportHistory}
-              className="flex items-center px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-xs font-medium"
-            >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              {isIndo ? "Ekspor CSV" : "Export CSV"}
-            </button>
+
           </div>
           <div className="overflow-x-auto flex-1">
             <table className="min-w-full divide-y divide-slate-200">
