@@ -47,13 +47,13 @@ const TYPE_LABELS: Record<ExpenseCategoryType, string> = {
 };
 
 const TYPE_COLORS: Record<ExpenseCategoryType, string> = {
-  PENDAPATAN: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  PENGELUARAN: "bg-red-500/20 text-red-300 border-red-500/30",
-  BAHAN_BAKU: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  UTILITAS: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  HRD: "bg-violet-500/20 text-violet-300 border-violet-500/30",
-  ASET: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-  LAINNYA: "bg-gray-500/20 text-gray-300 border-gray-500/30",
+  PENDAPATAN: "bg-emerald-500/20 text-emerald-600 border-emerald-500/30",
+  PENGELUARAN: "bg-red-500/20 text-red-600 border-red-500/30",
+  BAHAN_BAKU: "bg-amber-500/20 text-amber-600 border-amber-500/30",
+  UTILITAS: "bg-blue-500/20 text-blue-600 border-blue-500/30",
+  HRD: "bg-violet-500/20 text-violet-600 border-violet-500/30",
+  ASET: "bg-indigo-500/20 text-indigo-600 border-indigo-500/30",
+  LAINNYA: "bg-slate-500/20 text-slate-600 border-slate-300/30",
 };
 
 // ─── Build tree from flat list ───────────────────────────────────────────────
@@ -98,18 +98,18 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
   const IconComp = ICON_MAP[icon] ?? Tag;
 
   return (
-    <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl border border-gray-700 p-5 space-y-4">
-      <h3 className="text-base font-semibold text-white">
+    <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <h3 className="text-base font-semibold text-slate-900">
         {initial?.id ? "Edit Kategori" : "Tambah Kategori"}
       </h3>
 
       {/* Name */}
       <div>
-        <label className="block text-xs text-gray-400 mb-1">Nama Kategori *</label>
+        <label className="block text-xs text-slate-500 mb-1">Nama Kategori *</label>
         <input
           value={name} onChange={(e) => setName(e.target.value)}
           placeholder="Contoh: Kopi & Espresso"
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
           required
         />
       </div>
@@ -117,10 +117,10 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
       <div className="grid grid-cols-2 gap-3">
         {/* Type */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Tipe</label>
+          <label className="block text-xs text-slate-500 mb-1">Tipe</label>
           <select
             value={type} onChange={(e) => setType(e.target.value as ExpenseCategoryType)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
           >
             {CATEGORY_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -130,11 +130,11 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
 
         {/* Parent */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Induk (opsional)</label>
+          <label className="block text-xs text-slate-500 mb-1">Induk (opsional)</label>
           <select
             value={parentId ?? ""}
             onChange={(e) => setParentId(e.target.value || null)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
           >
             <option value="">— Tidak ada (root) —</option>
             {rootCategories.map((c) => (
@@ -146,13 +146,13 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
 
       {/* Color */}
       <div>
-        <label className="block text-xs text-gray-400 mb-2">Warna</label>
+        <label className="block text-xs text-slate-500 mb-2">Warna</label>
         <div className="flex flex-wrap gap-2">
           {PRESET_COLORS.map((c) => (
             <button
               key={c} type="button"
               onClick={() => setColor(c)}
-              className={`w-7 h-7 rounded-full transition-transform ${color === c ? "scale-125 ring-2 ring-white ring-offset-1 ring-offset-gray-800" : "hover:scale-110"}`}
+              className={`w-7 h-7 rounded-full transition-transform ${color === c ? "scale-125 ring-2 ring-slate-900 ring-offset-1 ring-offset-white" : "hover:scale-110"}`}
               style={{ backgroundColor: c }}
             />
           ))}
@@ -166,7 +166,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
 
       {/* Icon */}
       <div>
-        <label className="block text-xs text-gray-400 mb-2">Ikon</label>
+        <label className="block text-xs text-slate-500 mb-2">Ikon</label>
         <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
           {AVAILABLE_ICONS.map((ic) => {
             const Ic = ICON_MAP[ic];
@@ -174,10 +174,10 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
               <button
                 key={ic} type="button"
                 onClick={() => setIcon(ic)}
-                className={`p-2 rounded-lg transition-colors ${icon === ic ? "bg-amber-500/30 border border-amber-500" : "bg-gray-700 border border-transparent hover:border-gray-500"}`}
+                className={`p-2 rounded-lg transition-colors ${icon === ic ? "bg-amber-500/30 border border-amber-500" : "bg-slate-100 border border-transparent hover:border-slate-300"}`}
                 title={ic}
               >
-                <Ic size={16} className="text-gray-300" />
+                <Ic size={16} className="text-slate-600" />
               </button>
             );
           })}
@@ -185,12 +185,12 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
       </div>
 
       {/* Preview */}
-      <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-lg">
+      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "30", border: `1px solid ${color}50` }}>
           <IconComp size={18} style={{ color }} />
         </div>
         <div>
-          <p className="text-sm font-medium text-white">{name || "Nama Kategori"}</p>
+          <p className="text-sm font-medium text-slate-900">{name || "Nama Kategori"}</p>
           <span className={`text-xs px-2 py-0.5 rounded-full border ${TYPE_COLORS[type]}`}>
             {TYPE_LABELS[type]}
           </span>
@@ -201,18 +201,18 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
       <label className="flex items-center gap-2 cursor-pointer">
         <div
           onClick={() => setIsActive(!isActive)}
-          className={`w-10 h-5 rounded-full relative transition-colors ${isActive ? "bg-amber-500" : "bg-gray-600"}`}
+          className={`w-10 h-5 rounded-full relative transition-colors ${isActive ? "bg-amber-500" : "bg-slate-200"}`}
         >
           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? "translate-x-5" : "translate-x-0.5"}`} />
         </div>
-        <span className="text-sm text-gray-300">{isActive ? "Aktif" : "Nonaktif"}</span>
+        <span className="text-sm text-slate-600">{isActive ? "Aktif" : "Nonaktif"}</span>
       </label>
 
       <div className="flex gap-2 pt-1">
-        <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
           <Save size={15} /> Simpan
         </button>
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-700 transition-colors">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 transition-colors">
           Batal
         </button>
       </div>
@@ -237,12 +237,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
   return (
     <div>
       <div
-        className={`flex items-center gap-2 p-2.5 rounded-lg group hover:bg-gray-800 transition-colors ${depth > 0 ? "ml-6 border-l border-gray-700 pl-4 rounded-none" : ""}`}
+        className={`flex items-center gap-2 p-2.5 rounded-lg group hover:bg-white transition-colors ${depth > 0 ? "ml-6 border-l border-slate-200 pl-4 rounded-none" : ""}`}
       >
         {/* Expand toggle */}
         <button
           onClick={() => setExpanded(!expanded)}
-          className={`w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 ${!hasChildren ? "invisible" : ""}`}
+          className={`w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 ${!hasChildren ? "invisible" : ""}`}
         >
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -256,7 +256,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
         {/* Name + badges */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-medium ${category.isActive ? "text-white" : "text-gray-500 line-through"}`}>
+            <span className={`text-sm font-medium ${category.isActive ? "text-slate-900" : "text-slate-400 line-through"}`}>
               {category.name}
             </span>
             {!category.parentId && (
@@ -265,11 +265,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
               </span>
             )}
             {!category.isActive && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400">Nonaktif</span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Nonaktif</span>
             )}
           </div>
           {hasChildren && (
-            <p className="text-xs text-gray-500">{category.children!.length} sub-kategori</p>
+            <p className="text-xs text-slate-400">{category.children!.length} sub-kategori</p>
           )}
         </div>
 
@@ -277,16 +277,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {!category.parentId && (
             <button onClick={() => onAddChild(category)}
-              className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Tambah sub-kategori">
+              className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Tambah sub-kategori">
               <Plus size={14} />
             </button>
           )}
           <button onClick={() => onEdit(category)}
-            className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors" title="Edit">
+            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors" title="Edit">
             <Edit2 size={14} />
           </button>
           <button onClick={() => onDelete(category)}
-            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus">
+            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus">
             <Trash2 size={14} />
           </button>
         </div>
@@ -416,8 +416,8 @@ export function ExpenseCategories() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Kategori Keuangan</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
+          <h1 className="text-xl font-bold text-slate-900">Kategori Keuangan</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
             Kelola hierarki kategori pendapatan & pengeluaran
           </p>
         </div>
@@ -438,7 +438,7 @@ export function ExpenseCategories() {
           />
           <button
             onClick={handleAddRoot}
-            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
           >
             <Plus size={16} /> Tambah Kategori
           </button>
@@ -448,13 +448,13 @@ export function ExpenseCategories() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total Kategori", value: stats.total, color: "text-white" },
-          { label: "Aktif", value: stats.active, color: "text-emerald-400" },
-          { label: "Kategori Utama", value: stats.roots, color: "text-amber-400" },
+          { label: "Total Kategori", value: stats.total, color: "text-slate-900" },
+          { label: "Aktif", value: stats.active, color: "text-emerald-600" },
+          { label: "Kategori Utama", value: stats.roots, color: "text-amber-600" },
         ].map((s) => (
-          <div key={s.label} className="bg-gray-800 border border-gray-700 rounded-xl p-4 text-center">
+          <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-400 mt-1">{s.label}</p>
+            <p className="text-xs text-slate-500 mt-1">{s.label}</p>
           </div>
         ))}
       </div>
@@ -482,13 +482,13 @@ export function ExpenseCategories() {
               <input
                 value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari kategori..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
               />
             </div>
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as any)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
             >
               <option value="ALL">Semua Tipe</option>
               {CATEGORY_TYPES.map((t) => (
@@ -498,13 +498,13 @@ export function ExpenseCategories() {
           </div>
 
           {/* Tree */}
-          <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
             {tree.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-slate-400">
                 <Tag size={40} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Belum ada kategori</p>
                 <button onClick={handleAddRoot}
-                  className="mt-3 text-xs text-amber-400 hover:underline">
+                  className="mt-3 text-xs text-amber-600 hover:underline">
                   Tambah kategori pertama
                 </button>
               </div>
