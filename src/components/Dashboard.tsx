@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "../utils/i18n";
 
-export const Dashboard = () => {
+export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const {
     salesTransactions,
     ingredients,
@@ -58,7 +58,6 @@ export const Dashboard = () => {
     new Date().getFullYear(),
   );
 
-  const [activeTab, setActiveTab] = useState<"FINANCE" | "INVENTORY">("FINANCE");
   const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER" || currentUser?.role === "OWNER" || currentUser?.role === "FINANCE";
   
   const recentMovements = useMemo(() => {
@@ -272,36 +271,9 @@ export const Dashboard = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-          {canViewFinance ? (
-            <div className="flex bg-slate-200/50 p-1 rounded-xl w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab("FINANCE")}
-                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  activeTab === "FINANCE"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-800"
-                }`}
-              >
-                {isIndo ? "Keuangan" : "Finance"}
-              </button>
-              <button
-                onClick={() => setActiveTab("INVENTORY")}
-                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  activeTab === "INVENTORY"
-                    ? "bg-white text-amber-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-800"
-                }`}
-              >
-                {isIndo ? "Inventori" : "Inventory"}
-              </button>
-            </div>
-          ) : (
-             <div className="text-sm font-bold text-slate-600 px-4 py-2">
-               {isIndo ? "Ringkasan Inventori" : "Inventory Summary"}
-             </div>
-          )}
+          {/* Navigation tabs moved to sidebar */}
           
-          {activeTab === "FINANCE" && (
+          {view === "FINANCE" && (
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 shadow-xs w-full sm:w-auto">
               <select
                 value={filterMonth}
@@ -327,7 +299,7 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {activeTab === "FINANCE" && canViewFinance && (
+      {view === "FINANCE" && canViewFinance && (
         <motion.div
           key="finance-tab"
           initial={{ opacity: 0, y: 10 }}
@@ -391,7 +363,7 @@ export const Dashboard = () => {
         </motion.div>
       )}
 
-      {activeTab === "INVENTORY" && (
+      {view === "INVENTORY" && (
         <motion.div key="inventory-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">

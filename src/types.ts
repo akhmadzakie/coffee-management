@@ -18,7 +18,8 @@ export interface User {
 }
 
 export type ViewState =
-  | "dashboard"
+  | "dashboard_finance"
+  | "dashboard_inventory"
   | "cash_flow"
   | "inventory"
   | "import_sales"

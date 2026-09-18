@@ -38,12 +38,12 @@ const ComingSoon = ({ title }: { title: string }) => (
 );
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewState>("dashboard");
+  const [currentView, setCurrentView] = useState<ViewState>("dashboard_finance");
   const { currentUser } = useStore();
 
   React.useEffect(() => {
     if (!currentUser) {
-      setCurrentView("dashboard");
+      setCurrentView("dashboard_finance");
     }
   }, [currentUser]);
 
@@ -53,8 +53,10 @@ function AppContent() {
 
   const renderView = () => {
     switch (currentView) {
-      case "dashboard":
-        return <Dashboard />;
+      case "dashboard_finance":
+        return <Dashboard view="FINANCE" />;
+      case "dashboard_inventory":
+        return <Dashboard view="INVENTORY" />;
       case "inventory":
         return <Inventory />;
       case "import_sales":
@@ -87,7 +89,7 @@ function AppContent() {
       case "payroll":
         return <Payroll />;
       default:
-        return <Dashboard />;
+        return <Dashboard view="FINANCE" />;
     }
   };
 
