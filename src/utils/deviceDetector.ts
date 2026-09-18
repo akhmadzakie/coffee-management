@@ -8,7 +8,7 @@ export interface DetectedDeviceInfo {
   deviceType: "desktop" | "mobile" | "tablet";
 }
 
-export async function getSessionIdAsync(): Promise<string> {
+async function getSessionIdAsync(): Promise<string> {
   let sessionId = await get("node_session_id");
   if (!sessionId) {
     sessionId = localStorage.getItem("node_session_id");

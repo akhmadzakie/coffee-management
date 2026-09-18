@@ -1,4 +1,4 @@
-export type LocationType = "MAIN" | "BAR" | "KITCHEN";
+type LocationType = "MAIN" | "BAR" | "KITCHEN";
 
 export type Role =
   | "SUPER_ADMIN"
@@ -37,7 +37,7 @@ export type ViewState =
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
-export type AttendanceStatus = "HADIR" | "IZIN" | "SAKIT" | "ALPHA" | "LIBUR";
+type AttendanceStatus = "HADIR" | "IZIN" | "SAKIT" | "ALPHA" | "LIBUR";
 
 // ─── Expense Categories (Fase 1) ───────────────────────────────────────────
 export type ExpenseCategoryType =
@@ -72,7 +72,7 @@ export interface Budget {
 }
 
 // ─── Payroll (Fase 4) ───────────────────────────────────────────────────────────
-export type PayrollStatus = "DRAFT" | "APPROVED" | "PAID";
+type PayrollStatus = "DRAFT" | "APPROVED" | "PAID";
 
 export interface PayrollRecord {
   id: string;
@@ -95,7 +95,7 @@ export interface PayrollRecord {
 }
 
 // ─── Stock Opname (Fase 3) ───────────────────────────────────────────────────
-export type OpnameStatus = "DRAFT" | "FINAL";
+type OpnameStatus = "DRAFT" | "FINAL";
 
 export interface StockOpname {
   id: string;
@@ -117,7 +117,7 @@ export interface StockOpnameItem {
 }
 
 // ─── Bank Reconciliation (Fase 2) ────────────────────────────────────────────
-export type ReconciliationStatus = "DRAFT" | "FINAL";
+type ReconciliationStatus = "DRAFT" | "FINAL";
 
 export interface BankReconciliation {
   id: string;
@@ -208,7 +208,7 @@ export interface KPIRecord {
   createdAt: string;
 }
 
-export interface KPITarget {
+interface KPITarget {
   id: string;
   description: string; // Deskripsi target KPI
   weight: number; // Bobot (total semua harus = 100%)

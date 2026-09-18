@@ -6,7 +6,7 @@ declare global {
   var _postgresPool: Pool | undefined;
 }
 
-export const createPool = () => {
+const createPool = () => {
   if (!global._postgresPool) {
     // Railway injects DATABASE_URL automatically when Postgres plugin is added.
     // Fall back to individual host/user/pass vars for other environments.
