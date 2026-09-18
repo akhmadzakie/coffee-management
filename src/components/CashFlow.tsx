@@ -379,49 +379,19 @@ export const CashFlow = () => {
 
             {!isReadOnly && cashAccounts.length > 0 && (
               <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  ref={fileInputRef}
-                  onChange={handleImportCSV}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
-                  title="Import CSV"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import
-                </button>
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
-                  title="Download Template CSV"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Template
-                </button>
-                <button
-                  onClick={handleExportCSV}
-                  className="flex items-center px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shrink-0 text-sm font-medium"
-                  title="Export Data CSV"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Export Data
-                </button>
                 <button
                   onClick={() => {
                     setTrxType("CASH_IN");
                     setIsModalOpen(true);
                   }}
-                  className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 text-sm font-medium"
+                  className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 text-sm font-medium shadow-sm"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Tambah Transaksi
                 </button>
               </div>
             )}
+
           </div>
         </div>
 
