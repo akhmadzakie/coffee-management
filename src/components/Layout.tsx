@@ -158,7 +158,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const roleAccess: Record<string, ViewState[]> = {
     SUPER_ADMIN: ["dashboard_finance", "dashboard_inventory", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
-    OWNER: ["dashboard_finance", "dashboard_inventory", "cash_flow", "finance_reports", "hr", "payroll", "inventory", "shifts"],
+    OWNER: ["dashboard_finance", "cash_flow", "finance_reports"],
     MANAGER: ["dashboard_finance", "dashboard_inventory", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
     FINANCE: ["dashboard_finance", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
     KASIR: ["shifts", "import_sales"],

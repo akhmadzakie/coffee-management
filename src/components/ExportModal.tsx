@@ -11,6 +11,7 @@ import {
   Wallet,
   FileSpreadsheet,
   CheckCircle2,
+  Upload,
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
 import {
@@ -23,11 +24,17 @@ import {
   filterByDateRange,
   formatDateIndo,
 } from "../utils/export";
+import {
+  exportFinanceToXlsx,
+  exportSalesToXlsx,
+  exportInventoryToXlsx,
+} from "../utils/exportXlsx";
+import { ImportFinanceModal } from "./ImportFinanceModal";
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultModule?: "sales" | "inventory" | "finance";
+  defaultModule?: "sales" | "inventory" | "finance" | "executive";
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -41,12 +48,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     stockMovements,
     cashTransactions,
     settings,
+    expenseCategories,
   } = useStore();
   const isIndo = settings.language === "id";
 
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<
     "sales" | "inventory" | "finance"
-  >(defaultModule);
+  >(defaultModule === "executive" ? "finance" : (defaultModule || "finance"));
   const [datePreset, setDatePreset] = useState<
     | "ALL"
     | "TODAY"
@@ -172,7 +181,31 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       exportFinanceToCSV({ finance: filteredFinance, settings });
   };
 
+  const handleExportXlsx = () => {
+    if (activeModule === "sales")
+      exportSalesToXlsx({ sales: filteredSales, settings, periodLabel });
+    else if (activeModule === "inventory")
+      exportInventoryToXlsx({
+        ingredients,
+        movements: filteredInventoryTrx,
+        settings,
+        periodLabel,
+      });
+    else if (activeModule === "finance")
+      exportFinanceToXlsx({
+        finance: filteredFinance,
+        settings,
+        periodLabel,
+        expenseCategories,
+      });
+  };
+
   return (
+    <>
+    <ImportFinanceModal
+      isOpen={isImportOpen}
+      onClose={() => setIsImportOpen(false)}
+    />
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 overflow-hidden flex flex-col my-8">
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
@@ -298,27 +331,47 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
-          >
-            Tutup
-          </button>
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-blue-600" /> Excel (CSV)
-          </button>
-          <button
-            onClick={handleExportPDF}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm"
-          >
-            <FileText className="w-4 h-4" /> PDF Laporan
-          </button>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
+            {activeModule === "finance" && (
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="px-3 py-2 bg-green-50 border border-green-300 hover:bg-green-100 text-green-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                title="Import transaksi dari file Excel/CSV"
+              >
+                <Upload className="w-3.5 h-3.5" /> Import Excel
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+            >
+              Tutup
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <Table className="w-3.5 h-3.5 text-slate-500" /> CSV
+            </button>
+            <button
+              onClick={handleExportXlsx}
+              className="px-3 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel (.xlsx)
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <FileText className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
         </div>
       </div>
     </div>
+    </>
   );
 };

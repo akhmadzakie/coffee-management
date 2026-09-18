@@ -41,11 +41,26 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>("dashboard_finance");
   const { currentUser } = useStore();
 
+  const roleDefaultView: Record<string, ViewState> = {
+    OWNER: "dashboard_finance",
+    KASIR: "shifts",
+    LEADER: "dashboard_inventory",
+  };
+
+  const roleAllowedViews: Record<string, ViewState[]> = {
+    OWNER: ["dashboard_finance", "cash_flow", "finance_reports"],
+  };
+
   React.useEffect(() => {
     if (!currentUser) {
       setCurrentView("dashboard_finance");
+      return;
     }
-  }, [currentUser]);
+    const allowed = roleAllowedViews[currentUser.role];
+    if (allowed && !allowed.includes(currentView)) {
+      setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
+    }
+  }, [currentUser, currentView]);
 
   if (!currentUser) {
     return <Login />;
