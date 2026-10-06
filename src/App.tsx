@@ -57,6 +57,9 @@ const BankReconciliationComponent = React.lazy(() =>
 const FinanceReports = React.lazy(() =>
   import("./components/FinanceReports"),
 );
+const LeaderChecklist = React.lazy(() =>
+  import("./components/LeaderChecklist").then((m) => ({ default: m.LeaderChecklist })),
+);
 const ClockIn = React.lazy(() =>
   import("./components/ClockIn").then((m) => ({ default: m.ClockIn })),
 );
@@ -111,7 +114,7 @@ function AppContent() {
   const ALL_VIEWS: ViewState[] = [
     "dashboard_finance", "dashboard_inventory", "cash_flow",
     "expense_categories", "finance_reports", "bank_reconciliation",
-    "inventory", "import_sales", "hr", "payroll",
+    "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
     "attendance_clock"
   ];
@@ -127,7 +130,7 @@ function AppContent() {
       "dashboard_finance", "dashboard_inventory",
       "cash_flow", "expense_categories", "finance_reports",
       "inventory", "import_sales",
-      "hr", "payroll",
+      "hr", "payroll", "leader_checklist",
       "shifts", "suppliers", "purchases",
       "users",   // Manager bisa onboard staff (KASIR, LEADER) — dibatasi di Users.tsx
       "audit_log",
@@ -141,14 +144,14 @@ function AppContent() {
       "attendance_clock"
     ],
     KASIR: [
-      "shifts",
+      "shifts", "leader_checklist",
       "import_sales",
       "attendance_clock"
     ],
     LEADER: [
       "dashboard_inventory",
       "inventory",
-      "shifts",
+      "shifts", "leader_checklist",
       "suppliers", "purchases",
       "attendance_clock"
     ],
@@ -196,6 +199,8 @@ function AppContent() {
         return <Suppliers />;
       case "purchases":
         return <Purchases />;
+            case "leader_checklist":
+        return <LeaderChecklist />;
       case "hr":
         return <HRManagement />;
       // Fase 1: Expense Categories

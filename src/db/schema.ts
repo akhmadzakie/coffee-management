@@ -278,6 +278,7 @@ export const dailyChecklists = pgTable("daily_checklists", {
   date: text("date").notNull(),
   cleaningDone: boolean("cleaning_done").default(false),
   equipmentChecked: boolean("equipment_checked").default(false),
+  leaderTasks: text("leader_tasks").default("[]"),
   notes: text("notes"),
 });
 

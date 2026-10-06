@@ -36,6 +36,7 @@ export type ViewState =
   | "hr"
   | "expense_categories"
   | "payroll"
+  | "leader_checklist"
   | "finance_reports"
   | "bank_reconciliation"
   | "attendance_clock";

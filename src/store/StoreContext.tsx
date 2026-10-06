@@ -404,7 +404,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.contracts)) setContracts(data.contracts);
         if (Array.isArray(data.attendances)) setAttendances(data.attendances);
         if (Array.isArray(data.dailyAttendances)) setDailyAttendances(data.dailyAttendances);
-        if (Array.isArray(data.dailyChecklists)) setDailyChecklists(data.dailyChecklists);
+        if (Array.isArray(data.dailyChecklists)) {
+          setDailyChecklists(data.dailyChecklists.map((c: any) => ({
+            ...c,
+            leaderTasks: typeof c.leaderTasks === 'string' ? (() => { try { return JSON.parse(c.leaderTasks); } catch { return []; } })() : (Array.isArray(c.leaderTasks) ? c.leaderTasks : [])
+          })));
+        }
         if (Array.isArray(data.employeeShifts)) setEmployeeShifts(data.employeeShifts);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
