@@ -58,10 +58,14 @@ export function Payroll() {
 
   // Generate calculations for employees
   const generatedCalculations = useMemo(() => {
-    return employees
-      .filter((e: any) => e.status === "AKTIF")
-      .map((emp: any) => {
-        const contract = contracts.find((c: any) => c.employeeId === emp.id && c.status === "ACTIVE");
+    const uniqueEmpIds = Array.from(new Set([
+      ...employees.filter((e: any) => e.status === "AKTIF").map((e: any) => e.id),
+      ...dailyAttendances.filter((a: any) => a.date.startsWith(period)).map((a: any) => a.employeeId)
+    ]));
+
+    return uniqueEmpIds.map((empId: any) => {
+        const emp = employees.find((e: any) => e.id === empId) || users.find((u: any) => u.id === empId) || { id: empId, name: "Unknown Karyawan" };
+        const contract = contracts.find((c: any) => c.employeeId === empId && c.status === "ACTIVE");
         
         // Auto-calculate from daily attendances
         const dailyLogs = dailyAttendances.filter((a: any) => a.employeeId === emp.id && a.date.startsWith(period));

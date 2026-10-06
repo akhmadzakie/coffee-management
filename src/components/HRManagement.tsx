@@ -1332,12 +1332,16 @@ export function HRManagement() {
                                         {(() => {
                         // Auto-generate rekapan bulanan dari dailyAttendances
                         const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
-                        const recap = employees.map(emp => {
-                          const logs = dailyAttendances.filter(a => a.employeeId === emp.id && a.date.startsWith(currentMonth));
+                        const uniqueEmpIds = Array.from(new Set([
+                          ...employees.map(e => e.id),
+                          ...dailyAttendances.filter(a => a.date.startsWith(currentMonth)).map(a => a.employeeId)
+                        ]));
+                        const recap = uniqueEmpIds.map(empId => {
+                          const logs = dailyAttendances.filter(a => a.employeeId === empId && a.date.startsWith(currentMonth));
                           if (logs.length === 0) return null;
                           return {
-                            id: emp.id,
-                            employeeId: emp.id,
+                            id: empId,
+                            employeeId: empId,
                             period: currentMonth,
                             presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status)).length,
                             sickDays: logs.filter(l => l.status === "SAKIT").length,
