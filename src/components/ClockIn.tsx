@@ -177,6 +177,41 @@ export function ClockIn() {
     }
   };
 
+
+  const handleLeaveSubmit = async (leaveStatus: "IZIN" | "SAKIT") => {
+    if (!notes) {
+      alert("Harap isi alasan / catatan untuk pengajuan ini.");
+      return;
+    }
+    if (!currentUser || !activeEmployeeId) return;
+
+    setIsLoading(true);
+    const now = new Date().toISOString();
+    
+    try {
+      addDailyAttendance({
+        employeeId: activeEmployeeId,
+        date: todayStr,
+        clockInTime: now,
+        clockOutTime: now,
+        clockInLocation: location || { lat: 0, lng: 0 },
+        clockOutLocation: location || { lat: 0, lng: 0 },
+        clockInPhotoUrl: photoDataUrl || "",
+        clockOutPhotoUrl: photoDataUrl || "",
+        status: leaveStatus,
+        notes
+      });
+      alert(`Berhasil mengajukan ${leaveStatus}!`);
+      setPhotoDataUrl(null);
+      setNotes("");
+    } catch (error) {
+      console.error(error);
+      alert("Terjadi kesalahan.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!currentUser) return <div>Silakan login.</div>;
 
   return (
@@ -281,6 +316,28 @@ export function ClockIn() {
               <Clock className="w-5 h-5" />
               {isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
             </button>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button
+                onClick={() => handleLeaveSubmit("IZIN")}
+                disabled={isLoading}
+                className={`py-3 rounded-xl font-bold text-white transition-all ${
+                  isLoading ? "bg-slate-300 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-600"
+                }`}
+              >
+                IZIN
+              </button>
+              <button
+                onClick={() => handleLeaveSubmit("SAKIT")}
+                disabled={isLoading}
+                className={`py-3 rounded-xl font-bold text-white transition-all ${
+                  isLoading ? "bg-slate-300 cursor-not-allowed" : "bg-rose-400 hover:bg-rose-500"
+                }`}
+              >
+                SAKIT
+              </button>
+            </div>
+
           </div>
         )}
       </div>

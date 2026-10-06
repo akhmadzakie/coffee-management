@@ -236,6 +236,8 @@ async function startServer() {
       case "attendance_records":
       case "attendances":
         return schema.attendanceRecords;
+      case "daily_attendances":
+        return schema.dailyAttendances;
       case "kpi_records":
         return schema.kpiRecords;
 
@@ -480,6 +482,20 @@ async function startServer() {
     notes: String(a.notes || ""),
     createdBy: String(a.createdBy || ""),
     createdAt: String(a.createdAt || new Date().toISOString()),
+  });
+
+  const sanitizeDailyAttendance = (a: any) => ({
+    id: String(a.id || crypto.randomUUID()),
+    employeeId: String(a.employeeId || ""),
+    date: String(a.date || ""),
+    clockInTime: a.clockInTime ? String(a.clockInTime) : null,
+    clockOutTime: a.clockOutTime ? String(a.clockOutTime) : null,
+    clockInLocation: a.clockInLocation ? a.clockInLocation : null,
+    clockOutLocation: a.clockOutLocation ? a.clockOutLocation : null,
+    clockInPhotoUrl: a.clockInPhotoUrl ? String(a.clockInPhotoUrl) : null,
+    clockOutPhotoUrl: a.clockOutPhotoUrl ? String(a.clockOutPhotoUrl) : null,
+    status: String(a.status || "HADIR"),
+    notes: String(a.notes || ""),
   });
 
   const sanitizeKPIRecord = (k: any) => ({

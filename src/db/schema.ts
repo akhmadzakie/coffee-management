@@ -248,6 +248,20 @@ export const attendanceRecords = pgTable("attendance_records", {
   createdAt: text("created_at").notNull(),
 });
 
+export const dailyAttendances = pgTable("daily_attendances", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  employeeId: varchar("employee_id", { length: 255 }).notNull(),
+  date: text("date").notNull(),
+  clockInTime: text("clock_in_time"),
+  clockOutTime: text("clock_out_time"),
+  clockInLocation: jsonb("clock_in_location"),
+  clockOutLocation: jsonb("clock_out_location"),
+  clockInPhotoUrl: text("clock_in_photo_url"),
+  clockOutPhotoUrl: text("clock_out_photo_url"),
+  status: varchar("status", { length: 50 }).notNull(),
+  notes: text("notes"),
+});
+
 export const kpiRecords = pgTable("kpi_records", {
   id: varchar("id", { length: 255 }).primaryKey(),
   employeeId: varchar("employee_id", { length: 255 }).notNull(),

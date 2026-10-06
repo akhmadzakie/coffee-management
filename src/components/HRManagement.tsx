@@ -46,6 +46,8 @@ export function HRManagement() {
     employees,
     contracts,
     attendances,
+    dailyAttendances,
+    updateDailyAttendance,
     kpiRecords,
     addEmployee,
     updateEmployee,
@@ -731,6 +733,76 @@ export function HRManagement() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Daily Attendances for Manager */}
+              <div className="mt-12">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">
+                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                        <th className="py-3 px-4 font-semibold">Tanggal</th>
+                        <th className="py-3 px-4 font-semibold">Karyawan</th>
+                        <th className="py-3 px-4 font-semibold">Status</th>
+                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Catatan</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyAttendances.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                            Belum ada log kehadiran harian.
+                          </td>
+                        </tr>
+                      ) : (
+                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
+                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
+                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
+                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
+                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
+                                "bg-slate-100 text-slate-700"
+                              }`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                              {" - "}
+                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
+                              {d.notes || "-"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                <button
+                                  onClick={() => {
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
+                                  }}
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                >
+                                  Tolak (Alpha)
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -846,6 +918,76 @@ export function HRManagement() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Daily Attendances for Manager */}
+              <div className="mt-12">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">
+                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                        <th className="py-3 px-4 font-semibold">Tanggal</th>
+                        <th className="py-3 px-4 font-semibold">Karyawan</th>
+                        <th className="py-3 px-4 font-semibold">Status</th>
+                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Catatan</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyAttendances.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                            Belum ada log kehadiran harian.
+                          </td>
+                        </tr>
+                      ) : (
+                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
+                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
+                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
+                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
+                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
+                                "bg-slate-100 text-slate-700"
+                              }`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                              {" - "}
+                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
+                              {d.notes || "-"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                <button
+                                  onClick={() => {
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
+                                  }}
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                >
+                                  Tolak (Alpha)
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -920,6 +1062,76 @@ export function HRManagement() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Daily Attendances for Manager */}
+              <div className="mt-12">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">
+                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                        <th className="py-3 px-4 font-semibold">Tanggal</th>
+                        <th className="py-3 px-4 font-semibold">Karyawan</th>
+                        <th className="py-3 px-4 font-semibold">Status</th>
+                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Catatan</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyAttendances.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                            Belum ada log kehadiran harian.
+                          </td>
+                        </tr>
+                      ) : (
+                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
+                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
+                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
+                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
+                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
+                                "bg-slate-100 text-slate-700"
+                              }`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                              {" - "}
+                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
+                              {d.notes || "-"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                <button
+                                  onClick={() => {
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
+                                  }}
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                >
+                                  Tolak (Alpha)
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -1005,6 +1217,76 @@ export function HRManagement() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Daily Attendances for Manager */}
+              <div className="mt-12">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">
+                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                        <th className="py-3 px-4 font-semibold">Tanggal</th>
+                        <th className="py-3 px-4 font-semibold">Karyawan</th>
+                        <th className="py-3 px-4 font-semibold">Status</th>
+                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Catatan</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyAttendances.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                            Belum ada log kehadiran harian.
+                          </td>
+                        </tr>
+                      ) : (
+                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
+                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
+                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
+                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
+                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
+                                "bg-slate-100 text-slate-700"
+                              }`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                              {" - "}
+                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
+                              {d.notes || "-"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                <button
+                                  onClick={() => {
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
+                                  }}
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                >
+                                  Tolak (Alpha)
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
