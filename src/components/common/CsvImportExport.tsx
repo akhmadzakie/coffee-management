@@ -1,8 +1,13 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Upload, Download, FileSpreadsheet, ChevronDown, Database } from "lucide-react";
-import { downloadCsvTemplate } from "../../utils/export";
+import { Upload, Download, FileSpreadsheet, ChevronDown, Database, Loader2 } from "lucide-react";
 import { GenericImportModal } from "./GenericImportModal";
-import { downloadInteractiveTemplate } from "../../utils/genericImport";
+import {
+  buildTemplateWithDropdown,
+  TemplateColumn,
+  TemplateColumnType,
+} from "../../utils/excelTemplate";
+
+const ID_HEADER = "ID_SISTEM (JANGAN DIUBAH)";
 
 interface CsvImportExportProps {
   onImport: (data: any[]) => void;
@@ -11,6 +16,14 @@ interface CsvImportExportProps {
   templateFilename?: string;
   buttonLabel?: string;
   currentData?: any[]; // For export-to-edit
+  /** Pilihan dropdown per header, contoh: { Role: ["KASIR", "LEADER"] } */
+  templateDropdowns?: Record<string, string[]>;
+  /** Validasi tipe per header: number | integer | date | text */
+  templateColumnTypes?: Record<string, TemplateColumnType>;
+  /** Teks bantuan per header (muncul saat sel dipilih di Excel) */
+  templateHints?: Record<string, string>;
+  /** Petunjuk tambahan di sheet "Petunjuk" */
+  templateInstructions?: string[];
 }
 
 export const CsvImportExport: React.FC<CsvImportExportProps> = ({
@@ -20,10 +33,15 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   templateFilename = "template.csv",
   buttonLabel = "Import Data",
   currentData,
+  templateDropdowns = {},
+  templateColumnTypes = {},
+  templateHints = {},
+  templateInstructions = [],
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -35,20 +53,62 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleDownloadTemplate = () => {
-    downloadCsvTemplate(templateFilename.replace(".csv", ""), templateHeaders, templateExampleRow);
-    setIsOpen(false);
+  const buildColumns = (withId: boolean): TemplateColumn[] => {
+    const cols: TemplateColumn[] = templateHeaders.map((h) => ({
+      header: h,
+      options: templateDropdowns[h],
+      type: templateColumnTypes[h],
+      hint: templateHints[h],
+    }));
+    return withId
+      ? [{ header: ID_HEADER, locked: true, width: 28, hint: "Kosongkan untuk data baru. Jangan ubah untuk data lama." }, ...cols]
+      : cols;
   };
 
-  const handleDownloadInteractive = () => {
-    downloadInteractiveTemplate(
-      templateFilename.replace(".csv", ""),
-      templateHeaders,
-      currentData,
-      templateExampleRow
-    );
-    setIsOpen(false);
+  const filenameBase = templateFilename.replace(/\.(csv|xlsx)$/i, "");
+
+  const runGenerate = async (fn: () => Promise<void>) => {
+    setIsGenerating(true);
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error(err);
+      alert("Gagal membuat template Excel: " + (err?.message || err));
+    } finally {
+      setIsGenerating(false);
+      setIsOpen(false);
+    }
   };
+
+  const handleDownloadTemplate = () =>
+    runGenerate(() =>
+      buildTemplateWithDropdown({
+        filename: filenameBase,
+        columns: buildColumns(false),
+        rows: templateExampleRow ? [templateExampleRow] : [],
+        instructions: [
+          ...(templateExampleRow ? ["Baris ke-2 adalah CONTOH — ganti atau hapus sebelum diimpor."] : []),
+          ...templateInstructions,
+        ],
+      })
+    );
+
+  const handleDownloadInteractive = () =>
+    runGenerate(() => {
+      const cols = buildColumns(true);
+      const rows = (currentData || []).map((row) =>
+        cols.map((c) => (c.header === ID_HEADER ? row.id || "" : row[c.header] ?? ""))
+      );
+      return buildTemplateWithDropdown({
+        filename: `${filenameBase}_Edit_Massal`,
+        columns: cols,
+        rows,
+        instructions: [
+          "Kolom ID_SISTEM dipakai untuk memperbarui data lama. Kosongkan ID untuk menambah data baru.",
+          ...templateInstructions,
+        ],
+      });
+    });
 
   // We add ID_SISTEM to the expected headers for the modal if currentData is provided
   const expectedHeadersWithId = currentData 
@@ -73,16 +133,22 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
             <div className="py-1">
               <button
                 onClick={handleDownloadTemplate}
-                className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                disabled={isGenerating}
+                className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left disabled:opacity-50"
               >
-                <Download className="w-4 h-4 mr-3 text-slate-400 shrink-0" />
-                Download Template Kosong
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 mr-3 text-slate-400 shrink-0 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-3 text-slate-400 shrink-0" />
+                )}
+                Download Template Excel (Dropdown)
               </button>
               
               {currentData && (
                 <button
                   onClick={handleDownloadInteractive}
-                  className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
+                  disabled={isGenerating}
+                  className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100 disabled:opacity-50"
                 >
                   <Database className="w-4 h-4 mr-3 text-blue-500 shrink-0" />
                   Download Template & Data Saat Ini (Edit Massal)

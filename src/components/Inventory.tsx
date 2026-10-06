@@ -280,6 +280,26 @@ export const Inventory = () => {
                   }))}
                   templateFilename="Template_Import_Bahan_Baku.csv"
                   buttonLabel="Bahan Baku"
+                  templateDropdowns={{
+                    Kategori: Array.from(
+                      new Set([
+                        ...ingredients.map((i) => i.category).filter(Boolean),
+                        "Biji Kopi", "Susu & Dairy", "Sirup & Saus", "Teh", "Bubuk",
+                        "Makanan", "Kemasan", "Lainnya",
+                      ])
+                    ),
+                    Satuan: Array.from(
+                      new Set([
+                        ...ingredients.map((i) => i.unit).filter(Boolean),
+                        "Kg", "gram", "Liter", "ml", "pcs", "pack", "botol", "dus",
+                      ])
+                    ),
+                  }}
+                  templateColumnTypes={{
+                    "Stok Saat Ini": "number",
+                    "Stok Minimum": "number",
+                    "Harga per Satuan": "number",
+                  }}
                 />
                 <button
                   onClick={() => setIsAddIngredientOpen(true)}
@@ -597,7 +617,7 @@ export const Inventory = () => {
       </div>
 
       {isAddIngredientOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/50  flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h2 className="text-xl font-bold text-slate-800">
@@ -716,7 +736,7 @@ export const Inventory = () => {
       )}
 
       {isAddMovementOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/50  flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h2 className="text-xl font-bold text-slate-800">Catat Pemakaian Harian</h2>

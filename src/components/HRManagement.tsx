@@ -81,7 +81,7 @@ export function HRManagement() {
   const [editingKpi, setEditingKpi] = useState<any | null>(null);
 
   const [attendanceForm, setAttendanceForm] = useState({ employeeId: "", period: "", presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
-  const [kpiForm, setKpiForm] = useState({ employeeId: "", period: "", quarter: 1, year: new Date().getFullYear(), totalScore: 0, evaluatorNotes: "", kpiBonus: 0 });
+  const [kpiForm, setKpiForm] = useState({ employeeId: "", period: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), totalScore: 0, evaluatorNotes: "", kpiBonus: 0, targets: [{ id: "1", description: "", weight: 100, score: 0 }] });
 
   const handleOpenAttendanceModal = (att?: any, employeeId?: string) => {
     if (att && att.id) {
@@ -108,18 +108,34 @@ export function HRManagement() {
   const handleOpenKpiModal = (kpi?: any, employeeId?: string) => {
     if (kpi && kpi.id) {
       setEditingKpi(kpi);
-      setKpiForm({ ...kpi });
+      setKpiForm({ ...kpi, targets: kpi.targets || [{ id: "1", description: "", weight: 100, score: 0 }] });
     } else {
       setEditingKpi(null);
       const currentYear = new Date().getFullYear();
-      setKpiForm({ employeeId: employeeId || "", period: `Q1-${currentYear}`, quarter: 1, year: currentYear, totalScore: 0, evaluatorNotes: "", kpiBonus: 0 });
+      const currentMonth = new Date().getMonth() + 1;
+      setKpiForm({ employeeId: employeeId || "", period: `${currentYear}-${currentMonth.toString().padStart(2, '0')}`, month: currentMonth, year: currentYear, totalScore: 0, evaluatorNotes: "", kpiBonus: 0, targets: [{ id: "1", description: "Target 1", weight: 100, score: 0 }] });
     }
     setIsKpiModalOpen(true);
   };
 
   const handleSaveKpi = () => {
     if (!kpiForm.employeeId) return alert("Pilih Karyawan");
-    const kpiToSave = { ...kpiForm, period: `Q${kpiForm.quarter}-${kpiForm.year}` };
+    
+    // Auto calculate bonus based on target from contract
+    const contract = contracts.find(c => c.employeeId === kpiForm.employeeId && c.status === "ACTIVE") || contracts.find(c => c.employeeId === kpiForm.employeeId);
+    const kpiBonusTarget = contract?.kpiBonusTarget || 0;
+    
+    // Calculate total score from targets
+    let calculatedScore = 0;
+    if (kpiForm.targets && kpiForm.targets.length > 0) {
+      calculatedScore = kpiForm.targets.reduce((sum: number, t: any) => sum + (t.score * (t.weight / 100)), 0);
+    } else {
+      calculatedScore = kpiForm.totalScore;
+    }
+    
+    const kpiBonus = (calculatedScore / 100) * kpiBonusTarget;
+    
+    const kpiToSave = { ...kpiForm, period: `${kpiForm.year}-${kpiForm.month.toString().padStart(2, '0')}`, totalScore: calculatedScore, kpiBonus };
     if (editingKpi) {
       updateKPI({ ...editingKpi, ...kpiToSave });
     } else {
@@ -1270,7 +1286,7 @@ export function HRManagement() {
 
       {/* Modals */}
       {isEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-800">
@@ -1329,7 +1345,7 @@ export function HRManagement() {
       )}
 
       {isContractModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
@@ -1396,7 +1412,7 @@ export function HRManagement() {
 
       {/* Attendance Modal */}
       {isAttendanceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
@@ -1453,7 +1469,7 @@ export function HRManagement() {
 
       {/* KPI Modal */}
       {isKpiModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
@@ -1475,12 +1491,11 @@ export function HRManagement() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Kuartal</label>
-                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.quarter} onChange={e => setKpiForm({...kpiForm, quarter: Number(e.target.value)})}>
-                    <option value={1}>Q1 (Jan-Mar)</option>
-                    <option value={2}>Q2 (Apr-Jun)</option>
-                    <option value={3}>Q3 (Jul-Sep)</option>
-                    <option value={4}>Q4 (Okt-Des)</option>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Bulan</label>
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.month || 1} onChange={e => setKpiForm({...kpiForm, month: Number(e.target.value)})}>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('id-ID', { month: 'long' })}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1488,14 +1503,57 @@ export function HRManagement() {
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.year} onChange={e => setKpiForm({...kpiForm, year: Number(e.target.value)})} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Skor Total (0-100)</label>
-                  <input type="number" step="0.1" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.totalScore || 0} onChange={e => setKpiForm({...kpiForm, totalScore: Number(e.target.value)})} />
+              
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-sm font-bold text-slate-700">Target KPI & Pencapaian</h4>
+                  <button type="button" onClick={() => setKpiForm({...kpiForm, targets: [...(kpiForm.targets || []), { id: Date.now().toString(), description: "", weight: 0, score: 0 }]})} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
+                    + Tambah Target
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Bonus Nominal (Rp)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.kpiBonus || 0} onChange={e => setKpiForm({...kpiForm, kpiBonus: Number(e.target.value)})} />
+                <div className="space-y-3">
+                  {(kpiForm.targets || []).map((target: any, index: number) => (
+                    <div key={target.id || index} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <div className="flex-1">
+                        <input type="text" placeholder="Deskripsi Tugas/Target" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.description} onChange={e => {
+                          const newT = [...kpiForm.targets];
+                          newT[index].description = e.target.value;
+                          setKpiForm({...kpiForm, targets: newT});
+                        }} />
+                      </div>
+                      <div className="w-20">
+                        <input type="number" placeholder="Bobot %" title="Bobot %" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.weight} onChange={e => {
+                          const newT = [...kpiForm.targets];
+                          newT[index].weight = Number(e.target.value);
+                          setKpiForm({...kpiForm, targets: newT});
+                        }} />
+                      </div>
+                      <div className="w-20 flex items-center gap-1">
+                        <input type="number" placeholder="Skor" title="Skor (0-100)" max="100" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.score} onChange={e => {
+                          const newT = [...kpiForm.targets];
+                          newT[index].score = Number(e.target.value);
+                          setKpiForm({...kpiForm, targets: newT});
+                        }} />
+                      </div>
+                      <button type="button" onClick={() => {
+                        const newT = kpiForm.targets.filter((_, i) => i !== index);
+                        setKpiForm({...kpiForm, targets: newT});
+                      }} className="text-red-500 p-1 hover:bg-red-50 rounded">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {(!kpiForm.targets || kpiForm.targets.length === 0) && (
+                    <div className="text-sm text-slate-500 text-center py-2">Belum ada target. (Total skor akan diambil dari Skor Total manual jika kosong)</div>
+                  )}
+                  {(!kpiForm.targets || kpiForm.targets.length === 0) && (
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Skor Total (0-100)</label>
+                        <input type="number" step="0.1" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.totalScore || 0} onChange={e => setKpiForm({...kpiForm, totalScore: Number(e.target.value)})} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div>

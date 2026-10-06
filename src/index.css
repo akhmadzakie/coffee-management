@@ -17,3 +17,13 @@
     border-radius: 20px;
   }
 }
+@layer base {
+  html {
+    /* Scale down default 16px to 14px (approx 87.5%) 
+       This shrinks all Tailwind text, paddings, margins proportionally
+       making the dashboard feel more compact and professional */
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

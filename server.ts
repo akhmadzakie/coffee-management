@@ -10,8 +10,8 @@ import { eq } from "drizzle-orm";
 const initialSettings = {
   id: "1",
   logoDataUrl: null,
-  brandName: "Kedai Kopi Manager",
-  companyAddress: "Alamat Kedai Kopi",
+  brandName: "Julia's Management System",
+  companyAddress: "Alamat Julia's Management",
   bankDetails: "Bank BCA 1234567890",
   salesPerson: "Admin",
   footerMessage: "Terima kasih atas kunjungannya.",
@@ -402,7 +402,7 @@ async function startServer() {
   const sanitizeSettings = (st: any) => ({
     id: "1",
     logoDataUrl: st?.logoDataUrl || null,
-    brandName: String(st?.brandName || "Kedai Kopi Manager"),
+    brandName: String(st?.brandName || "Julia's Management System"),
     companyAddress: String(st?.companyAddress || ""),
     bankDetails: String(st?.bankDetails || ""),
     salesPerson: String(st?.salesPerson || ""),
@@ -1489,8 +1489,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} at localhost and local network`);
   });
 }
 

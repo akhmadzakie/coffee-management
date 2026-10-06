@@ -6,7 +6,10 @@ export type Role =
   | "MANAGER"
   | "FINANCE"
   | "KASIR"
-  | "LEADER";
+  | "LEADER"
+  | "BAR"
+  | "KITCHEN"
+  | "BAKER";
 
 export interface User {
   id: string;
@@ -33,7 +36,8 @@ export type ViewState =
   | "expense_categories"
   | "payroll"
   | "finance_reports"
-  | "bank_reconciliation";
+  | "bank_reconciliation"
+  | "attendance_clock";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
@@ -171,13 +175,17 @@ export interface Employee {
 export interface EmployeeContract {
   id: string;
   employeeId: string;
-  effectiveDate: string; // ISO string - tanggal berlaku
   basicSalary: number; // Gaji pokok
   mealAllowance: number; // Tunjangan makan
   positionAllowance: number; // Tunjangan jabatan
+  transportAllowance: number; // Tunjangan transport
+  kpiBonusTarget: number; // Target bonus KPI
   alphaDeductionPerDay: number; // Potongan per hari alpha
-  workingDaysPerMonth: number; // HKE - Hari Kerja Efektif normal
-  notes: string;
+  workingDaysPerMonth?: number; // HKE - Hari Kerja Efektif normal
+  startDate: string; // ISO string
+  endDate: string | null; // ISO string
+  status: "ACTIVE" | "INACTIVE";
+  notes?: string;
 }
 
 export interface AttendanceRecord {
@@ -195,20 +203,34 @@ export interface AttendanceRecord {
   createdAt: string;
 }
 
+export interface DailyAttendance {
+  id: string;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  clockInTime: string | null; // ISO string
+  clockOutTime: string | null; // ISO string
+  clockInLocation: { lat: number; lng: number } | null;
+  clockOutLocation: { lat: number; lng: number } | null;
+  clockInPhotoUrl: string | null;
+  clockOutPhotoUrl: string | null;
+  status: "HADIR" | "TERLAMBAT" | "IZIN" | "SAKIT" | "ALPHA";
+  notes: string;
+}
+
 export interface KPIRecord {
   id: string;
   employeeId: string;
-  quarter: number; // 1, 2, 3, atau 4
+  month: number; // 1-12
   year: number;
   targets: KPITarget[];
-  totalScore: number; // 0-100, average dari semua target
+  totalScore: number; // 0-100
   kpiBonus: number; // Bonus dalam Rupiah berdasarkan score
   notes: string;
   evaluatedBy: string;
   createdAt: string;
 }
 
-interface KPITarget {
+export interface KPITarget {
   id: string;
   description: string; // Deskripsi target KPI
   weight: number; // Bobot (total semua harus = 100%)

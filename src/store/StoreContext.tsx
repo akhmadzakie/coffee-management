@@ -24,6 +24,7 @@ import {
   EmployeeContract,
   AttendanceRecord,
   KPIRecord,
+  DailyAttendance,
   // Fase 1-4
   ExpenseCategory,
   Budget,
@@ -69,6 +70,7 @@ interface StoreContextType {
   employees: Employee[];
   contracts: EmployeeContract[];
   attendances: AttendanceRecord[];
+  dailyAttendances: DailyAttendance[];
   kpiRecords: KPIRecord[];
 
   // Fase 1: Expense Categories
@@ -117,6 +119,11 @@ interface StoreContextType {
     att: Omit<AttendanceRecord, "id" | "createdAt" | "createdBy">,
   ) => void;
   updateAttendance: (att: AttendanceRecord) => void;
+
+  addDailyAttendance: (
+    att: Omit<DailyAttendance, "id">,
+  ) => void;
+  updateDailyAttendance: (att: DailyAttendance) => void;
 
   addKPI: (kpi: Omit<KPIRecord, "id" | "createdAt" | "evaluatedBy">) => void;
   updateKPI: (kpi: KPIRecord) => void;
@@ -185,7 +192,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>({
     id: "1",
     logoDataUrl: null,
-    brandName: "Kedai Kopi Manager",
+    brandName: "Julia's Management System",
     companyAddress: "",
     bankDetails: "",
     salesPerson: "",
@@ -212,6 +219,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [contracts, setContracts] = useState<EmployeeContract[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
+  const [dailyAttendances, setDailyAttendances] = useState<DailyAttendance[]>([]);
   const [kpiRecords, setKpiRecords] = useState<KPIRecord[]>([]);
 
   // Fase 1-4 state
@@ -301,6 +309,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const isSyncingRef = useRef(false);
   const isApplyingServerUpdate = useRef(false);
   const deviceRef = useRef<DetectedDeviceInfo>({} as DetectedDeviceInfo);
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initialize auth
   useEffect(() => {
@@ -382,6 +392,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.employees)) setEmployees(data.employees);
         if (Array.isArray(data.contracts)) setContracts(data.contracts);
         if (Array.isArray(data.attendances)) setAttendances(data.attendances);
+        if (Array.isArray(data.dailyAttendances)) setDailyAttendances(data.dailyAttendances);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
         if (Array.isArray(data.expense_categories)) setExpenseCategories(data.expense_categories);
@@ -435,6 +446,45 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       window.removeEventListener("online", handleFocus);
     };
   }, []);
+
+  // ─── Idle Session Timeout ──────────────────────────────────────────────────
+  // Role operasional (KASIR, LEADER, FINANCE) akan otomatis logout setelah
+  // 30 menit tidak ada aktivitas. SUPER_ADMIN & MANAGER dikecualikan.
+  const IDLE_TIMEOUT_ROLES = ["KASIR", "LEADER", "FINANCE"];
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 menit
+
+  useEffect(() => {
+    if (!currentUser || !IDLE_TIMEOUT_ROLES.includes(currentUser.role)) {
+      // Clear timer jika role tidak perlu timeout
+      if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+      return;
+    }
+
+    const resetActivity = () => { lastActivityRef.current = Date.now(); };
+
+    // Dengarkan semua event aktivitas user
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    events.forEach((e) => window.addEventListener(e, resetActivity, { passive: true }));
+
+    // Cek setiap 60 detik apakah sudah idle
+    idleTimerRef.current = setInterval(() => {
+      const idleDuration = Date.now() - lastActivityRef.current;
+      if (idleDuration >= IDLE_TIMEOUT_MS) {
+        // Auto logout
+        setCurrentUser(null);
+        localStorage.removeItem("node_current_user");
+        del("node_current_user").catch(() => {});
+        localStorage.removeItem("node_session_id");
+        del("node_session_id").catch(() => {});
+        setWasForceLoggedOut(true); // Gunakan flag yg sama agar UI tampil info
+      }
+    }, 60_000); // cek tiap 1 menit
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetActivity));
+      if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    };
+  }, [currentUser?.id, currentUser?.role]);
 
   const sendHeartbeat = async (user = currentUser) => {
     if (!user) return;
@@ -571,6 +621,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             employees,
             contracts,
             attendances,
+            dailyAttendances,
             kpiRecords,
             // Fase 1-4
             expense_categories: expenseCategories,
@@ -731,6 +782,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const updateAttendance = (att: AttendanceRecord) => {
     setAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
     writeAuditLog("UPDATE", "attendances", att.id);
+    markChanged();
+  };
+
+  const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
+    const id = generateId();
+    const newAtt: DailyAttendance = { ...att, id };
+    setDailyAttendances((prev) => [...prev, newAtt]);
+    writeAuditLog("CREATE", "daily_attendances", id);
+    markChanged();
+  };
+
+  const updateDailyAttendance = (att: DailyAttendance) => {
+    setDailyAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
+    writeAuditLog("UPDATE", "daily_attendances", att.id);
     markChanged();
   };
 
@@ -993,6 +1058,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         employees,
         contracts,
         attendances,
+        dailyAttendances,
         kpiRecords,
         updateSettings,
         login,
@@ -1007,6 +1073,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         updateContract,
         addAttendance,
         updateAttendance,
+        addDailyAttendance,
+        updateDailyAttendance,
         addKPI,
         updateKPI,
         addCashAccount,
@@ -1037,6 +1105,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         revokeOtherSessions,
         wasForceLoggedOut,
         dismissForceLogoutAlert,
+        // OWNER hanya boleh view data, tidak boleh create/edit/delete apapun
         isReadOnly: currentUser?.role === "OWNER",
         // Fase 1-4
         expenseCategories,

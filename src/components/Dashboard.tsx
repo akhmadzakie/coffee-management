@@ -299,7 +299,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             {isIndo
-              ? "Pantau performa bisnis kedai kopi Anda secara real-time."
+              ? "Pantau performa bisnis Anda secara real-time."
               : "Monitor your coffee shop business performance in real-time."}
           </p>
         </div>

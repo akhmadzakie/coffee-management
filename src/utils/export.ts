@@ -123,7 +123,7 @@ const setupPdfHeader = (
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
-  doc.text(settings.brandName || "KEDAI KOPI", 14, 20);
+  doc.text(settings.brandName || "JULIA'S MANAGEMENT SYSTEM", 14, 20);
 
   // Address
   doc.setFontSize(10);

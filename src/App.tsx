@@ -57,6 +57,9 @@ const BankReconciliationComponent = React.lazy(() =>
 const FinanceReports = React.lazy(() =>
   import("./components/FinanceReports"),
 );
+const ClockIn = React.lazy(() =>
+  import("./components/ClockIn").then((m) => ({ default: m.ClockIn })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -91,14 +94,67 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>("dashboard_finance");
   const { currentUser } = useStore();
 
+  // Halaman default saat pertama login atau saat view tidak diizinkan
   const roleDefaultView: Record<string, ViewState> = {
-    OWNER: "dashboard_finance",
-    KASIR: "shifts",
-    LEADER: "dashboard_inventory",
+    SUPER_ADMIN: "dashboard_finance",
+    OWNER:       "dashboard_finance",
+    MANAGER:     "dashboard_finance",
+    FINANCE:     "dashboard_finance",
+    KASIR:       "shifts",
+    LEADER:      "dashboard_inventory",
+    BAR:         "attendance_clock",
+    KITCHEN:     "attendance_clock",
+    BAKER:       "attendance_clock",
   };
 
+  // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
+  const ALL_VIEWS: ViewState[] = [
+    "dashboard_finance", "dashboard_inventory", "cash_flow",
+    "expense_categories", "finance_reports", "bank_reconciliation",
+    "inventory", "import_sales", "hr", "payroll",
+    "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
+    "attendance_clock"
+  ];
+
   const roleAllowedViews: Record<string, ViewState[]> = {
-    OWNER: ["dashboard_finance", "cash_flow", "finance_reports"],
+    SUPER_ADMIN: ALL_VIEWS,
+    OWNER: [
+      "dashboard_finance",
+      "cash_flow",
+      "finance_reports",
+    ],
+    MANAGER: [
+      "dashboard_finance", "dashboard_inventory",
+      "cash_flow", "expense_categories", "finance_reports",
+      "inventory", "import_sales",
+      "hr", "payroll",
+      "shifts", "suppliers", "purchases",
+      "users",   // Manager bisa onboard staff (KASIR, LEADER) — dibatasi di Users.tsx
+      "audit_log",
+      "attendance_clock"
+    ],
+    FINANCE: [
+      "dashboard_finance",
+      "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
+      "payroll", "purchases",
+      "audit_log",
+      "attendance_clock"
+    ],
+    KASIR: [
+      "shifts",
+      "import_sales",
+      "attendance_clock"
+    ],
+    LEADER: [
+      "dashboard_inventory",
+      "inventory",
+      "shifts",
+      "suppliers", "purchases",
+      "attendance_clock"
+    ],
+    BAR: ["attendance_clock"],
+    KITCHEN: ["attendance_clock"],
+    BAKER: ["attendance_clock"],
   };
 
   React.useEffect(() => {
@@ -106,11 +162,11 @@ function AppContent() {
       setCurrentView("dashboard_finance");
       return;
     }
-    const allowed = roleAllowedViews[currentUser.role];
-    if (allowed && !allowed.includes(currentView)) {
+    const allowed = roleAllowedViews[currentUser.role] || ALL_VIEWS;
+    if (!allowed.includes(currentView)) {
       setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
     }
-  }, [currentUser, currentView]);
+  }, [currentUser?.role]);
 
   if (!currentUser) {
     return <Login />;
@@ -153,6 +209,8 @@ function AppContent() {
       // Fase 4: Payroll (Coming Soon)
       case "payroll":
         return <Payroll />;
+      case "attendance_clock":
+        return <ClockIn />;
       default:
         return <Dashboard view="FINANCE" />;
     }

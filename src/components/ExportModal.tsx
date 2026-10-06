@@ -206,7 +206,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       isOpen={isImportOpen}
       onClose={() => setIsImportOpen(false)}
     />
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60  overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 overflow-hidden flex flex-col my-8">
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">

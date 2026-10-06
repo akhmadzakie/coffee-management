@@ -86,7 +86,7 @@ export const exportFinanceToXlsx = ({
   expenseCategories = [],
 }: ExportFinanceXlsxOptions) => {
   const wb = XLSX.utils.book_new();
-  const brandName = settings.brandName || "Kedai Kopi";
+  const brandName = settings.brandName || "Julia's Management System";
 
   // ─── Sheet 1: Ringkasan ───────────────────────────────────────────────────
   const totalIn = finance
@@ -202,7 +202,7 @@ export const exportSalesToXlsx = ({
   periodLabel: string;
 }) => {
   const wb = XLSX.utils.book_new();
-  const brandName = settings.brandName || "Kedai Kopi";
+  const brandName = settings.brandName || "Julia's Management System";
 
   const totalQty = sales.reduce((a, b) => a + b.quantitySold, 0);
   const totalRevenue = sales.reduce((a, b) => a + b.totalPrice, 0);

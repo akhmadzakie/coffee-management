@@ -14,7 +14,7 @@ export const parseGenericImportFile = async (
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: "binary" });
+        const workbook = XLSX.read(data, { type: "binary", cellDates: true });
 
         if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
           throw new Error("File tidak memiliki sheet/halaman.");
@@ -48,8 +48,20 @@ export const parseGenericImportFile = async (
           // Clean keys (trim spaces)
           const cleanRow: any = {};
           for (const key in row) {
-            cleanRow[key.trim()] = row[key];
+            let val = row[key];
+            // Tanggal dari template (validasi tanggal) dibaca sebagai Date → ubah ke YYYY-MM-DD
+            if (val instanceof Date && !isNaN(val.getTime())) {
+              const d = new Date(Math.round(val.getTime() / 60000) * 60000);
+              val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
+            cleanRow[key.trim()] = val;
           }
+
+          // Lewati baris yang benar-benar kosong
+          const hasValue = Object.values(cleanRow).some(
+            (v) => v !== "" && v !== null && v !== undefined
+          );
+          if (!hasValue) return;
 
           rows.push(cleanRow);
         });

@@ -45,9 +45,19 @@ export const ShiftManagement = () => {
 
   const isIndo = settings.language === "id";
 
-  // Find current open shift
-  const currentShift = shifts.find((s) => s.status === "OPEN");
-  const pastShifts = shifts
+  // KASIR hanya bisa lihat/kelola shift miliknya sendiri
+  // Supervisor (MANAGER, SUPER_ADMIN, LEADER) bisa lihat semua shift
+  const isKasir = currentUser?.role === "KASIR";
+  const visibleShifts = isKasir
+    ? shifts.filter((s) => s.userId === currentUser?.id)
+    : shifts;
+
+  // Shift aktif saat ini — KASIR hanya bisa close shift miliknya
+  const currentShift = visibleShifts.find((s) => s.status === "OPEN");
+  // Supervisor bisa lihat shift orang lain yang OPEN juga
+  const globalOpenShift = shifts.find((s) => s.status === "OPEN");
+
+  const pastShifts = visibleShifts
     .filter((s) => s.status === "CLOSED")
     .sort(
       (a, b) =>
@@ -180,6 +190,18 @@ export const ShiftManagement = () => {
                   <p className="text-slate-500 text-sm">
                     Saat ini tidak ada shift yang sedang berjalan. Kasir dapat
                     membuka shift baru.
+                  </p>
+                </div>
+              ) : isKasir && globalOpenShift ? (
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-700 mb-2">
+                    Ada Shift yang Sedang Berjalan
+                  </h2>
+                  <p className="text-slate-500 text-sm max-w-sm mx-auto">
+                    Kasir lain sedang dalam shift aktif. Shift baru hanya bisa dibuka setelah shift sebelumnya ditutup.
                   </p>
                 </div>
               ) : (

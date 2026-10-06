@@ -620,7 +620,7 @@ export const Purchases = () => {
 
       {/* Receive PO Modal */}
       {poToReceive && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 ">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-2">
               {isIndo
@@ -673,7 +673,7 @@ export const Purchases = () => {
 
       {/* View PO Modal */}
       {isInvoiceModalOpen && currentInvoiceData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-8">
               <div className="flex justify-between items-start mb-8 border-b border-slate-200 pb-6">
@@ -825,7 +825,7 @@ export const Purchases = () => {
 
       {/* Delete Confirmation Modal */}
       {invoiceToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 ">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-2">
               {isIndo ? "Hapus Purchase Order?" : "Delete Purchase Order?"}

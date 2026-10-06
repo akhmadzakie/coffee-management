@@ -118,6 +118,10 @@ export const Suppliers = () => {
               }))}
               templateFilename="template_supplier"
               buttonLabel="Import Supplier"
+              templateHints={{
+                "Nama Supplier": "Wajib diisi",
+                Kontak: "No. HP / WhatsApp, contoh: 081234567890",
+              }}
             />
             <button
               onClick={() => handleOpenModal()}
@@ -199,7 +203,7 @@ export const Suppliers = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
               <h3 className="text-lg font-semibold text-slate-800">

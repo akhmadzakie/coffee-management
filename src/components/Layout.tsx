@@ -23,6 +23,7 @@ import {
   RefreshCw,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   UserCheck,
   Download,
   FileSpreadsheet,
@@ -32,6 +33,8 @@ import {
   BarChart3,
   CreditCard,
   Calculator,
+  Eye,
+  Calendar,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -55,6 +58,18 @@ export const Layout: React.FC<LayoutProps> = ({
   >("sales");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    Dasbor: true,
+    Keuangan: false,
+    Operasi: false,
+    SDM: false,
+    Admin: false,
+  });
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  };
+
   const { settings, isSyncing, lastSyncTime, syncData, currentUser, logout } =
     useStore();
   const { t } = useTranslation(settings.language || "id");
@@ -73,99 +88,145 @@ export const Layout: React.FC<LayoutProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ─── Semua item navigasi dengan grup visual ─────────────────────────────
   const allNavigation = [
-    {
+    // ─── Dashboard Group ─────────────────────────────────────────
+    { group: "Dasbor",
       name: "Dashboard Keuangan",
       view: "dashboard_finance" as ViewState,
       icon: LayoutDashboard,
     },
-    {
+    { group: "Dasbor",
       name: "Dashboard Inventori",
       view: "dashboard_inventory" as ViewState,
       icon: Package,
     },
     // ─── Finance Group ───────────────────────────────────────────
-    {
+    { group: "Keuangan",
       name: t("cash_flow") || "Arus Kas",
       view: "cash_flow" as ViewState,
       icon: Wallet,
     },
-    {
+    { group: "Keuangan",
       name: "Kategori Keuangan",
       view: "expense_categories" as ViewState,
       icon: Tag,
     },
-    {
+    { group: "Keuangan",
       name: "Laporan Keuangan",
       view: "finance_reports" as ViewState,
       icon: BarChart3,
     },
-    {
+    { group: "Keuangan",
       name: "Rekonsiliasi Bank",
       view: "bank_reconciliation" as ViewState,
       icon: CreditCard,
     },
     // ─── Operations Group ────────────────────────────────────────
-    {
+    { group: "Operasi",
       name: t("inventory") || "Inventori",
       view: "inventory" as ViewState,
       icon: Warehouse,
     },
-    {
+    { group: "Operasi",
       name: t("import_sales") || "Impor Penjualan",
       view: "import_sales" as ViewState,
       icon: ReceiptText,
     },
+    { group: "Operasi",
+      name: t("shifts") || "Shift & Kasir",
+      view: "shifts" as ViewState,
+      icon: Coffee,
+    },
+    { group: "Operasi",
+      name: t("suppliers") || "Supplier",
+      view: "suppliers" as ViewState,
+      icon: Truck,
+    },
+    { group: "Operasi",
+      name: t("purchases") || "Pembelian (PO)",
+      view: "purchases" as ViewState,
+      icon: ShoppingBag,
+    },
     // ─── HR Group ────────────────────────────────────────────────
-    {
+    { group: "SDM",
       name: "SDM & HRD",
       view: "hr" as ViewState,
       icon: UserCheck,
     },
-    {
+    { group: "SDM",
+      name: "Clock In / Out",
+      view: "attendance_clock" as ViewState,
+      icon: Calendar,
+    },
+    { group: "SDM",
       name: "Penggajian (Payroll)",
       view: "payroll" as ViewState,
       icon: Calculator,
     },
     // ─── Admin Group ─────────────────────────────────────────────
-    { name: t("users") || "Pengguna", view: "users" as ViewState, icon: Users },
-    {
+    { group: "Admin",
+      name: t("users") || "Pengguna",
+      view: "users" as ViewState,
+      icon: Users,
+    },
+    { group: "Admin",
       name: t("audit_log") || "Audit Log",
       view: "audit_log" as ViewState,
       icon: ShieldCheck,
     },
-    {
-      name: t("shifts") || "Shift & Kasir",
-      view: "shifts" as ViewState,
-      icon: Coffee,
-    },
-    {
-      name: t("suppliers") || "Supplier",
-      view: "suppliers" as ViewState,
-      icon: Truck,
-    },
-    {
-      name: t("purchases") || "Pembelian (PO)",
-      view: "purchases" as ViewState,
-      icon: ShoppingBag,
-    },
-    {
+    { group: "Admin",
       name: t("settings") || "Pengaturan",
       view: "settings" as ViewState,
       icon: Settings,
     },
   ];
 
+  // ─── Role Access Matrix ───────────────────────────────────────────────────
+  const ALL_VIEWS: ViewState[] = allNavigation.map((n) => n.view);
+
   const roleAccess: Record<string, ViewState[]> = {
-    SUPER_ADMIN: ["dashboard_finance", "dashboard_inventory", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "inventory", "import_sales", "hr", "payroll", "users", "audit_log", "shifts", "suppliers", "purchases", "settings"],
-    OWNER: ["dashboard_finance", "cash_flow", "finance_reports"],
-    MANAGER: ["dashboard_finance", "dashboard_inventory", "cash_flow", "inventory", "import_sales", "hr", "payroll", "shifts", "suppliers", "purchases"],
-    FINANCE: ["dashboard_finance", "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation", "payroll", "purchases", "audit_log"],
-    KASIR: ["shifts", "import_sales"],
-    LEADER: ["dashboard_inventory", "inventory"],
+    SUPER_ADMIN: ALL_VIEWS,
+    OWNER: [
+      "dashboard_finance",
+      "cash_flow",
+      "finance_reports",
+    ],
+    MANAGER: [
+      "dashboard_finance", "dashboard_inventory",
+      "cash_flow", "expense_categories", "finance_reports",
+      "inventory", "import_sales",
+      "hr", "payroll",
+      "shifts", "suppliers", "purchases",
+      "users",   // Manager bisa onboard staff (dibatasi role-nya di Users.tsx)
+      "audit_log",
+      "attendance_clock"
+    ],
+    FINANCE: [
+      "dashboard_finance",
+      "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
+      "payroll", "purchases",
+      "audit_log",
+      "attendance_clock"
+    ],
+    KASIR: [
+      "shifts",
+      "import_sales",
+      "attendance_clock"
+    ],
+    LEADER: [
+      "dashboard_inventory",
+      "inventory",
+      "shifts",
+      "suppliers", "purchases",
+      "attendance_clock"
+    ],
+    BAR: ["attendance_clock"],
+    KITCHEN: ["attendance_clock"],
+    BAKER: ["attendance_clock"],
   };
 
-  const allowedViews = currentUser ? roleAccess[currentUser.role] || [] : [];
+  const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];
   const navigation = allNavigation.filter((nav) => allowedViews.includes(nav.view));
 
   return (
@@ -206,32 +267,87 @@ export const Layout: React.FC<LayoutProps> = ({
           )}
         </div>
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          {!isSidebarCollapsed && (
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 mt-2">
-              Modules
-            </div>
-          )}
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentView === item.view;
-            return (
-              <button
-                key={item.name}
-                onClick={() => onViewChange(item.view)}
-                title={isSidebarCollapsed ? item.name : undefined}
-                className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'} rounded-lg text-sm transition-colors ${
-                  isActive
-                    ? "bg-accent/20 text-accent font-medium"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <Icon
-                  className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`}
-                />
-                {!isSidebarCollapsed && <span>{item.name}</span>}
-              </button>
-            );
-          })}
+          {(() => {
+            const groupedNav = navigation.reduce((acc, item) => {
+              const g = item.group || "Lainnya";
+              if (!acc[g]) acc[g] = [];
+              acc[g].push(item);
+              return acc;
+            }, {} as Record<string, typeof navigation>);
+
+            return Object.entries(groupedNav).map(([group, items]) => {
+              const isExpanded = expandedGroups[group];
+              const isActiveGroup = items.some(i => i.view === currentView);
+
+              if (isSidebarCollapsed) {
+                return (
+                  <React.Fragment key={group}>
+                    {items.map(item => {
+                      const Icon = item.icon;
+                      const isActive = currentView === item.view;
+                      return (
+                        <button
+                          key={item.view}
+                          onClick={() => onViewChange(item.view)}
+                          title={item.name}
+                          className={`w-full flex items-center justify-center p-2 rounded-lg text-sm transition-colors mb-1 ${
+                            isActive
+                              ? "bg-accent/20 text-accent font-medium"
+                              : "text-slate-300 hover:bg-white/10 hover:text-white"
+                          }`}
+                        >
+                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`} />
+                        </button>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              }
+
+              return (
+                <div key={group} className="mb-2">
+                  <button
+                    onClick={() => toggleGroup(group)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${isActiveGroup ? 'text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      {group}
+                    </span>
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 opacity-70" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 opacity-70" />
+                    )}
+                  </button>
+                  
+                  {isExpanded && (
+                    <div className="mt-1 space-y-1 pl-2">
+                      {items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = currentView === item.view;
+                        return (
+                          <button
+                            key={item.view}
+                            onClick={() => onViewChange(item.view)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                              isActive
+                                ? "bg-accent/20 text-accent font-medium"
+                                : "text-slate-300 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            <Icon
+                              className={`w-4 h-4 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`}
+                            />
+                            <span>{item.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </nav>
 
         {/* User Card & Actions - Desktop Sidebar */}
@@ -371,29 +487,31 @@ export const Layout: React.FC<LayoutProps> = ({
                 settings: "Konfigurasi sistem dan preferensi aplikasi.",
                 hr: "Data karyawan, kontrak, dan absensi.",
                 payroll: "Hitung dan kelola penggajian karyawan.",
-              }[currentView] || "Pantau dan kelola operasional kedai kopi Anda."}
+              }[currentView] || "Pantau dan kelola operasional bisnis Anda."}
             </p>
           </div>
 
           <div className="flex gap-2.5 items-center">
             {/* Export & Business Reports Center Button */}
-            <button
-              onClick={() => {
-                // Preselect module based on currentView if applicable
-                if (currentView === "sales") setExportModalModule("sales");
-                else if (currentView === "inventory")
-                  setExportModalModule("inventory");
-                else if (currentView === "finance")
-                  setExportModalModule("finance");
-                else setExportModalModule("executive");
-                setIsExportModalOpen(true);
-              }}
-              title="Pusat Ekspor Laporan CSV & PDF Resmi"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">Ekspor & Laporan</span>
-            </button>
+            {currentUser?.role !== "KASIR" && currentUser?.role !== "LEADER" && (
+              <button
+                onClick={() => {
+                  // Preselect module based on currentView if applicable
+                  if (currentView === "sales") setExportModalModule("sales");
+                  else if (currentView === "inventory")
+                    setExportModalModule("inventory");
+                  else if (currentView === "finance")
+                    setExportModalModule("finance");
+                  else setExportModalModule("executive");
+                  setIsExportModalOpen(true);
+                }}
+                title="Pusat Ekspor Laporan CSV & PDF Resmi"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Ekspor & Laporan</span>
+              </button>
+            )}
 
             {/* Cloud Sync Status Indicator */}
             <button
@@ -468,17 +586,19 @@ export const Layout: React.FC<LayoutProps> = ({
                   </div>
 
                   <div className="py-1">
-                    <button
-                      onClick={() => {
-                        setIsUserDropdownOpen(false);
-                        setExportModalModule("executive");
-                        setIsExportModalOpen(true);
-                      }}
-                      className="w-full flex items-center px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 mr-2.5 text-blue-600" />
-                      Pusat Ekspor & Laporan
-                    </button>
+                    {currentUser?.role !== "KASIR" && currentUser?.role !== "LEADER" && (
+                      <button
+                        onClick={() => {
+                          setIsUserDropdownOpen(false);
+                          setExportModalModule("executive");
+                          setIsExportModalOpen(true);
+                        }}
+                        className="w-full flex items-center px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 mr-2.5 text-blue-600" />
+                        Pusat Ekspor & Laporan
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setIsUserDropdownOpen(false);
@@ -532,29 +652,65 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
 
             <nav className="p-3 space-y-1 max-h-[60vh] overflow-y-auto">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentView === item.view;
-                return (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      onViewChange(item.view);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                      isActive
-                        ? "bg-accent/20 text-accent font-medium"
-                        : "text-slate-300 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Icon
-                      className={`w-5 h-5 ${isActive ? "text-accent" : "text-slate-400"}`}
-                    />
-                    <span>{item.name}</span>
-                  </button>
-                );
-              })}
+              {(() => {
+                const groupedNav = navigation.reduce((acc, item) => {
+                  const g = item.group || "Lainnya";
+                  if (!acc[g]) acc[g] = [];
+                  acc[g].push(item);
+                  return acc;
+                }, {} as Record<string, typeof navigation>);
+
+                return Object.entries(groupedNav).map(([group, items]) => {
+                  const isExpanded = expandedGroups[group];
+                  const isActiveGroup = items.some(i => i.view === currentView);
+                  
+                  return (
+                    <div key={group} className="mb-2">
+                      <button
+                        onClick={() => toggleGroup(group)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${isActiveGroup ? 'text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        <span className="text-[11px] font-bold uppercase tracking-wider">
+                          {group}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 opacity-70" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 opacity-70" />
+                        )}
+                      </button>
+                      
+                      {isExpanded && (
+                        <div className="mt-1 space-y-1 pl-2">
+                          {items.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = currentView === item.view;
+                            return (
+                              <button
+                                key={item.name}
+                                onClick={() => {
+                                  onViewChange(item.view);
+                                  setIsMobileMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                                  isActive
+                                    ? "bg-accent/20 text-accent font-medium"
+                                    : "text-slate-300 hover:bg-white/10 hover:text-white"
+                                }`}
+                              >
+                                <Icon
+                                  className={`w-5 h-5 ${isActive ? "text-accent" : "text-slate-400"}`}
+                                />
+                                <span>{item.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </nav>
 
             {/* Fast Action Buttons in Mobile Menu */}
@@ -584,7 +740,19 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* Page Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 backdrop-blur-sm relative z-10 rounded-tl-2xl border-t border-l border-slate-200/50 shadow-inner">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50  relative z-10 rounded-tl-2xl border-t border-l border-slate-200/50 shadow-inner">
+          {/* Banner Read-Only untuk OWNER */}
+          {currentUser?.role === "OWNER" && (
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm shadow-sm">
+              <Eye className="w-4 h-4 shrink-0 text-amber-600" />
+              <div>
+                <span className="font-bold">Mode Pantau (View Only)</span>
+                <span className="ml-2 text-amber-700">
+                  Anda login sebagai <strong>Owner</strong> — dapat melihat semua data namun tidak dapat membuat perubahan.
+                </span>
+              </div>
+            </div>
+          )}
           <AnimatePresence mode="wait">
             <motion.main
               key={currentView}
