@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { DailyAttendance } from "../types";
 
 export function ClockIn() {
-  const { currentUser, dailyAttendances, addDailyAttendance, updateDailyAttendance } = useStore();
+  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance } = useStore();
   
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string>("");
@@ -20,7 +20,8 @@ export function ClockIn() {
 
   // Check today's attendance for the current user
   const todayStr = new Date().toISOString().split("T")[0];
-  const activeEmployeeId = currentUser?.employeeId || currentUser?.id;
+  const activeEmployee = employees.find(e => e.username === currentUser?.username);
+  const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
 
   const todayAttendance = dailyAttendances.find(
     (a) => a.employeeId === activeEmployeeId && a.date === todayStr
