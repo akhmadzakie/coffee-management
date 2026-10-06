@@ -73,7 +73,7 @@ export function HRManagement() {
   const [editingContract, setEditingContract] = useState<any | null>(null);
 
   // --- Modal Form State ---
-  const [empForm, setEmpForm] = useState({ nik: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
+  const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
   const [autoCreateUser, setAutoCreateUser] = useState(true);
   const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
 
@@ -150,17 +150,17 @@ export function HRManagement() {
   const handleOpenEmployeeModal = (emp?: any) => {
     if (emp && emp.id) {
       setEditingEmployee(emp);
-      setEmpForm({ nik: emp.nik, name: emp.name, position: emp.position, department: emp.department, status: emp.status, employmentType: emp.employmentType });
+      setEmpForm({ username: emp.username, name: emp.name, position: emp.position, department: emp.department, status: emp.status, employmentType: emp.employmentType });
     } else {
       setEditingEmployee(null);
-      setEmpForm({ nik: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP" });
+      setEmpForm({ username: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP" });
       setAutoCreateUser(true);
     }
     setIsEmployeeModalOpen(true);
   };
 
   const handleSaveEmployee = () => {
-    if (!empForm.nik || !empForm.name) return alert("NIK dan Nama wajib diisi");
+    if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
     if (editingEmployee) {
       updateEmployee({ ...editingEmployee, ...empForm });
     } else {
@@ -175,12 +175,12 @@ export function HRManagement() {
         
         addUser({
           name: empForm.name,
-          username: empForm.nik.toLowerCase(),
+          username: empForm.username.toLowerCase(),
           pin: "123456",
           role: defaultRole,
           employeeId: newEmpId
         });
-        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.nik.toLowerCase()}\nPIN: 123456\nRole: ${defaultRole}`);
+        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.username.toLowerCase()}\nPIN: 123456\nRole: ${defaultRole}`);
       }
     }
     setIsEmployeeModalOpen(false);
@@ -191,17 +191,17 @@ export function HRManagement() {
     let updated = 0;
     data.forEach(row => {
       const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const nik = row["NIK"] || row.nik;
+      const username = row["Username"] || row.username;
       const name = row["Nama Karyawan"] || row.name;
       const position = row["Posisi"] || row.position;
       const department = row["Departemen"] || row.department;
-      if (nik && name) {
+      if (username && name) {
         if (idSistem) {
           const existing = employees.find(e => e.id === idSistem);
           if (existing) {
             updateEmployee({
               ...existing,
-              nik: nik || existing.nik,
+              username: nik || existing.username,
               name,
               position,
               department,
@@ -212,7 +212,7 @@ export function HRManagement() {
           }
         } else {
           addEmployee({
-            nik, name, position, department,
+            username, name, position, department,
             status: (row["Status"] || "AKTIF") as EmployeeStatus,
             employmentType: (row["Tipe"] || "TETAP") as EmploymentType
           });
@@ -227,7 +227,7 @@ export function HRManagement() {
   const handleImportContracts = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      const empId = employees.find(e => e.nik === row["Username"])?.id;
       if (empId) {
         addContract({
           employeeId: empId,
@@ -251,7 +251,7 @@ export function HRManagement() {
   const handleImportAttendances = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      const empId = employees.find(e => e.nik === row["Username"])?.id;
       const period = row["Periode (YYYY-MM)"];
       if (empId && period) {
         addAttendance({
@@ -273,7 +273,7 @@ export function HRManagement() {
   const handleImportKPI = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["NIK"])?.id;
+      const empId = employees.find(e => e.nik === row["Username"])?.id;
       const quarter = Number(row["Kuartal (1-4)"]);
       const year = Number(row["Tahun"]);
       if (empId && quarter && year) {
@@ -639,7 +639,7 @@ export function HRManagement() {
                       templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
                       currentData={employees.map(e => ({
                         id: e.id,
-                        "NIK": e.nik || "",
+                        "Username": e.username || "",
                         "Nama Karyawan": e.name,
                         "Posisi": e.position,
                         "Departemen": e.department,
@@ -699,7 +699,7 @@ export function HRManagement() {
                           className="border-b border-slate-100 hover:bg-slate-50"
                         >
                           <td className="py-3 px-4 text-slate-600 font-mono text-sm">
-                            {emp.nik}
+                            {emp.username}
                           </td>
                           <td className="py-3 px-4 font-medium text-slate-800">
                             {emp.name}
@@ -1318,8 +1318,8 @@ export function HRManagement() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">NIK</label>
-                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.nik} onChange={e => setEmpForm({...empForm, nik: e.target.value})} />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Username (Untuk Login)</label>
+                <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.username} onChange={e => setEmpForm({...empForm, username: e.target.value})} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
@@ -1328,11 +1328,23 @@ export function HRManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Departemen</label>
-                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.department} onChange={e => setEmpForm({...empForm, department: e.target.value})} />
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={empForm.department} onChange={e => setEmpForm({...empForm, department: e.target.value})}>
+                    <option value="">-- Pilih Departemen --</option>
+                    <option value="MAIN">Utama (Main)</option>
+                    <option value="BAR">Bar</option>
+                    <option value="KITCHEN">Dapur (Kitchen)</option>
+                    <option value="BAKER">Baker (Roti)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Jabatan</label>
-                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.position} onChange={e => setEmpForm({...empForm, position: e.target.value})} />
+                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={empForm.position} onChange={e => setEmpForm({...empForm, position: e.target.value})}>
+                    <option value="">-- Pilih Jabatan --</option>
+                    <option value="Kasir">Kasir</option>
+                    <option value="Karyawan">Karyawan (Staff)</option>
+                    <option value="Leader">Leader</option>
+                    <option value="Manager">Manager</option>
+                  </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1369,7 +1381,7 @@ export function HRManagement() {
                   </label>
                   {autoCreateUser && (
                     <p className="text-xs text-slate-500 mt-1 ml-6">
-                      Username: <strong>[NIK]</strong>, PIN default: <strong>123456</strong>. Role akan disesuaikan dengan Departemen.
+                      Username: <strong>[Username]</strong>, PIN default: <strong>123456</strong>. Role akan disesuaikan dengan Departemen.
                     </p>
                   )}
                 </div>

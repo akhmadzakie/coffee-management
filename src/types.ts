@@ -160,7 +160,7 @@ export interface Budget {
 
 export interface Employee {
   id: string;
-  nik: string; // Nomor Induk Karyawan
+  username: string; // Digunakan sebagai username login
   name: string;
   position: string; // Jabatan
   department: string;
