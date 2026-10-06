@@ -539,6 +539,9 @@ async function startServer() {
     totalAmount: Number(p.totalAmount) || 0,
     status: String(p.status || "UNPAID"),
     deliveryStatus: String(p.deliveryStatus || "PENDING"),
+    paymentMethod: String(p.paymentMethod || "CASH"),
+    dueDate: p.dueDate ? String(p.dueDate) : null,
+    amountPaid: Number(p.amountPaid) || 0,
   });
 
   const sanitizeShift = (s: any) => ({

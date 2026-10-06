@@ -137,7 +137,8 @@ interface StoreContextType {
   deleteSupplier: (id: string) => void;
 
   addPurchaseOrder: (po: Omit<PurchaseOrder, "id">) => void;
-  updatePOStatus: (id: string, status: "PAID" | "UNPAID") => void;
+  updatePOStatus: (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => void;
+  payPurchaseOrder: (id: string, amount: number, cashAccountId: string) => void;
   markPOAsReceived: (id: string) => void;
   deletePurchaseOrder: (id: string) => void;
 
@@ -630,7 +631,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             dailyAttendances,
         employeeShifts,
         setEmployeeShifts,
-            employeeShifts,
             kpiRecords,
             // Fase 1-4
             expense_categories: expenseCategories,
@@ -940,6 +940,31 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const payPurchaseOrder = (id: string, amount: number, cashAccountId: string) => {
+    const po = purchaseOrders.find((p) => p.id === id);
+    if (!po) return;
+
+    const newAmountPaid = (po.amountPaid || 0) + amount;
+    const isPaid = newAmountPaid >= po.totalAmount;
+
+    setPurchaseOrders((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, amountPaid: newAmountPaid, status: isPaid ? "PAID" : "PARTIAL" } : p)),
+    );
+
+    // Create Cash Transaction for this payment
+    addCashTransaction({
+      accountId: cashAccountId,
+      date: new Date().toISOString(),
+      type: "OUT",
+      amount: amount,
+      category: "Payable",
+      description: `Pembayaran PO ${po.poNumber}`,
+    });
+
+    writeAuditLog("UPDATE", "purchase_orders", id);
+    markChanged();
+  };
+
   const markPOAsReceived = (id: string) => {
     const po = purchaseOrders.find((p) => p.id === id);
     if (!po) return;
@@ -1087,9 +1112,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addAttendance,
         updateAttendance,
         addDailyAttendance,
-  EmployeeShift,
-        updateDailyAttendance,
-  EmployeeShift,
+  updateDailyAttendance,
         addKPI,
         updateKPI,
         addCashAccount,
@@ -1107,6 +1130,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         deleteSupplier,
         addPurchaseOrder,
         updatePOStatus,
+        payPurchaseOrder,
         markPOAsReceived,
         deletePurchaseOrder,
         openShift,

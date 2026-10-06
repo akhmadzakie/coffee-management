@@ -301,6 +301,9 @@ export const purchaseOrders = pgTable("purchase_orders", {
   totalAmount: real("total_amount").notNull(),
   status: varchar("status", { length: 50 }).notNull(),
   deliveryStatus: varchar("delivery_status", { length: 50 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("CASH"),
+  dueDate: text("due_date"),
+  amountPaid: real("amount_paid").default(0),
 });
 
 export const shifts = pgTable("shifts", {

@@ -367,7 +367,10 @@ export interface PurchaseOrder {
   date: string; // ISO string
   items: PurchaseOrderItem[];
   totalAmount: number;
-  status: "PAID" | "UNPAID";
+  status: "PAID" | "UNPAID" | "PARTIAL";
+  paymentMethod?: "CASH" | "TEMPO";
+  dueDate?: string;
+  amountPaid?: number;
   deliveryStatus: "PENDING" | "RECEIVED";
 }
 
