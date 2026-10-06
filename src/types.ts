@@ -204,6 +204,14 @@ export interface AttendanceRecord {
   createdAt: string;
 }
 
+
+export interface EmployeeShift {
+  id: string;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF";
+  notes?: string;
+}
 export interface DailyAttendance {
   id: string;
   employeeId: string;

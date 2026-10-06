@@ -47,6 +47,8 @@ export function HRManagement() {
     contracts,
     attendances,
     dailyAttendances,
+    employeeShifts,
+    setEmployeeShifts,
     updateDailyAttendance,
     kpiRecords,
     addEmployee,
@@ -332,6 +334,42 @@ export function HRManagement() {
 
   const getEmployeeName = (empId: string) =>
     employees.find((e) => e.id === empId)?.name || "Unknown";
+
+
+  // --- Weekly Schedule Logic ---
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
+    const today = new Date();
+    const day = today.getDay(); // 0 = Sunday, 1 = Monday
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+    return new Date(today.setDate(diff));
+  });
+
+  const generateWeekDays = (start: Date) => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  };
+  const weekDays = generateWeekDays(currentWeekStart);
+
+  const handleShiftChange = (empId: string, dateStr: string, shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF") => {
+    const existing = employeeShifts.find(s => s.employeeId === empId && s.date === dateStr);
+    let newShifts = [...employeeShifts];
+    if (existing) {
+      existing.shiftType = shiftType;
+    } else {
+      newShifts.push({
+        id: crypto.randomUUID(),
+        employeeId: empId,
+        date: dateStr,
+        shiftType: shiftType
+      });
+    }
+    setEmployeeShifts(newShifts);
+  };
 
   // --- Chart Data ---
   const attendanceChartData = useMemo(() => {
@@ -987,6 +1025,92 @@ export function HRManagement() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          
+          {activeTab === "schedule" && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo ? "Jadwal Shift Karyawan" : "Employee Shift Schedule"}
+                </h3>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => {
+                      const prev = new Date(currentWeekStart);
+                      prev.setDate(prev.getDate() - 7);
+                      setCurrentWeekStart(prev);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
+                  >
+                    &laquo; Prev Week
+                  </button>
+                  <span className="font-semibold text-slate-700">
+                    {weekDays[0].toLocaleDateString("id-ID", { month: "short", day: "numeric" })} - {weekDays[6].toLocaleDateString("id-ID", { month: "short", day: "numeric" })}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const next = new Date(currentWeekStart);
+                      next.setDate(next.getDate() + 7);
+                      setCurrentWeekStart(next);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
+                  >
+                    Next Week &raquo;
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                      <th className="py-3 px-4 font-semibold sticky left-0 bg-slate-50 z-10 w-48 shadow-[1px_0_0_0_#e2e8f0]">Karyawan</th>
+                      {weekDays.map((d, idx) => (
+                        <th key={idx} className="py-3 px-4 font-semibold text-center border-l border-slate-200">
+                          <div className="text-xs">{d.toLocaleDateString("id-ID", { weekday: "short" })}</div>
+                          <div>{d.getDate()}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.filter(e => e.status === "AKTIF").map((emp) => (
+                      <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-3 px-4 font-medium text-slate-800 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
+                          <div className="truncate">{emp.name}</div>
+                          <div className="text-xs text-slate-500">{emp.position}</div>
+                        </td>
+                        {weekDays.map((d, idx) => {
+                          const dateStr = d.toISOString().split("T")[0];
+                          const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
+                          return (
+                            <td key={idx} className="p-2 border-l border-slate-200">
+                              <select
+                                disabled={!canEditHR}
+                                value={shift}
+                                onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
+                                className={`w-full text-xs font-semibold py-1.5 px-2 rounded-lg border-0 focus:ring-2 focus:ring-indigo-500 ${
+                                  shift === "PAGI" ? "bg-emerald-100 text-emerald-700" :
+                                  shift === "SORE" ? "bg-amber-100 text-amber-700" :
+                                  shift === "MIDDLE" ? "bg-blue-100 text-blue-700" :
+                                  "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                <option value="OFF">OFF (Libur)</option>
+                                <option value="PAGI">Pagi</option>
+                                <option value="MIDDLE">Middle</option>
+                                <option value="SORE">Sore</option>
+                              </select>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

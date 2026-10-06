@@ -25,6 +25,7 @@ import {
   AttendanceRecord,
   KPIRecord,
   DailyAttendance,
+  EmployeeShift,
   // Fase 1-4
   ExpenseCategory,
   Budget,
@@ -71,6 +72,8 @@ interface StoreContextType {
   contracts: EmployeeContract[];
   attendances: AttendanceRecord[];
   dailyAttendances: DailyAttendance[];
+  employeeShifts: EmployeeShift[];
+  setEmployeeShifts: (shifts: EmployeeShift[]) => void;
   kpiRecords: KPIRecord[];
 
   // Fase 1: Expense Categories
@@ -121,7 +124,8 @@ interface StoreContextType {
   updateAttendance: (att: AttendanceRecord) => void;
 
   addDailyAttendance: (
-    att: Omit<DailyAttendance, "id">,
+    att: Omit<DailyAttendance,
+  EmployeeShift, "id">,
   ) => void;
   updateDailyAttendance: (att: DailyAttendance) => void;
 
@@ -220,6 +224,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [contracts, setContracts] = useState<EmployeeContract[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [dailyAttendances, setDailyAttendances] = useState<DailyAttendance[]>([]);
+  const [employeeShifts, setEmployeeShifts] = useState<EmployeeShift[]>([]);
   const [kpiRecords, setKpiRecords] = useState<KPIRecord[]>([]);
 
   // Fase 1-4 state
@@ -393,6 +398,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.contracts)) setContracts(data.contracts);
         if (Array.isArray(data.attendances)) setAttendances(data.attendances);
         if (Array.isArray(data.dailyAttendances)) setDailyAttendances(data.dailyAttendances);
+        if (Array.isArray(data.employeeShifts)) setEmployeeShifts(data.employeeShifts);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
         if (Array.isArray(data.expense_categories)) setExpenseCategories(data.expense_categories);
@@ -622,6 +628,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             contracts,
             attendances,
             dailyAttendances,
+        employeeShifts,
+        setEmployeeShifts,
+            employeeShifts,
             kpiRecords,
             // Fase 1-4
             expense_categories: expenseCategories,
@@ -786,7 +795,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
-  const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
+  const addDailyAttendance = (att: Omit<DailyAttendance,
+  EmployeeShift, "id">) => {
     const id = generateId();
     const newAtt: DailyAttendance = { ...att, id };
     setDailyAttendances((prev) => [...prev, newAtt]);
@@ -1060,6 +1070,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         contracts,
         attendances,
         dailyAttendances,
+        employeeShifts,
+        setEmployeeShifts,
         kpiRecords,
         updateSettings,
         login,
@@ -1075,7 +1087,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addAttendance,
         updateAttendance,
         addDailyAttendance,
+  EmployeeShift,
         updateDailyAttendance,
+  EmployeeShift,
         addKPI,
         updateKPI,
         addCashAccount,

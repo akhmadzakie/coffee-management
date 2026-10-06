@@ -248,6 +248,14 @@ export const attendanceRecords = pgTable("attendance_records", {
   createdAt: text("created_at").notNull(),
 });
 
+
+export const employeeShifts = pgTable("employee_shifts", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  employeeId: varchar("employee_id", { length: 255 }).notNull(),
+  date: text("date").notNull(),
+  shiftType: varchar("shift_type", { length: 50 }).notNull(),
+  notes: text("notes"),
+});
 export const dailyAttendances = pgTable("daily_attendances", {
   id: varchar("id", { length: 255 }).primaryKey(),
   employeeId: varchar("employee_id", { length: 255 }).notNull(),

@@ -238,6 +238,8 @@ async function startServer() {
         return schema.attendanceRecords;
       case "daily_attendances":
         return schema.dailyAttendances;
+      case "employee_shifts":
+        return schema.employeeShifts;
       case "kpi_records":
         return schema.kpiRecords;
 
@@ -484,6 +486,14 @@ async function startServer() {
     createdAt: String(a.createdAt || new Date().toISOString()),
   });
 
+
+  const sanitizeEmployeeShift = (s: any) => ({
+    id: String(s.id || crypto.randomUUID()),
+    employeeId: String(s.employeeId || ""),
+    date: String(s.date || ""),
+    shiftType: String(s.shiftType || "OFF"),
+    notes: String(s.notes || ""),
+  });
   const sanitizeDailyAttendance = (a: any) => ({
     id: String(a.id || crypto.randomUUID()),
     employeeId: String(a.employeeId || ""),
@@ -598,6 +608,7 @@ async function startServer() {
           audit_logs,
           employees,
           employee_contracts,
+          employee_shifts,
           attendance_records,
           kpi_records,
           suppliers,
@@ -623,6 +634,7 @@ async function startServer() {
           db.select().from(schema.auditLogs),
           db.select().from(schema.employees),
           db.select().from(schema.employeeContracts),
+          db.select().from(schema.employeeShifts),
           db.select().from(schema.attendanceRecords),
           db.select().from(schema.kpiRecords),
           db.select().from(schema.suppliers),
@@ -729,6 +741,7 @@ async function startServer() {
         shifts,
         employees,
         contracts: employee_contracts,
+        employeeShifts: employee_shifts,
         attendances: attendance_records,
         kpiRecords: kpi_records,
         // Fase 1-4
@@ -765,6 +778,7 @@ async function startServer() {
         shifts,
         employees,
         contracts,
+        employeeShifts,
         attendances,
         kpiRecords,
         // Fase 1-4
