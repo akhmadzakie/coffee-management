@@ -270,6 +270,16 @@ export const dailyAttendances = pgTable("daily_attendances", {
   notes: text("notes"),
 });
 
+
+export const dailyChecklists = pgTable("daily_checklists", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  employeeId: varchar("employee_id", { length: 255 }).notNull(),
+  date: text("date").notNull(),
+  cleaningDone: boolean("cleaning_done").default(false),
+  equipmentChecked: boolean("equipment_checked").default(false),
+  notes: text("notes"),
+});
+
 export const kpiRecords = pgTable("kpi_records", {
   id: varchar("id", { length: 255 }).primaryKey(),
   employeeId: varchar("employee_id", { length: 255 }).notNull(),

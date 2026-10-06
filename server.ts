@@ -508,6 +508,16 @@ async function startServer() {
     notes: String(a.notes || ""),
   });
 
+
+  const sanitizeDailyChecklist = (c: any) => ({
+    id: String(c.id || crypto.randomUUID()),
+    employeeId: String(c.employeeId || ""),
+    date: String(c.date || ""),
+    cleaningDone: Boolean(c.cleaningDone),
+    equipmentChecked: Boolean(c.equipmentChecked),
+    notes: String(c.notes || ""),
+  });
+
   const sanitizeKPIRecord = (k: any) => ({
     id: String(k.id || crypto.randomUUID()),
     employeeId: String(k.employeeId || ""),
@@ -613,6 +623,7 @@ async function startServer() {
           employee_contracts,
           employee_shifts,
           attendance_records,
+          daily_checklists,
           kpi_records,
           suppliers,
           purchase_orders,
@@ -639,6 +650,7 @@ async function startServer() {
           db.select().from(schema.employeeContracts),
           db.select().from(schema.employeeShifts),
           db.select().from(schema.attendanceRecords),
+          db.select().from(schema.dailyChecklists),
           db.select().from(schema.kpiRecords),
           db.select().from(schema.suppliers),
           db.select().from(schema.purchaseOrders),
@@ -746,6 +758,7 @@ async function startServer() {
         contracts: employee_contracts,
         employeeShifts: employee_shifts,
         attendances: attendance_records,
+        dailyChecklists: daily_checklists,
         kpiRecords: kpi_records,
         // Fase 1-4
         expense_categories,
@@ -783,6 +796,7 @@ async function startServer() {
         contracts,
         employeeShifts,
         attendances,
+        dailyChecklists,
         kpiRecords,
         // Fase 1-4
         expense_categories,

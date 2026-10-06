@@ -25,6 +25,7 @@ import {
   AttendanceRecord,
   KPIRecord,
   DailyAttendance,
+  DailyChecklist,
   EmployeeShift,
   // Fase 1-4
   ExpenseCategory,
@@ -72,6 +73,8 @@ interface StoreContextType {
   contracts: EmployeeContract[];
   attendances: AttendanceRecord[];
   dailyAttendances: DailyAttendance[];
+  dailyChecklists: DailyChecklist[];
+  setDailyChecklists: (c: DailyChecklist[]) => void;
   employeeShifts: EmployeeShift[];
   setEmployeeShifts: (shifts: EmployeeShift[]) => void;
   kpiRecords: KPIRecord[];
@@ -125,6 +128,7 @@ interface StoreContextType {
 
   addDailyAttendance: (
     att: Omit<DailyAttendance,
+  DailyChecklist,
   EmployeeShift, "id">,
   ) => void;
   updateDailyAttendance: (att: DailyAttendance) => void;
@@ -225,6 +229,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [contracts, setContracts] = useState<EmployeeContract[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [dailyAttendances, setDailyAttendances] = useState<DailyAttendance[]>([]);
+  const [dailyChecklists, setDailyChecklists] = useState<DailyChecklist[]>([]);
   const [employeeShifts, setEmployeeShifts] = useState<EmployeeShift[]>([]);
   const [kpiRecords, setKpiRecords] = useState<KPIRecord[]>([]);
 
@@ -399,6 +404,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.contracts)) setContracts(data.contracts);
         if (Array.isArray(data.attendances)) setAttendances(data.attendances);
         if (Array.isArray(data.dailyAttendances)) setDailyAttendances(data.dailyAttendances);
+        if (Array.isArray(data.dailyChecklists)) setDailyChecklists(data.dailyChecklists);
         if (Array.isArray(data.employeeShifts)) setEmployeeShifts(data.employeeShifts);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
@@ -629,6 +635,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             contracts,
             attendances,
             dailyAttendances,
+        dailyChecklists,
+        setDailyChecklists,
         employeeShifts,
         setEmployeeShifts,
             kpiRecords,
@@ -796,6 +804,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addDailyAttendance = (att: Omit<DailyAttendance,
+  DailyChecklist,
   EmployeeShift, "id">) => {
     const id = generateId();
     const newAtt: DailyAttendance = { ...att, id };
@@ -1095,6 +1104,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         contracts,
         attendances,
         dailyAttendances,
+        dailyChecklists,
+        setDailyChecklists,
         employeeShifts,
         setEmployeeShifts,
         kpiRecords,

@@ -34,6 +34,7 @@ export const ShiftManagement = () => {
     cashTransactions,
     cashAccounts,
     currentUser,
+    users,
     isReadOnly,
   } = useStore();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");

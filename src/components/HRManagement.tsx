@@ -41,6 +41,7 @@ import { CsvImportExport } from "./common/CsvImportExport";
 export function HRManagement() {
   const {
     currentUser,
+    users,
     settings,
     isReadOnly,
     employees,
@@ -50,6 +51,8 @@ export function HRManagement() {
     employeeShifts,
     setEmployeeShifts,
     updateDailyAttendance,
+    dailyChecklists,
+    setDailyChecklists,
     kpiRecords,
     addEmployee,
     updateEmployee,
@@ -332,8 +335,12 @@ export function HRManagement() {
     }).format(amount);
   };
 
-  const getEmployeeName = (empId: string) =>
-    employees.find((e) => e.id === empId)?.name || "Unknown";
+  const getEmployeeName = (empId: string) => {
+    const emp = employees.find((e) => e.id === empId);
+    if (emp) return emp.name;
+    const user = users.find((u) => u.id === empId);
+    return user ? user.name : "Unknown";
+  };
 
 
   // --- Weekly Schedule Logic ---

@@ -27,6 +27,7 @@ export function Payroll() {
     addCashTransaction,
     expenseCategories,
     currentUser,
+    users,
     isReadOnly
   } = (useStore() as any);
 
@@ -276,7 +277,7 @@ export function Payroll() {
                     </td>
                   </tr>
                 ) : currentPeriodRecords.map((record: PayrollRecord) => {
-                  const empName = employees.find((e: any) => e.id === record.employeeId)?.name || "Unknown";
+                  const empName = employees.find((e: any) => e.id === record.employeeId)?.name || users.find((u: any) => u.id === record.employeeId)?.name || "Unknown";
                   return (
                     <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 font-medium text-slate-800">{empName}</td>

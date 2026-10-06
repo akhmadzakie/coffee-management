@@ -226,6 +226,16 @@ export interface DailyAttendance {
   notes: string;
 }
 
+
+export interface DailyChecklist {
+  id: string;
+  employeeId: string;
+  date: string;
+  cleaningDone: boolean;
+  equipmentChecked: boolean;
+  notes?: string;
+}
+
 export interface KPIRecord {
   id: string;
   employeeId: string;
