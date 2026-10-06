@@ -18,6 +18,7 @@ export interface User {
   name: string;
   role: Role;
   department?: LocationType | null;
+  employeeId?: string | null;
 }
 
 export type ViewState =

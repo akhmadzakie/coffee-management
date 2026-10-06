@@ -28,7 +28,7 @@ const DEPARTMENTS = [
 ];
 
 export const UsersComponent = () => {
-  const { users, addUser, updateUser, deleteUser, currentUser, settings } =
+  const { users, employees, addUser, updateUser, deleteUser, currentUser, settings } =
     useStore();
   const { t } = useTranslation(settings.language || "id");
   const [isEditing, setIsEditing] = useState(false);
@@ -65,6 +65,7 @@ export const UsersComponent = () => {
       pin: formData.get("pin") as string,
       name: formData.get("name") as string,
       role: role,
+      employeeId: formData.get("employeeId") ? (formData.get("employeeId") as string) : null,
     };
     if (role === "LEADER") {
       userData.department = formData.get("department");
@@ -386,6 +387,27 @@ export const UsersComponent = () => {
                   </select>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Tautkan ke Data Karyawan (Opsional)
+                </label>
+                <select
+                  name="employeeId"
+                  defaultValue={editingUser?.employeeId || ""}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Tidak ditautkan --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.position})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Berguna agar data absensi akun ini langsung masuk ke profil karyawan.
+                </p>
+              </div>
 
               <div className="flex gap-3 pt-4">
                 <button

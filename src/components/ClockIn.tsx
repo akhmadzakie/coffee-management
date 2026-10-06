@@ -20,8 +20,10 @@ export function ClockIn() {
 
   // Check today's attendance for the current user
   const todayStr = new Date().toISOString().split("T")[0];
+  const activeEmployeeId = currentUser?.employeeId || currentUser?.id;
+
   const todayAttendance = dailyAttendances.find(
-    (a) => a.employeeId === currentUser?.id && a.date === todayStr
+    (a) => a.employeeId === activeEmployeeId && a.date === todayStr
   );
   
   const isClockedIn = !!todayAttendance?.clockInTime;
@@ -141,7 +143,7 @@ export function ClockIn() {
         if (hour >= 9) status = "TERLAMBAT"; // Example: Late after 9 AM
         
         addDailyAttendance({
-          employeeId: currentUser.id,
+          employeeId: activeEmployeeId as string,
           date: todayStr,
           clockInTime: now,
           clockOutTime: null,
