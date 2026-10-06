@@ -149,6 +149,7 @@ async function ensureTables() {
         position_allowance NUMERIC NOT NULL DEFAULT 0,
         kpi_bonus NUMERIC NOT NULL DEFAULT 0,
         alpha_deduction NUMERIC NOT NULL DEFAULT 0,
+        overtime_pay NUMERIC NOT NULL DEFAULT 0,
         other_deductions NUMERIC NOT NULL DEFAULT 0,
         gross_pay NUMERIC NOT NULL DEFAULT 0,
         net_pay NUMERIC NOT NULL DEFAULT 0,
@@ -160,6 +161,7 @@ async function ensureTables() {
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
       )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
@@ -385,6 +387,7 @@ async function startServer() {
     positionAllowance: Number(p.positionAllowance) || 0,
     kpiBonus: Number(p.kpiBonus) || 0,
     alphaDeduction: Number(p.alphaDeduction) || 0,
+    overtimePay: Number(p.overtimePay) || 0,
     otherDeductions: Number(p.otherDeductions) || 0,
     grossPay: Number(p.grossPay) || 0,
     netPay: Number(p.netPay) || 0,

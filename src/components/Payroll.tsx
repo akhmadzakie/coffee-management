@@ -37,6 +37,7 @@ export function Payroll() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"list" | "generate">("list");
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollRecord | null>(null);
+  const [editingPayroll, setEditingPayroll] = useState<PayrollRecord | null>(null);
 
   const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
   const isHRD = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
@@ -84,8 +85,11 @@ export function Payroll() {
         const alphaDeduction = alphaDays * dailyWage; // Penalty for alpha is the daily wage
         const kpiBonus = kpi?.bonusAmount || 0;
 
-        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalDailyBonus + sopBonus + kpiBonus;
-        const netPay = grossPay - alphaDeduction;
+        const overtimePay = 0; // Default no overtime
+        const otherDeductions = 0;
+        
+        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalDailyBonus + sopBonus + kpiBonus + overtimePay;
+        const netPay = grossPay - alphaDeduction - otherDeductions;
 
         const existingRecord = (payrollRecords || []).find(
           (r: PayrollRecord) => r.employeeId === emp.id && r.period === period
@@ -97,12 +101,13 @@ export function Payroll() {
           calculation: {
             employeeId: emp.id,
             period,
-            basicSalary,
+            basicSalary: totalBasicSalary, // Fix undefined variable basicSalary
             mealAllowance: totalMealAllowance,
             positionAllowance,
             kpiBonus,
+            overtimePay,
             alphaDeduction,
-            otherDeductions: 0,
+            otherDeductions,
             grossPay,
             netPay: netPay > 0 ? netPay : 0,
             status: "DRAFT" as const,
@@ -318,6 +323,16 @@ export function Payroll() {
                           >
                             <FileText size={16} />
                           </button>
+
+                          {record.status === "DRAFT" && !isReadOnly && isHRD && (
+                            <button
+                              onClick={() => setEditingPayroll(record)}
+                              className="p-1.5 text-slate-400 hover:text-amber-500 transition-colors"
+                              title="Edit Manual (Lembur / Potongan)"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
                           
                           {record.status === "DRAFT" && canApprove && !isReadOnly && (
                             <button
@@ -348,6 +363,97 @@ export function Payroll() {
       )}
 
       {/* Slip Gaji Modal */}
+      {editingPayroll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+              <h2 className="text-xl font-bold text-slate-800">Edit Tambahan Manual</h2>
+              <button
+                onClick={() => setEditingPayroll(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Tambahan Lain (Misal: Lembur)
+                </label>
+                <input
+                  type="number"
+                  value={editingPayroll.overtimePay || 0}
+                  onChange={(e) => {
+                    const overtimePay = parseFloat(e.target.value) || 0;
+                    setEditingPayroll(prev => {
+                      if (!prev) return null;
+                      const grossPay = prev.basicSalary + prev.positionAllowance + prev.mealAllowance + prev.kpiBonus + overtimePay;
+                      const netPay = grossPay - prev.alphaDeduction - prev.otherDeductions;
+                      return { ...prev, overtimePay, grossPay, netPay: netPay > 0 ? netPay : 0 };
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Potongan Manual
+                </label>
+                <input
+                  type="number"
+                  value={editingPayroll.otherDeductions || 0}
+                  onChange={(e) => {
+                    const otherDeductions = parseFloat(e.target.value) || 0;
+                    setEditingPayroll(prev => {
+                      if (!prev) return null;
+                      const netPay = prev.grossPay - prev.alphaDeduction - otherDeductions;
+                      return { ...prev, otherDeductions, netPay: netPay > 0 ? netPay : 0 };
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              
+              <div className="bg-slate-50 p-4 rounded-xl mt-4 border border-slate-100">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-600">Gaji Pokok & Tunjangan Dasar:</span>
+                  <span className="font-medium text-slate-800">{formatCurrency(editingPayroll.basicSalary + editingPayroll.positionAllowance + editingPayroll.mealAllowance + editingPayroll.kpiBonus)}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-emerald-600">Lembur/Tambahan Manual:</span>
+                  <span className="font-medium text-emerald-600">+{formatCurrency(editingPayroll.overtimePay || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-4">
+                  <span className="text-rose-600">Total Potongan (Alpha + Manual):</span>
+                  <span className="font-medium text-rose-600">-{formatCurrency((editingPayroll.alphaDeduction || 0) + (editingPayroll.otherDeductions || 0))}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-3">
+                  <span className="text-slate-800">Total Take Home Pay:</span>
+                  <span className="text-emerald-600">{formatCurrency(editingPayroll.netPay)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => setEditingPayroll(null)}
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  updatePayrollRecord(editingPayroll);
+                  setEditingPayroll(null);
+                }}
+                className="px-4 py-2 bg-primary text-white font-medium hover:bg-slate-800 rounded-lg"
+              >
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedPayroll && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">

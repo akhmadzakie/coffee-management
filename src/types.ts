@@ -87,6 +87,7 @@ export interface PayrollRecord {
   mealAllowance: number;
   positionAllowance: number;
   kpiBonus: number;
+  overtimePay: number; // Lembur / Tambahan Manual
   alphaDeduction: number;
   otherDeductions: number;
   grossPay: number;

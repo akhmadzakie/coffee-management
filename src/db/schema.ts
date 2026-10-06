@@ -88,6 +88,7 @@ export const payrollRecords = pgTable("payroll_records", {
   positionAllowance: real("position_allowance").notNull(),
   kpiBonus: real("kpi_bonus").default(0).notNull(),
   alphaDeduction: real("alpha_deduction").default(0).notNull(),
+  overtimePay: real("overtime_pay").default(0).notNull(),
   otherDeductions: real("other_deductions").default(0).notNull(),
   grossPay: real("gross_pay").notNull(),
   netPay: real("net_pay").notNull(),
