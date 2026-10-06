@@ -792,6 +792,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Karyawan</th>
                         <th className="py-3 px-4 font-semibold">Status</th>
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
                         <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
@@ -823,6 +824,11 @@ export function HRManagement() {
                               {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
                               {" - "}
                               {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
+                              {d.clockInTime && d.clockOutTime 
+                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
+                                : "-"}
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
@@ -977,6 +983,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Karyawan</th>
                         <th className="py-3 px-4 font-semibold">Status</th>
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
                         <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
@@ -1008,6 +1015,11 @@ export function HRManagement() {
                               {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
                               {" - "}
                               {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
+                              {d.clockInTime && d.clockOutTime 
+                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
+                                : "-"}
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
@@ -1208,6 +1220,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Karyawan</th>
                         <th className="py-3 px-4 font-semibold">Status</th>
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
                         <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
@@ -1239,6 +1252,11 @@ export function HRManagement() {
                               {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
                               {" - "}
                               {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
+                              {d.clockInTime && d.clockOutTime 
+                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
+                                : "-"}
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
@@ -1311,41 +1329,43 @@ export function HRManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {attendances.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="py-8 text-center text-slate-500 italic"
-                        >
-                          {isIndo
-                            ? "Belum ada data absensi."
-                            : "No attendance data yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      attendances.map((a) => (
-                        <tr
-                          key={a.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
-                        >
-                          <td className="py-3 px-4 font-medium text-slate-800">
-                            {getEmployeeName(a.employeeId)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            {a.period}
-                          </td>
-                          <td className="py-3 px-4 font-semibold text-emerald-600">
-                            {a.presentDays}
-                          </td>
-                          <td className="py-3 px-4 font-semibold text-amber-500">
-                            {a.sickDays + a.permissionDays}
-                          </td>
-                          <td className="py-3 px-4 font-semibold text-rose-600">
-                            {a.alphaDays}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                                        {(() => {
+                        // Auto-generate rekapan bulanan dari dailyAttendances
+                        const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+                        const recap = employees.map(emp => {
+                          const logs = dailyAttendances.filter(a => a.employeeId === emp.id && a.date.startsWith(currentMonth));
+                          if (logs.length === 0) return null;
+                          return {
+                            id: emp.id,
+                            employeeId: emp.id,
+                            period: currentMonth,
+                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status)).length,
+                            sickDays: logs.filter(l => l.status === "SAKIT").length,
+                            permissionDays: logs.filter(l => l.status === "IZIN").length,
+                            alphaDays: logs.filter(l => l.status === "ALPHA").length,
+                          };
+                        }).filter(Boolean);
+
+                        if (recap.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-slate-500 italic">
+                                {isIndo ? "Belum ada data absensi untuk bulan ini." : "No attendance data yet."}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return recap.map((a: any) => (
+                          <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(a.employeeId)}</td>
+                            <td className="py-3 px-4 text-slate-600">{a.period}</td>
+                            <td className="py-3 px-4 font-semibold text-emerald-600">{a.presentDays}</td>
+                            <td className="py-3 px-4 font-semibold text-amber-500">{a.sickDays + a.permissionDays}</td>
+                            <td className="py-3 px-4 font-semibold text-rose-600">{a.alphaDays}</td>
+                          </tr>
+                        ));
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1363,6 +1383,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Karyawan</th>
                         <th className="py-3 px-4 font-semibold">Status</th>
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
+                        <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
                         <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
@@ -1394,6 +1415,11 @@ export function HRManagement() {
                               {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
                               {" - "}
                               {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
+                              {d.clockInTime && d.clockOutTime 
+                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
+                                : "-"}
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}

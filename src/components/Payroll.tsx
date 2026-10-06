@@ -61,21 +61,30 @@ export function Payroll() {
       .filter((e: any) => e.status === "AKTIF")
       .map((emp: any) => {
         const contract = contracts.find((c: any) => c.employeeId === emp.id && c.status === "ACTIVE");
-        const attendance = attendances.find((a: any) => a.employeeId === emp.id && a.period === period);
+        
+        // Auto-calculate from daily attendances
+        const dailyLogs = dailyAttendances.filter((a: any) => a.employeeId === emp.id && a.date.startsWith(period));
+        const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+        const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA").length;
         const kpi = kpiRecords.find((k: any) => k.employeeId === emp.id && k.period === period);
 
-        const basicSalary = contract?.baseSalary || 0;
+        const dailyWage = contract?.basicSalary || contract?.baseSalary || 0; // The baseSalary field is now treated as Daily Wage
         const positionAllowance = contract?.positionAllowance || 0;
         const mealAllowanceRate = contract?.mealAllowance || 0;
+        const dailyBonusRate = contract?.dailyBonusRate || 0;
+        const sopBonusRate = contract?.sopBonusRate || 0;
         
-        const presentDays = attendance?.presentDays || 0;
-        const alphaDays = attendance?.alphaDays || 0;
-
+        const totalBasicSalary = presentDays * dailyWage;
         const totalMealAllowance = presentDays * mealAllowanceRate;
-        const alphaDeduction = alphaDays * (basicSalary / 22); // Assuming 22 working days
+        const totalDailyBonus = presentDays * dailyBonusRate;
+        
+        const checklistDays = dailyChecklists.filter(c => c.employeeId === emp.id && c.date.startsWith(period) && c.cleaningDone && c.equipmentChecked).length;
+        const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
+        
+        const alphaDeduction = alphaDays * dailyWage; // Penalty for alpha is the daily wage
         const kpiBonus = kpi?.bonusAmount || 0;
 
-        const grossPay = basicSalary + positionAllowance + totalMealAllowance + kpiBonus;
+        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalDailyBonus + sopBonus + kpiBonus;
         const netPay = grossPay - alphaDeduction;
 
         const existingRecord = (payrollRecords || []).find(
@@ -204,7 +213,7 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Total (Harian)</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Tunjangan</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Potongan Alpha</th>
@@ -254,7 +263,7 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Total (Harian)</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Aksi</th>

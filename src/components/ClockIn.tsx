@@ -227,6 +227,15 @@ export function ClockIn() {
             <h3 className="text-lg font-bold text-emerald-800">Anda sudah menyelesaikan shift hari ini.</h3>
             <p className="text-sm text-emerald-600 mt-1">Clock In: {new Date(todayAttendance.clockInTime!).toLocaleTimeString("id-ID")}</p>
             <p className="text-sm text-emerald-600">Clock Out: {new Date(todayAttendance.clockOutTime!).toLocaleTimeString("id-ID")}</p>
+            {todayAttendance.clockInTime && todayAttendance.clockOutTime && (
+              <div className="mt-4 p-3 bg-white rounded-lg border border-emerald-100 w-full">
+                <p className="text-sm font-bold text-slate-700">Durasi Kerja:</p>
+                <p className="text-xl font-bold text-emerald-600">
+                  {((new Date(todayAttendance.clockOutTime).getTime() - new Date(todayAttendance.clockInTime).getTime()) / 3600000).toFixed(1)} Jam
+                </p>
+                <p className="text-xs text-slate-500 mt-1">*(Standar: 8 Jam Kerja)</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
