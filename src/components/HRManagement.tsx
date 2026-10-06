@@ -56,6 +56,7 @@ export function HRManagement() {
     updateAttendance,
     addKPI,
     updateKPI,
+    addUser,
   } = useStore();
 
   const isIndo = settings.language === "id";
@@ -73,6 +74,7 @@ export function HRManagement() {
 
   // --- Modal Form State ---
   const [empForm, setEmpForm] = useState({ nik: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
+  const [autoCreateUser, setAutoCreateUser] = useState(true);
   const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
 
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
@@ -152,6 +154,7 @@ export function HRManagement() {
     } else {
       setEditingEmployee(null);
       setEmpForm({ nik: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP" });
+      setAutoCreateUser(true);
     }
     setIsEmployeeModalOpen(true);
   };
@@ -161,7 +164,24 @@ export function HRManagement() {
     if (editingEmployee) {
       updateEmployee({ ...editingEmployee, ...empForm });
     } else {
-      addEmployee(empForm);
+      const newEmpId = addEmployee(empForm);
+      if (autoCreateUser && newEmpId) {
+        // Auto create user account
+        let defaultRole: any = "KASIR";
+        const deptUpper = empForm.department.toUpperCase();
+        if (deptUpper.includes("BAR")) defaultRole = "BAR";
+        else if (deptUpper.includes("KITCHEN") || deptUpper.includes("DAPUR")) defaultRole = "KITCHEN";
+        else if (deptUpper.includes("BAKER")) defaultRole = "BAKER";
+        
+        addUser({
+          name: empForm.name,
+          username: empForm.nik.toLowerCase(),
+          pin: "123456",
+          role: defaultRole,
+          employeeId: newEmpId
+        });
+        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.nik.toLowerCase()}\nPIN: 123456\nRole: ${defaultRole}`);
+      }
     }
     setIsEmployeeModalOpen(false);
   };
@@ -1335,6 +1355,25 @@ export function HRManagement() {
                   </select>
                 </div>
               </div>
+              
+              {!editingEmployee && (
+                <div className="pt-2 border-t border-slate-100">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={autoCreateUser}
+                      onChange={(e) => setAutoCreateUser(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-slate-300"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Buat Akun Login Otomatis</span>
+                  </label>
+                  {autoCreateUser && (
+                    <p className="text-xs text-slate-500 mt-1 ml-6">
+                      Username: <strong>[NIK]</strong>, PIN default: <strong>123456</strong>. Role akan disesuaikan dengan Departemen.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
               <button onClick={() => setIsEmployeeModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>

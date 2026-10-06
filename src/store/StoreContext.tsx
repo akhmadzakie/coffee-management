@@ -108,7 +108,7 @@ interface StoreContextType {
   state: any;
   dispatch: (action: any) => void;
 
-  addEmployee: (emp: Omit<Employee, "id" | "createdAt">) => void;
+  addEmployee: (emp: Omit<Employee, "id" | "createdAt">) => string;
   updateEmployee: (emp: Employee) => void;
   deleteEmployee: (id: string) => void;
 
@@ -733,6 +733,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     ]);
     writeAuditLog("CREATE", "employees", id);
     markChanged();
+    return id;
   };
 
   const updateEmployee = (emp: Employee) => {
