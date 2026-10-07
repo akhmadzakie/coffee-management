@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useStore } from "../store/StoreContext";
+import { getLocalDateString } from "../utils/dateUtils";
 import {
   Users,
   FileText,
@@ -15,6 +16,7 @@ import {
   Printer,
   UserCheck,
   X,
+  Mail,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -80,11 +82,13 @@ export function HRManagement() {
   const [editingContract, setEditingContract] = useState<any | null>(null);
 
   // --- Modal Form State ---
-  const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any });
+  const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any, phone: "", email: "", address: "" });
   const [autoCreateUser, setAutoCreateUser] = useState(true);
   const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
 
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+    const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [verifyingAttendance, setVerifyingAttendance] = useState<any | null>(null);
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [isKpiModalOpen, setIsKpiModalOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<any | null>(null);
@@ -157,10 +161,10 @@ export function HRManagement() {
   const handleOpenEmployeeModal = (emp?: any) => {
     if (emp && emp.id) {
       setEditingEmployee(emp);
-      setEmpForm({ username: emp.username, name: emp.name, position: emp.position, department: emp.department, status: emp.status, employmentType: emp.employmentType });
+      setEmpForm({ username: emp.username, name: emp.name, position: emp.position, department: emp.department, status: emp.status, employmentType: emp.employmentType, phone: emp.phone || "", email: emp.email || "", address: emp.address || "" });
     } else {
       setEditingEmployee(null);
-      setEmpForm({ username: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP" });
+      setEmpForm({ username: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP", phone: "", email: "", address: "" });
       setAutoCreateUser(true);
     }
     setIsEmployeeModalOpen(true);
@@ -244,8 +248,8 @@ export function HRManagement() {
           transportAllowance: Number(row["Tunjangan Transport"]) || 0,
           kpiBonusTarget: Number(row["Target Bonus KPI"]) || 0,
           alphaDeductionPerDay: Number(row["Potongan Alpha/Hari"]) || 0,
-          startDate: row["Mulai Kontrak"] || new Date().toISOString().split('T')[0],
-          endDate: row["Selesai Kontrak"] || new Date().toISOString().split('T')[0],
+          startDate: row["Mulai Kontrak"] || getLocalDateString(),
+          endDate: row["Selesai Kontrak"] || getLocalDateString(),
           status: "ACTIVE"
         });
         imported++;
@@ -305,7 +309,7 @@ export function HRManagement() {
       setContractForm({ ...contract });
     } else {
       setEditingContract(null);
-      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: new Date().toISOString().split("T")[0], endDate: "", status: "ACTIVE" });
+      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: getLocalDateString(), endDate: "", status: "ACTIVE" });
     }
     setIsContractModalOpen(true);
   };
@@ -674,110 +678,7 @@ export function HRManagement() {
 
           {activeTab === "employees" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Data Karyawan" : "Employee Data"}
-                </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportEmployees}
-                      templateHeaders={["NIK", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
-                      templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
-                      currentData={employees.map(e => ({
-                        id: e.id,
-                        "Username": e.username || "",
-                        "Nama Karyawan": e.name,
-                        "Posisi": e.position,
-                        "Departemen": e.department,
-                        "Status": e.status,
-                        "Tipe": e.employmentType
-                      }))}
-                      templateFilename="template_karyawan"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
-                    <button
-                      onClick={() => handleOpenEmployeeModal()}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />{" "}
-                      {isIndo ? "Tambah Karyawan" : "Add Employee"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">NIK</th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Nama" : "Name"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Jabatan" : "Position"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">Departemen</th>
-                      <th className="py-3 px-4 font-semibold">Status</th>
-                      {canEditHR && (
-                        <th className="py-3 px-4 font-semibold text-right">
-                          Aksi
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="py-8 text-center text-slate-500 italic"
-                        >
-                          {isIndo
-                            ? "Belum ada data karyawan."
-                            : "No employees data yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      employees.map((emp) => (
-                        <tr
-                          key={emp.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
-                        >
-                          <td className="py-3 px-4 text-slate-600 font-mono text-sm">
-                            {emp.username}
-                          </td>
-                          <td className="py-3 px-4 font-medium text-slate-800">
-                            {emp.name}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            {emp.position}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            {emp.department}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-1 text-xs font-semibold rounded-full 
-                              ${emp.status === "AKTIF" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}
-                            >
-                              {emp.status}
-                            </span>
-                          </td>
-                          {canEditHR && (
-                            <td className="py-3 px-4 flex justify-end gap-2">
-                              <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <KPI />
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -794,7 +695,8 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
+                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -833,17 +735,25 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
+                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
+                                "bg-amber-100 text-amber-700"
+                              }`}>
+                                {d.approvalStatus || "PENDING"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {canEditHR && (
                                 <button
                                   onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
+                                    setVerifyingAttendance(d);
+                                    setIsVerificationModalOpen(true);
                                   }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
                                 >
-                                  Tolak (Alpha)
+                                  Verifikasi
                                 </button>
                               )}
                             </td>
@@ -859,116 +769,7 @@ export function HRManagement() {
 
           {activeTab === "contracts" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
-                </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportContracts}
-                      templateHeaders={["NIK", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Potongan Alpha/Hari", "Mulai Kontrak", "Selesai Kontrak"]}
-                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
-                      templateFilename="template_kontrak"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
-                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Karyawan" : "Employee"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Batas Kontrak" : "End Date"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Gaji Pokok" : "Basic Salary"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Tnjgn Makan" : "Meal Allow."}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Tnjgn Jabatan" : "Position Allow."}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Potongan Alpha" : "Alpha Deduct"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contracts.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="py-8 text-center text-slate-500 italic"
-                        >
-                          {isIndo
-                            ? "Belum ada data kontrak."
-                            : "No contract data yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      contracts.map((c) => {
-                        const isExpiring = (() => {
-                          if (!c.endDate || c.status !== 'ACTIVE') return false;
-                          const end = new Date(c.endDate);
-                          const thirtyDays = new Date();
-                          thirtyDays.setDate(new Date().getDate() + 30);
-                          return end >= new Date() && end <= thirtyDays;
-                        })();
-                        
-                        return (
-                          <tr
-                            key={c.id}
-                            className={`border-b border-slate-100 hover:bg-slate-50 ${isExpiring ? 'bg-amber-50/50' : ''}`}
-                          >
-                            <td className="py-3 px-4 font-medium text-slate-800">
-                              {getEmployeeName(c.employeeId)}
-                            </td>
-                            <td className="py-3 px-4">
-                              {c.endDate ? (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-slate-600 font-medium">
-                                    {new Date(c.endDate).toLocaleDateString("id-ID")}
-                                  </span>
-                                  {isExpiring && (
-                                    <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full inline-block w-max">
-                                      {isIndo ? "Segera Berakhir" : "Expiring Soon"}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic">
-                                  {isIndo ? "Tetap" : "Permanent"}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-slate-600 font-mono">
-                              {formatRupiah(c.basicSalary)}
-                            </td>
-                            <td className="py-3 px-4 text-slate-600 font-mono">
-                              {formatRupiah(c.mealAllowance)}
-                            </td>
-                            <td className="py-3 px-4 text-slate-600 font-mono">
-                              {formatRupiah(c.positionAllowance)}
-                            </td>
-                            <td className="py-3 px-4 text-rose-600 font-mono">
-                              {formatRupiah(c.alphaDeductionPerDay)}/hr
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <KPI />
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -985,7 +786,8 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
+                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1024,17 +826,25 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
+                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
+                                "bg-amber-100 text-amber-700"
+                              }`}>
+                                {d.approvalStatus || "PENDING"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {canEditHR && (
                                 <button
                                   onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
+                                    setVerifyingAttendance(d);
+                                    setIsVerificationModalOpen(true);
                                   }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
                                 >
-                                  Tolak (Alpha)
+                                  Verifikasi
                                 </button>
                               )}
                             </td>
@@ -1051,161 +861,13 @@ export function HRManagement() {
           
           {activeTab === "schedule" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Jadwal Shift Karyawan" : "Employee Shift Schedule"}
-                </h3>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => {
-                      const prev = new Date(currentWeekStart);
-                      prev.setDate(prev.getDate() - 7);
-                      setCurrentWeekStart(prev);
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
-                  >
-                    &laquo; Prev Week
-                  </button>
-                  <span className="font-semibold text-slate-700">
-                    {weekDays[0].toLocaleDateString("id-ID", { month: "short", day: "numeric" })} - {weekDays[6].toLocaleDateString("id-ID", { month: "short", day: "numeric" })}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const next = new Date(currentWeekStart);
-                      next.setDate(next.getDate() + 7);
-                      setCurrentWeekStart(next);
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
-                  >
-                    Next Week &raquo;
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                      <th className="py-3 px-4 font-semibold sticky left-0 bg-slate-50 z-10 w-48 shadow-[1px_0_0_0_#e2e8f0]">Karyawan</th>
-                      {weekDays.map((d, idx) => (
-                        <th key={idx} className="py-3 px-4 font-semibold text-center border-l border-slate-200">
-                          <div className="text-xs">{d.toLocaleDateString("id-ID", { weekday: "short" })}</div>
-                          <div>{d.getDate()}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.filter(e => e.status === "AKTIF").map((emp) => (
-                      <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-3 px-4 font-medium text-slate-800 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
-                          <div className="truncate">{emp.name}</div>
-                          <div className="text-xs text-slate-500">{emp.position}</div>
-                        </td>
-                        {weekDays.map((d, idx) => {
-                          const dateStr = d.toISOString().split("T")[0];
-                          const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
-                          return (
-                            <td key={idx} className="p-2 border-l border-slate-200">
-                              <select
-                                disabled={!canEditHR}
-                                value={shift}
-                                onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
-                                className={`w-full text-xs font-semibold py-1.5 px-2 rounded-lg border-0 focus:ring-2 focus:ring-indigo-500 ${
-                                  shift === "PAGI" ? "bg-emerald-100 text-emerald-700" :
-                                  shift === "SORE" ? "bg-amber-100 text-amber-700" :
-                                  shift === "MIDDLE" ? "bg-blue-100 text-blue-700" :
-                                  "bg-slate-100 text-slate-500"
-                                }`}
-                              >
-                                <option value="OFF">OFF (Libur)</option>
-                                <option value="PAGI">Pagi</option>
-                                <option value="MIDDLE">Middle</option>
-                                <option value="SORE">Sore</option>
-                              </select>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <KPI />
             </div>
           )}
 
           {activeTab === "kpi" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Penilaian KPI (Kuartal)" : "KPI Assessment (Quarterly)"}
-                </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportKPI}
-                      templateHeaders={["NIK", "Kuartal (1-4)", "Tahun", "Total Skor", "Bonus KPI", "Catatan Evaluator"]}
-                      templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
-                      templateFilename="template_kpi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
-                    <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Karyawan" : "Employee"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">Qtr/Tahun</th>
-                      <th className="py-3 px-4 font-semibold">Skor Total</th>
-                      <th className="py-3 px-4 font-semibold">Bonus KPI</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kpiRecords.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="py-8 text-center text-slate-500 italic"
-                        >
-                          {isIndo ? "Belum ada data KPI." : "No KPI data yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      kpiRecords.map((k) => (
-                        <tr
-                          key={k.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
-                        >
-                          <td className="py-3 px-4 font-medium text-slate-800">
-                            {getEmployeeName(k.employeeId)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            Q{k.quarter} {k.year}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-1 text-xs font-semibold rounded-full 
-                              ${k.totalScore >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
-                            >
-                              {k.totalScore.toFixed(1)} / 100
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-emerald-600 font-mono font-medium">
-                            {formatRupiah(k.kpiBonus)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <KPI />
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -1222,7 +884,8 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
+                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1261,17 +924,25 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
+                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
+                                "bg-amber-100 text-amber-700"
+                              }`}>
+                                {d.approvalStatus || "PENDING"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {canEditHR && (
                                 <button
                                   onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
+                                    setVerifyingAttendance(d);
+                                    setIsVerificationModalOpen(true);
                                   }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
                                 >
-                                  Tolak (Alpha)
+                                  Verifikasi
                                 </button>
                               )}
                             </td>
@@ -1287,92 +958,7 @@ export function HRManagement() {
 
           {activeTab === "attendance" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo
-                    ? "Rekap Absensi Bulanan"
-                    : "Monthly Attendance Recap"}
-                </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportAttendances}
-                      templateHeaders={["NIK", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
-                      templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
-                      templateFilename="template_absensi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                    />
-                    <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Karyawan" : "Employee"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">Periode</th>
-                      <th className="py-3 px-4 font-semibold text-emerald-600">
-                        Hadir
-                      </th>
-                      <th className="py-3 px-4 font-semibold text-amber-500">
-                        Izin/Sakit
-                      </th>
-                      <th className="py-3 px-4 font-semibold text-rose-600">
-                        Alpha
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                                        {(() => {
-                        // Auto-generate rekapan bulanan dari dailyAttendances
-                        const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
-                        const uniqueEmpIds = Array.from(new Set([
-                          ...employees.map(e => e.id),
-                          ...dailyAttendances.filter(a => a.date.startsWith(currentMonth)).map(a => a.employeeId)
-                        ]));
-                        const recap = uniqueEmpIds.map(empId => {
-                          const logs = dailyAttendances.filter(a => a.employeeId === empId && a.date.startsWith(currentMonth));
-                          if (logs.length === 0) return null;
-                          return {
-                            id: empId,
-                            employeeId: empId,
-                            period: currentMonth,
-                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status)).length,
-                            sickDays: logs.filter(l => l.status === "SAKIT").length,
-                            permissionDays: logs.filter(l => l.status === "IZIN").length,
-                            alphaDays: logs.filter(l => l.status === "ALPHA").length,
-                          };
-                        }).filter(Boolean);
-
-                        if (recap.length === 0) {
-                          return (
-                            <tr>
-                              <td colSpan={5} className="py-8 text-center text-slate-500 italic">
-                                {isIndo ? "Belum ada data absensi untuk bulan ini." : "No attendance data yet."}
-                              </td>
-                            </tr>
-                          );
-                        }
-
-                        return recap.map((a: any) => (
-                          <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(a.employeeId)}</td>
-                            <td className="py-3 px-4 text-slate-600">{a.period}</td>
-                            <td className="py-3 px-4 font-semibold text-emerald-600">{a.presentDays}</td>
-                            <td className="py-3 px-4 font-semibold text-amber-500">{a.sickDays + a.permissionDays}</td>
-                            <td className="py-3 px-4 font-semibold text-rose-600">{a.alphaDays}</td>
-                          </tr>
-                        ));
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+              <KPI />
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -1389,7 +975,8 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
+                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1428,17 +1015,25 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
+                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
+                                "bg-amber-100 text-amber-700"
+                              }`}>
+                                {d.approvalStatus || "PENDING"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {canEditHR && (
                                 <button
                                   onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
+                                    setVerifyingAttendance(d);
+                                    setIsVerificationModalOpen(true);
                                   }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
+                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
                                 >
-                                  Tolak (Alpha)
+                                  Verifikasi
                                 </button>
                               )}
                             </td>
@@ -1468,12 +1063,26 @@ export function HRManagement() {
                         ? "Kembali ke Daftar Payroll"
                         : "Back to Payroll List"}
                     </button>
-                    <button
-                      onClick={generatePDF}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
-                    >
-                      <Download className="w-4 h-4" /> Download PDF
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          if (!selectedPayslip.employee.email) {
+                            alert("Karyawan tidak memiliki data email. Harap lengkapi email karyawan di menu Edit Karyawan.");
+                            return;
+                          }
+                          alert(`Slip Gaji berhasil dikirimkan ke email: ${selectedPayslip.employee.email}`);
+                        }}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
+                      >
+                        <Mail className="w-4 h-4" /> {isIndo ? "Kirim Email" : "Send Email"}
+                      </button>
+                      <button
+                        onClick={generatePDF}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
+                      >
+                        <Download className="w-4 h-4" /> Download PDF
+                      </button>
+                    </div>
                   </div>
 
                   {/* Printable Area */}
@@ -1652,95 +1261,7 @@ export function HRManagement() {
               ) : (
                 /* --- PAYROLL TABLE --- */
                 <>
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-800">
-                      {isIndo ? "Summary Payroll" : "Payroll Summary"}
-                    </h3>
-                  </div>
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 mb-6 flex gap-3 text-amber-900 shadow-sm">
-                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
-                    <div className="text-sm">
-                      <p className="font-bold mb-1">
-                        {isIndo
-                          ? "Payroll Dihitung Otomatis"
-                          : "Auto-Calculated Payroll"}
-                      </p>
-                      <p className="text-amber-700">
-                        {isIndo
-                          ? "Klik baris karyawan untuk melihat dan mencetak rincian Slip Gaji resmi."
-                          : "Click an employee row to view and print the official Payslip."}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                          <th className="py-3 px-4 font-semibold">
-                            {isIndo ? "Karyawan" : "Employee"}
-                          </th>
-                          <th className="py-3 px-4 font-semibold">Periode</th>
-                          <th className="py-3 px-4 font-semibold">
-                            Gaji Pokok
-                          </th>
-                          <th className="py-3 px-4 font-semibold">Tunjangan</th>
-                          <th className="py-3 px-4 font-semibold">Potongan</th>
-                          <th className="py-3 px-4 font-semibold text-right text-indigo-700">
-                            Take Home Pay
-                          </th>
-                          <th className="py-3 px-4"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {payrollData.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={7}
-                              className="py-12 text-center text-slate-500 italic"
-                            >
-                              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                              {isIndo
-                                ? "Data payroll belum tersedia. Pastikan ada data absensi."
-                                : "Payroll data not available. Ensure attendance data exists."}
-                            </td>
-                          </tr>
-                        ) : (
-                          payrollData.map((p) => (
-                            <tr
-                              key={p.id}
-                              onClick={() => setSelectedPayslip(p)}
-                              className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors group"
-                            >
-                              <td className="py-4 px-4 font-bold text-slate-800">
-                                {p.employee.name}
-                              </td>
-                              <td className="py-4 px-4 text-slate-600 font-medium">
-                                {p.period}
-                              </td>
-                              <td className="py-4 px-4 text-slate-600 font-mono text-sm">
-                                {formatRupiah(p.basic)}
-                              </td>
-                              <td className="py-4 px-4 text-emerald-600 font-mono text-sm">
-                                +
-                                {formatRupiah(p.meal + p.position + p.kpiBonus)}
-                              </td>
-                              <td className="py-4 px-4 text-rose-600 font-mono text-sm">
-                                -{formatRupiah(p.alphaDeduction)}
-                              </td>
-                              <td className="py-4 px-4 font-bold text-right text-indigo-700 font-mono text-lg">
-                                {formatRupiah(p.total)}
-                              </td>
-                              <td className="py-4 px-4 text-right">
-                                <button className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                  Slip Gaji
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <KPI />
                 </>
               )}
             </motion.div>
@@ -1809,6 +1330,20 @@ export function HRManagement() {
                     <option value="MAGANG">Magang</option>
                   </select>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.email} onChange={e => setEmpForm({...empForm, email: e.target.value})} placeholder="email@contoh.com" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">No. HP</label>
+                  <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={empForm.phone} onChange={e => setEmpForm({...empForm, phone: e.target.value})} placeholder="08123xxx" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Alamat</label>
+                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none h-20" value={empForm.address} onChange={e => setEmpForm({...empForm, address: e.target.value})} placeholder="Alamat lengkap..." />
               </div>
               
               {!editingEmployee && (
@@ -1903,6 +1438,104 @@ export function HRManagement() {
       )}
 
       </div>
+
+            {/* Verification Modal */}
+      {isVerificationModalOpen && verifyingAttendance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0">
+              <h3 className="text-lg font-bold text-slate-800">
+                Verifikasi Kehadiran
+              </h3>
+              <button onClick={() => setIsVerificationModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6">
+              <div className="flex gap-4 items-center">
+                <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-bold text-lg">
+                  {getEmployeeName(verifyingAttendance.employeeId)}
+                </div>
+                <div className="text-slate-600 font-medium">
+                  {verifyingAttendance.date}
+                </div>
+                <div className={`px-3 py-1 rounded-full text-sm font-bold ${verifyingAttendance.status === 'HADIR' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                  {verifyingAttendance.status}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* Clock In */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                  <h4 className="font-bold text-slate-700 mb-3 text-center border-b pb-2">Clock In</h4>
+                  <div className="text-center font-mono text-xl mb-3 text-indigo-700">
+                    {verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                  </div>
+                  {verifyingAttendance.clockInPhotoUrl ? (
+                    <img src={verifyingAttendance.clockInPhotoUrl} alt="Clock In" className="w-full h-48 object-cover rounded-lg mb-3 shadow-sm border border-slate-200" />
+                  ) : (
+                    <div className="w-full h-48 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 mb-3">Tidak ada foto</div>
+                  )}
+                  {verifyingAttendance.clockInLocation ? (
+                    <a href={`https://maps.google.com/?q=${verifyingAttendance.clockInLocation.lat},${verifyingAttendance.clockInLocation.lng}`} target="_blank" rel="noreferrer" className="block text-center text-sm font-medium text-blue-600 hover:underline bg-blue-50 py-2 rounded-lg">
+                      Buka Google Maps
+                    </a>
+                  ) : (
+                    <div className="text-center text-sm text-slate-500 py-2">GPS tidak tersedia</div>
+                  )}
+                </div>
+
+                {/* Clock Out */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                  <h4 className="font-bold text-slate-700 mb-3 text-center border-b pb-2">Clock Out</h4>
+                  <div className="text-center font-mono text-xl mb-3 text-indigo-700">
+                    {verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                  </div>
+                  {verifyingAttendance.clockOutPhotoUrl ? (
+                    <img src={verifyingAttendance.clockOutPhotoUrl} alt="Clock Out" className="w-full h-48 object-cover rounded-lg mb-3 shadow-sm border border-slate-200" />
+                  ) : (
+                    <div className="w-full h-48 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 mb-3">Tidak ada foto</div>
+                  )}
+                  {verifyingAttendance.clockOutLocation ? (
+                    <a href={`https://maps.google.com/?q=${verifyingAttendance.clockOutLocation.lat},${verifyingAttendance.clockOutLocation.lng}`} target="_blank" rel="noreferrer" className="block text-center text-sm font-medium text-blue-600 hover:underline bg-blue-50 py-2 rounded-lg">
+                      Buka Google Maps
+                    </a>
+                  ) : (
+                    <div className="text-center text-sm text-slate-500 py-2">GPS tidak tersedia</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-100 shrink-0">
+              <button onClick={() => setIsVerificationModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">
+                Kembali
+              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    if(confirm("Tolak kehadiran ini? Status karyawan akan menjadi ALPHA.")) {
+                      updateDailyAttendance({...verifyingAttendance, approvalStatus: "REJECTED", status: "ALPHA"});
+                      setIsVerificationModalOpen(false);
+                    }
+                  }} 
+                  className="px-6 py-2 bg-rose-100 text-rose-700 font-bold rounded-lg hover:bg-rose-200 transition-colors"
+                >
+                  Tolak (Alpha)
+                </button>
+                <button 
+                  onClick={() => {
+                    updateDailyAttendance({...verifyingAttendance, approvalStatus: "APPROVED"});
+                    setIsVerificationModalOpen(false);
+                  }} 
+                  className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-200"
+                >
+                  Approve (Sah)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Attendance Modal */}
       {isAttendanceModalOpen && (

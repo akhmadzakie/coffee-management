@@ -44,8 +44,7 @@ export const Sales = () => {
       const response = await fetch("/api/import/sales", {
         method: "POST",
         headers: {
-          "x-user-id": currentUser?.id || "",
-          "x-user-role": currentUser?.role || "",
+          "Authorization": `Bearer ${localStorage.getItem("node_session_id")}`,
         },
         body: formData,
       });

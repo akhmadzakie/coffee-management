@@ -10,6 +10,7 @@ import {
   Search,
   Wallet,
   AlertCircle,
+  Edit2,
   FileText
 } from "lucide-react";
 
@@ -28,7 +29,11 @@ export function Payroll() {
     expenseCategories,
     currentUser,
     users,
-    isReadOnly
+    isReadOnly,
+    dailyAttendances,
+    dailyChecklists,
+    kpiTasks,
+    kpiBonusRules
   } = (useStore() as any);
 
   const [period, setPeriod] = useState(
@@ -38,6 +43,8 @@ export function Payroll() {
   const [activeTab, setActiveTab] = useState<"list" | "generate">("list");
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollRecord | null>(null);
   const [editingPayroll, setEditingPayroll] = useState<PayrollRecord | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [payrollToPay, setPayrollToPay] = useState<PayrollRecord | null>(null);
 
   const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
   const isHRD = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
@@ -83,11 +90,17 @@ export function Payroll() {
         const totalMealAllowance = presentDays * mealAllowanceRate;
         const totalDailyBonus = presentDays * dailyBonusRate;
         
-        const checklistDays = dailyChecklists.filter(c => c.employeeId === emp.id && c.date.startsWith(period) && c.cleaningDone && c.equipmentChecked).length;
+        const checklistDays = dailyChecklists.filter((c: any) => c.employeeId === emp.id && c.date.startsWith(period) && c.cleaningDone && c.equipmentChecked).length;
         const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
         
         const alphaDeduction = alphaDays * dailyWage; // Penalty for alpha is the daily wage
-        const kpiBonus = kpi?.bonusAmount || 0;
+        
+        // KPI Bonus Logic
+        const empKpiTasks = (kpiTasks || []).filter((t: any) => t.employeeId === emp.id && t.period === period);
+        const totalKpiScore = empKpiTasks.reduce((sum: number, task: any) => sum + (task.score || 0), 0);
+        const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
+        const applicableRule = activeRules.find((r: any) => totalKpiScore >= r.minScore && totalKpiScore <= r.maxScore);
+        const kpiBonus = applicableRule ? applicableRule.bonusAmount : (kpi?.bonusAmount || 0); // fallback to old kpiRecord
 
         const overtimePay = 0; // Default no overtime
         const otherDeductions = 0;
@@ -142,34 +155,8 @@ export function Payroll() {
 
   const handleUpdateStatus = (record: PayrollRecord, newStatus: "APPROVED" | "PAID") => {
     if (newStatus === "PAID") {
-      // Find default or first bank account
-      const account = cashAccounts.find((a: any) => a.type === "BANK") || cashAccounts[0];
-      if (!account) {
-        alert("Tidak ada akun kas/bank untuk pembayaran.");
-        return;
-      }
-      if (confirm(`Bayar gaji ini menggunakan akun: ${account.name}?`)) {
-        // Find "Gaji" category ID
-        const salaryCat = expenseCategories?.find((c: any) => c.name.toLowerCase().includes("gaji"));
-
-        addCashTransaction({
-          accountId: account.id,
-          type: "CASH_OUT",
-          date: new Date().toISOString(),
-          amount: record.netPay,
-          description: `Pembayaran Gaji - ${employees.find((e: any) => e.id === record.employeeId)?.name} (${record.period})`,
-          category: salaryCat ? salaryCat.name : "Gaji Karyawan",
-          categoryId: salaryCat ? salaryCat.id : null,
-          referenceId: record.id,
-        });
-
-        updatePayrollRecord({
-          ...record,
-          status: newStatus,
-          paidDate: new Date().toISOString(),
-          paidVia: account.id
-        });
-      }
+      setPayrollToPay(record);
+      setPaymentModalOpen(true);
     } else {
       updatePayrollRecord({
         ...record,
@@ -519,6 +506,116 @@ export function Payroll() {
                   <span className="font-bold text-lg text-primary">{formatCurrency(selectedPayroll.netPay)}</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Payment Modal */}
+      {paymentModalOpen && payrollToPay && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
+                Bayar Gaji Karyawan
+              </h2>
+              <button
+                onClick={() => {
+                  setPaymentModalOpen(false);
+                  setPayrollToPay(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-sm text-slate-500 mb-1">Penerima</p>
+                <p className="font-semibold text-slate-800">
+                  {employees.find((e: any) => e.id === payrollToPay.employeeId)?.name}
+                </p>
+                <div className="mt-4 flex justify-between items-end">
+                  <div>
+                    <p className="text-sm text-slate-500 mb-1">Total Dibayarkan</p>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {formatCurrency(payrollToPay.netPay)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const accountId = formData.get("accountId") as string;
+                  if (!accountId) return;
+                  
+                  const account = cashAccounts.find((a: any) => a.id === accountId);
+                  const salaryCat = expenseCategories?.find((c: any) => c.name.toLowerCase().includes("gaji"));
+
+                  addCashTransaction({
+                    accountId: account.id,
+                    type: "CASH_OUT",
+                    date: new Date().toISOString(),
+                    amount: payrollToPay.netPay,
+                    description: `Pembayaran Gaji - ${employees.find((e: any) => e.id === payrollToPay.employeeId)?.name} (${payrollToPay.period})`,
+                    category: salaryCat ? salaryCat.name : "Gaji Karyawan",
+                    categoryId: salaryCat ? salaryCat.id : null,
+                    referenceId: payrollToPay.id,
+                  });
+
+                  updatePayrollRecord({
+                    ...payrollToPay,
+                    status: "PAID",
+                    paidDate: new Date().toISOString(),
+                    paidVia: account.id
+                  });
+
+                  setPaymentModalOpen(false);
+                  setPayrollToPay(null);
+                }}
+              >
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Gunakan Pos Kas / Rekening:
+                  </label>
+                  <select
+                    name="accountId"
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent"
+                  >
+                    <option value="">-- Pilih Pos Kas --</option>
+                    {cashAccounts.map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalOpen(false);
+                      setPayrollToPay(null);
+                    }}
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors font-medium"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium flex items-center"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Konfirmasi Bayar
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

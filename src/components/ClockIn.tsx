@@ -3,6 +3,7 @@ import { useStore } from "../store/StoreContext";
 import { Camera, MapPin, CheckCircle, XCircle, Clock } from "lucide-react";
 import { motion } from "motion/react";
 import { DailyAttendance } from "../types";
+import { getLocalDateString } from "../utils/dateUtils";
 
 export function ClockIn() {
   const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance } = useStore();
@@ -19,7 +20,7 @@ export function ClockIn() {
   const streamRef = useRef<MediaStream | null>(null);
 
   // Check today's attendance for the current user
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getLocalDateString();
   const activeEmployee = employees.find(e => e.username === currentUser?.username);
   const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
 

@@ -21,9 +21,10 @@ export const Login = () => {
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!login(username, pin)) {
+    const success = await login(username, pin);
+    if (!success) {
       setError(
         settings.language === "id"
           ? "Username atau PIN salah!"

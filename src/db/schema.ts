@@ -165,6 +165,12 @@ export const ingredients = pgTable("ingredients", {
   costPerUnit: real("cost_per_unit").default(0).notNull(), // Fase 3: valuation
 });
 
+export const recipes = pgTable("recipes", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  menuName: text("menu_name").notNull().unique(),
+  ingredients: text("ingredients").notNull(), // JSON string: [{ ingredientId, quantity }]
+});
+
 export const stockMovements = pgTable("stock_movements", {
   id: varchar("id", { length: 255 }).primaryKey(),
   ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
@@ -268,6 +274,7 @@ export const dailyAttendances = pgTable("daily_attendances", {
   clockInPhotoUrl: text("clock_in_photo_url"),
   clockOutPhotoUrl: text("clock_out_photo_url"),
   status: varchar("status", { length: 50 }).notNull(),
+  approvalStatus: varchar("approval_status", { length: 50 }).default("PENDING"),
   notes: text("notes"),
 });
 
@@ -332,3 +339,24 @@ export const shifts = pgTable("shifts", {
 });
 
 
+
+export const kpiTasks = pgTable("kpi_tasks", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  employeeId: varchar("employee_id", { length: 255 }).notNull(),
+  period: text("period").notNull(), // YYYY-MM
+  taskName: text("task_name").notNull(),
+  weight: real("weight").notNull(), // e.g. 20 for 20%
+  target: real("target").notNull(), 
+  realization: real("realization").default(0).notNull(),
+  score: real("score").default(0).notNull(), // (realization / target) * weight
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const kpiBonusRules = pgTable("kpi_bonus_rules", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  minScore: real("min_score").notNull(),
+  maxScore: real("max_score").notNull(),
+  bonusAmount: real("bonus_amount").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useStore } from "../store/StoreContext";
 import { CheckSquare, Square, Save, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import { getLocalDateString } from "../utils/dateUtils";
 
 const LEADER_BAR_TASKS = [
   "Pekerjaan Kebersihan (Area Bar, Outdoor, WC, Smoking Area, Mushala, Gudang, dll)",
@@ -25,7 +26,7 @@ export const LeaderChecklist = () => {
   const initialRole = currentUser?.role === "KITCHEN" ? "KITCHEN" : "BAR";
   const [selectedRole, setSelectedRole] = useState<"BAR" | "KITCHEN">(initialRole);
   
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   
   // Find current user's checklist for today
   const existingChecklist = dailyChecklists.find(

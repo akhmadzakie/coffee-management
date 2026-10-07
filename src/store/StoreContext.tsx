@@ -35,6 +35,7 @@ import {
   BankStatementLine,
   StockOpname,
   StockOpnameItem,
+  Recipe,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -60,6 +61,7 @@ interface StoreContextType {
   cashAccounts: CashAccount[];
   cashTransactions: CashTransaction[];
   ingredients: Ingredient[];
+  recipes: Recipe[];
   stockMovements: StockMovement[];
   salesTransactions: SalesTransaction[];
   salesImportLogs: SalesImportLog[];
@@ -72,7 +74,9 @@ interface StoreContextType {
   employees: Employee[];
   contracts: EmployeeContract[];
   attendances: AttendanceRecord[];
-  dailyAttendances: DailyAttendance[];
+    dailyAttendances: DailyAttendance[];
+  setDailyAttendances: (a: DailyAttendance[]) => void;
+  updateDailyAttendance: (att: DailyAttendance) => void;
   dailyChecklists: DailyChecklist[];
   setDailyChecklists: (c: DailyChecklist[]) => void;
   employeeShifts: EmployeeShift[];
@@ -155,7 +159,7 @@ interface StoreContextType {
 
   // Actions
   updateSettings: (settings: Settings) => void;
-  login: (username: string, pin: string) => boolean;
+  login: (username: string, pin: string) => Promise<boolean>;
   logout: () => void;
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (user: User) => void;
@@ -172,6 +176,10 @@ interface StoreContextType {
   addIngredient: (ingredient: Omit<Ingredient, "id">) => void;
   updateIngredient: (ingredient: Ingredient) => void;
   deleteIngredient: (id: string) => void;
+
+  addRecipe: (recipe: Omit<Recipe, "id">) => void;
+  updateRecipe: (recipe: Recipe) => void;
+  deleteRecipe: (id: string) => void;
 
   addStockMovement: (movement: Omit<StockMovement, "id">) => void;
 
@@ -214,6 +222,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     [],
   );
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [salesTransactions, setSalesTransactions] = useState<
     SalesTransaction[]
@@ -388,6 +397,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.device_sessions))
           setSessions(data.device_sessions);
         if (Array.isArray(data.ingredients)) setIngredients(data.ingredients);
+        if (Array.isArray(data.recipes)) setRecipes(data.recipes);
         if (Array.isArray(data.stock_movements))
           setStockMovements(data.stock_movements);
         if (Array.isArray(data.sales_transactions))
@@ -619,8 +629,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-user-role": currentUser?.role || "",
-            "x-user-id": currentUser?.id || "",
+            "Authorization": `Bearer ${localStorage.getItem("node_session_id")}`,
           },
           body: JSON.stringify({
             cash_accounts: cashAccounts,
@@ -629,6 +638,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             users: users,
             device_sessions: sessions,
             ingredients: ingredients,
+            recipes: recipes,
             stock_movements: stockMovements,
             sales_transactions: salesTransactions,
             sales_import_logs: salesImportLogs,
@@ -641,9 +651,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             attendances,
             dailyAttendances,
         dailyChecklists,
-        setDailyChecklists,
-        employeeShifts,
-        setEmployeeShifts,
+            employeeShifts,
             kpiRecords,
             // Fase 1-4
             expense_categories: expenseCategories,
@@ -678,6 +686,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     users,
     sessions,
     ingredients,
+    recipes,
     stockMovements,
     salesTransactions,
     salesImportLogs,
@@ -698,14 +707,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
-  const login = (username: string, pin: string) => {
-    const user = users.find((u) => u.username === username && u.pin === pin);
-    if (user) {
-      setCurrentUser(user);
-      sendHeartbeat(user);
+  const login = async (username: string, pin: string) => {
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, pin })
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = await res.json();
+      setCurrentUser(data.user);
+      localStorage.setItem("node_current_user", JSON.stringify(data.user));
+      localStorage.setItem("node_session_id", data.token);
+      setIsAuthenticated(true);
+      fetchFromServer(true);
+      sendHeartbeat(data.user);
       return true;
+    } catch (e) {
+      console.error("Login failed", e);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
@@ -737,6 +760,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       timestamp: new Date().toISOString(),
     };
     setAuditLogs((prev) => [log, ...prev]);
+  };
+
+  
+  const handleSetDailyChecklists = (c: DailyChecklist[]) => {
+    setDailyChecklists(c);
+    markChanged();
+  };
+  const handleSetEmployeeShifts = (shifts: EmployeeShift[]) => {
+    setEmployeeShifts(shifts);
+    markChanged();
+  };
+  const handleSetDailyAttendances = (a: DailyAttendance[]) => {
+    setDailyAttendances(a);
+    markChanged();
   };
 
   const addUser = (user: Omit<User, "id">) => {
@@ -808,9 +845,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
-  const addDailyAttendance = (att: Omit<DailyAttendance,
-  DailyChecklist,
-  EmployeeShift, "id">) => {
+  const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
     const id = generateId();
     const newAtt: DailyAttendance = { ...att, id };
     setDailyAttendances((prev) => [...prev, newAtt]);
@@ -915,6 +950,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const deleteIngredient = (id: string) => {
     setIngredients((prev) => prev.filter((i) => i.id !== id));
     writeAuditLog("DELETE", "ingredients", id);
+    markChanged();
+  };
+
+  const addRecipe = (recipe: Omit<Recipe, "id">) => {
+    const id = generateId();
+    setRecipes((prev) => [...prev, { ...recipe, id }]);
+    writeAuditLog("CREATE", "recipes", id);
+    markChanged();
+  };
+
+  const updateRecipe = (recipe: Recipe) => {
+    setRecipes((prev) => prev.map((r) => (r.id === recipe.id ? recipe : r)));
+    writeAuditLog("UPDATE", "recipes", recipe.id);
+    markChanged();
+  };
+
+  const deleteRecipe = (id: string) => {
+    setRecipes((prev) => prev.filter((r) => r.id !== id));
+    writeAuditLog("DELETE", "recipes", id);
     markChanged();
   };
 
@@ -1098,6 +1152,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         cashAccounts,
         cashTransactions,
         ingredients,
+        recipes,
         stockMovements,
         salesTransactions,
         salesImportLogs,
@@ -1110,9 +1165,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         attendances,
         dailyAttendances,
         dailyChecklists,
-        setDailyChecklists,
-        employeeShifts,
-        setEmployeeShifts,
+            employeeShifts,
         kpiRecords,
         updateSettings,
         login,
@@ -1140,6 +1193,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addIngredient,
         updateIngredient,
         deleteIngredient,
+        addRecipe,
+        updateRecipe,
+        deleteRecipe,
         addStockMovement,
         addSupplier,
         updateSupplier,

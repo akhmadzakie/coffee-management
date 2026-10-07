@@ -8,9 +8,12 @@ import {
   AlertTriangle,
   ClipboardList,
   CheckCircle2,
+  Edit2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { RecipeModal } from "./RecipeModal";
+import { Recipe } from "../types";
 
 export const Inventory = () => {
   const {
@@ -25,13 +28,19 @@ export const Inventory = () => {
     addStockOpnameItem,
     currentUser,
     isReadOnly,
+    recipes,
+    addRecipe,
+    updateRecipe,
+    deleteRecipe,
   } = useStore();
-  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames">("ingredients");
+  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes">("ingredients");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Modals
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
   const [isAddMovementOpen, setIsAddMovementOpen] = useState(false);
+  const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [selectedIngredientForMove, setSelectedIngredientForMove] = useState<string>("");
   const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE">("OUT");
 
@@ -39,6 +48,10 @@ export const Inventory = () => {
     (i) =>
       i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.category.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  const filteredRecipes = recipes.filter(
+    (r) => r.menuName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const filteredMovements = stockMovements
@@ -231,6 +244,16 @@ export const Inventory = () => {
           >
             Opname Stok
           </button>
+          <button
+            onClick={() => setActiveTab("recipes")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === "recipes"
+                ? "bg-white text-primary shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Resep (BOM)
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end mt-2 sm:mt-0">
@@ -338,6 +361,19 @@ export const Inventory = () => {
                 Mulai Opname
               </button>
              ) : null
+          ) : activeTab === "recipes" ? (
+            !isReadOnly && currentUser?.role !== "LEADER" ? (
+              <button
+                onClick={() => {
+                  setEditingRecipe(null);
+                  setIsAddRecipeOpen(true);
+                }}
+                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Tambah Resep
+              </button>
+            ) : null
           ) : null}
         </div>
       </div>
@@ -519,7 +555,7 @@ export const Inventory = () => {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : activeTab === "opnames" ? (
           <div className="p-6">
             {isOpnameMode ? (
               <div className="space-y-6">
@@ -613,8 +649,89 @@ export const Inventory = () => {
                 </div>
             )}
           </div>
-        )}
+            ) : activeTab === "recipes" ? (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="p-4 font-semibold text-slate-600">Nama Menu</th>
+                                <th className="p-4 font-semibold text-slate-600">Bahan & Takaran</th>
+                                <th className="p-4 font-semibold text-slate-600">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredRecipes.map((recipe) => (
+                                <tr key={recipe.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                    <td className="p-4 text-slate-800 font-medium">{recipe.menuName}</td>
+                                    <td className="p-4">
+                                        <ul className="list-disc list-inside text-slate-600 text-sm">
+                                            {recipe.ingredients.map((ri, idx) => {
+                                                const ing = ingredients.find(i => i.id === ri.ingredientId);
+                                                return (
+                                                    <li key={idx}>
+                                                        {ing ? ing.name : "Bahan tidak ditemukan"} - {ri.quantity} {ing ? ing.unit : ""}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex items-center gap-2">
+                                            {!isReadOnly && currentUser?.role !== "LEADER" && (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingRecipe(recipe);
+                                                            setIsAddRecipeOpen(true);
+                                                        }}
+                                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                                        title="Edit Resep"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if(confirm(`Hapus resep untuk ${recipe.menuName}?`)) {
+                                                                deleteRecipe(recipe.id);
+                                                            }
+                                                        }}
+                                                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                                                        title="Hapus Resep"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredRecipes.length === 0 && (
+                                <tr>
+                                    <td colSpan={3} className="p-8 text-center text-slate-500">
+                                        Belum ada data resep.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            ) : null}
       </div>
+
+      <RecipeModal 
+        isOpen={isAddRecipeOpen}
+        onClose={() => setIsAddRecipeOpen(false)}
+        editingRecipe={editingRecipe}
+        ingredients={ingredients}
+        onSave={(recipeData) => {
+            if (editingRecipe) {
+                updateRecipe(editingRecipe.id, recipeData);
+            } else {
+                addRecipe(recipeData);
+            }
+        }}
+      />
 
       {isAddIngredientOpen && (
         <div className="fixed inset-0 bg-slate-900/50  flex items-center justify-center p-4 z-50">

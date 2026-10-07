@@ -170,6 +170,7 @@ export interface Employee {
   startDate: string; // ISO string
   endDate: string | null; // for contracts
   phone: string;
+  email?: string;
   address: string;
   status: EmployeeStatus;
   createdAt: string;
@@ -225,6 +226,7 @@ export interface DailyAttendance {
   clockInPhotoUrl: string | null;
   clockOutPhotoUrl: string | null;
   status: "HADIR" | "TERLAMBAT" | "IZIN" | "SAKIT" | "ALPHA";
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
   notes: string;
 }
 
@@ -338,6 +340,17 @@ export interface SalesTransaction {
   quantitySold: number;
   totalPrice: number;
   importLogId: string;
+}
+
+export interface RecipeIngredient {
+  ingredientId: string;
+  quantity: number; // Jumlah yang dipakai per 1 penjualan
+}
+
+export interface Recipe {
+  id: string;
+  menuName: string;
+  ingredients: RecipeIngredient[];
 }
 
 export interface SalesImportLog {

@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Upload,
 } from "lucide-react";
+import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import {
   exportSalesToCSV,
@@ -75,7 +76,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const { startDate, endDate, periodLabel } = useMemo(() => {
     const now = new Date();
     if (datePreset === "TODAY") {
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = getLocalDateString(now);
       return {
         startDate: todayStr,
         endDate: todayStr,
@@ -88,8 +89,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       const start = new Date();
       start.setDate(now.getDate() - 6);
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: now.toISOString().split("T")[0],
+        startDate: getLocalDateString(start),
+        endDate: getLocalDateString(now),
         periodLabel: isIndo ? "7 Hari Terakhir" : "Last 7 Days",
       };
     }
@@ -97,8 +98,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: end.toISOString().split("T")[0],
+        startDate: getLocalDateString(start),
+        endDate: getLocalDateString(end),
         periodLabel: isIndo ? `Bulan Ini` : `This Month`,
       };
     }
@@ -106,8 +107,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const end = new Date(now.getFullYear(), now.getMonth(), 0);
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: end.toISOString().split("T")[0],
+        startDate: getLocalDateString(start),
+        endDate: getLocalDateString(end),
         periodLabel: isIndo ? `Bulan Lalu` : `Last Month`,
       };
     }
@@ -115,8 +116,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       const start = new Date(now.getFullYear(), 0, 1);
       const end = new Date(now.getFullYear(), 11, 31);
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: end.toISOString().split("T")[0],
+        startDate: getLocalDateString(start),
+        endDate: getLocalDateString(end),
         periodLabel: isIndo ? `Tahun Ini` : `This Year`,
       };
     }

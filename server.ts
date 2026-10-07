@@ -1,11 +1,12 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq } from "drizzle-orm";
+import { eq, not } from "drizzle-orm";
 
 const initialSettings = {
   id: "1",
@@ -160,9 +161,15 @@ async function ensureTables() {
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT NOW()::TEXT
       )`,
+    `CREATE TABLE IF NOT EXISTS recipes (
+        id TEXT PRIMARY KEY,
+        menu_name TEXT NOT NULL UNIQUE,
+        ingredients TEXT NOT NULL
+      )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
-    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
+        `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE daily_checklists ADD COLUMN IF NOT EXISTS leader_tasks TEXT DEFAULT '[]'`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'PENDING'`,
     `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
@@ -191,6 +198,15 @@ async function startServer() {
   app.use(cors());
   app.use(express.json({ limit: "50mb" }));
 
+  // --- RATE LIMITING ---
+  const syncLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 120, // limit each IP to 120 requests per windowMs
+    message: { error: "Too many requests from this IP, please try again later." }
+  });
+  app.use("/api/sync", syncLimiter);
+
+
   const getTable = (tableName: string) => {
     switch (tableName) {
       case "cash_accounts":
@@ -211,6 +227,8 @@ async function startServer() {
         return schema.salesTransactions;
       case "sales_import_logs":
         return schema.salesImportLogs;
+      case "recipes":
+        return schema.recipes;
       case "audit_logs":
         return schema.auditLogs;
       // Fase 1
@@ -259,6 +277,12 @@ async function startServer() {
     minStock: Number(i.minStock) || 0,
     category: String(i.category || ""),
     costPerUnit: Number(i.costPerUnit) || 0,
+  });
+
+  const sanitizeRecipe = (r: any) => ({
+    id: String(r.id || crypto.randomUUID()),
+    menuName: String(r.menuName || ""),
+    ingredients: String(r.ingredients || "[]"),
   });
 
   const sanitizeStockMovement = (m: any) => ({
@@ -422,10 +446,29 @@ async function startServer() {
     let role = String(u.role || "MANAGER");
     if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
     if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
+    
     return {
       id: String(u.id || crypto.randomUUID()),
       username: String(u.username || ""),
-      pin: String(u.pin || "1234"),
+      name: String(u.name || ""),
+      role,
+      department: u.department ? String(u.department) : null,
+    };
+  };
+
+  const sanitizeUserForInsert = (u: any, existingPin?: string) => {
+    let role = String(u.role || "MANAGER");
+    if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
+    if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
+    let finalPin = u.pin ? String(u.pin) : (existingPin || "1234");
+    if (finalPin.length !== 64) {
+      finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
+    }
+    
+    return {
+      id: String(u.id || crypto.randomUUID()),
+      username: String(u.username || ""),
+      pin: finalPin,
       name: String(u.name || ""),
       role,
       department: u.department ? String(u.department) : null,
@@ -595,11 +638,15 @@ async function startServer() {
       let stock_movements: any[] = [];
       let sales_transactions: any[] = [];
       let sales_import_logs: any[] = [];
+      let recipes: any[] = [];
       let audit_logs: any[] = [];
       let employees: any[] = [];
       let employee_contracts: any[] = [];
       let attendance_records: any[] = [];
-      let kpi_records: any[] = [];
+            let kpi_records: any[] = [];
+      let employee_shifts: any[] = [];
+      let daily_checklists: any[] = [];
+      let daily_attendances: any[] = [];
       let suppliers: any[] = [];
       let purchase_orders: any[] = [];
       let shifts: any[] = [];
@@ -623,12 +670,14 @@ async function startServer() {
           stock_movements,
           sales_transactions,
           sales_import_logs,
+          recipes,
           audit_logs,
           employees,
           employee_contracts,
           employee_shifts,
           attendance_records,
           daily_checklists,
+          daily_attendances,
           kpi_records,
           suppliers,
           purchase_orders,
@@ -650,12 +699,14 @@ async function startServer() {
           db.select().from(schema.stockMovements),
           db.select().from(schema.salesTransactions),
           db.select().from(schema.salesImportLogs),
+          db.select().from(schema.recipes),
           db.select().from(schema.auditLogs),
           db.select().from(schema.employees),
           db.select().from(schema.employeeContracts),
           db.select().from(schema.employeeShifts),
           db.select().from(schema.attendanceRecords),
           db.select().from(schema.dailyChecklists),
+          db.select().from(schema.dailyAttendances),
           db.select().from(schema.kpiRecords),
           db.select().from(schema.suppliers),
           db.select().from(schema.purchaseOrders),
@@ -755,6 +806,7 @@ async function startServer() {
         stock_movements,
         sales_transactions,
         sales_import_logs,
+        recipes,
         audit_logs,
         suppliers,
         purchase_orders,
@@ -764,6 +816,7 @@ async function startServer() {
         employeeShifts: employee_shifts,
         attendances: attendance_records,
         dailyChecklists: daily_checklists,
+        dailyAttendances: daily_attendances,
         kpiRecords: kpi_records,
         // Fase 1-4
         expense_categories,
@@ -781,8 +834,72 @@ async function startServer() {
     }
   });
 
+  app.post("/api/login", async (req, res) => {
+    try {
+      const { username, pin } = req.body;
+      let finalPin = String(pin || "");
+      if (finalPin.length !== 64) {
+        finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
+      }
+      const currentUsers = await db.select().from(schema.users);
+      const user = currentUsers.find(u => u.username === username && u.pin === finalPin);
+      
+      if (!user) {
+        return res.status(401).json({ error: "Username atau PIN salah" });
+      }
+
+      const sessionId = crypto.randomUUID();
+      const newSession = {
+        id: sessionId,
+        userId: user.id,
+        username: user.username,
+        userName: user.name,
+        deviceName: req.headers["user-agent"]?.substring(0, 50) || "Unknown Device",
+        browser: "Web",
+        os: "Unknown",
+        deviceType: "desktop",
+        ipAddress: req.ip || "127.0.0.1",
+        location: null,
+        lastActive: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      
+      await db.insert(schema.deviceSessions).values(newSession);
+      
+      const { pin: _, ...userWithoutPin } = user;
+      res.json({ success: true, token: sessionId, user: userWithoutPin });
+    } catch (e) {
+      console.error("Login error:", e);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
   app.post("/api/sync", async (req, res) => {
     try {
+      const authHeader = req.headers["authorization"] as string;
+      const token = authHeader?.split(" ")[1];
+      
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized: No token provided" });
+      }
+
+      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
+      const session = sessions[0];
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized: Invalid session" });
+      }
+
+      const currentUsersDB = await db.select().from(schema.users);
+      const requestUser = currentUsersDB.find(u => u.id === session.userId);
+
+      if (!requestUser) {
+        return res.status(401).json({ error: "Unauthorized: User not found" });
+      }
+
+      if (requestUser.role === "OWNER") {
+         return res.status(403).json({ error: "Forbidden: Read-only access" });
+      }
+
       const {
         cash_accounts,
         cash_transactions,
@@ -793,6 +910,7 @@ async function startServer() {
         stock_movements,
         sales_transactions,
         sales_import_logs,
+        recipes,
         audit_logs,
         suppliers,
         purchase_orders,
@@ -802,6 +920,9 @@ async function startServer() {
         employeeShifts,
         attendances,
         dailyChecklists,
+  kpiTasks,
+  kpiBonusRules,
+        dailyAttendances,
         kpiRecords,
         // Fase 1-4
         expense_categories,
@@ -815,6 +936,7 @@ async function startServer() {
 
       await db.transaction(async (tx) => {
         // --- PHASE 1: DELETES (Child -> Parent) ---
+        let existingPaidIds = new Set<string>();
         if (device_sessions !== undefined) {
           await tx.delete(schema.deviceSessions);
         }
@@ -835,6 +957,9 @@ async function startServer() {
         }
         if (audit_logs !== undefined) {
           await tx.delete(schema.auditLogs);
+        }
+        if (recipes !== undefined) {
+          await tx.delete(schema.recipes);
         }
         if (sales_import_logs !== undefined) {
           await tx.delete(schema.salesImportLogs);
@@ -858,7 +983,9 @@ async function startServer() {
           await tx.delete(schema.suppliers);
         }
         if (payroll_records !== undefined) {
-          await tx.delete(schema.payrollRecords);
+          const existingPaid = await tx.select({ id: schema.payrollRecords.id }).from(schema.payrollRecords).where(eq(schema.payrollRecords.status, "PAID"));
+          existingPaid.forEach(r => existingPaidIds.add(r.id));
+          await tx.delete(schema.payrollRecords).where(not(eq(schema.payrollRecords.status, "PAID")));
         }
         if (kpiRecords !== undefined) {
           await tx.delete(schema.kpiRecords);
@@ -866,6 +993,9 @@ async function startServer() {
         if (attendances !== undefined) {
           await tx.delete(schema.attendanceRecords);
         }
+                if (dailyAttendances !== undefined) await tx.delete(schema.dailyAttendances);
+        if (dailyChecklists !== undefined) await tx.delete(schema.dailyChecklists);
+        if (employeeShifts !== undefined) await tx.delete(schema.employeeShifts);
         if (contracts !== undefined) {
           await tx.delete(schema.employeeContracts);
         }
@@ -904,7 +1034,7 @@ async function startServer() {
         }
         if (users !== undefined) {
           if (Array.isArray(users) && users.length > 0) {
-            await tx.insert(schema.users).values(users.map(sanitizeUser));
+            await tx.insert(schema.users).values(users.map((u: any) => sanitizeUserForInsert(u, existingUsersMap.get(String(u.id))?.pin)));
           }
         }
         if (expense_categories !== undefined) {
@@ -920,6 +1050,21 @@ async function startServer() {
         if (employees !== undefined) {
           if (Array.isArray(employees) && employees.length > 0) {
             await tx.insert(schema.employees).values(employees.map(sanitizeEmployee));
+          }
+        }
+                if (dailyAttendances !== undefined) {
+          if (Array.isArray(dailyAttendances) && dailyAttendances.length > 0) {
+            await tx.insert(schema.dailyAttendances).values(dailyAttendances.map(sanitizeDailyAttendance));
+          }
+        }
+        if (dailyChecklists !== undefined) {
+          if (Array.isArray(dailyChecklists) && dailyChecklists.length > 0) {
+            await tx.insert(schema.dailyChecklists).values(dailyChecklists.map(sanitizeDailyChecklist));
+          }
+        }
+        if (employeeShifts !== undefined) {
+          if (Array.isArray(employeeShifts) && employeeShifts.length > 0) {
+            await tx.insert(schema.employeeShifts).values(employeeShifts.map(sanitizeEmployeeShift));
           }
         }
         if (contracts !== undefined) {
@@ -939,7 +1084,10 @@ async function startServer() {
         }
         if (payroll_records !== undefined) {
           if (Array.isArray(payroll_records) && payroll_records.length > 0) {
-            await tx.insert(schema.payrollRecords).values(payroll_records.map(sanitizePayrollRecord));
+            const incomingToInsert = payroll_records.filter((pr: any) => !existingPaidIds.has(pr.id));
+            if (incomingToInsert.length > 0) {
+              await tx.insert(schema.payrollRecords).values(incomingToInsert.map(sanitizePayrollRecord));
+            }
           }
         }
         if (suppliers !== undefined) {
@@ -970,6 +1118,11 @@ async function startServer() {
         if (sales_transactions !== undefined) {
           if (Array.isArray(sales_transactions) && sales_transactions.length > 0) {
             await tx.insert(schema.salesTransactions).values(sales_transactions.map(sanitizeSalesTransaction));
+          }
+        }
+        if (recipes !== undefined) {
+          if (Array.isArray(recipes) && recipes.length > 0) {
+            await tx.insert(schema.recipes).values(recipes.map(sanitizeRecipe));
           }
         }
         if (sales_import_logs !== undefined) {
@@ -1208,44 +1361,64 @@ async function startServer() {
     }
   });
 
-  const rbacMiddleware = (
+  const rbacMiddleware = async (
     req: express.Request,
     res: express.Response,
     next: express.NextFunction,
   ) => {
-    const role = req.headers["x-user-role"] as string;
-    const table = req.params.table;
+    try {
+      const authHeader = req.headers["authorization"] as string;
+      const token = authHeader?.split(" ")[1];
+      
+      if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
+      
+      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
+      const session = sessions[0];
+      if (!session) return res.status(401).json({ error: "Unauthorized: Invalid session" });
 
-    // By default, only SUPER_ADMIN has full access, OWNER is read-only (so no POST/PUT/DELETE)
-    if (!role) return res.status(401).json({ error: "No role provided" });
-    if (role === "SUPER_ADMIN") return next();
-    if (role === "OWNER")
-      return res.status(403).json({ error: "Owner is read-only" });
+      const currentUsers = await db.select().from(schema.users).where(eq(schema.users.id, session.userId));
+      const requestUser = currentUsers[0];
+      if (!requestUser) return res.status(401).json({ error: "Unauthorized: User not found" });
 
-    if (role === "FINANCE") {
-      if (table !== "cash_transactions" && table !== "settings") {
-        return res
-          .status(403)
-          .json({ error: "Finance only has access to Cash Flow" });
+      const role = requestUser.role;
+      const table = req.params.table;
+
+      // By default, only SUPER_ADMIN has full access, OWNER is read-only (so no POST/PUT/DELETE)
+      if (!role) return res.status(401).json({ error: "No role provided" });
+      if (role === "SUPER_ADMIN") return next();
+      if (role === "OWNER")
+        return res.status(403).json({ error: "Owner is read-only" });
+
+      if (role === "FINANCE") {
+        if (table !== "cash_transactions" && table !== "settings") {
+          return res
+            .status(403)
+            .json({ error: "Finance only has access to Cash Flow" });
+        }
+        return next();
       }
-      return next();
-    }
-    if (role === "ADMIN_OPERASIONAL") {
-      if (
-        table !== "ingredients" &&
-        table !== "stock_movements" &&
-        table !== "sales_transactions" &&
-        table !== "sales_import_logs"
-      ) {
-        return res
-          .status(403)
-          .json({
-            error: "Admin Operasional only has access to Inventory and Sales",
-          });
+      if (role === "MANAGER") {
+        if (
+          table !== "ingredients" &&
+          table !== "stock_movements" &&
+          table !== "sales_transactions" &&
+          table !== "sales_import_logs" &&
+          table !== "purchase_orders" &&
+          table !== "suppliers"
+        ) {
+          return res
+            .status(403)
+            .json({
+              error: "Manager only has access to Inventory, Sales, and Purchases",
+            });
+        }
+        return next();
       }
-      return next();
+      return res.status(403).json({ error: "Unauthorized role" });
+    } catch (e) {
+      console.error("RBAC Error:", e);
+      return res.status(500).json({ error: "Internal server error" });
     }
-    return res.status(403).json({ error: "Unauthorized role" });
   };
 
   const auditLogMiddleware = async (
@@ -1284,6 +1457,26 @@ async function startServer() {
 
   app.post("/api/import/sales", async (req, res) => {
     try {
+      const authHeader = req.headers["authorization"] as string;
+      const token = authHeader?.split(" ")[1];
+      
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized: No token provided" });
+      }
+
+      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
+      const session = sessions[0];
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized: Invalid session" });
+      }
+
+      const currentUsersDB = await db.select().from(schema.users).where(eq(schema.users.id, session.userId));
+      const requestUser = currentUsersDB[0];
+
+      if (!requestUser || (requestUser.role !== "SUPER_ADMIN" && requestUser.role !== "FINANCE" && requestUser.role !== "MANAGER")) {
+        return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+      }
+
       const { sales_transactions, log } = req.body;
       const logId = crypto.randomUUID();
 
@@ -1308,6 +1501,54 @@ async function startServer() {
             importLogId: logId,
           }));
           await tx.insert(schema.salesTransactions).values(transactions);
+
+          // Process stock reduction based on recipes
+          const allRecipes = await tx.select().from(schema.recipes);
+          const allIngredients = await tx.select().from(schema.ingredients);
+          const stockMovementsToInsert: any[] = [];
+          
+          for (const s of transactions) {
+            const recipe = allRecipes.find(r => r.menuName.toLowerCase() === s.menuName.toLowerCase());
+            if (recipe) {
+              let ingredientsList: any[] = [];
+              try {
+                ingredientsList = JSON.parse(recipe.ingredients);
+              } catch (err) {
+                console.warn(`Failed to parse recipe ingredients for ${recipe.menuName}`);
+              }
+              for (const reqIng of ingredientsList) {
+                const dbIngredient = allIngredients.find(i => i.id === reqIng.ingredientId);
+                if (dbIngredient) {
+                  const qtyToDeduct = reqIng.quantity * s.quantitySold;
+                  // Deduct current stock
+                  await tx.update(schema.ingredients)
+                    .set({ currentStock: Number(dbIngredient.currentStock) - qtyToDeduct })
+                    .where(eq(schema.ingredients.id, reqIng.ingredientId));
+                  // Update local copy to prevent sequential overwriting
+                  dbIngredient.currentStock = Number(dbIngredient.currentStock) - qtyToDeduct;
+
+                  // Add stock movement log
+                  stockMovementsToInsert.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: reqIng.ingredientId,
+                    type: "OUT",
+                    quantity: qtyToDeduct,
+                    date: new Date().toISOString(),
+                    note: `Auto deduction for sales: ${s.menuName} (${s.quantitySold}x)`,
+                    unitCost: dbIngredient.costPerUnit,
+                    totalCost: Number(dbIngredient.costPerUnit) * qtyToDeduct,
+                    referenceId: s.id,
+                    location: null,
+                    createdBy: "System"
+                  });
+                }
+              }
+            }
+          }
+          
+          if (stockMovementsToInsert.length > 0) {
+            await tx.insert(schema.stockMovements).values(stockMovementsToInsert);
+          }
         }
       });
       res.json({ success: true, logId });
@@ -1367,86 +1608,6 @@ async function startServer() {
       }
     },
   );
-
-  // ─── Payroll Calculator API (Fase 4) ─────────────────────────────────────
-  app.post("/api/payroll/calculate", async (req, res) => {
-    try {
-      const { period } = req.body; // YYYY-MM
-      if (!period) return res.status(400).json({ error: "Period required" });
-
-      // Get all active employees
-      const allEmployees = await db.select().from(schema.employees);
-      const activeEmployees = allEmployees.filter((e) => e.status === "AKTIF");
-
-      // Get latest contracts for each employee
-      const allContracts = await db.select().from(schema.employeeContracts);
-      const allAttendances = await db.select().from(schema.attendanceRecords);
-      const allKpi = await db.select().from(schema.kpiRecords);
-
-      const results = activeEmployees.map((emp) => {
-        // Get latest contract (highest effectiveDate)
-        const contracts = allContracts
-          .filter((c) => c.employeeId === emp.id)
-          .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
-        const contract = contracts[0];
-        if (!contract) return null;
-
-        // Get attendance for this period
-        const attendance = allAttendances.find(
-          (a) => a.employeeId === emp.id && a.period === period
-        );
-
-        // Get latest KPI bonus (current quarter)
-        const [year, month] = period.split("-").map(Number);
-        const quarter = Math.ceil(month / 3);
-        const kpi = allKpi.find(
-          (k) => k.employeeId === emp.id && k.year === year && k.quarter === quarter
-        );
-
-        const alphaDays = attendance?.alphaDays ?? 0;
-        const alphaDeduction = alphaDays * contract.alphaDeductionPerDay;
-        const kpiBonus = kpi?.kpiBonus ?? 0;
-
-        const grossPay =
-          contract.basicSalary +
-          contract.mealAllowance +
-          contract.positionAllowance +
-          kpiBonus;
-        const netPay = grossPay - alphaDeduction;
-
-        return {
-          id: crypto.randomUUID(),
-          employeeId: emp.id,
-          period,
-          basicSalary: contract.basicSalary,
-          mealAllowance: contract.mealAllowance,
-          positionAllowance: contract.positionAllowance,
-          kpiBonus,
-          alphaDeduction,
-          otherDeductions: 0,
-          grossPay,
-          netPay,
-          status: "DRAFT",
-          paidDate: null,
-          paidVia: null,
-          notes: null,
-          createdBy: (req.headers["x-user-id"] as string) || "System",
-          createdAt: new Date().toISOString(),
-          // Employee info for UI
-          employeeName: emp.name,
-          employeeNik: emp.nik,
-          position: emp.position,
-          alphaDays,
-          attendancePresentDays: attendance?.presentDays ?? 0,
-        };
-      }).filter(Boolean);
-
-      res.json({ success: true, payrolls: results, period });
-    } catch (e) {
-      console.error("Payroll calculate error:", e);
-      res.status(500).json({ error: "Internal error" });
-    }
-  });
 
   // ─── Dashboard Summary API ─────────────────────────────────────────────────
   app.get("/api/dashboard/summary", async (req, res) => {

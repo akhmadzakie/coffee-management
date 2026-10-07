@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from "react";
+import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
-import Papa from "papaparse";
 import {
   TrendingUp,
   TrendingDown,
@@ -15,10 +15,11 @@ import {
   Smartphone,
   Download,
   Upload,
+  CheckCircle,
 } from "lucide-react";
 import { CashAccount } from "../types";
 import { CsvImportExport } from "./common/CsvImportExport";
-import { downloadInteractiveTemplate } from "../utils/genericImport";
+
 
 export const CashFlow = () => {
   const {
@@ -31,6 +32,8 @@ export const CashFlow = () => {
     deleteCashAccount,
     isReadOnly,
     expenseCategories,
+    salesTransactions,
+    salesImportLogs,
   } = useStore();
 
 
@@ -38,6 +41,15 @@ export const CashFlow = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+
+  const unverifiedSalesLogs = useMemo(() => {
+    return salesImportLogs.filter((log) => {
+      if (log.status !== "SUCCESS") return false;
+      const isVerified = cashTransactions.some((c) => c.referenceId === log.id);
+      return !isVerified;
+    });
+  }, [salesImportLogs, cashTransactions]);
 
   const [trxType, setTrxType] = useState<"CASH_IN" | "CASH_OUT" | "TRANSFER">(
     "CASH_IN",
@@ -120,125 +132,65 @@ export const CashFlow = () => {
     setIsAccountModalOpen(false);
   };
 
-  const handleExportCSV = () => {
-    if (filteredTransactions.length === 0) {
-      alert("Tidak ada data untuk diexport.");
-      return;
-    }
-    const csvData = filteredTransactions.map((trx) => ({
-      "ID_SISTEM (JANGAN DIUBAH)": trx.id,
-      Tanggal: new Date(trx.date).toISOString().split("T")[0],
-      "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
-      Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
-      Kategori: trx.category,
-      Deskripsi: trx.description,
-      Jumlah: trx.amount,
-    }));
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `arus_kas_${new Date().getTime()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
-  const handleDownloadTemplate = () => {
-    const templateData = [
-      {
-        "ID_SISTEM (JANGAN DIUBAH)": "",
-        Tanggal: new Date().toISOString().split("T")[0],
-        "Pos Kas": cashAccounts[0]?.name || "Kas Utama",
-        Jenis: "Pemasukan",
-        Kategori: "Pendapatan Lain",
-        Deskripsi: "Contoh transaksi pemasukan",
-        Jumlah: 50000,
-      },
-    ];
-    downloadInteractiveTemplate(
-      "Template_Import_Arus_Kas.csv",
-      ["ID_SISTEM (JANGAN DIUBAH)", "Tanggal", "Pos Kas", "Jenis", "Kategori", "Deskripsi", "Jumlah"],
-      templateData,
-      filteredTransactions.map((trx) => ({
-        "ID_SISTEM (JANGAN DIUBAH)": trx.id,
-        Tanggal: new Date(trx.date).toISOString().split("T")[0],
-        "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
-        Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
-        Kategori: trx.category,
-        Deskripsi: trx.description,
-        Jumlah: trx.amount,
-      }))
-    );
-  };
 
-  const handleImport = (file: File) => {
+  const handleImport = (parsedData: any[]) => {
     if (cashAccounts.length === 0) {
       alert("Silakan buat Pos Kas terlebih dahulu sebelum mengimport transaksi.");
       return;
     }
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        let addedCount = 0;
-        let updatedCount = 0;
-        let errors = 0;
+    let addedCount = 0;
+    let updatedCount = 0;
+    let errors = 0;
 
-        results.data.forEach((row: any) => {
-          try {
-            const systemId = row["ID_SISTEM (JANGAN DIUBAH)"]?.trim();
-            const date = row["Tanggal"] || new Date().toISOString();
-            const rawJenis = String(row["Jenis"] || "").toLowerCase();
-            const type = rawJenis.includes("masuk") ? "CASH_IN" : "CASH_OUT";
-            const category = row["Kategori"] || "Lainnya";
-            const description = row["Deskripsi"] || "Import CSV";
-            const amount = parseFloat(row["Jumlah"]) || 0;
-            const accountName = row["Pos Kas"];
-            const posKas = cashAccounts.find((a) => a.name.toLowerCase() === (accountName || "").toLowerCase()) || cashAccounts[0];
+    parsedData.forEach((row: any) => {
+      try {
+        const systemId = row["ID_SISTEM (JANGAN DIUBAH)"]?.trim();
+        const date = row["Tanggal"] || new Date().toISOString();
+        const rawJenis = String(row["Jenis"] || "").toLowerCase();
+        const type = rawJenis.includes("masuk") ? "CASH_IN" : "CASH_OUT";
+        const category = row["Kategori"] || "Lainnya";
+        const description = row["Deskripsi"] || "Import Excel";
+        const amount = parseFloat(row["Jumlah"]) || 0;
+        const accountName = row["Pos Kas"];
+        const posKas = cashAccounts.find((a) => a.name.toLowerCase() === (accountName || "").toLowerCase()) || cashAccounts[0];
 
-            if (amount > 0) {
-              const existingTrx = cashTransactions.find((t) => t.id === systemId);
-              if (existingTrx) {
-                updateCashTransaction({
-                  ...existingTrx,
-                  accountId: posKas.id,
-                  type: type,
-                  date: date,
-                  amount: amount,
-                  description: description,
-                  category: category,
-                });
-                updatedCount++;
-              } else {
-                addCashTransaction({
-                  accountId: posKas.id,
-                  type: type,
-                  date: date,
-                  amount: amount,
-                  description: description,
-                  category: category,
-                  categoryId: null,
-                  referenceId: null,
-                });
-                addedCount++;
-              }
-            } else {
-              errors++;
-            }
-          } catch (err) {
-            errors++;
+        if (amount > 0 && posKas) {
+          const existingTrx = cashTransactions.find((t) => t.id === systemId);
+          if (existingTrx) {
+            updateCashTransaction({
+              ...existingTrx,
+              accountId: posKas.id,
+              type: type,
+              date: date,
+              amount: amount,
+              description: description,
+              category: category,
+            });
+            updatedCount++;
+          } else {
+            addCashTransaction({
+              accountId: posKas.id,
+              type: type,
+              date: date,
+              amount: amount,
+              description: description,
+              category: category,
+              categoryId: null,
+              referenceId: null,
+            });
+            addedCount++;
           }
-        });
-
-        alert(`Import selesai.\nDitambahkan: ${addedCount} data baru\nDiperbarui: ${updatedCount} data lama\nGagal/Dilewati: ${errors} baris`);
-      },
-      error: () => {
-        alert("Gagal membaca file CSV. Pastikan format sudah benar.");
+        } else {
+          errors++;
+        }
+      } catch (err) {
+        errors++;
       }
     });
+
+    alert(`Import selesai.\nDitambahkan: ${addedCount} data baru\nDiperbarui: ${updatedCount} data lama\nGagal/Dilewati: ${errors} baris`);
   };
 
   const getAccountIcon = (type: string) => {
@@ -255,6 +207,7 @@ export const CashFlow = () => {
   };
 
   return (
+    <>
     <div className="space-y-6">
       {/* Accounts Overview */}
       <div>
@@ -394,9 +347,42 @@ export const CashFlow = () => {
               <div className="flex items-center gap-2">
                 <CsvImportExport 
                   onImport={handleImport}
-                  onExport={handleExportCSV}
-                  onDownloadTemplate={handleDownloadTemplate}
+                  templateHeaders={["Tanggal", "Pos Kas", "Jenis", "Kategori", "Deskripsi", "Jumlah"]}
+                  templateExampleRow={[getLocalDateString(), cashAccounts[0]?.name || "Kas Utama", "Pemasukan", "Pendapatan Lain", "Contoh transaksi", "50000"]}
+                  templateFilename="Template_Import_Arus_Kas.xlsx"
+                  buttonLabel="Import Excel"
+                  currentData={filteredTransactions.map((trx) => ({
+                    id: trx.id,
+                    Tanggal: getLocalDateString(new Date(trx.date)),
+                    "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
+                    Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+                    Kategori: trx.category,
+                    Deskripsi: trx.description,
+                    Jumlah: trx.amount,
+                  }))}
+                  templateDropdowns={{
+                    "Pos Kas": cashAccounts.map((a) => a.name),
+                    Jenis: ["Pemasukan", "Pengeluaran"],
+                    Kategori: expenseCategories.map((c: any) => c.name),
+                  }}
+                  templateColumnTypes={{
+                    Tanggal: "date",
+                    Jumlah: "number",
+                  }}
+                  templateHints={{
+                    Tanggal: "Format: YYYY-MM-DD",
+                    Jumlah: "Angka saja, tanpa titik atau koma",
+                  }}
                 />
+                {unverifiedSalesLogs.length > 0 && (
+                  <button
+                    onClick={() => setIsVerificationModalOpen(true)}
+                    className="flex items-center px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shrink-0 text-sm font-medium shadow-sm"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Verifikasi Penjualan ({unverifiedSalesLogs.length})
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setTrxType("CASH_IN");
@@ -706,5 +692,116 @@ export const CashFlow = () => {
         </div>
       )}
     </div>
+
+      {isVerificationModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2 text-amber-500" />
+                Verifikasi Penjualan ({unverifiedSalesLogs.length})
+              </h2>
+              <button
+                onClick={() => setIsVerificationModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              {unverifiedSalesLogs.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">
+                  Tidak ada data penjualan yang perlu diverifikasi.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {unverifiedSalesLogs.map((log) => {
+                    const totalSales = salesTransactions
+                      .filter((t) => t.importLogId === log.id)
+                      .reduce((sum, t) => sum + t.totalPrice, 0);
+
+                    return (
+                      <div key={log.id} className="p-4 border rounded-lg shadow-sm">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <p className="font-semibold text-slate-800">
+                              Data Penjualan: {new Date(log.importDate).toLocaleDateString("id-ID")}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {log.rowCount} baris data
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-emerald-600">
+                              {formatCurrency(totalSales)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            const accountId = formData.get("accountId") as string;
+                            if (!accountId) return;
+
+                            addCashTransaction({
+                              accountId: accountId,
+                              type: "CASH_IN",
+                              amount: totalSales,
+                              date: new Date(log.importDate).toISOString(),
+                              description: `Pemasukan Penjualan (${log.rowCount} transaksi)`,
+                              category: "Penjualan",
+                              categoryId: null,
+                              referenceId: log.id,
+                            });
+                          }}
+                          className="flex gap-2 items-end"
+                        >
+                          <div className="flex-1">
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              Simpan ke Pos Kas
+                            </label>
+                            <select
+                              name="accountId"
+                              required
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                            >
+                              <option value="">-- Pilih Pos Kas --</option>
+                              {cashAccounts.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shrink-0"
+                          >
+                            Simpan ke Arus Kas
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 flex justify-end shrink-0 bg-slate-50 rounded-b-xl">
+              <button
+                onClick={() => setIsVerificationModalOpen(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </>
   );
 };
