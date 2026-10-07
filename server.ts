@@ -842,8 +842,22 @@ async function startServer() {
       if (finalPin.length !== 64) {
         finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
       }
-      const currentUsers = await db.select().from(schema.users);
-      const user = currentUsers.find(u => u.username === username && u.pin === finalPin);
+
+      let currentUsers;
+      try {
+        currentUsers = await db.select().from(schema.users);
+      } catch (dbErr) {
+        console.error("Login DB error, falling back to memory:", dbErr);
+        if (offlineState && offlineState.users) {
+          currentUsers = offlineState.users;
+        } else {
+          currentUsers = initialUsers;
+        }
+      }
+
+      const user = currentUsers.find(u => 
+        u.username === username && (u.pin === finalPin || u.pin === pin)
+      );
       
       if (!user) {
         return res.status(401).json({ error: "Username atau PIN salah" });
