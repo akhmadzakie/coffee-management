@@ -155,8 +155,8 @@ function AppContent() {
       "suppliers", "purchases",
       "attendance_clock"
     ],
-    BAR: ["attendance_clock"],
-    KITCHEN: ["attendance_clock"],
+    BAR: ["attendance_clock", "leader_checklist"],
+    KITCHEN: ["attendance_clock", "leader_checklist"],
     BAKER: ["attendance_clock"],
   };
 

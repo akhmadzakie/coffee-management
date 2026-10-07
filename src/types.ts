@@ -283,6 +283,8 @@ export interface Settings {
   salesPerson: string;
   footerMessage: string;
   language: "id" | "en";
+  leaderBarTasks?: string[];
+  leaderKitchenTasks?: string[];
 }
 
 export interface CashAccount {

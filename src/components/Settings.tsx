@@ -13,6 +13,25 @@ export const SettingsComponent = () => {
   const [bankDetails, setBankDetails] = useState(settings.bankDetails);
   const [salesPerson, setSalesPerson] = useState(settings.salesPerson);
   const [footerMessage, setFooterMessage] = useState(settings.footerMessage);
+  const [leaderBarTasks, setLeaderBarTasks] = useState<string[]>(settings.leaderBarTasks || []);
+  const [leaderKitchenTasks, setLeaderKitchenTasks] = useState<string[]>(settings.leaderKitchenTasks || []);
+  
+  const addTask = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+    const task = prompt(language === "id" ? "Masukkan tugas baru:" : "Enter new task:");
+    if (task) setter(prev => [...prev, task]);
+  };
+  
+  const removeTask = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number) => {
+    setter(prev => prev.filter((_, i) => i !== index));
+  };
+  
+  const updateTask = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number, value: string) => {
+    setter(prev => {
+      const newTasks = [...prev];
+      newTasks[index] = value;
+      return newTasks;
+    });
+  };
   const [language, setLanguage] = useState(settings.language || "id");
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);

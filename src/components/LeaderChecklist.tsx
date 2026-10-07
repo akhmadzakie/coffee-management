@@ -21,8 +21,9 @@ const LEADER_KITCHEN_TASKS = [
 ];
 
 export const LeaderChecklist = () => {
-  const { currentUser, dailyChecklists, setDailyChecklists, isReadOnly } = useStore();
-  const [selectedRole, setSelectedRole] = useState<"BAR" | "KITCHEN">("BAR");
+  const { currentUser, dailyChecklists, setDailyChecklists, settings, isReadOnly } = useStore();
+  const initialRole = currentUser?.role === "KITCHEN" ? "KITCHEN" : "BAR";
+  const [selectedRole, setSelectedRole] = useState<"BAR" | "KITCHEN">(initialRole);
   
   const today = new Date().toISOString().split("T")[0];
   
@@ -37,7 +38,9 @@ export const LeaderChecklist = () => {
 
   const [isSaved, setIsSaved] = useState(false);
 
-  const tasks = selectedRole === "BAR" ? LEADER_BAR_TASKS : LEADER_KITCHEN_TASKS;
+  const tasks = selectedRole === "BAR" 
+    ? (settings.leaderBarTasks && settings.leaderBarTasks.length > 0 ? settings.leaderBarTasks : LEADER_BAR_TASKS)
+    : (settings.leaderKitchenTasks && settings.leaderKitchenTasks.length > 0 ? settings.leaderKitchenTasks : LEADER_KITCHEN_TASKS);
 
   const toggleTask = (task: string) => {
     if (isReadOnly) return;
@@ -84,9 +87,10 @@ export const LeaderChecklist = () => {
           </p>
         </div>
         
-        <div className="flex bg-gray-800 rounded-lg p-1">
-          <button
-            onClick={() => setSelectedRole("BAR")}
+        {(!currentUser || !["BAR", "KITCHEN"].includes(currentUser.role)) && (
+          <div className="flex bg-gray-800 rounded-lg p-1">
+            <button
+              onClick={() => setSelectedRole("BAR")}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               selectedRole === "BAR"
                 ? "bg-amber-500 text-white"
@@ -104,8 +108,9 @@ export const LeaderChecklist = () => {
             }`}
           >
             Head Kitchen
-          </button>
-        </div>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
