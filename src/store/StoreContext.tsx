@@ -131,11 +131,8 @@ interface StoreContextType {
   updateAttendance: (att: AttendanceRecord) => void;
 
   addDailyAttendance: (
-    att: Omit<DailyAttendance,
-  DailyChecklist,
-  EmployeeShift, "id">,
+    att: Omit<DailyAttendance, "id">,
   ) => void;
-  updateDailyAttendance: (att: DailyAttendance) => void;
 
   addKPI: (kpi: Omit<KPIRecord, "id" | "createdAt" | "evaluatedBy">) => void;
   updateKPI: (kpi: KPIRecord) => void;
@@ -721,7 +718,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       setCurrentUser(data.user);
       localStorage.setItem("node_current_user", JSON.stringify(data.user));
       localStorage.setItem("node_session_id", data.token);
-      setIsAuthenticated(true);
+      localStorage.setItem("node_session_id", data.token);
       fetchFromServer(true);
       sendHeartbeat(data.user);
       return true;
@@ -1023,7 +1020,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     addCashTransaction({
       accountId: cashAccountId,
       date: new Date().toISOString(),
-      type: "OUT",
+      type: "CASH_OUT",
       amount: amount,
       category: "Payable",
       description: `Pembayaran PO ${po.poNumber}`,

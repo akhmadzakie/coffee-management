@@ -11,7 +11,8 @@ import {
   Wallet,
   AlertCircle,
   Edit2,
-  FileText
+  FileText,
+  X
 } from "lucide-react";
 
 export function Payroll() {

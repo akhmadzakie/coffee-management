@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useStore } from "../store/StoreContext";
 import { getLocalDateString } from "../utils/dateUtils";
+import { KPI } from "./KPI";
 import {
   Users,
   FileText,
@@ -212,7 +213,7 @@ export function HRManagement() {
           if (existing) {
             updateEmployee({
               ...existing,
-              username: nik || existing.username,
+              username: username || existing.username,
               name,
               position,
               department,

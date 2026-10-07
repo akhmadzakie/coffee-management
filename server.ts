@@ -26,6 +26,7 @@ const initialUsers = [
     pin: "1234",
     name: "Super Admin",
     role: "SUPER_ADMIN",
+    department: "Management",
   },
 ];
 
@@ -770,7 +771,7 @@ async function startServer() {
             await db.transaction(async (tx) => {
               await tx
                 .insert(schema.users)
-                .values(initialUsers.map(sanitizeUser));
+                .values(initialUsers.map((u: any) => sanitizeUserForInsert(u, u.pin)));
               await tx
                 .insert(schema.settings)
                 .values([sanitizeSettings(initialSettings)]);
@@ -862,6 +863,7 @@ async function startServer() {
         location: null,
         lastActive: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+        status: "ACTIVE",
       };
       
       await db.insert(schema.deviceSessions).values(newSession);
@@ -1034,7 +1036,7 @@ async function startServer() {
         }
         if (users !== undefined) {
           if (Array.isArray(users) && users.length > 0) {
-            await tx.insert(schema.users).values(users.map((u: any) => sanitizeUserForInsert(u, existingUsersMap.get(String(u.id))?.pin)));
+            await tx.insert(schema.users).values(users.map((u: any) => sanitizeUserForInsert(u, currentUsersDB.find((cu) => cu.id === String(u.id))?.pin)));
           }
         }
         if (expense_categories !== undefined) {
