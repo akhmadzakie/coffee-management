@@ -4,6 +4,7 @@
  */
 
 import React, { useState, Suspense } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { StoreProvider, useStore } from "./store/StoreContext";
 import { Layout } from "./components/Layout";
 import { Login } from "./components/Login";
@@ -224,7 +225,9 @@ function AppContent() {
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView}>
       <Suspense fallback={<PageLoader />}>
-        {renderView()}
+        <ErrorBoundary>
+          {renderView()}
+        </ErrorBoundary>
       </Suspense>
     </Layout>
   );
