@@ -21,10 +21,19 @@ const LEADER_KITCHEN_TASKS = [
   "Pekerjaan Kontroling Karyawan (Koki, Helper, Cuci Piring)"
 ];
 
+const LEADER_BAKER_TASKS = [
+  "Pekerjaan Kebersihan (Area Pastry, Oven, dll)",
+  "Pekerjaan Kontroling Alat (Mixer, Oven, Proofer, dll)",
+  "Pekerjaan Gudang (Cek EXP ragi, tepung, butter, dll)",
+  "Pekerjaan Kontroling Serving (Display Pastry)",
+  "Pekerjaan Kontroling Karyawan (Asisten Baker)"
+];
+
+
 export const LeaderChecklist = () => {
   const { currentUser, dailyChecklists, setDailyChecklists, settings, isReadOnly } = useStore();
-  const initialRole = currentUser?.role === "KITCHEN" ? "KITCHEN" : "BAR";
-  const [selectedRole, setSelectedRole] = useState<"BAR" | "KITCHEN">(initialRole);
+  const initialRole = currentUser?.role === "KITCHEN" ? "KITCHEN" : currentUser?.role === "BAKER" ? "BAKER" : "BAR";
+  const [selectedRole, setSelectedRole] = useState<"BAR" | "KITCHEN" | "BAKER">(initialRole);
   
   const today = getLocalDateString();
   
@@ -39,7 +48,7 @@ export const LeaderChecklist = () => {
 
   const [isSaved, setIsSaved] = useState(false);
 
-  const tasks = selectedRole === "BAR" 
+  const tasks = selectedRole === "BAKER" ? (settings.leaderBakerTasks && settings.leaderBakerTasks.length > 0 ? settings.leaderBakerTasks : LEADER_BAKER_TASKS) : selectedRole === "BAR" 
     ? (settings.leaderBarTasks && settings.leaderBarTasks.length > 0 ? settings.leaderBarTasks : LEADER_BAR_TASKS)
     : (settings.leaderKitchenTasks && settings.leaderKitchenTasks.length > 0 ? settings.leaderKitchenTasks : LEADER_KITCHEN_TASKS);
 
@@ -84,11 +93,11 @@ export const LeaderChecklist = () => {
         <div>
           <h2 className="text-2xl font-bold">Checklist Leader</h2>
           <p className="text-gray-400 text-sm">
-            Tugas harian khusus untuk Head Bar dan Head Kitchen.
+            Tugas harian khusus untuk Head Bar, Head Kitchen, dan Head Baker.
           </p>
         </div>
         
-        {(!currentUser || !["BAR", "KITCHEN"].includes(currentUser.role)) && (
+        {(!currentUser || !["BAR", "KITCHEN", "BAKER"].includes(currentUser.role)) && (
           <div className="flex bg-gray-800 rounded-lg p-1">
             <button
               onClick={() => setSelectedRole("BAR")}
@@ -117,7 +126,7 @@ export const LeaderChecklist = () => {
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
         <div className="mb-6 flex justify-between items-center">
           <h3 className="text-xl font-bold text-amber-500">
-            Tugas Harian - {selectedRole === "BAR" ? "Bar" : "Kitchen"}
+            Tugas Harian - {selectedRole === "BAR" ? "Bar" : selectedRole === "KITCHEN" ? "Kitchen" : "Baker"}
           </h3>
           <span className="px-3 py-1 bg-gray-700 rounded-full text-sm">
             {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

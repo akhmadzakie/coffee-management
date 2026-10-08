@@ -137,8 +137,10 @@ export const settings = pgTable("settings", {
   salesPerson: text("sales_person").notNull(),
   footerMessage: text("footer_message").notNull(),
   language: varchar("language", { length: 10 }).notNull(),
+  leaderBarTasks: text("leader_bar_tasks").default("[]"),
+  leaderKitchenTasks: text("leader_kitchen_tasks").default("[]"),
+  leaderBakerTasks: text("leader_baker_tasks").default("[]"),
 });
-
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),
   userId: varchar("user_id", { length: 255 }).notNull(),

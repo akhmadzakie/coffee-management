@@ -157,7 +157,7 @@ function AppContent() {
     ],
     BAR: ["attendance_clock", "leader_checklist"],
     KITCHEN: ["attendance_clock", "leader_checklist"],
-    BAKER: ["attendance_clock"],
+    BAKER: ["attendance_clock", "leader_checklist"],
   };
 
   React.useEffect(() => {

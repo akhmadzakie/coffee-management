@@ -166,7 +166,7 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     // --- SDM Group ---
     { group: "SDM",
-      name: "Checklist Leader",
+      name: "Checklist Jobdesk",
       view: "leader_checklist" as ViewState,
       icon: ClipboardCheck,
     },
@@ -229,7 +229,7 @@ export const Layout: React.FC<LayoutProps> = ({
     ],
     BAR: ["attendance_clock", "leader_checklist"],
     KITCHEN: ["attendance_clock", "leader_checklist"],
-    BAKER: ["attendance_clock"],
+    BAKER: ["attendance_clock", "leader_checklist"],
   };
 
   const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];

@@ -236,6 +236,7 @@ export interface DailyChecklist {
   date: string;
   cleaningDone: boolean;
   equipmentChecked: boolean;
+  leaderTasks?: string[];
   notes?: string;
 }
 
@@ -286,6 +287,7 @@ export interface Settings {
   language: "id" | "en";
   leaderBarTasks?: string[];
   leaderKitchenTasks?: string[];
+  leaderBakerTasks?: string[];
 }
 
 export interface CashAccount {
