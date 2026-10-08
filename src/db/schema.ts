@@ -235,7 +235,6 @@ export const employeeContracts = pgTable("employee_contracts", {
   basicSalary: real("basic_salary").notNull(),
   mealAllowance: real("meal_allowance").notNull(),
   positionAllowance: real("position_allowance").notNull(),
-  alphaDeductionPerDay: real("alpha_deduction_per_day").notNull(),
   workingDaysPerMonth: integer("working_days_per_month").notNull(),
   notes: text("notes").notNull(),
 });

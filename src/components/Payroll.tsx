@@ -400,7 +400,7 @@ export function Payroll() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Potongan Manual
+                  Potongan Manual (Cth: Terlambat, Hukuman)
                 </label>
                 <input
                   type="number"

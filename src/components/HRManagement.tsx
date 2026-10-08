@@ -87,7 +87,7 @@ export function HRManagement() {
   // --- Modal Form State ---
   const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any, phone: "", email: "", address: "" });
   const [autoCreateUser, setAutoCreateUser] = useState(true);
-  const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: "", endDate: "", status: "ACTIVE" as any });
+  const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0,  startDate: "", endDate: "", status: "ACTIVE" as any });
 
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
@@ -277,7 +277,7 @@ export function HRManagement() {
           mealAllowance: Number(row["Tunjangan Makan"]) || 0,
           transportAllowance: Number(row["Tunjangan Transport"]) || 0,
           kpiBonusTarget: Number(row["Target Bonus KPI"]) || 0,
-          alphaDeductionPerDay: Number(row["Potongan Alpha/Hari"]) || 0,
+          
           startDate: row["Mulai Kontrak"] || getLocalDateString(),
           endDate: row["Selesai Kontrak"] || getLocalDateString(),
           status: "ACTIVE"
@@ -339,7 +339,7 @@ export function HRManagement() {
       setContractForm({ ...contract });
     } else {
       setEditingContract(null);
-      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0, alphaDeductionPerDay: 0, startDate: getLocalDateString(), endDate: "", status: "ACTIVE" });
+      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0,  startDate: getLocalDateString(), endDate: "", status: "ACTIVE" });
     }
     setIsContractModalOpen(true);
   };
@@ -910,7 +910,7 @@ export function HRManagement() {
                   <div className="flex items-center gap-3">
                     <CsvImportExport
                       onImport={handleImportContracts}
-                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Potongan Alpha/Hari", "Mulai Kontrak", "Selesai Kontrak"]}
+                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak"]}
                       templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
                       templateFilename="template_kontrak"
                       buttonLabel={isIndo ? "Import" : "Import"}
@@ -1844,14 +1844,10 @@ export function HRManagement() {
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Gaji Pokok (Rp)</label>
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.basicSalary || ""} onChange={e => setContractForm({...contractForm, basicSalary: Number(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Potongan Alpha/Hari (Rp)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.alphaDeductionPerDay || ""} onChange={e => setContractForm({...contractForm, alphaDeductionPerDay: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
