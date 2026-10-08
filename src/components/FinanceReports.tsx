@@ -2,16 +2,28 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/StoreContext';
 import { formatCurrency } from '../utils/format';
 
+import { Lock, Unlock, AlertTriangle } from 'lucide-react';
+
 const FinanceReports: React.FC = () => {
   const { 
+    currentUser,
     cashTransactions,
     expenseCategories,
-    budgets
+    budgets,
+    closedPeriods,
+    closePeriod,
+    reopenPeriod
   } = useStore();
 
   const [period, setPeriod] = useState<string>(
     new Date().toISOString().substring(0, 7) // YYYY-MM
   );
+
+  const isPeriodClosed = useMemo(() => {
+    return closedPeriods.some(p => p.period === period);
+  }, [closedPeriods, period]);
+
+  const canManagePeriod = currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPER_ADMIN';
 
   // Filter transactions by period
   const periodTransactions = useMemo(() => {
@@ -71,8 +83,55 @@ const FinanceReports: React.FC = () => {
             value={period}
             onChange={e => setPeriod(e.target.value)}
           />
+          {isPeriodClosed && (
+            <span className="ml-4 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+              <Lock className="w-4 h-4 mr-1" />
+              Periode Ditutup
+            </span>
+          )}
         </div>
       </div>
+
+      {canManagePeriod && (
+        <div className="mb-6 p-4 rounded bg-gray-50 border flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-gray-800 flex items-center">
+              Manajemen Periode
+              {isPeriodClosed && <AlertTriangle className="w-4 h-4 ml-2 text-amber-500" />}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {isPeriodClosed 
+                ? "Periode ini telah dikunci. Data (Cash Flow, Payroll, dll) tidak dapat diubah."
+                : "Tutup periode ini jika semua laporan sudah final. Data tidak akan bisa diubah."}
+            </p>
+          </div>
+          <div>
+            {isPeriodClosed ? (
+              <button 
+                onClick={() => {
+                  if (window.confirm("Buka kembali periode ini? (Audit akan mencatat aksi ini)")) {
+                    reopenPeriod(period, "Permintaan koreksi/Buka buku");
+                  }
+                }}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded font-medium transition"
+              >
+                <Unlock className="w-4 h-4" /> Buka Kembali
+              </button>
+            ) : (
+              <button 
+                onClick={() => {
+                  if (window.confirm("Tutup periode ini? Pastikan semua transaksi sudah benar.")) {
+                    closePeriod(period, "Tutup buku rutin");
+                  }
+                }}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium transition"
+              >
+                <Lock className="w-4 h-4" /> Tutup Periode
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* P&L Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

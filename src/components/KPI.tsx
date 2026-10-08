@@ -6,7 +6,7 @@ export const KPI: React.FC = () => {
   const { kpiTasks, employees, updateKpiTask, kpiBonusRules, updateKpiBonusRule, user } = useStore();
   const [activeSubTab, setActiveSubTab] = useState<"tasks" | "rules">("tasks");
   const isIndo = true;
-  const canEditHR = user?.role === "OWNER" || user?.role === "MANAGER";
+  const canEditHR = user?.role === "OWNER" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN";
 
   // State for new/edit task
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);

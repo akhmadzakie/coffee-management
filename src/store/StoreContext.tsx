@@ -36,6 +36,7 @@ import {
   StockOpname,
   StockOpnameItem,
   Recipe,
+  ClosedPeriod,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -113,6 +114,10 @@ interface StoreContextType {
   updatePayrollRecord: (p: PayrollRecord) => void;
   deletePayrollRecord: (id: string) => void;
   bulkAddPayrollRecords: (records: PayrollRecord[]) => void;
+
+  closedPeriods: ClosedPeriod[];
+  closePeriod: (period: string, notes?: string) => void;
+  reopenPeriod: (period: string, notes?: string) => void;
 
   // Generic state access (for new modules)
   state: any;
@@ -247,6 +252,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [stockOpnames, setStockOpnames] = useState<StockOpname[]>([]);
   const [stockOpnameItems, setStockOpnameItems] = useState<StockOpnameItem[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+  const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
 
   // Generic dispatch for new modules
   const dispatch = (action: any) => {
@@ -277,6 +283,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       case "BULK_ADD_PAYROLL_RECORDS":
         setPayrollRecords((prev) => [...prev, ...action.payload]);
+        break;
+      case "ADD_CLOSED_PERIOD":
+        setClosedPeriods((prev) => [...prev, action.payload]);
+        break;
+      case "REMOVE_CLOSED_PERIOD":
+        setClosedPeriods((prev) => prev.filter((p) => p.period !== action.payload));
         break;
       case "ADD_BUDGET":
         setBudgets((prev) => [...prev, action.payload]);
@@ -427,6 +439,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.stock_opnames)) setStockOpnames(data.stock_opnames);
         if (Array.isArray(data.stock_opname_items)) setStockOpnameItems(data.stock_opname_items);
         if (Array.isArray(data.payroll_records)) setPayrollRecords(data.payroll_records);
+        if (Array.isArray(data.closed_periods)) setClosedPeriods(data.closed_periods);
 
         setLastSyncTime(new Date());
         hasLocalChanges.current = false;
@@ -658,6 +671,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             stock_opnames: stockOpnames,
             stock_opname_items: stockOpnameItems,
             payroll_records: payrollRecords,
+            closed_periods: closedPeriods,
           }),
         });
         if (res.ok) {

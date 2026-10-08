@@ -34,7 +34,8 @@ export function Payroll() {
     dailyAttendances,
     dailyChecklists,
     kpiTasks,
-    kpiBonusRules
+    kpiBonusRules,
+    closedPeriods
   } = (useStore() as any);
 
   const [period, setPeriod] = useState(
@@ -135,6 +136,11 @@ export function Payroll() {
   }, [employees, contracts, attendances, kpiRecords, period, payrollRecords]);
 
   const handleGenerateAll = () => {
+    if (closedPeriods.some((p: any) => p.period === period)) {
+      alert("Periode ini telah ditutup. Tidak dapat membuat slip gaji.");
+      return;
+    }
+
     const newRecords = generatedCalculations
       .filter(item => !item.existingRecord)
       .map(item => ({
@@ -155,6 +161,11 @@ export function Payroll() {
   };
 
   const handleUpdateStatus = (record: PayrollRecord, newStatus: "APPROVED" | "PAID") => {
+    if (closedPeriods.some((p: any) => p.period === record.period)) {
+      alert("Periode ini telah ditutup.");
+      return;
+    }
+
     if (newStatus === "PAID") {
       setPayrollToPay(record);
       setPaymentModalOpen(true);
@@ -316,7 +327,7 @@ export function Payroll() {
                             <FileText size={16} />
                           </button>
 
-                          {record.status === "DRAFT" && !isReadOnly && isHRD && (
+                          {record.status === "DRAFT" && !isReadOnly && isHRD && !closedPeriods.some((p: any) => p.period === record.period) && (
                             <button
                               onClick={() => setEditingPayroll(record)}
                               className="p-1.5 text-slate-400 hover:text-amber-500 transition-colors"
@@ -326,7 +337,7 @@ export function Payroll() {
                             </button>
                           )}
                           
-                          {record.status === "DRAFT" && canApprove && !isReadOnly && (
+                          {record.status === "DRAFT" && canApprove && !isReadOnly && !closedPeriods.some((p: any) => p.period === record.period) && (
                             <button
                               onClick={() => handleUpdateStatus(record, "APPROVED")}
                               className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded font-medium transition-colors"
@@ -335,7 +346,7 @@ export function Payroll() {
                             </button>
                           )}
                           
-                          {record.status === "APPROVED" && canPay && !isReadOnly && (
+                          {record.status === "APPROVED" && canPay && !isReadOnly && !closedPeriods.some((p: any) => p.period === record.period) && (
                             <button
                               onClick={() => handleUpdateStatus(record, "PAID")}
                               className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs rounded font-medium transition-colors"

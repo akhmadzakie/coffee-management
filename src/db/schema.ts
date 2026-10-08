@@ -215,7 +215,7 @@ export const auditLogs = pgTable("audit_logs", {
 
 export const employees = pgTable("employees", {
   id: varchar("id", { length: 255 }).primaryKey(),
-  nik: text("nik").notNull(),
+  username: text("username").notNull(),
   name: text("name").notNull(),
   position: text("position").notNull(),
   department: text("department").notNull(),
@@ -359,4 +359,12 @@ export const kpiBonusRules = pgTable("kpi_bonus_rules", {
   maxScore: real("max_score").notNull(),
   bonusAmount: real("bonus_amount").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const closedPeriods = pgTable("closed_periods", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  period: text("period").notNull(), // format YYYY-MM
+  closedAt: text("closed_at").notNull(),
+  closedBy: varchar("closed_by", { length: 255 }).notNull(),
+  notes: text("notes")
 });

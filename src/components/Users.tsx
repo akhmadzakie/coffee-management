@@ -205,7 +205,7 @@ export const UsersComponent = () => {
           <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 border-b border-blue-100 text-blue-700 text-xs">
             <ShieldCheck className="w-4 h-4 shrink-0 text-blue-500" />
             <span>
-              <strong>Mode Manager:</strong> Anda hanya dapat mengelola akun dengan role <strong>Kasir</strong> dan <strong>Leader</strong>.
+              <strong>Mode Manager:</strong> Anda hanya dapat mengelola akun dengan role <strong>Kasir, Leader, Bar, Kitchen, dan Baker</strong>.
             </span>
           </div>
         )}

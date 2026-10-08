@@ -413,3 +413,11 @@ export interface ShiftSession {
   difference: number | null;
   status: "OPEN" | "CLOSED";
 }
+
+export interface ClosedPeriod {
+  id: string;
+  period: string; // YYYY-MM
+  closedAt: string;
+  closedBy: string;
+  notes?: string;
+}

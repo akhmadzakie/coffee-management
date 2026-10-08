@@ -45,7 +45,7 @@
 | 15 | Rumus payroll | ⚠️ | `Payroll.tsx:82-95` vs `server.ts:1410-1415` | **Dua rumus berbeda.** Client: hari hadir × gaji harian (sesuai). Server `/api/payroll/calculate`: gaji bulanan − potongan alpha, dan membaca `k.year`/`k.quarter` yang tidak ada di `kpi_records` → bonus KPI selalu 0. | Hapus atau samakan endpoint server. | Tinggi |
 | 16 | Checklist → KPI/bonus | ⚠️ | `Payroll.tsx:86` | Bonus SOP memakai `cleaningDone && equipmentChecked`, **bukan** `leaderTasks`. Datanya juga tidak tersimpan (K1). | Hitung dari `leaderTasks`. | Rendah |
 | 17 | Rekonsiliasi pakai mutasi import | ⚠️ | `server.ts:64-74` | Tabel `bank_statement_lines` + `matched_transaction_id` ada; alur UI belum diverifikasi. | — | Sedang |
-| 18 | Tutup Periode | ❌ | — | Tidak ada. | — | Sedang |
+| 18 | Tutup Periode | ✅ | CashFlow.tsx, Payroll.tsx, server.ts | Telah diimplementasikan dengan fitur Manajemen Periode (buka kembali). | — | Selesai |
 | 19 | Laporan = Cash Flow | ❓ | `FinanceReports.tsx` | Belum diverifikasi. | — | Sedang |
 | 20 | Cakupan Audit Log | ⚠️ | `server.ts:1251-1283` | Hanya `/api:table`; aksi via `/api/sync` dicatat client (K6). | Tulis audit di server. | Sedang |
 | 21 | FK & indeks | ⚠️ | `server.ts:95-162` | Sebagian FK ada; `payroll_records.employee_id` tanpa FK; tanggal disimpan TEXT; tidak ada unique `(employee_id, period)`. | Tambah constraint. | Sedang |

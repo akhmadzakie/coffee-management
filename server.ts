@@ -96,7 +96,7 @@ async function ensureTables() {
       )`,
     `CREATE TABLE IF NOT EXISTS employees (
         id TEXT PRIMARY KEY,
-        nik TEXT NOT NULL,
+        username TEXT NOT NULL,
         name TEXT NOT NULL,
         position TEXT NOT NULL,
         department TEXT NOT NULL,
@@ -167,6 +167,13 @@ async function ensureTables() {
         menu_name TEXT NOT NULL UNIQUE,
         ingredients TEXT NOT NULL
       )`,
+    `CREATE TABLE IF NOT EXISTS closed_periods (
+        id TEXT PRIMARY KEY,
+        period TEXT NOT NULL UNIQUE,
+        closed_at TEXT NOT NULL,
+        closed_by TEXT NOT NULL,
+        notes TEXT
+      )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
         `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE daily_checklists ADD COLUMN IF NOT EXISTS leader_tasks TEXT DEFAULT '[]'`,
@@ -176,7 +183,8 @@ async function ensureTables() {
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`,
+    `ALTER TABLE employees RENAME COLUMN nik TO username`
   ];
 
   for (const q of queries) {
@@ -494,7 +502,7 @@ async function startServer() {
 
   const sanitizeEmployee = (e: any) => ({
     id: String(e.id || crypto.randomUUID()),
-    nik: String(e.nik || ""),
+    username: String(e.username || ""),
     name: String(e.name || ""),
     position: String(e.position || ""),
     department: String(e.department || ""),
@@ -659,6 +667,7 @@ async function startServer() {
       let stock_opnames: any[] = [];
       let stock_opname_items: any[] = [];
       let payroll_records: any[] = [];
+      let closed_periods: any[] = [];
 
       try {
         [
@@ -690,6 +699,7 @@ async function startServer() {
           stock_opnames,
           stock_opname_items,
           payroll_records,
+          closed_periods,
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -719,6 +729,7 @@ async function startServer() {
           db.select().from(schema.stockOpnames),
           db.select().from(schema.stockOpnameItems),
           db.select().from(schema.payrollRecords),
+          db.select().from(schema.closedPeriods),
         ]);
 
         // Seed default expense categories if empty
@@ -827,6 +838,7 @@ async function startServer() {
         stock_opnames,
         stock_opname_items,
         payroll_records,
+        closed_periods,
         serverTime: new Date().toISOString(),
       });
     } catch (e) {
@@ -948,6 +960,7 @@ async function startServer() {
         stock_opnames,
         stock_opname_items,
         payroll_records,
+        closed_periods,
       } = req.body;
 
       await db.transaction(async (tx) => {
@@ -1032,6 +1045,9 @@ async function startServer() {
         }
         if (settings !== undefined && settings !== null) {
           await tx.delete(schema.settings);
+        }
+        if (closed_periods !== undefined) {
+          await tx.delete(schema.closedPeriods);
         }
 
         // --- PHASE 2: INSERTS (Parent -> Child) ---
@@ -1119,6 +1135,17 @@ async function startServer() {
         if (purchase_orders !== undefined) {
           if (Array.isArray(purchase_orders) && purchase_orders.length > 0) {
             await tx.insert(schema.purchaseOrders).values(purchase_orders.map(sanitizePurchaseOrder));
+          }
+        }
+        if (closed_periods !== undefined) {
+          if (Array.isArray(closed_periods) && closed_periods.length > 0) {
+            await tx.insert(schema.closedPeriods).values(closed_periods.map((cp: any) => ({
+              id: cp.id,
+              period: cp.period,
+              closedAt: cp.closedAt,
+              closedBy: cp.closedBy,
+              notes: cp.notes || '',
+            })));
           }
         }
         if (cash_transactions !== undefined) {

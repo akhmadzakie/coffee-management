@@ -67,6 +67,8 @@ export function HRManagement() {
     addKPI,
     updateKPI,
     addUser,
+    updateUser,
+    deleteUser,
   } = useStore();
 
   const isIndo = settings.language === "id";
@@ -175,13 +177,40 @@ export function HRManagement() {
     if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
     if (editingEmployee) {
       updateEmployee({ ...editingEmployee, ...empForm });
+      
+      const relatedUser = users.find(u => u.username === editingEmployee.username);
+      if (relatedUser) {
+        if (empForm.status !== "AKTIF") {
+          deleteUser(relatedUser.id);
+          alert("Akun pengguna terkait telah dihapus karena status karyawan menjadi " + empForm.status);
+        } else {
+          let role = relatedUser.role;
+          const deptUpper = empForm.department.toUpperCase();
+          const posUpper = empForm.position.toUpperCase();
+          
+          if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) role = "MANAGER";
+          else if (deptUpper.includes("BAR")) role = "BAR";
+          else if (deptUpper.includes("KITCHEN") || deptUpper.includes("DAPUR")) role = "KITCHEN";
+          else if (deptUpper.includes("BAKER")) role = "BAKER";
+          
+          updateUser({
+            ...relatedUser,
+            username: empForm.username.toLowerCase(),
+            name: empForm.name,
+            role: role
+          });
+        }
+      }
     } else {
       const newEmpId = addEmployee(empForm);
       if (autoCreateUser && newEmpId) {
         // Auto create user account
         let defaultRole: any = "KASIR";
         const deptUpper = empForm.department.toUpperCase();
-        if (deptUpper.includes("BAR")) defaultRole = "BAR";
+        const posUpper = empForm.position.toUpperCase();
+        
+        if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) defaultRole = "MANAGER";
+        else if (deptUpper.includes("BAR")) defaultRole = "BAR";
         else if (deptUpper.includes("KITCHEN") || deptUpper.includes("DAPUR")) defaultRole = "KITCHEN";
         else if (deptUpper.includes("BAKER")) defaultRole = "BAKER";
         
@@ -239,7 +268,7 @@ export function HRManagement() {
   const handleImportContracts = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["Username"])?.id;
+      const empId = employees.find(e => e.username === row["Username"])?.id;
       if (empId) {
         addContract({
           employeeId: empId,
@@ -257,13 +286,13 @@ export function HRManagement() {
       }
     });
     if (imported > 0) alert(`Berhasil mengimport ${imported} kontrak.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
   };
 
   const handleImportAttendances = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["Username"])?.id;
+      const empId = employees.find(e => e.username === row["Username"])?.id;
       const period = row["Periode (YYYY-MM)"];
       if (empId && period) {
         addAttendance({
@@ -279,13 +308,13 @@ export function HRManagement() {
       }
     });
     if (imported > 0) alert(`Berhasil mengimport ${imported} absensi.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
   };
 
   const handleImportKPI = (data: any[]) => {
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.nik === row["Username"])?.id;
+      const empId = employees.find(e => e.username === row["Username"])?.id;
       const quarter = Number(row["Kuartal (1-4)"]);
       const year = Number(row["Tahun"]);
       if (empId && quarter && year) {
@@ -301,7 +330,7 @@ export function HRManagement() {
       }
     });
     if (imported > 0) alert(`Berhasil mengimport ${imported} KPI.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan NIK karyawan sesuai.");
+    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
   };
 
   const handleOpenContractModal = (contract?: any, employeeId?: string) => {
@@ -322,6 +351,15 @@ export function HRManagement() {
     } else {
       addContract(contractForm);
     }
+    
+    // Sync endDate ke Employee
+    if (contractForm.status === "ACTIVE") {
+      const emp = employees.find(e => e.id === contractForm.employeeId);
+      if (emp) {
+        updateEmployee({ ...emp, endDate: contractForm.endDate });
+      }
+    }
+    
     setIsContractModalOpen(false);
   };
 
@@ -679,7 +717,110 @@ export function HRManagement() {
 
           {activeTab === "employees" && (
             <div>
-              <KPI />
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo ? "Data Karyawan" : "Employee Data"}
+                </h3>
+                {canEditHR && (
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportEmployees}
+                      templateHeaders={["Username", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
+                      templateExampleRow={["EMP-001", "Budi Santoso", "Barista", "Operasional", "AKTIF", "TETAP"]}
+                      currentData={employees.map(e => ({
+                        id: e.id,
+                        "Username": e.username || "",
+                        "Nama Karyawan": e.name,
+                        "Posisi": e.position,
+                        "Departemen": e.department,
+                        "Status": e.status,
+                        "Tipe": e.employmentType
+                      }))}
+                      templateFilename="template_karyawan"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button
+                      onClick={() => handleOpenEmployeeModal()}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />{" "}
+                      {isIndo ? "Tambah Karyawan" : "Add Employee"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">Username</th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Nama" : "Name"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Jabatan" : "Position"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">Departemen</th>
+                      <th className="py-3 px-4 font-semibold">Status</th>
+                      {canEditHR && (
+                        <th className="py-3 px-4 font-semibold text-right">
+                          Aksi
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-8 text-center text-slate-500 italic"
+                        >
+                          {isIndo
+                            ? "Belum ada data karyawan."
+                            : "No employees data yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      employees.map((emp) => (
+                        <tr
+                          key={emp.id}
+                          className="border-b border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="py-3 px-4 text-slate-600 font-mono text-sm">
+                            {emp.username}
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-800">
+                            {emp.name}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">
+                            {emp.position}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">
+                            {emp.department}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full 
+                              ${emp.status === "AKTIF" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}
+                            >
+                              {emp.status}
+                            </span>
+                          </td>
+                          {canEditHR && (
+                            <td className="py-3 px-4 flex justify-end gap-2">
+                              <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -696,8 +837,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
-                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -736,25 +876,17 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
-                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
-                                "bg-amber-100 text-amber-700"
-                              }`}>
-                                {d.approvalStatus || "PENDING"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              {canEditHR && (
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
                                 <button
                                   onClick={() => {
-                                    setVerifyingAttendance(d);
-                                    setIsVerificationModalOpen(true);
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
                                   }}
-                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
                                 >
-                                  Verifikasi
+                                  Tolak (Alpha)
                                 </button>
                               )}
                             </td>
@@ -770,7 +902,116 @@ export function HRManagement() {
 
           {activeTab === "contracts" && (
             <div>
-              <KPI />
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
+                </h3>
+                {canEditHR && (
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportContracts}
+                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Potongan Alpha/Hari", "Mulai Kontrak", "Selesai Kontrak"]}
+                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
+                      templateFilename="template_kontrak"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Karyawan" : "Employee"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Batas Kontrak" : "End Date"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Gaji Pokok" : "Basic Salary"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Tnjgn Makan" : "Meal Allow."}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Tnjgn Jabatan" : "Position Allow."}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Potongan Alpha" : "Alpha Deduct"}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contracts.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-8 text-center text-slate-500 italic"
+                        >
+                          {isIndo
+                            ? "Belum ada data kontrak."
+                            : "No contract data yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      contracts.map((c) => {
+                        const isExpiring = (() => {
+                          if (!c.endDate || c.status !== 'ACTIVE') return false;
+                          const end = new Date(c.endDate);
+                          const thirtyDays = new Date();
+                          thirtyDays.setDate(new Date().getDate() + 30);
+                          return end >= new Date() && end <= thirtyDays;
+                        })();
+                        
+                        return (
+                          <tr
+                            key={c.id}
+                            className={`border-b border-slate-100 hover:bg-slate-50 ${isExpiring ? 'bg-amber-50/50' : ''}`}
+                          >
+                            <td className="py-3 px-4 font-medium text-slate-800">
+                              {getEmployeeName(c.employeeId)}
+                            </td>
+                            <td className="py-3 px-4">
+                              {c.endDate ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-slate-600 font-medium">
+                                    {new Date(c.endDate).toLocaleDateString("id-ID")}
+                                  </span>
+                                  {isExpiring && (
+                                    <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full inline-block w-max">
+                                      {isIndo ? "Segera Berakhir" : "Expiring Soon"}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic">
+                                  {isIndo ? "Tetap" : "Permanent"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.basicSalary)}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.mealAllowance)}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-mono">
+                              {formatRupiah(c.positionAllowance)}
+                            </td>
+                            <td className="py-3 px-4 text-rose-600 font-mono">
+                              {formatRupiah(c.alphaDeductionPerDay)}/hr
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -787,8 +1028,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
-                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -827,25 +1067,17 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
-                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
-                                "bg-amber-100 text-amber-700"
-                              }`}>
-                                {d.approvalStatus || "PENDING"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              {canEditHR && (
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
                                 <button
                                   onClick={() => {
-                                    setVerifyingAttendance(d);
-                                    setIsVerificationModalOpen(true);
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
                                   }}
-                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
                                 >
-                                  Verifikasi
+                                  Tolak (Alpha)
                                 </button>
                               )}
                             </td>
@@ -862,13 +1094,161 @@ export function HRManagement() {
           
           {activeTab === "schedule" && (
             <div>
-              <KPI />
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo ? "Jadwal Shift Karyawan" : "Employee Shift Schedule"}
+                </h3>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => {
+                      const prev = new Date(currentWeekStart);
+                      prev.setDate(prev.getDate() - 7);
+                      setCurrentWeekStart(prev);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
+                  >
+                    &laquo; Prev Week
+                  </button>
+                  <span className="font-semibold text-slate-700">
+                    {weekDays[0].toLocaleDateString("id-ID", { month: "short", day: "numeric" })} - {weekDays[6].toLocaleDateString("id-ID", { month: "short", day: "numeric" })}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const next = new Date(currentWeekStart);
+                      next.setDate(next.getDate() + 7);
+                      setCurrentWeekStart(next);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
+                  >
+                    Next Week &raquo;
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                      <th className="py-3 px-4 font-semibold sticky left-0 bg-slate-50 z-10 w-48 shadow-[1px_0_0_0_#e2e8f0]">Karyawan</th>
+                      {weekDays.map((d, idx) => (
+                        <th key={idx} className="py-3 px-4 font-semibold text-center border-l border-slate-200">
+                          <div className="text-xs">{d.toLocaleDateString("id-ID", { weekday: "short" })}</div>
+                          <div>{d.getDate()}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.filter(e => e.status === "AKTIF").map((emp) => (
+                      <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-3 px-4 font-medium text-slate-800 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
+                          <div className="truncate">{emp.name}</div>
+                          <div className="text-xs text-slate-500">{emp.position}</div>
+                        </td>
+                        {weekDays.map((d, idx) => {
+                          const dateStr = d.toISOString().split("T")[0];
+                          const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
+                          return (
+                            <td key={idx} className="p-2 border-l border-slate-200">
+                              <select
+                                disabled={!canEditHR}
+                                value={shift}
+                                onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
+                                className={`w-full text-xs font-semibold py-1.5 px-2 rounded-lg border-0 focus:ring-2 focus:ring-indigo-500 ${
+                                  shift === "PAGI" ? "bg-emerald-100 text-emerald-700" :
+                                  shift === "SORE" ? "bg-amber-100 text-amber-700" :
+                                  shift === "MIDDLE" ? "bg-blue-100 text-blue-700" :
+                                  "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                <option value="OFF">OFF (Libur)</option>
+                                <option value="PAGI">Pagi</option>
+                                <option value="MIDDLE">Middle</option>
+                                <option value="SORE">Sore</option>
+                              </select>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           {activeTab === "kpi" && (
             <div>
-              <KPI />
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo ? "Penilaian KPI (Kuartal)" : "KPI Assessment (Quarterly)"}
+                </h3>
+                {canEditHR && (
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportKPI}
+                      templateHeaders={["Username", "Kuartal (1-4)", "Tahun", "Total Skor", "Bonus KPI", "Catatan Evaluator"]}
+                      templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
+                      templateFilename="template_kpi"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Karyawan" : "Employee"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">Qtr/Tahun</th>
+                      <th className="py-3 px-4 font-semibold">Skor Total</th>
+                      <th className="py-3 px-4 font-semibold">Bonus KPI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kpiRecords.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="py-8 text-center text-slate-500 italic"
+                        >
+                          {isIndo ? "Belum ada data KPI." : "No KPI data yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      kpiRecords.map((k) => (
+                        <tr
+                          key={k.id}
+                          className="border-b border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="py-3 px-4 font-medium text-slate-800">
+                            {getEmployeeName(k.employeeId)}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">
+                            Q{k.quarter} {k.year}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full 
+                              ${k.totalScore >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                            >
+                              {k.totalScore.toFixed(1)} / 100
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-emerald-600 font-mono font-medium">
+                            {formatRupiah(k.kpiBonus)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -885,8 +1265,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
-                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -925,25 +1304,17 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
-                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
-                                "bg-amber-100 text-amber-700"
-                              }`}>
-                                {d.approvalStatus || "PENDING"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              {canEditHR && (
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
                                 <button
                                   onClick={() => {
-                                    setVerifyingAttendance(d);
-                                    setIsVerificationModalOpen(true);
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
                                   }}
-                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
                                 >
-                                  Verifikasi
+                                  Tolak (Alpha)
                                 </button>
                               )}
                             </td>
@@ -959,7 +1330,92 @@ export function HRManagement() {
 
           {activeTab === "attendance" && (
             <div>
-              <KPI />
+              <div className="flex justify-between items-center mb-6">
+                
+                <h3 className="text-lg font-bold text-slate-800">
+                  {isIndo
+                    ? "Rekap Absensi Bulanan"
+                    : "Monthly Attendance Recap"}
+                </h3>
+                {canEditHR && (
+                  <div className="flex items-center gap-3">
+                    <CsvImportExport
+                      onImport={handleImportAttendances}
+                      templateHeaders={["Username", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
+                      templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
+                      templateFilename="template_absensi"
+                      buttonLabel={isIndo ? "Import" : "Import"}
+                    />
+                    <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
+                      <th className="py-3 px-4 font-semibold">
+                        {isIndo ? "Karyawan" : "Employee"}
+                      </th>
+                      <th className="py-3 px-4 font-semibold">Periode</th>
+                      <th className="py-3 px-4 font-semibold text-emerald-600">
+                        Hadir
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-amber-500">
+                        Izin/Sakit
+                      </th>
+                      <th className="py-3 px-4 font-semibold text-rose-600">
+                        Alpha
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                                        {(() => {
+                        // Auto-generate rekapan bulanan dari dailyAttendances
+                        const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+                        const uniqueEmpIds = Array.from(new Set([
+                          ...employees.map(e => e.id),
+                          ...dailyAttendances.filter(a => a.date.startsWith(currentMonth)).map(a => a.employeeId)
+                        ]));
+                        const recap = uniqueEmpIds.map(empId => {
+                          const logs = dailyAttendances.filter(a => a.employeeId === empId && a.date.startsWith(currentMonth));
+                          if (logs.length === 0) return null;
+                          return {
+                            id: empId,
+                            employeeId: empId,
+                            period: currentMonth,
+                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status)).length,
+                            sickDays: logs.filter(l => l.status === "SAKIT").length,
+                            permissionDays: logs.filter(l => l.status === "IZIN").length,
+                            alphaDays: logs.filter(l => l.status === "ALPHA").length,
+                          };
+                        }).filter(Boolean);
+
+                        if (recap.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-slate-500 italic">
+                                {isIndo ? "Belum ada data absensi untuk bulan ini." : "No attendance data yet."}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return recap.map((a: any) => (
+                          <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(a.employeeId)}</td>
+                            <td className="py-3 px-4 text-slate-600">{a.period}</td>
+                            <td className="py-3 px-4 font-semibold text-emerald-600">{a.presentDays}</td>
+                            <td className="py-3 px-4 font-semibold text-amber-500">{a.sickDays + a.permissionDays}</td>
+                            <td className="py-3 px-4 font-semibold text-rose-600">{a.alphaDays}</td>
+                          </tr>
+                        ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Daily Attendances for Manager */}
               <div className="mt-12">
@@ -976,8 +1432,7 @@ export function HRManagement() {
                         <th className="py-3 px-4 font-semibold">Jam In/Out</th>
                         <th className="py-3 px-4 font-semibold">Durasi</th>
                         <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold text-center">Approval</th>
-                        <th className="py-3 px-4 font-semibold text-center">Aksi</th>
+                        <th className="py-3 px-4 font-semibold">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1016,25 +1471,17 @@ export function HRManagement() {
                             <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
                               {d.notes || "-"}
                             </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
-                                d.approvalStatus === "REJECTED" ? "bg-rose-100 text-rose-700" :
-                                "bg-amber-100 text-amber-700"
-                              }`}>
-                                {d.approvalStatus || "PENDING"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              {canEditHR && (
+                            <td className="py-3 px-4">
+                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
                                 <button
                                   onClick={() => {
-                                    setVerifyingAttendance(d);
-                                    setIsVerificationModalOpen(true);
+                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
+                                      updateDailyAttendance({...d, status: "ALPHA"});
+                                    }
                                   }}
-                                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
                                 >
-                                  Verifikasi
+                                  Tolak (Alpha)
                                 </button>
                               )}
                             </td>
@@ -1124,7 +1571,7 @@ export function HRManagement() {
                           {selectedPayslip.employee.name}
                         </p>
                         <p className="text-sm text-slate-600">
-                          {selectedPayslip.employee.nik} —{" "}
+                          {selectedPayslip.employee.username} —{" "}
                           {selectedPayslip.employee.position}
                         </p>
                       </div>
@@ -1308,7 +1755,9 @@ export function HRManagement() {
                     <option value="Kasir">Kasir</option>
                     <option value="Karyawan">Karyawan (Staff)</option>
                     <option value="Leader">Leader</option>
-                    <option value="Manager">Manager</option>
+                    {currentUser?.role !== "MANAGER" && (
+                      <option value="Manager">Manager</option>
+                    )}
                   </select>
                 </div>
               </div>

@@ -198,15 +198,35 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   // Expiring Contracts (within 30 days)
   const expiringContracts = useMemo(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(today.getDate() + 30);
     
     return contracts.filter(c => {
+      // Check if the employee is still active, otherwise the contract doesn't matter
+      const emp = employees.find(e => e.id === c.employeeId);
+      if (!emp || emp.status !== "AKTIF") return false;
+      
       if (c.status !== 'ACTIVE' || !c.endDate) return false;
       const end = new Date(c.endDate);
       return end >= today && end <= thirtyDaysFromNow;
     });
-  }, [contracts]);
+  }, [contracts, employees]);
+
+  // Expired Contracts (Past end date but employee still active)
+  const expiredContracts = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today
+    
+    return contracts.filter(c => {
+      const emp = employees.find(e => e.id === c.employeeId);
+      if (!emp || emp.status !== "AKTIF") return false;
+      
+      if (c.status !== 'ACTIVE' || !c.endDate) return false;
+      const end = new Date(c.endDate);
+      return end < today;
+    });
+  }, [contracts, employees]);
   
   // Expense by Category (Donut Chart)
   const expenseByCategory = useMemo(() => {
@@ -291,6 +311,39 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           </div>
         );
       })()}
+
+      {/* HR Alerts */}
+      {(currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
+        <div className="space-y-3">
+          {expiredContracts.length > 0 && (
+            <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-5 py-3.5 shadow-sm">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-rose-800">
+                  {isIndo ? "Perhatian: Ada kontrak karyawan yang sudah KEDALUWARSA" : "Alert: Expired employee contracts detected"}
+                </p>
+                <p className="text-xs text-rose-600 mt-0.5">
+                  {expiredContracts.length} {isIndo ? "karyawan masih berstatus AKTIF namun kontraknya telah melewati batas tanggal. Segera perbarui kontrak atau nonaktifkan karyawan." : "employees are still active past their contract end date. Please update or terminate."}
+                </p>
+              </div>
+            </div>
+          )}
+          {expiringContracts.length > 0 && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5 shadow-sm">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-amber-800">
+                  {isIndo ? "Pengingat: Ada kontrak yang akan segera habis" : "Reminder: Contracts expiring soon"}
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {expiringContracts.length} {isIndo ? "kontrak karyawan akan habis dalam waktu 30 hari ke depan." : "employee contracts will expire in the next 30 days."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header & Filters */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
         <div>

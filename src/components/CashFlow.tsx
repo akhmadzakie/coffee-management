@@ -34,6 +34,7 @@ export const CashFlow = () => {
     expenseCategories,
     salesTransactions,
     salesImportLogs,
+    closedPeriods,
   } = useStore();
 
 
@@ -105,10 +106,17 @@ export const CashFlow = () => {
     const catId = formData.get("categoryId") as string;
     const catName = expenseCategories.find((c: any) => c.id === catId)?.name || "Lainnya";
 
+    const trxDate = new Date().toISOString();
+    const period = trxDate.substring(0, 7);
+    if (closedPeriods.some(p => p.period === period)) {
+      alert('Gagal: Periode untuk tanggal ini sudah ditutup.');
+      return;
+    }
+
     addCashTransaction({
       accountId: accId,
       type: trxType,
-      date: new Date().toISOString(),
+      date: trxDate,
       amount: Number(formData.get("amount")),
       description: formData.get("description") as string,
       category: catName,
@@ -157,6 +165,12 @@ export const CashFlow = () => {
         const posKas = cashAccounts.find((a) => a.name.toLowerCase() === (accountName || "").toLowerCase()) || cashAccounts[0];
 
         if (amount > 0 && posKas) {
+          const rowPeriod = date.substring(0, 7);
+          if (closedPeriods.some((p: any) => p.period === rowPeriod)) {
+            errors++;
+            return; // skip this row
+          }
+
           const existingTrx = cashTransactions.find((t) => t.id === systemId);
           if (existingTrx) {
             updateCashTransaction({
@@ -455,7 +469,7 @@ export const CashFlow = () => {
                     {formatCurrency(trx.amount)}
                   </td>
                   <td className="p-4 text-center">
-                    {!isReadOnly && (
+                    {!isReadOnly && !closedPeriods.some((p: any) => p.period === trx.date.substring(0, 7)) && (
                       <button
                         onClick={() => {
                           if (

@@ -130,7 +130,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
                     </div>
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        user.role === "ADMIN"
+                        user.role === "SUPER_ADMIN" || user.role === "OWNER"
                           ? "bg-purple-100 text-purple-700"
                           : user.role === "MANAGER"
                             ? "bg-blue-100 text-blue-700"
