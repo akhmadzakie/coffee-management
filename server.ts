@@ -184,7 +184,10 @@ async function ensureTables() {
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`,
-    `ALTER TABLE employees RENAME COLUMN nik TO username`
+    `ALTER TABLE employees RENAME COLUMN nik TO username`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_bar_tasks JSONB`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_kitchen_tasks JSONB`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_baker_tasks JSONB`
   ];
 
   for (const q of queries) {
