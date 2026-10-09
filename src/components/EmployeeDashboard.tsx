@@ -28,9 +28,14 @@ import {
   ShieldCheck,
   ClipboardList,
   Info,
+  FileText,
+  Wallet,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES } from "./LeaderChecklist";
+import { PayrollRecord } from "../types";
+import { formatCurrency } from "../utils/format";
+import { PayslipModal } from "./PayslipModal";
 
 interface EmployeeDashboardProps {
   onNavigate: (view: ViewState) => void;
@@ -46,9 +51,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     settings,
     users,
     contracts,
+    payrollRecords,
   } = useStore();
 
   const [showKpiDetails, setShowKpiDetails] = useState(false);
+  const [selectedPayslipForEmployee, setSelectedPayslipForEmployee] = useState<PayrollRecord | null>(null);
 
   // 1. Identify the active employee record matching currentUser
   const activeEmployee = useMemo(() => {
@@ -257,6 +264,13 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
       };
     }
   }, [monthlyStats, isLeader, dailyChecklists, activeEmployeeId, leaderDivision, currentMonthStr, targetKpiBonus]);
+
+  // 10. My Payslips (Self-Service)
+  const myPayslips = useMemo(() => {
+    return (payrollRecords || [])
+      .filter((p) => p.employeeId === activeEmployeeId)
+      .sort((a, b) => b.period.localeCompare(a.period));
+  }, [payrollRecords, activeEmployeeId]);
 
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
@@ -931,6 +945,112 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           </div>
         </div>
       </div>
+
+      {/* ─── 5. SLIP GAJI SAYA (SELF-SERVICE PAYSLIP) ─── */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Riwayat Slip Gaji Saya
+              </h3>
+              <p className="text-xs text-slate-500">
+                Akses mandiri untuk melihat dan mengunduh slip gaji resmi Anda kapan saja.
+              </p>
+            </div>
+          </div>
+
+          {myPayslips.length > 0 && (
+            <span className="text-xs font-bold px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200/60 self-start sm:self-auto">
+              {myPayslips.length} Periode Tersedia
+            </span>
+          )}
+        </div>
+
+        {myPayslips.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+            <FileText className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-xs font-medium text-slate-600">
+              Belum Ada Slip Gaji Diterbitkan
+            </p>
+            <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+              Slip gaji resmi Anda akan otomatis muncul di sini setelah diproses dan disahkan oleh Tim Keuangan / Manajemen kafe pada jadwal penggajian bulanan.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myPayslips.map((pay) => {
+              const [y, m] = pay.period.split("-");
+              const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+              const formattedPeriod = dateObj.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+
+              return (
+                <div
+                  key={pay.id}
+                  className="p-5 rounded-2xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition-all bg-gradient-to-br from-white to-slate-50/60 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <span className="text-[11px] text-slate-400 font-medium block">
+                          Periode Gaji
+                        </span>
+                        <h4 className="font-bold text-slate-800 text-sm sm:text-base">
+                          {formattedPeriod}
+                        </h4>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          pay.status === "PAID"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : pay.status === "APPROVED"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {pay.status === "PAID" ? "Lunas Diterima" : pay.status === "APPROVED" ? "Disahkan" : "Draft"}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-100/80 rounded-xl mb-4">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block">
+                        Take Home Pay (THP)
+                      </span>
+                      <span className="text-xl font-black text-slate-900 font-mono block mt-0.5">
+                        {formatCurrency(pay.netPay)}
+                      </span>
+                      {pay.paidDate && (
+                        <span className="text-[10px] text-slate-400 block mt-1">
+                          Dibayar tgl {new Date(pay.paidDate).toLocaleDateString("id-ID")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedPayslipForEmployee(pay)}
+                    className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Lihat & Unduh Slip Gaji</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Payslip Modal */}
+      {selectedPayslipForEmployee && (
+        <PayslipModal
+          payroll={selectedPayslipForEmployee}
+          onClose={() => setSelectedPayslipForEmployee(null)}
+        />
+      )}
     </div>
   );
 };

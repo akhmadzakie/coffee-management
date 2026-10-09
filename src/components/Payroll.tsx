@@ -14,6 +14,7 @@ import {
   FileText,
   X
 } from "lucide-react";
+import { PayslipModal } from "./PayslipModal";
 
 export function Payroll() {
   const {
@@ -496,81 +497,10 @@ export function Payroll() {
       )}
 
       {selectedPayroll && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <FileText size={18} className="text-primary" />
-                Detail Slip Gaji
-              </h3>
-              <button onClick={() => setSelectedPayroll(null)} className="text-slate-400 hover:text-slate-600">
-                &times;
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto space-y-4 text-sm flex-1">
-              <div className="text-center mb-6">
-                <h4 className="font-bold text-lg">{employees.find((e: any) => e.id === selectedPayroll.employeeId)?.name}</h4>
-                <p className="text-slate-500">Periode: {selectedPayroll.period}</p>
-                <div className="mt-2 inline-block px-3 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-700">
-                  Status: {selectedPayroll.status}
-                </div>
-              </div>
-
-              <div>
-                <p className="font-semibold text-slate-800 border-b pb-1 mb-2">Penghasilan</p>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-600">Gaji Pokok</span>
-                  <span className="font-medium">{formatCurrency(selectedPayroll.basicSalary)}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-600">Tunjangan Jabatan</span>
-                  <span className="font-medium">{formatCurrency(selectedPayroll.positionAllowance)}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-600">Uang Makan</span>
-                  <span className="font-medium">{formatCurrency(selectedPayroll.mealAllowance)}</span>
-                </div>
-                {(selectedPayroll.transportAllowance || 0) > 0 && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-600">Uang Transport</span>
-                    <span className="font-medium">{formatCurrency(selectedPayroll.transportAllowance)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-600">Bonus KPI</span>
-                  <span className="font-medium text-emerald-600">+{formatCurrency(selectedPayroll.kpiBonus)}</span>
-                </div>
-                {(selectedPayroll.overtimePay || 0) > 0 && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-600">Lembur/Tambahan Lain</span>
-                    <span className="font-medium text-emerald-600">+{formatCurrency(selectedPayroll.overtimePay)}</span>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <p className="font-semibold text-slate-800 border-b pb-1 mb-2 mt-4">Potongan</p>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-600">Potongan Ketidakhadiran</span>
-                  <span className="font-medium text-rose-600">-{formatCurrency(selectedPayroll.alphaDeduction)}</span>
-                </div>
-                {selectedPayroll.otherDeductions > 0 && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-600">Potongan Lainnya</span>
-                    <span className="font-medium text-rose-600">-{formatCurrency(selectedPayroll.otherDeductions)}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-6 pt-4 border-t-2 border-slate-200">
-                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  <span className="font-bold text-slate-800">Total Take Home Pay</span>
-                  <span className="font-bold text-lg text-primary">{formatCurrency(selectedPayroll.netPay)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PayslipModal
+          payroll={selectedPayroll}
+          onClose={() => setSelectedPayroll(null)}
+        />
       )}
       {/* Payment Modal */}
       {paymentModalOpen && payrollToPay && (
