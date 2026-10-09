@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
 import { eq, not } from "drizzle-orm";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const initialSettings = {
   id: "1",
@@ -17,6 +18,10 @@ const initialSettings = {
   salesPerson: "Admin",
   footerMessage: "Terima kasih atas kunjungannya.",
   language: "id",
+  leaderBarTasks: "[]",
+  leaderKitchenTasks: "[]",
+  leaderBakerTasks: "[]",
+  managerTasks: "[]",
 };
 
 const initialUsers = [
@@ -187,7 +192,9 @@ async function ensureTables() {
     `ALTER TABLE employees RENAME COLUMN nik TO username`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_bar_tasks JSONB`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_kitchen_tasks JSONB`,
-    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_baker_tasks JSONB`
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_baker_tasks JSONB`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS manager_tasks JSONB`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT`
   ];
 
   for (const q of queries) {
@@ -452,6 +459,11 @@ async function startServer() {
     salesPerson: String(st?.salesPerson || ""),
     footerMessage: String(st?.footerMessage || ""),
     language: String(st?.language || "id"),
+    leaderBarTasks: Array.isArray(st?.leaderBarTasks) ? JSON.stringify(st.leaderBarTasks) : (st?.leaderBarTasks || "[]"),
+    leaderKitchenTasks: Array.isArray(st?.leaderKitchenTasks) ? JSON.stringify(st.leaderKitchenTasks) : (st?.leaderKitchenTasks || "[]"),
+    leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
+    managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
+    geminiApiKey: st?.geminiApiKey || null,
   });
 
   const sanitizeUser = (u: any) => {
@@ -1654,6 +1666,77 @@ async function startServer() {
       }
     },
   );
+
+  // ─── AI ASSISTANT API ──────────────────────────────────────────────────────
+  app.post("/api/ai/parse-receipt", async (req, res) => {
+    try {
+      const { text, imageBase64, mimeType } = req.body;
+      const settings = await db.select().from(schema.settings).limit(1);
+      const apiKey = settings[0]?.gemini_api_key;
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "Gemini API Key is not configured in settings." });
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const contents = [];
+      
+      let promptText = "You are an AI assistant for a Coffee Shop management system. ";
+      
+      if (imageBase64) {
+        promptText += "Analyze this receipt/invoice. Identify the items bought, prices, and the total. Also categorize it (e.g., 'Operasional', 'Bahan Baku', etc). ";
+        contents.push({
+          inlineData: { data: imageBase64, mimeType: mimeType || "image/jpeg" }
+        });
+      }
+      
+      if (text) {
+        promptText += "The user input is: '" + text + "'. ";
+        promptText += "Parse this text and extract any expenses, incomes, or stock updates. ";
+      }
+      
+      promptText += "Return the result strictly as a JSON object matching this schema: { transactions: [{ type: 'CASH_OUT' | 'CASH_IN', amount: number, category: string, description: string }] }";
+
+      contents.push({ text: promptText });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              transactions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    type: { type: Type.STRING, enum: ["CASH_OUT", "CASH_IN"] },
+                    amount: { type: Type.NUMBER },
+                    category: { type: Type.STRING },
+                    description: { type: Type.STRING }
+                  },
+                  required: ["type", "amount", "category", "description"]
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const jsonStr = response.text;
+      if (!jsonStr) {
+        throw new Error("Empty response from Gemini");
+      }
+      
+      const result = JSON.parse(jsonStr);
+      res.json(result);
+    } catch (e: any) {
+      console.error("AI parse error:", e);
+      res.status(500).json({ error: e?.message || "Failed to parse with AI" });
+    }
+  });
 
   // ─── Dashboard Summary API ─────────────────────────────────────────────────
   app.get("/api/dashboard/summary", async (req, res) => {

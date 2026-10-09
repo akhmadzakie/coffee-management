@@ -87,7 +87,7 @@ export function HRManagement() {
   // --- Modal Form State ---
   const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any, phone: "", email: "", address: "" });
   const [autoCreateUser, setAutoCreateUser] = useState(true);
-  const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0,  startDate: "", endDate: "", status: "ACTIVE" as any });
+  const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, alphaDeductionPerDay: 0, kpiBonusTarget: 0,  startDate: "", endDate: "", status: "ACTIVE" as any });
 
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
@@ -276,6 +276,7 @@ export function HRManagement() {
           positionAllowance: Number(row["Tunjangan Jabatan"]) || 0,
           mealAllowance: Number(row["Tunjangan Makan"]) || 0,
           transportAllowance: Number(row["Tunjangan Transport"]) || 0,
+          alphaDeductionPerDay: Number(row["Potongan Alpha"]) || 0,
           kpiBonusTarget: Number(row["Target Bonus KPI"]) || 0,
           
           startDate: row["Mulai Kontrak"] || getLocalDateString(),
@@ -339,7 +340,7 @@ export function HRManagement() {
       setContractForm({ ...contract });
     } else {
       setEditingContract(null);
-      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, kpiBonusTarget: 0,  startDate: getLocalDateString(), endDate: "", status: "ACTIVE" });
+      setContractForm({ employeeId: employeeId || "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, alphaDeductionPerDay: 0, kpiBonusTarget: 0,  startDate: getLocalDateString(), endDate: "", status: "ACTIVE" });
     }
     setIsContractModalOpen(true);
   };
@@ -365,9 +366,9 @@ export function HRManagement() {
 
 
   const isHRD =
-    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
+    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
   const isFinance =
-    currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
+    currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
   const canEditHR = isHRD && !isReadOnly;
 
   const formatRupiah = (amount: number) => {
@@ -810,7 +811,10 @@ export function HRManagement() {
                           </td>
                           {canEditHR && (
                             <td className="py-3 px-4 flex justify-end gap-2">
-                              <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                              <button 
+                                onClick={() => handleOpenEmployeeModal(emp)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              >
                                 <Edit2 className="w-4 h-4" />
                               </button>
                             </td>
@@ -910,8 +914,8 @@ export function HRManagement() {
                   <div className="flex items-center gap-3">
                     <CsvImportExport
                       onImport={handleImportContracts}
-                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak"]}
-                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "500000", "100000", "2024-01-01", "2024-12-31"]}
+                      templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Potongan Alpha", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak"]}
+                      templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "100000", "500000", "2024-01-01", "2024-12-31"]}
                       templateFilename="template_kontrak"
                       buttonLabel={isIndo ? "Import" : "Import"}
                     />
@@ -943,6 +947,11 @@ export function HRManagement() {
                       <th className="py-3 px-4 font-semibold">
                         {isIndo ? "Potongan Alpha" : "Alpha Deduct"}
                       </th>
+                      {canEditHR && (
+                        <th className="py-3 px-4 font-semibold text-right">
+                          Aksi
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1003,8 +1012,18 @@ export function HRManagement() {
                               {formatRupiah(c.positionAllowance)}
                             </td>
                             <td className="py-3 px-4 text-rose-600 font-mono">
-                              {formatRupiah(c.alphaDeductionPerDay)}/hr
+                              {formatRupiah(c.alphaDeductionPerDay || 0)}/hr
                             </td>
+                            {canEditHR && (
+                              <td className="py-3 px-4 flex justify-end gap-2">
+                                <button 
+                                  onClick={() => handleOpenContractModal(c)}
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -1208,6 +1227,11 @@ export function HRManagement() {
                       <th className="py-3 px-4 font-semibold">Qtr/Tahun</th>
                       <th className="py-3 px-4 font-semibold">Skor Total</th>
                       <th className="py-3 px-4 font-semibold">Bonus KPI</th>
+                      {canEditHR && (
+                        <th className="py-3 px-4 font-semibold text-right">
+                          Aksi
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1243,6 +1267,16 @@ export function HRManagement() {
                           <td className="py-3 px-4 text-emerald-600 font-mono font-medium">
                             {formatRupiah(k.kpiBonus)}
                           </td>
+                          {canEditHR && (
+                            <td className="py-3 px-4 flex justify-end gap-2">
+                              <button 
+                                onClick={() => handleOpenKpiModal(k)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -1850,7 +1884,7 @@ export function HRManagement() {
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.basicSalary || ""} onChange={e => setContractForm({...contractForm, basicSalary: Number(e.target.value)})} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Jabatan</label>
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.positionAllowance || ""} onChange={e => setContractForm({...contractForm, positionAllowance: Number(e.target.value)})} />
@@ -1862,6 +1896,10 @@ export function HRManagement() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Transport</label>
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.transportAllowance || ""} onChange={e => setContractForm({...contractForm, transportAllowance: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Potongan Alpha/Hari</label>
+                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.alphaDeductionPerDay || ""} onChange={e => setContractForm({...contractForm, alphaDeductionPerDay: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

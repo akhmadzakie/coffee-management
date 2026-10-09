@@ -4,6 +4,7 @@ import { useTranslation } from "../utils/i18n";
 import { useStore } from "../store/StoreContext";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
+import { AIAssistantModal } from "./AIAssistantModal";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -35,6 +36,7 @@ import {
   Calculator,
   Eye,
   Calendar,
+  Sparkles,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -56,6 +58,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [exportModalModule, setExportModalModule] = useState<
     "sales" | "inventory" | "finance" | "executive"
   >("sales");
+  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -197,16 +200,18 @@ export const Layout: React.FC<LayoutProps> = ({
       "dashboard_finance",
       "cash_flow",
       "finance_reports",
+      "settings",
+      "leader_checklist",
     ],
     MANAGER: [
-      "dashboard_finance", "dashboard_inventory",
-      "cash_flow", "expense_categories", "finance_reports",
+      "dashboard_inventory",
       "inventory", "import_sales",
-      "hr", "payroll", "leader_checklist",
+      "hr", "leader_checklist",
       "shifts", "suppliers", "purchases",
       "users",   // Manager bisa onboard staff (dibatasi role-nya di Users.tsx)
       "audit_log",
-      "attendance_clock"
+      "attendance_clock",
+      "settings"
     ],
     FINANCE: [
       "dashboard_finance",
@@ -241,6 +246,16 @@ export const Layout: React.FC<LayoutProps> = ({
       <SwitchAccountModal
         isOpen={isSwitchAccountOpen}
         onClose={() => setIsSwitchAccountOpen(false)}
+      />
+
+      {/* AI Assistant Modal */}
+      <AIAssistantModal
+        isOpen={isAIAssistantOpen}
+        onClose={() => setIsAIAssistantOpen(false)}
+        onApplyTransactions={(txs) => {
+          // Temporarily just alert until we hook it to StoreContext
+          alert(`Transaksi dari AI akan ditambahkan:\n` + JSON.stringify(txs, null, 2));
+        }}
       />
 
       {/* Export & Business Reports Modal */}
@@ -498,6 +513,16 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
 
           <div className="flex gap-2.5 items-center">
+            {/* AI Assistant Button */}
+            <button
+              onClick={() => setIsAIAssistantOpen(true)}
+              title="Magic AI Assistant (Catat dari Nota/Teks)"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md shadow-blue-500/20"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">AI Assistant</span>
+            </button>
+
             {/* Export & Business Reports Center Button */}
             {currentUser?.role !== "KASIR" && currentUser?.role !== "LEADER" && (
               <button

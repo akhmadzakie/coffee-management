@@ -82,32 +82,38 @@ export function Payroll() {
         const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA").length;
         const kpi = kpiRecords.find((k: any) => k.employeeId === emp.id && k.period === period);
 
-        const dailyWage = contract?.basicSalary || contract?.baseSalary || 0; // The baseSalary field is now treated as Daily Wage
+        const rawBasicSalary = contract?.basicSalary || contract?.baseSalary || 0;
+        const dailyWage = Math.round(rawBasicSalary / 26);
         const positionAllowance = contract?.positionAllowance || 0;
         const mealAllowanceRate = contract?.mealAllowance || 0;
+        const transportAllowanceRate = contract?.transportAllowance || 0;
         const dailyBonusRate = contract?.dailyBonusRate || 0;
         const sopBonusRate = contract?.sopBonusRate || 0;
         
-        const totalBasicSalary = presentDays * dailyWage;
-        const totalMealAllowance = presentDays * mealAllowanceRate;
-        const totalDailyBonus = presentDays * dailyBonusRate;
+        const isManagerOrFinance = emp.position?.toUpperCase() === "MANAGER" || emp.position?.toUpperCase() === "FINANCE" || emp.role?.toUpperCase() === "MANAGER" || emp.role?.toUpperCase() === "FINANCE" || emp.department?.toUpperCase() === "FINANCE" || emp.department?.toUpperCase() === "MANAGEMENT";
+        
+        const totalBasicSalary = isManagerOrFinance ? rawBasicSalary : (presentDays * dailyWage);
+        // If they don't have attendance records, they still get full allowance assuming 26 days if they are manager/finance
+        const totalMealAllowance = isManagerOrFinance ? (26 * mealAllowanceRate) : (presentDays * mealAllowanceRate);
+        const totalTransportAllowance = isManagerOrFinance ? (26 * transportAllowanceRate) : (presentDays * transportAllowanceRate);
+        const totalDailyBonus = isManagerOrFinance ? (26 * dailyBonusRate) : (presentDays * dailyBonusRate);
         
         const checklistDays = dailyChecklists.filter((c: any) => c.employeeId === emp.id && c.date.startsWith(period) && c.cleaningDone && c.equipmentChecked).length;
         const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
         
-        const alphaDeduction = alphaDays * dailyWage; // Penalty for alpha is the daily wage
+        const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage); // Penalty for alpha
         
         // KPI Bonus Logic
         const empKpiTasks = (kpiTasks || []).filter((t: any) => t.employeeId === emp.id && t.period === period);
         const totalKpiScore = empKpiTasks.reduce((sum: number, task: any) => sum + (task.score || 0), 0);
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
         const applicableRule = activeRules.find((r: any) => totalKpiScore >= r.minScore && totalKpiScore <= r.maxScore);
-        const kpiBonus = applicableRule ? applicableRule.bonusAmount : (kpi?.bonusAmount || 0); // fallback to old kpiRecord
+        const kpiBonus = applicableRule ? applicableRule.bonusAmount : (kpi?.kpiBonus || kpi?.bonusAmount || 0); // fallback to old kpiRecord
 
         const overtimePay = 0; // Default no overtime
         const otherDeductions = 0;
         
-        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalDailyBonus + sopBonus + kpiBonus + overtimePay;
+        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + overtimePay;
         const netPay = grossPay - alphaDeduction - otherDeductions;
 
         const existingRecord = (payrollRecords || []).find(
@@ -123,6 +129,7 @@ export function Payroll() {
             basicSalary: totalBasicSalary, // Fix undefined variable basicSalary
             mealAllowance: totalMealAllowance,
             positionAllowance,
+            transportAllowance: totalTransportAllowance,
             kpiBonus,
             overtimePay,
             alphaDeduction,
@@ -234,7 +241,7 @@ export function Payroll() {
                   <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 font-medium text-slate-800">{emp.name}</td>
                     <td className="p-4 text-right">{formatCurrency(calculation.basicSalary)}</td>
-                    <td className="p-4 text-right">{formatCurrency(calculation.positionAllowance + calculation.mealAllowance)}</td>
+                    <td className="p-4 text-right">{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</td>
                     <td className="p-4 text-right text-emerald-600">+{formatCurrency(calculation.kpiBonus)}</td>
                     <td className="p-4 text-right text-rose-600">-{formatCurrency(calculation.alphaDeduction)}</td>
                     <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(calculation.netPay)}</td>
@@ -390,7 +397,7 @@ export function Payroll() {
                     const overtimePay = parseFloat(e.target.value) || 0;
                     setEditingPayroll(prev => {
                       if (!prev) return null;
-                      const grossPay = prev.basicSalary + prev.positionAllowance + prev.mealAllowance + prev.kpiBonus + overtimePay;
+                      const grossPay = prev.basicSalary + prev.positionAllowance + prev.mealAllowance + (prev.transportAllowance || 0) + prev.kpiBonus + overtimePay;
                       const netPay = grossPay - prev.alphaDeduction - prev.otherDeductions;
                       return { ...prev, overtimePay, grossPay, netPay: netPay > 0 ? netPay : 0 };
                     });
@@ -420,7 +427,7 @@ export function Payroll() {
               <div className="bg-slate-50 p-4 rounded-xl mt-4 border border-slate-100">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-600">Gaji Pokok & Tunjangan Dasar:</span>
-                  <span className="font-medium text-slate-800">{formatCurrency(editingPayroll.basicSalary + editingPayroll.positionAllowance + editingPayroll.mealAllowance + editingPayroll.kpiBonus)}</span>
+                  <span className="font-medium text-slate-800">{formatCurrency(editingPayroll.basicSalary + editingPayroll.positionAllowance + editingPayroll.mealAllowance + (editingPayroll.transportAllowance || 0) + editingPayroll.kpiBonus)}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-emerald-600">Lembur/Tambahan Manual:</span>
@@ -492,10 +499,22 @@ export function Payroll() {
                   <span className="text-slate-600">Uang Makan</span>
                   <span className="font-medium">{formatCurrency(selectedPayroll.mealAllowance)}</span>
                 </div>
+                {(selectedPayroll.transportAllowance || 0) > 0 && (
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-600">Uang Transport</span>
+                    <span className="font-medium">{formatCurrency(selectedPayroll.transportAllowance)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1">
                   <span className="text-slate-600">Bonus KPI</span>
                   <span className="font-medium text-emerald-600">+{formatCurrency(selectedPayroll.kpiBonus)}</span>
                 </div>
+                {(selectedPayroll.overtimePay || 0) > 0 && (
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-600">Lembur/Tambahan Lain</span>
+                    <span className="font-medium text-emerald-600">+{formatCurrency(selectedPayroll.overtimePay)}</span>
+                  </div>
+                )}
               </div>
 
               <div>

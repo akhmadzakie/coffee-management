@@ -102,7 +102,7 @@ function AppContent() {
   const roleDefaultView: Record<string, ViewState> = {
     SUPER_ADMIN: "dashboard_finance",
     OWNER:       "dashboard_finance",
-    MANAGER:     "dashboard_finance",
+    MANAGER:     "dashboard_inventory",
     FINANCE:     "dashboard_finance",
     KASIR:       "shifts",
     LEADER:      "dashboard_inventory",
@@ -126,16 +126,18 @@ function AppContent() {
       "dashboard_finance",
       "cash_flow",
       "finance_reports",
+      "settings",
+      "leader_checklist"
     ],
     MANAGER: [
-      "dashboard_finance", "dashboard_inventory",
-      "cash_flow", "expense_categories", "finance_reports",
+      "dashboard_inventory",
       "inventory", "import_sales",
-      "hr", "payroll", "leader_checklist",
+      "hr", "leader_checklist",
       "shifts", "suppliers", "purchases",
       "users",   // Manager bisa onboard staff (KASIR, LEADER) — dibatasi di Users.tsx
       "audit_log",
-      "attendance_clock"
+      "attendance_clock",
+      "settings"
     ],
     FINANCE: [
       "dashboard_finance",

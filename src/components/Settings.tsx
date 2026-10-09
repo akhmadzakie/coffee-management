@@ -4,7 +4,7 @@ import { Upload, Save, Building2, Shield } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 
 export const SettingsComponent = () => {
-  const { settings, updateSettings } = useStore();
+  const { settings, updateSettings, currentUser } = useStore();
   const [brandName, setBrandName] = useState(settings.brandName);
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(
     settings.logoDataUrl,
@@ -15,6 +15,9 @@ export const SettingsComponent = () => {
   const [footerMessage, setFooterMessage] = useState(settings.footerMessage);
   const [leaderBarTasks, setLeaderBarTasks] = useState<string[]>(settings.leaderBarTasks || []);
   const [leaderKitchenTasks, setLeaderKitchenTasks] = useState<string[]>(settings.leaderKitchenTasks || []);
+  const [leaderBakerTasks, setLeaderBakerTasks] = useState<string[]>(settings.leaderBakerTasks || []);
+  const [managerTasks, setManagerTasks] = useState<string[]>(settings.managerTasks || []);
+  const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
   
   const addTask = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     const task = prompt(language === "id" ? "Masukkan tugas baru:" : "Enter new task:");
@@ -56,6 +59,11 @@ export const SettingsComponent = () => {
       salesPerson,
       footerMessage,
       language,
+      leaderBarTasks,
+      leaderKitchenTasks,
+      leaderBakerTasks,
+      managerTasks,
+      geminiApiKey,
     });
     setSaveStatus("Settings saved successfully!");
     setTimeout(() => setSaveStatus(null), 3000);
@@ -81,7 +89,9 @@ export const SettingsComponent = () => {
       </div>
 
       {/* Connected Devices & Active Sessions Management */}
-      <ConnectedDevices />
+      {currentUser?.role !== "MANAGER" && (
+        <>
+          <ConnectedDevices />
 
       {/* Company Profile Settings Card */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -232,6 +242,22 @@ export const SettingsComponent = () => {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center">
+              <span className="mr-2">✨</span> Gemini API Key
+            </label>
+            <input
+              type="password"
+              value={geminiApiKey}
+              onChange={(e) => setGeminiApiKey(e.target.value)}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="AI_..."
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Digunakan untuk fitur AI Assistant (Otomatisasi pengeluaran dari Struk/Teks).
+            </p>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               {language === "id" ? "Pesan Footer Invoice" : "Footer Message"}
             </label>
@@ -243,6 +269,63 @@ export const SettingsComponent = () => {
               placeholder="e.g., You are our strongest connection..."
             />
           </div>
+        </div>
+      </div>
+    </>
+  )}
+          
+      <div className="pt-6 border-t border-slate-200">
+            <h4 className="font-semibold text-slate-800 mb-4">{language === "id" ? "Tugas Checklist Leader (Bar)" : "Leader Bar Tasks"}</h4>
+            <div className="space-y-2 mb-3">
+              {leaderBarTasks.map((task, i) => (
+                <div key={i} className="flex gap-2">
+                  <input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm" value={task} onChange={(e) => updateTask(setLeaderBarTasks, i, e.target.value)} />
+                  <button onClick={() => removeTask(setLeaderBarTasks, i)} className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-sm">Hapus</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addTask(setLeaderBarTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Bar</button>
+          </div>
+          
+          <div className="pt-6 border-t border-slate-200">
+            <h4 className="font-semibold text-slate-800 mb-4">{language === "id" ? "Tugas Checklist Leader (Kitchen)" : "Leader Kitchen Tasks"}</h4>
+            <div className="space-y-2 mb-3">
+              {leaderKitchenTasks.map((task, i) => (
+                <div key={i} className="flex gap-2">
+                  <input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm" value={task} onChange={(e) => updateTask(setLeaderKitchenTasks, i, e.target.value)} />
+                  <button onClick={() => removeTask(setLeaderKitchenTasks, i)} className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-sm">Hapus</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addTask(setLeaderKitchenTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Kitchen</button>
+          </div>
+          
+          <div className="pt-6 border-t border-slate-200">
+            <h4 className="font-semibold text-slate-800 mb-4">{language === "id" ? "Tugas Checklist Leader (Baker)" : "Leader Baker Tasks"}</h4>
+            <div className="space-y-2 mb-3">
+              {leaderBakerTasks.map((task, i) => (
+                <div key={i} className="flex gap-2">
+                  <input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm" value={task} onChange={(e) => updateTask(setLeaderBakerTasks, i, e.target.value)} />
+                  <button onClick={() => removeTask(setLeaderBakerTasks, i)} className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-sm">Hapus</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addTask(setLeaderBakerTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Baker</button>
+          </div>
+          
+          <div className="pt-6 border-t border-slate-200">
+            <h4 className="font-semibold text-slate-800 mb-4">{language === "id" ? "Tugas Checklist (Manager)" : "Manager Tasks"}</h4>
+            <div className="space-y-2 mb-3">
+              {managerTasks.map((task, i) => (
+                <div key={i} className="flex gap-2">
+                  <input type="text" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm" value={task} onChange={(e) => updateTask(setManagerTasks, i, e.target.value)} />
+                  <button onClick={() => removeTask(setManagerTasks, i)} className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-sm">Hapus</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addTask(setManagerTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Manager</button>
+          </div>
+          
         </div>
 
         <div className="mt-8 flex justify-end items-center space-x-4">

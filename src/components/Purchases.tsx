@@ -29,7 +29,10 @@ export const Purchases = () => {
     deletePurchaseOrder,
     settings,
     isReadOnly,
+    currentUser,
   } = useStore();
+
+  const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
 
   const [activeTab, setActiveTab] = useState<"new_po" | "history">("new_po");
 
@@ -132,11 +135,11 @@ export const Purchases = () => {
       date: new Date().toISOString(),
       items: cart,
       totalAmount,
-      status: paymentMethod === "CASH" ? "PAID" : "UNPAID",
+      status: "UNPAID",
       deliveryStatus: deliveryOption,
-      paymentMethod,
-      dueDate: paymentMethod === "TEMPO" ? dueDate : undefined,
-      amountPaid: paymentMethod === "CASH" ? totalAmount : 0,
+      paymentMethod: "TEMPO",
+      dueDate: dueDate,
+      amountPaid: 0,
     };
 
     addPurchaseOrder(newPO);
@@ -550,9 +553,13 @@ export const Purchases = () => {
                           >
                             {po.status}
                           </span>
-                          {po.status === "UNPAID" && (
+                          {po.status === "UNPAID" && isFinance && (
                             <button
-                              onClick={() => updatePOStatus(po.id, "PAID")}
+                              onClick={() => {
+                                setSelectedPOForPay(po);
+                                setPayAmount(po.totalAmount - (po.amountPaid || 0));
+                                setPayModalOpen(true);
+                              }}
                               className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline font-semibold"
                             >
                               {isIndo ? "Lunasi" : "Pay"}

@@ -88,6 +88,7 @@ export interface PayrollRecord {
   mealAllowance: number;
   positionAllowance: number;
   kpiBonus: number;
+  transportAllowance: number;
   overtimePay: number; // Lembur / Tambahan Manual
   alphaDeduction: number;
   otherDeductions: number;
@@ -183,6 +184,7 @@ export interface EmployeeContract {
   mealAllowance: number; // Tunjangan makan
   positionAllowance: number; // Tunjangan jabatan
   transportAllowance: number; // Tunjangan transport
+  alphaDeductionPerDay: number; // Potongan Alpha per hari
   kpiBonusTarget: number; // Target bonus KPI
   workingDaysPerMonth?: number; // HKE - Hari Kerja Efektif normal
   startDate: string; // ISO string
@@ -288,6 +290,8 @@ export interface Settings {
   leaderBarTasks?: string[];
   leaderKitchenTasks?: string[];
   leaderBakerTasks?: string[];
+  managerTasks?: string[];
+  geminiApiKey?: string;
 }
 
 export interface CashAccount {

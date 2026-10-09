@@ -140,6 +140,8 @@ export const settings = pgTable("settings", {
   leaderBarTasks: text("leader_bar_tasks").default("[]"),
   leaderKitchenTasks: text("leader_kitchen_tasks").default("[]"),
   leaderBakerTasks: text("leader_baker_tasks").default("[]"),
+  managerTasks: text("manager_tasks").default("[]"),
+  gemini_api_key: text("gemini_api_key"),
 });
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),
