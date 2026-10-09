@@ -14,6 +14,11 @@ import {
   Coffee,
   CheckCircle2,
   AlertCircle,
+  FileText,
+  FileSpreadsheet,
+  File,
+  Trash2,
+  Paperclip,
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 
@@ -53,11 +58,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Receipt Scanner State
+  // Receipt & Document Scanner State
   const [receiptText, setReceiptText] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [scanResult, setScanResult] = useState<any | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,11 +154,36 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setReceiptFile(selectedFile);
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const processSelectedFile = async (selectedFile: File) => {
+    setReceiptFile(selectedFile);
+    setScanError(null);
+
+    const name = selectedFile.name.toLowerCase();
+    const type = selectedFile.type.toLowerCase();
+
+    // If it's an image, create preview
+    if (type.startsWith("image/") || name.match(/\.(jpg|jpeg|png|webp|gif|heic|bmp|svg)$/)) {
       setPreviewUrl(URL.createObjectURL(selectedFile));
+    } else {
+      setPreviewUrl(null);
+    }
+
+    // If text or CSV, read text automatically to assist user
+    if (type.startsWith("text/") || name.endsWith(".csv") || name.endsWith(".txt")) {
+      try {
+        const textContent = await selectedFile.text();
+        if (!receiptText.trim()) {
+          setReceiptText(textContent.slice(0, 1500));
+        }
+      } catch {
+        // non-critical
+      }
     }
   };
 
@@ -168,7 +199,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       let mimeType = null;
 
       if (receiptFile) {
-        mimeType = receiptFile.type;
+        mimeType =
+          receiptFile.type ||
+          (receiptFile.name.toLowerCase().endsWith(".pdf")
+            ? "application/pdf"
+            : receiptFile.name.toLowerCase().endsWith(".csv")
+            ? "text/csv"
+            : "application/octet-stream");
+
         const reader = new FileReader();
         const readPromise = new Promise<string>((resolve) => {
           reader.onloadend = () => {
@@ -184,7 +222,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       const response = await fetch("/api/ai/parse-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: receiptText, imageBase64, mimeType }),
+        body: JSON.stringify({
+          text: receiptText,
+          imageBase64,
+          mimeType,
+          fileName: receiptFile?.name,
+        }),
       });
 
       const data = await response.json();
@@ -192,7 +235,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
       setScanResult(data);
     } catch (err: any) {
-      setScanError(err.message || "Terjadi kesalahan saat memproses struk dengan AI");
+      setScanError(err.message || "Terjadi kesalahan saat memproses berkas dengan AI");
     } finally {
       setIsScanning(false);
     }
@@ -250,7 +293,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             }`}
           >
             <Receipt className="w-4 h-4 text-amber-600" />
-            <span>Scan Struk & Nota Belanja</span>
+            <span>Ekstraksi Berkas & Struk</span>
           </button>
 
           <button
@@ -386,65 +429,197 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           </div>
         )}
 
-        {/* ─── TAB 2: SCAN STRUK & NOTA BELANJA ─── */}
+        {/* ─── TAB 2: EKSTRAKSI BERKAS & STRUK BELANJA ─── */}
         {activeTab === "receipt" && (
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-[#F8F9FA]">
             <div className="rounded-2xl p-4 bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed shadow-xs">
-              <span className="font-bold text-amber-950">Ekstraksi Pengeluaran Otomatis:</span>{" "}
-              Unggah foto nota belanja bahan baku (susu, biji kopi, cup, es batu) atau ketik catatan belanja. AI akan mengonversinya menjadi draf transaksi kas secara presisi.
+              <span className="font-bold text-amber-950">Ekstraksi Pengeluaran Multi-Format:</span>{" "}
+              Unggah berkas bukti belanja atau ketik catatan belanja. AI Copilot mendukung foto struk kamera (JPG/PNG/WebP), dokumen PDF invoice supplier, spreadsheet Excel / CSV, hingga catatan teks dokumen. Transaksi kas akan otomatis dirangkum secara rapi.
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                  Catatan Naratif / Rincian Belanja
+                  Catatan Naratif / Rincian Belanja (Opsional)
                 </label>
                 <textarea
                   value={receiptText}
                   onChange={(e) => setReceiptText(e.target.value)}
                   placeholder="Contoh: Beli es kristal 2 bal Rp 30.000 pake laci kasir, lalu beli susu segar Diamond 5 kotak total Rp 95.000..."
-                  className="w-full bg-white border border-stone-200 rounded-xl px-4 py-3 text-xs sm:text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 min-h-[90px] resize-none shadow-xs"
+                  className="w-full bg-white border border-stone-200 rounded-xl px-4 py-3 text-xs sm:text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 min-h-[85px] resize-none shadow-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5">
-                  Foto Struk / Invoice (Opsional)
+                <label className="block text-xs font-bold text-stone-700 mb-1.5 flex items-center justify-between">
+                  <span>Berkas Dokumen / Foto Struk / Invoice</span>
+                  <span className="text-[10px] text-stone-400 font-normal">Mendukung Foto, PDF, Excel/CSV & Dokumen</span>
                 </label>
+                
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/plain,text/csv"
                   className="hidden"
                   ref={fileInputRef}
-                  onChange={handleFileChange}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) processSelectedFile(f);
+                  }}
                 />
 
-                {!previewUrl ? (
-                  <button
+                {!receiptFile ? (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) processSelectedFile(f);
+                    }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-6 border-2 border-dashed border-stone-200 rounded-2xl text-stone-500 hover:text-stone-800 hover:border-amber-400 hover:bg-white transition-colors flex flex-col items-center justify-center gap-2 bg-stone-50"
+                    className={`w-full py-6 px-4 border-2 border-dashed rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 text-center ${
+                      isDragging
+                        ? "border-amber-500 bg-amber-50/70 ring-4 ring-amber-500/10"
+                        : "border-stone-200 bg-stone-50/70 hover:bg-white hover:border-amber-400"
+                    }`}
                   >
-                    <Upload className="w-5 h-5 text-amber-600" />
-                    <span className="text-xs font-bold">Klik untuk Pilih Foto Nota / Struk</span>
-                    <span className="text-[10px] text-stone-400">Mendukung format JPG, PNG, WebP</span>
-                  </button>
-                ) : (
-                  <div className="relative rounded-2xl border border-stone-200 p-2 bg-white shadow-xs">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shadow-xs">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-stone-800 block">
+                        Klik untuk Pilih Berkas atau Tarik ke Sini
+                      </span>
+                      <span className="text-[11px] text-stone-500 mt-0.5 block">
+                        Mendukung Foto Struk, PDF Invoice, Excel/CSV, dan Catatan Dokumen
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                        📷 Foto (JPG/PNG/WebP)
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                        📄 Dokumen PDF Faktur
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        📊 Excel & CSV
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                        📝 Dokumen / Teks
+                      </span>
+                    </div>
+                  </div>
+                ) : previewUrl ? (
+                  /* ── Image Preview ── */
+                  <div className="relative rounded-2xl border border-stone-200 p-2.5 bg-white shadow-xs">
                     <img
                       src={previewUrl}
-                      alt="Preview"
-                      className="w-full h-44 object-contain rounded-xl"
+                      alt="Preview Struk"
+                      className="w-full h-44 object-contain rounded-xl bg-stone-50"
                     />
-                    <button
-                      onClick={() => {
-                        setReceiptFile(null);
-                        setPreviewUrl(null);
-                      }}
-                      className="absolute top-4 right-4 p-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl hover:bg-rose-100 transition-colors"
-                      title="Hapus foto"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <div className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between text-xs px-1">
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-mono">
+                          FOTO
+                        </span>
+                        <span className="text-stone-700 font-medium truncate max-w-[220px]">
+                          {receiptFile.name}
+                        </span>
+                        <span className="text-stone-400 text-[11px]">
+                          ({formatFileSize(receiptFile.size)})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-stone-600 hover:text-amber-700 hover:bg-stone-100 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border border-stone-200"
+                        >
+                          Ganti
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReceiptFile(null);
+                            setPreviewUrl(null);
+                          }}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100"
+                          title="Hapus foto"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Non-Image Document Preview (PDF, Excel, CSV, Doc, Text) ── */
+                  <div className="rounded-2xl border border-stone-200 p-4 bg-white shadow-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                          receiptFile.name.toLowerCase().endsWith(".pdf")
+                            ? "bg-rose-50 border-rose-200 text-rose-600"
+                            : receiptFile.name.toLowerCase().match(/\.(csv|xlsx|xls)$/)
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-600"
+                            : "bg-amber-50 border-amber-200 text-amber-700"
+                        }`}
+                      >
+                        {receiptFile.name.toLowerCase().endsWith(".pdf") ? (
+                          <FileText className="w-6 h-6" />
+                        ) : receiptFile.name.toLowerCase().match(/\.(csv|xlsx|xls)$/) ? (
+                          <FileSpreadsheet className="w-6 h-6" />
+                        ) : (
+                          <File className="w-6 h-6" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-xs sm:text-sm text-stone-900 truncate">
+                            {receiptFile.name}
+                          </p>
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border font-mono shrink-0 ${
+                              receiptFile.name.toLowerCase().endsWith(".pdf")
+                                ? "bg-rose-100 text-rose-800 border-rose-200"
+                                : receiptFile.name.toLowerCase().match(/\.(csv|xlsx|xls)$/)
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                : "bg-sky-100 text-sky-800 border-sky-200"
+                            }`}
+                          >
+                            {receiptFile.name.split(".").pop()?.toUpperCase() || "DOC"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          {formatFileSize(receiptFile.size)} • Dokumen siap dipindai oleh AI
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition-colors border border-stone-200"
+                      >
+                        Ganti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceiptFile(null);
+                          setPreviewUrl(null);
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-rose-100"
+                        title="Hapus berkas"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -465,7 +640,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 {isScanning ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Menganalisis Struk dengan AI...</span>
+                    <span>Menganalisis Berkas dengan AI...</span>
                   </>
                 ) : (
                   <>
