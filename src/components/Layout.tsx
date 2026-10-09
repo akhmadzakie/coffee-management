@@ -38,6 +38,7 @@ import {
   Calendar,
   Sparkles,
   Store,
+  TrendingUp,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -95,6 +96,11 @@ export const Layout: React.FC<LayoutProps> = ({
   // ─── Semua item navigasi dengan grup visual ─────────────────────────────
   const allNavigation = [
     // ─── Dashboard Group ─────────────────────────────────────────
+    { group: "Dasbor",
+      name: "Dashboard Eksekutif",
+      view: "dashboard_owner" as ViewState,
+      icon: TrendingUp,
+    },
     { group: "Dasbor",
       name: "Dashboard Karyawan",
       view: "dashboard_employee" as ViewState,
@@ -208,6 +214,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const roleAccess: Record<string, ViewState[]> = {
     SUPER_ADMIN: ALL_VIEWS,
     OWNER: [
+      "dashboard_owner",
       "dashboard_finance",
       "dashboard_manager",
       "cash_flow",
@@ -285,8 +292,8 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {/* Sidebar - Desktop */}
-      <aside className={`hidden md:flex flex-col bg-primary border-r border-[#3a281f] text-secondary transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`p-6 border-b border-[#3a281f] flex items-center ${isSidebarCollapsed ? 'justify-center px-4' : 'gap-3'}`}>
+      <aside className={`hidden md:flex flex-col bg-primary border-r border-slate-800 text-secondary transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div className={`p-6 border-b border-slate-800 flex items-center ${isSidebarCollapsed ? 'justify-center px-4' : 'gap-3'}`}>
           {settings.logoDataUrl ? (
             <img
               src={settings.logoDataUrl}
@@ -491,6 +498,7 @@ export const Layout: React.FC<LayoutProps> = ({
           <div className="hidden md:block">
             <h2 className="text-xl font-bold text-stone-900 tracking-tight capitalize">
               {{
+                dashboard_owner: "Dashboard Eksekutif Owner",
                 dashboard_employee: "Portal Karyawan & Leader",
                 dashboard_manager: "Dashboard Operasional Manajer",
                 dashboard_finance: "Dashboard Keuangan",
@@ -515,6 +523,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </h2>
             <p className="text-xs text-stone-500 mt-0.5">
               {{
+                dashboard_owner: "Kesehatan bisnis, profitabilitas riil, efisiensi rasio biaya, dan deteksi dini risiko.",
                 dashboard_employee: "Pantau status kehadiran, evaluasi KPI, dan progres tugas operasional Anda.",
                 dashboard_manager: "Pantau shift kasir, kehadiran selfie staf, progres checklist divisi, dan stok bahan.",
                 dashboard_finance: "Ringkasan keuangan, arus kas, dan likuiditas bisnis Anda.",

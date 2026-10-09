@@ -16,6 +16,9 @@ import { ViewState } from "./types";
 const Dashboard = React.lazy(() =>
   import("./components/Dashboard").then((m) => ({ default: m.Dashboard })),
 );
+const OwnerDashboard = React.lazy(() =>
+  import("./components/OwnerDashboard").then((m) => ({ default: m.OwnerDashboard })),
+);
 const FinanceDashboard = React.lazy(() =>
   import("./components/FinanceDashboard").then((m) => ({ default: m.FinanceDashboard })),
 );
@@ -109,8 +112,8 @@ function AppContent() {
 
   // Halaman default saat pertama login atau saat view tidak diizinkan
   const roleDefaultView: Record<string, ViewState> = {
-    SUPER_ADMIN: "dashboard_manager",
-    OWNER:       "dashboard_finance",
+    SUPER_ADMIN: "dashboard_owner",
+    OWNER:       "dashboard_owner",
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
     KASIR:       "dashboard_employee",
@@ -122,6 +125,7 @@ function AppContent() {
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
   const ALL_VIEWS: ViewState[] = [
+    "dashboard_owner",
     "dashboard_employee",
     "dashboard_manager",
     "dashboard_finance", "dashboard_inventory", "cash_flow",
@@ -134,6 +138,7 @@ function AppContent() {
   const roleAllowedViews: Record<string, ViewState[]> = {
     SUPER_ADMIN: ALL_VIEWS,
     OWNER: [
+      "dashboard_owner",
       "dashboard_finance",
       "dashboard_manager",
       "cash_flow",
@@ -191,6 +196,8 @@ function AppContent() {
 
   const renderView = () => {
     switch (currentView) {
+      case "dashboard_owner":
+        return <OwnerDashboard onNavigate={setCurrentView} />;
       case "dashboard_finance":
         return <FinanceDashboard onNavigate={setCurrentView} />;
       case "dashboard_manager":

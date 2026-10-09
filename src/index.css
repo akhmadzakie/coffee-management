@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #241813;
-  --color-accent: #c27803;
-  --color-secondary: #f5eee6;
-  --color-coffee-dark: #1b130f;
-  --color-coffee-roast: #2c1d17;
+  --color-primary: #0f172a;
+  --color-accent: #d97706;
+  --color-secondary: #f8fafc;
+  --color-coffee-dark: #0f172a;
+  --color-coffee-roast: #1e293b;
   --color-coffee-crema: #d97706;
-  --color-coffee-latte: #f8f4ee;
-  --color-coffee-border: #ede4d8;
+  --color-coffee-latte: #f8fafc;
+  --color-coffee-border: #e2e8f0;
 }
 
 @layer utilities {
@@ -20,37 +20,37 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: #d6cbbe;
+    background-color: #cbd5e1;
     border-radius: 9999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: #b8a896;
+    background-color: #94a3b8;
   }
 
-  /* Glassmorphism coffee styles */
+  /* Clean Nordic & Glassmorphism styles */
   .glass-card {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(226, 214, 199, 0.7);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
   }
 
   .glass-header {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(235, 224, 211, 0.8);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
   }
 
-  /* Apple-inspired subtle elevation */
+  /* Apple-inspired subtle elevation for clean management */
   .shadow-coffee-sm {
-    box-shadow: 0 1px 3px rgba(44, 29, 23, 0.04), 0 1px 2px rgba(44, 29, 23, 0.02);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
   }
   .shadow-coffee {
-    box-shadow: 0 4px 16px -2px rgba(44, 29, 23, 0.06), 0 2px 6px -1px rgba(44, 29, 23, 0.03);
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
   }
   .shadow-coffee-lg {
-    box-shadow: 0 12px 32px -4px rgba(44, 29, 23, 0.1), 0 4px 12px -2px rgba(44, 29, 23, 0.04);
+    box-shadow: 0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
   }
 }
 
@@ -65,8 +65,8 @@
 
   body {
     font-family: inherit;
-    color: #26201c;
-    background-color: #fbf9f5;
+    color: #0f172a;
+    background-color: #f8fafc;
   }
 
   /* Tabular numbers for clean currency and KPI alignment */
@@ -76,7 +76,7 @@
 
   /* Focus ring aesthetic */
   *:focus-visible {
-    outline: 2px solid rgba(194, 120, 3, 0.5);
+    outline: 2px solid rgba(217, 119, 6, 0.4);
     outline-offset: 2px;
   }
 }
