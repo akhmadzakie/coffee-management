@@ -37,6 +37,7 @@ import {
   Eye,
   Calendar,
   Sparkles,
+  Store,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -100,9 +101,14 @@ export const Layout: React.FC<LayoutProps> = ({
       icon: LayoutDashboard,
     },
     { group: "Dasbor",
+      name: "Dashboard Manajer",
+      view: "dashboard_manager" as ViewState,
+      icon: Store,
+    },
+    { group: "Dasbor",
       name: "Dashboard Keuangan",
       view: "dashboard_finance" as ViewState,
-      icon: LayoutDashboard,
+      icon: Wallet,
     },
     { group: "Dasbor",
       name: "Dashboard Inventori",
@@ -203,10 +209,12 @@ export const Layout: React.FC<LayoutProps> = ({
     SUPER_ADMIN: ALL_VIEWS,
     OWNER: [
       "dashboard_finance",
+      "dashboard_manager",
       "cash_flow",
       "finance_reports",
     ],
     MANAGER: [
+      "dashboard_manager",
       "dashboard_inventory",
       "inventory", "import_sales",
       "hr", "leader_checklist",
@@ -484,6 +492,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <h2 className="text-xl font-bold text-stone-900 tracking-tight capitalize">
               {{
                 dashboard_employee: "Portal Karyawan & Leader",
+                dashboard_manager: "Dashboard Operasional Manajer",
                 dashboard_finance: "Dashboard Keuangan",
                 dashboard_inventory: "Dashboard Inventori",
                 cash_flow: "Arus Kas",
@@ -507,7 +516,8 @@ export const Layout: React.FC<LayoutProps> = ({
             <p className="text-xs text-stone-500 mt-0.5">
               {{
                 dashboard_employee: "Pantau status kehadiran, evaluasi KPI, dan progres tugas operasional Anda.",
-                dashboard_finance: "Ringkasan keuangan dan arus kas bisnis Anda.",
+                dashboard_manager: "Pantau shift kasir, kehadiran selfie staf, progres checklist divisi, dan stok bahan.",
+                dashboard_finance: "Ringkasan keuangan, arus kas, dan likuiditas bisnis Anda.",
                 dashboard_inventory: "Pantau stok dan pergerakan inventori.",
                 cash_flow: "Kelola pemasukan, pengeluaran, dan posisi kas.",
                 expense_categories: "Atur kategori pengeluaran untuk pelaporan.",

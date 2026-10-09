@@ -16,6 +16,12 @@ import { ViewState } from "./types";
 const Dashboard = React.lazy(() =>
   import("./components/Dashboard").then((m) => ({ default: m.Dashboard })),
 );
+const FinanceDashboard = React.lazy(() =>
+  import("./components/FinanceDashboard").then((m) => ({ default: m.FinanceDashboard })),
+);
+const ManagerDashboard = React.lazy(() =>
+  import("./components/ManagerDashboard").then((m) => ({ default: m.ManagerDashboard })),
+);
 const Inventory = React.lazy(() =>
   import("./components/Inventory").then((m) => ({ default: m.Inventory })),
 );
@@ -103,9 +109,9 @@ function AppContent() {
 
   // Halaman default saat pertama login atau saat view tidak diizinkan
   const roleDefaultView: Record<string, ViewState> = {
-    SUPER_ADMIN: "dashboard_finance",
+    SUPER_ADMIN: "dashboard_manager",
     OWNER:       "dashboard_finance",
-    MANAGER:     "dashboard_inventory",
+    MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
     KASIR:       "dashboard_employee",
     LEADER:      "dashboard_employee",
@@ -117,6 +123,7 @@ function AppContent() {
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
   const ALL_VIEWS: ViewState[] = [
     "dashboard_employee",
+    "dashboard_manager",
     "dashboard_finance", "dashboard_inventory", "cash_flow",
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
@@ -128,10 +135,12 @@ function AppContent() {
     SUPER_ADMIN: ALL_VIEWS,
     OWNER: [
       "dashboard_finance",
+      "dashboard_manager",
       "cash_flow",
       "finance_reports",
     ],
     MANAGER: [
+      "dashboard_manager",
       "dashboard_inventory",
       "inventory", "import_sales",
       "hr", "leader_checklist",
@@ -183,7 +192,9 @@ function AppContent() {
   const renderView = () => {
     switch (currentView) {
       case "dashboard_finance":
-        return <Dashboard view="FINANCE" />;
+        return <FinanceDashboard onNavigate={setCurrentView} />;
+      case "dashboard_manager":
+        return <ManagerDashboard onNavigate={setCurrentView} />;
       case "dashboard_inventory":
         return <Dashboard view="INVENTORY" />;
       case "inventory":
