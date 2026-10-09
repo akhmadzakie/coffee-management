@@ -234,6 +234,10 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];
   const navigation = allNavigation.filter((nav) => allowedViews.includes(nav.view));
+  const canAccessBusinessReports = Boolean(
+    currentUser &&
+      ["OWNER", "MANAGER", "FINANCE", "SUPER_ADMIN"].includes(currentUser.role)
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -518,8 +522,8 @@ export const Layout: React.FC<LayoutProps> = ({
               <span className="hidden sm:inline">AI Assistant</span>
             </button>
 
-            {/* Export & Business Reports Center Button */}
-            {currentUser?.role !== "KASIR" && currentUser?.role !== "LEADER" && (
+            {/* Export & Business Reports Center Button (Only Owner/Boss, Manager, Finance, and Super Admin) */}
+            {canAccessBusinessReports && (
               <button
                 onClick={() => {
                   // Preselect module based on currentView if applicable
@@ -612,7 +616,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   </div>
 
                   <div className="py-1">
-                    {currentUser?.role !== "KASIR" && currentUser?.role !== "LEADER" && (
+                    {canAccessBusinessReports && (
                       <button
                         onClick={() => {
                           setIsUserDropdownOpen(false);

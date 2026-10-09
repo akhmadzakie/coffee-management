@@ -44,6 +44,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   defaultModule = "sales",
 }) => {
   const {
+    currentUser,
     salesTransactions,
     ingredients,
     stockMovements,
@@ -52,6 +53,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     expenseCategories,
   } = useStore();
   const isIndo = settings.language === "id";
+
+  const canAccessExport = Boolean(
+    currentUser &&
+      ["OWNER", "MANAGER", "FINANCE", "SUPER_ADMIN"].includes(currentUser.role)
+  );
+
+  if (!isOpen || !canAccessExport) return null;
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<
