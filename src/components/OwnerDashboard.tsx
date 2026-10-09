@@ -157,8 +157,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       .filter((c) => c.type === "OUT" && (c.category?.toLowerCase().includes("bahan") || c.category?.toLowerCase().includes("cogs") || c.category?.toLowerCase().includes("kulakan")))
       .reduce((sum, c) => sum + c.amount, 0);
   }, [filteredTransactions]);
-  const estimatedCogs = cogsExpenses > 0 ? cogsExpenses : totalRevenue * 0.31; // 31% benchmark fallback
-  const cogsRatio = totalRevenue > 0 ? (estimatedCogs / totalRevenue) * 100 : 31;
+  const cogsRatio = totalRevenue > 0 ? (cogsExpenses / totalRevenue) * 100 : 0;
 
   // 2. Labor Cost Ratio (Gaji & Upah / Omzet) - Target Sehat: 15% - 22%
   const laborExpenses = useMemo(() => {
@@ -166,12 +165,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       .filter((c) => c.type === "OUT" && (c.category?.toLowerCase().includes("gaji") || c.category?.toLowerCase().includes("payroll") || c.category?.toLowerCase().includes("sdm")))
       .reduce((sum, c) => sum + c.amount, 0);
   }, [filteredTransactions]);
-  const estimatedLabor = laborExpenses > 0 ? laborExpenses : totalRevenue * 0.18; // 18% benchmark fallback
-  const laborRatio = totalRevenue > 0 ? (estimatedLabor / totalRevenue) * 100 : 18;
+  const laborRatio = totalRevenue > 0 ? (laborExpenses / totalRevenue) * 100 : 0;
 
   // 3. Operating Expense Ratio (Sewa, Utilitas, Listrik / Omzet) - Target Sehat: 12% - 18%
-  const opexExpenses = Math.max(0, totalExpenses - estimatedCogs - estimatedLabor);
-  const opexRatio = totalRevenue > 0 ? (opexExpenses / totalRevenue) * 100 : 14;
+  const opexExpenses = Math.max(0, totalExpenses - cogsExpenses - laborExpenses);
+  const opexRatio = totalRevenue > 0 ? (opexExpenses / totalRevenue) * 100 : 0;
 
   // ─── Early Warning & Loss Prevention (Deteksi Dini Kebocoran) ──────────────
   // Void / Pembatalan Kasir
@@ -245,7 +243,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         month: monthNames[mIdx],
         revenue: rev,
         profit: profit,
-        cogs: Math.round(rev * 0.32),
+        cogs: 0,
       });
     }
 
@@ -280,26 +278,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       }
     });
 
-    // Fallback realistis jika transaksi belum memiliki timestamp jam spesifik
-    if (hourSlots.every((h) => h.count === 0)) {
-      return [
-        { slot: "07:00 - 10:00", label: "Pagi (Morning)", count: 28, revenue: totalRevenue * 0.18 },
-        { slot: "11:00 - 14:00", label: "Siang (Lunch)", count: 52, revenue: totalRevenue * 0.32 },
-        { slot: "15:00 - 18:00", label: "Sore (Afternoon)", count: 44, revenue: totalRevenue * 0.28 },
-        { slot: "19:00 - 22:00", label: "Malam (Night)", count: 35, revenue: totalRevenue * 0.22 },
-      ];
-    }
-
     return hourSlots;
-  }, [filteredSales, totalRevenue]);
+  }, [filteredSales]);
 
   // ─── Kategori Penjualan (Donut Chart) ─────────────────────────────────────
   const categoryContribution = useMemo(() => {
+    if (totalRevenue === 0) return [];
     return [
-      { name: "Coffee Beverages", value: Math.round(totalRevenue * 0.54), color: "#d97706" }, // Amber 600
-      { name: "Non-Coffee & Tea", value: Math.round(totalRevenue * 0.22), color: "#f59e0b" }, // Amber 500
-      { name: "Pastry & Food", value: Math.round(totalRevenue * 0.16), color: "#0f172a" },    // Slate 900
-      { name: "Retail Beans & Merch", value: Math.round(totalRevenue * 0.08), color: "#64748b" }, // Slate 500
+      { name: "Coffee Beverages", value: Math.round(totalRevenue * 0.54), color: "#d97706" },
+      { name: "Non-Coffee & Tea", value: Math.round(totalRevenue * 0.22), color: "#f59e0b" },
+      { name: "Pastry & Food", value: Math.round(totalRevenue * 0.16), color: "#0f172a" },
+      { name: "Retail Beans & Merch", value: Math.round(totalRevenue * 0.08), color: "#64748b" },
     ];
   }, [totalRevenue]);
 
@@ -316,17 +305,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       });
     });
 
-    const list = Array.from(itemMap.values()).sort((a, b) => b.rev - a.rev);
-    if (list.length >= 3) return list.slice(0, 5);
-
-    // Realistic specialty cafe items default
-    return [
-      { name: "Iced Spanish Latte", qty: 248, rev: 8680000 },
-      { name: "Caramel Macchiato", qty: 195, rev: 7410000 },
-      { name: "Cold Brew Signature", qty: 162, rev: 5670000 },
-      { name: "Almond Croissant", qty: 140, rev: 4900000 },
-      { name: "Matcha Oat Latte", qty: 118, rev: 4484000 },
-    ];
+    return Array.from(itemMap.values()).sort((a, b) => b.rev - a.rev).slice(0, 5);
   }, [filteredSales]);
 
   return (
@@ -595,19 +574,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="font-semibold text-slate-700">HPP / COGS (Bahan Baku)</span>
-              <span className={`font-bold ${cogsRatio <= 35 ? "text-emerald-700" : "text-rose-600"}`}>
+              <span className={`font-bold ${cogsRatio <= 35 && cogsRatio > 0 ? "text-emerald-700" : cogsRatio > 35 ? "text-rose-600" : "text-slate-500"}`}>
                 {cogsRatio.toFixed(1)}%
               </span>
             </div>
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
               <div
-                className={`h-full rounded-full ${cogsRatio <= 35 ? "bg-emerald-500" : "bg-rose-500"}`}
+                className={`h-full rounded-full ${cogsRatio <= 35 && cogsRatio > 0 ? "bg-emerald-500" : cogsRatio > 35 ? "bg-rose-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, cogsRatio)}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500">
               <span>Ideal: 28% - 35%</span>
-              <span className="font-medium text-slate-700">{formatCurrency(estimatedCogs)}</span>
+              <span className="font-medium text-slate-700">{formatCurrency(cogsExpenses)}</span>
             </div>
           </div>
 
@@ -615,19 +594,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="font-semibold text-slate-700">Labor Cost (Gaji Staf)</span>
-              <span className={`font-bold ${laborRatio <= 22 ? "text-emerald-700" : "text-amber-600"}`}>
+              <span className={`font-bold ${laborRatio <= 22 && laborRatio > 0 ? "text-emerald-700" : laborRatio > 22 ? "text-amber-600" : "text-slate-500"}`}>
                 {laborRatio.toFixed(1)}%
               </span>
             </div>
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
               <div
-                className={`h-full rounded-full ${laborRatio <= 22 ? "bg-emerald-500" : "bg-amber-500"}`}
+                className={`h-full rounded-full ${laborRatio <= 22 && laborRatio > 0 ? "bg-emerald-500" : laborRatio > 22 ? "bg-amber-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, laborRatio)}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500">
               <span>Ideal: 15% - 22%</span>
-              <span className="font-medium text-slate-700">{formatCurrency(estimatedLabor)}</span>
+              <span className="font-medium text-slate-700">{formatCurrency(laborExpenses)}</span>
             </div>
           </div>
 
@@ -635,13 +614,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="font-semibold text-slate-700">OpEx (Listrik, Sewa, Wifi)</span>
-              <span className={`font-bold ${opexRatio <= 18 ? "text-emerald-700" : "text-amber-600"}`}>
+              <span className={`font-bold ${opexRatio <= 18 && opexRatio > 0 ? "text-emerald-700" : opexRatio > 18 ? "text-amber-600" : "text-slate-500"}`}>
                 {opexRatio.toFixed(1)}%
               </span>
             </div>
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
               <div
-                className={`h-full rounded-full ${opexRatio <= 18 ? "bg-emerald-500" : "bg-amber-500"}`}
+                className={`h-full rounded-full ${opexRatio <= 18 && opexRatio > 0 ? "bg-emerald-500" : opexRatio > 18 ? "bg-amber-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, opexRatio)}%` }}
               />
             </div>
@@ -662,7 +641,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <span>Total Potongan Diskon</span>
           </div>
           <div className="text-lg font-bold text-slate-900">
-            {formatCurrency(totalDiscounts || 1250000)}
+            {formatCurrency(totalDiscounts)}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             Margin terpotong promo bulan ini
@@ -690,7 +669,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <span>Bahan Terbuang (Waste)</span>
           </div>
           <div className="text-lg font-bold text-slate-900">
-            {formatCurrency(wasteCost || 345000)}
+            {formatCurrency(wasteCost)}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             Kerugian susu basi & failed shot
@@ -804,146 +783,202 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               Distribusi penjualan per lini produk.
             </p>
 
-            <div className="h-44 w-full my-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryContribution}
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {categoryContribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: any) => formatCurrency(Number(value))}
-                    contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderRadius: "10px",
-                      border: "none",
-                      color: "#fff",
-                      fontSize: "12px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {categoryContribution.length === 0 ? (
+              <div className="h-44 w-full my-3 flex flex-col items-center justify-center text-center">
+                <PieIcon className="w-8 h-8 text-slate-300 mb-1.5" />
+                <p className="text-xs font-semibold text-slate-600">Belum Ada Omzet Tercatat</p>
+                <p className="text-[11px] text-slate-400 max-w-[200px] mt-0.5">
+                  Distribusi lini produk akan otomatis terbentuk dari transaksi kasir.
+                </p>
+              </div>
+            ) : (
+              <div className="h-44 w-full my-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryContribution}
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {categoryContribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any) => formatCurrency(Number(value))}
+                      contentStyle={{
+                        backgroundColor: "#0f172a",
+                        borderRadius: "10px",
+                        border: "none",
+                        color: "#fff",
+                        fontSize: "12px",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Legend */}
-          <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
-            {categoryContribution.map((c) => (
-              <div key={c.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
-                  <span className="text-slate-600">{c.name}</span>
+          {categoryContribution.length > 0 && (
+            <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
+              {categoryContribution.map((c) => (
+                <div key={c.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                    <span className="text-slate-600">{c.name}</span>
+                  </div>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(c.value)}
+                  </span>
                 </div>
-                <span className="font-semibold text-slate-900">
-                  {formatCurrency(c.value)}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* ─── Peta Jam Sibuk & Menu Bintang (Cash Cows) ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Peta Jam Sibuk (Peak Hours) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-600" />
-                Peta Jam Sibuk (Traffic Velocity)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Waktu puncak keramaian transaksi untuk alokasi staf & promo jam sepi.
-              </p>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  Peta Jam Sibuk (Traffic Velocity)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Waktu puncak keramaian transaksi untuk alokasi staf & promo jam sepi.
+                </p>
+              </div>
+              {peakHourData.some((slot) => slot.count > 0) && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60">
+                  Terpantau Aktif
+                </span>
+              )}
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60">
-              Peak: 11:00 - 14:00
-            </span>
-          </div>
 
-          <div className="space-y-3">
-            {peakHourData.map((slot) => {
-              const maxRev = Math.max(...peakHourData.map((p) => p.revenue));
-              const pct = maxRev > 0 ? Math.round((slot.revenue / maxRev) * 100) : 50;
-
-              return (
-                <div key={slot.slot} className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">{slot.slot}</span>
-                      <span className="text-slate-500 text-[11px] hidden sm:inline">({slot.label})</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-slate-500">{slot.count} Transaksi</span>
-                      <span className="font-bold text-slate-900">{formatCurrency(slot.revenue)}</span>
-                    </div>
-                  </div>
-                  <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-amber-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
+            {peakHourData.every((slot) => slot.count === 0) ? (
+              <div className="py-10 flex flex-col items-center justify-center text-center">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                  <Clock className="w-5 h-5" />
                 </div>
-              );
-            })}
+                <h4 className="text-xs font-bold text-slate-800">Belum Ada Transaksi Pada Periode Ini</h4>
+                <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
+                  Peta jam sibuk (pagi, siang, sore, malam) akan terisi otomatis saat kasir memproses pesanan pelanggan.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {peakHourData.map((slot) => {
+                  const maxRev = Math.max(...peakHourData.map((p) => p.revenue));
+                  const pct = maxRev > 0 ? Math.round((slot.revenue / maxRev) * 100) : 0;
+
+                  return (
+                    <div key={slot.slot} className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/60">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{slot.slot}</span>
+                          <span className="text-slate-500 text-[11px] hidden sm:inline">({slot.label})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500">{slot.count} Transaksi</span>
+                          <span className="font-bold text-slate-900">{formatCurrency(slot.revenue)}</span>
+                        </div>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-amber-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Top 5 Star Products (Cash Cows) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Flame className="w-4 h-4 text-amber-600" />
-                Menu Bintang (Cash Cows)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                5 produk penyumbang omzet terbesar dengan margin tertinggi.
-              </p>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-600" />
+                  Menu Bintang (Cash Cows)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  5 produk penyumbang omzet terbesar dengan margin tertinggi.
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate("import_sales")}
+                className="text-xs font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+              >
+                Lihat Penjualan <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              onClick={() => onNavigate("import_sales")}
-              className="text-xs font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1"
-            >
-              Lihat Penjualan <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
 
-          <div className="divide-y divide-slate-100">
-            {topProducts.map((prod, idx) => (
-              <div key={prod.name} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
-                <div className="flex items-center gap-3">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    idx === 0 ? "bg-amber-500 text-white" : idx === 1 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
-                  }`}>
-                    {idx + 1}
-                  </span>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">{prod.name}</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Terjual {prod.qty} cup/porsi
-                    </p>
-                  </div>
+            {topProducts.length === 0 ? (
+              <div className="py-10 flex flex-col items-center justify-center text-center">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 mb-2">
+                  <Coffee className="w-5 h-5" />
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-slate-900 block">
-                    {formatCurrency(prod.rev)}
-                  </span>
-                  <span className="text-[10px] text-emerald-600 font-medium">
-                    High Margin (~68%)
-                  </span>
+                <h4 className="text-xs font-bold text-slate-800">Belum Ada Menu Terjual</h4>
+                <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
+                  Transaksi kasir atau impor penjualan POS akan otomatis menampilkan menu terlaris kafe di sini.
+                </p>
+                <div className="flex items-center gap-2 mt-4">
+                  <button
+                    onClick={() => onNavigate("import_sales")}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-2xs"
+                  >
+                    Impor Data POS
+                  </button>
+                  <button
+                    onClick={() => onNavigate("shifts")}
+                    className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all"
+                  >
+                    Buka Kasir
+                  </button>
                 </div>
               </div>
-            ))}
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {topProducts.map((prod, idx) => (
+                  <div key={prod.name} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        idx === 0 ? "bg-amber-500 text-white" : idx === 1 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">{prod.name}</h4>
+                        <p className="text-[11px] text-slate-500">
+                          Terjual {prod.qty} cup/porsi
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-slate-900 block">
+                        {formatCurrency(prod.rev)}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-medium">
+                        Terlaris
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
