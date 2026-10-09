@@ -1266,6 +1266,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           stockOpnameItems,
           payrollRecords,
         },
+        closedPeriods,
+        closePeriod: (period: string, user: string, notes?: string) => dispatch({ type: "CLOSE_PERIOD", payload: { period, user, notes } }),
+        reopenPeriod: (period: string) => dispatch({ type: "REOPEN_PERIOD", payload: period }),
         dispatch,
       }}
     >
