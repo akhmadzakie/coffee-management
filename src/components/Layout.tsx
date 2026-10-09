@@ -210,7 +210,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "users",   // Manager bisa onboard staff (dibatasi role-nya di Users.tsx)
       "audit_log",
       "attendance_clock",
-      "settings"
     ],
     FINANCE: [
       "dashboard_finance",

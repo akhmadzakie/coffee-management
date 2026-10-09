@@ -279,7 +279,14 @@ export interface DeviceSession {
   isCurrent?: boolean;
 }
 
+export interface TaskCategoryGroup {
+  id: string;
+  category: string;
+  items: string[];
+}
+
 export interface Settings {
+  id?: string;
   logoDataUrl: string | null;
   brandName: string;
   companyAddress: string;
@@ -287,10 +294,10 @@ export interface Settings {
   salesPerson: string;
   footerMessage: string;
   language: "id" | "en";
-  leaderBarTasks?: string[];
-  leaderKitchenTasks?: string[];
-  leaderBakerTasks?: string[];
-  managerTasks?: string[];
+  leaderBarTasks?: any;
+  leaderKitchenTasks?: any;
+  leaderBakerTasks?: any;
+  managerTasks?: any;
   geminiApiKey?: string;
 }
 

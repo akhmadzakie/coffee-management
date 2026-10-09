@@ -4,48 +4,186 @@ import {
   CheckSquare, Square, Save, AlertCircle, Calendar, 
   CheckCircle2, Clock, XCircle, Plus, Trash2, RotateCcw, 
   Coffee, Utensils, Croissant, Users, ClipboardList, 
-  Sliders, TrendingUp, Check
+  Sliders, TrendingUp, Check, Layers, ChevronDown, ChevronUp
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { getLocalDateString } from "../utils/dateUtils";
+import { TaskCategoryGroup } from "../types";
 
-export const DEFAULT_LEADER_BAR_TASKS = [
-  "Pekerjaan Kebersihan (Area Bar, Outdoor, WC, Smoking Area, Mushala, Gudang, dll)",
-  "Pekerjaan Kontroling Alat (Mesin Espresso, Grinder, AC, Tablet, dll)",
-  "Pekerjaan Kontroling Konstruksi (Cek atap bocor, kaca pecah, dll)",
-  "Pekerjaan Gudang (Cek EXP semua bahan, FIFO, dll)",
-  "Pekerjaan Kontroling Serving (Kelengkapan serving minuman)",
-  "Pekerjaan Kontroling Karyawan (Kasir, Bar Belakang, Absensi)"
+export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
+  {
+    id: "bar-cat-1",
+    category: "Kebersihan & Sanitasi Area",
+    items: [
+      "Lap dan sanitasi seluruh meja bar & undercounter",
+      "Backflush mesin espresso dengan chemical & cuci portafilter",
+      "Bersihkan hopper grinder & meja kasir/bar",
+      "Sapu & pel lantai area bar serta buang ampas kopi (knockbox)",
+      "Bersihkan sink bar, drain tray, dan kosongkan tempat sampah",
+    ],
+  },
+  {
+    id: "bar-cat-2",
+    category: "Pengecekan Alat & Mesin",
+    items: [
+      "Kalibrasi timbangan digital & dial-in espresso (rasio/ekstraksi)",
+      "Cek tekanan pompa & temperatur steam wand mesin espresso",
+      "Cek temperatur chiller susu (standar 2°C - 4°C) & ice maker",
+      "Cek fungsi tablet POS kasir, jaringan internet, & printer struk",
+    ],
+  },
+  {
+    id: "bar-cat-3",
+    category: "Bahan Baku & FIFO Gudang",
+    items: [
+      "Cek tanggal kedaluwarsa & rotasi stok susu segar (FIFO)",
+      "Cek ketersediaan biji kopi (beans), sirup, sauce, & powder",
+      "Restock paper cup, sedotan, tutup cup, sendok, & tissue",
+      "Catat bahan yang menipis untuk pengajuan restock",
+    ],
+  },
+  {
+    id: "bar-cat-4",
+    category: "Kontroling Tim & Pelayanan",
+    items: [
+      "Briefing standar serving, keramahan kasir, & kebersihan seragam",
+      "Cek absensi staf bar dan kesiapan opening/closing shift",
+    ],
+  },
 ];
 
-export const DEFAULT_LEADER_KITCHEN_TASKS = [
-  "Pekerjaan Kebersihan (Area Kitchen, Lantai, Exhaust, dll)",
-  "Pekerjaan Kontroling Alat (Kompor, Chiller, Freezer, Fryer, dll)",
-  "Pekerjaan Gudang (Cek EXP bahan makanan, FIFO, stok, dll)",
-  "Pekerjaan Kontroling Serving (Plating, Standar Resep)",
-  "Pekerjaan Kontroling Karyawan (Koki, Helper, Cuci Piring)"
+export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
+  {
+    id: "kitchen-cat-1",
+    category: "Kebersihan Dapur & Stewarding",
+    items: [
+      "Bersihkan kompor, fryer, grill, & permukaan stainless steel",
+      "Cuci grease trap & saringan saluran pembuangan air",
+      "Sanitasi talenan, pisau, & wadah persiapan bahan (food-grade)",
+      "Sapu & pel lantai dapur dengan cairan desinfektan",
+      "Pastikan area cuci piring & rak pengering bersih dan tertata",
+    ],
+  },
+  {
+    id: "kitchen-cat-2",
+    category: "Pengecekan Alat & Pendingin",
+    items: [
+      "Cek temperatur chiller (1°C - 4°C) & deep freezer (-18°C)",
+      "Cek instalasi tabung gas, regulator, & cerobong exhaust hood",
+      "Cek kelayakan wajan, panci, fry basket, & penjepit makanan",
+    ],
+  },
+  {
+    id: "kitchen-cat-3",
+    category: "Penyimpanan Bahan & Food Safety",
+    items: [
+      "Cek label tanggal (prep date) & masa simpan bahan marinasi (FIFO)",
+      "Pastikan pemisahan bahan mentah (daging/ayam) dan bahan matang",
+      "Cek kualitas sayuran segar & persediaan bumbu utama",
+    ],
+  },
+  {
+    id: "kitchen-cat-4",
+    category: "Standar Porsi & Serving",
+    items: [
+      "Cek standar gramasi porsi & resep makanan sesuai SOP",
+      "Cek waktu saji makanan (ticket time standar)",
+      "Evaluasi presentasi & kebersihan piring saji (plating)",
+    ],
+  },
 ];
 
-export const DEFAULT_LEADER_BAKER_TASKS = [
-  "Pekerjaan Kebersihan (Area Pastry, Oven, dll)",
-  "Pekerjaan Kontroling Alat (Mixer, Oven, Proofer, dll)",
-  "Pekerjaan Gudang (Cek EXP ragi, tepung, butter, dll)",
-  "Pekerjaan Kontroling Serving (Display Pastry)",
-  "Pekerjaan Kontroling Karyawan (Asisten Baker)"
+export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
+  {
+    id: "baker-cat-1",
+    category: "Kebersihan Area Pastry & Alat",
+    items: [
+      "Sanitasi meja kerja marmer/stainless untuk adonan",
+      "Bersihkan loyang baking, rolling pin, scraper, & kuas pastry",
+      "Bersihkan remah roti dan tetesan butter di area oven & proofer",
+      "Pel lantai dan buang sisa plastik/bungkus bahan adonan",
+    ],
+  },
+  {
+    id: "baker-cat-2",
+    category: "Kontroling Alat Baking",
+    items: [
+      "Cek kalibrasi temperatur oven & fungsi timer pemanggang",
+      "Cek kebersihan bowl spiral mixer & hook pengaduk adonan",
+      "Cek kelembapan dan kontrol temperatur lemari proofer adonan",
+    ],
+  },
+  {
+    id: "baker-cat-3",
+    category: "Kualitas Bahan Baku & Adonan",
+    items: [
+      "Cek keaktifan ragi (yeast), kualitas butter, & kelembapan tepung",
+      "Pastikan wadah bahan kering tertutup rapat & terlabel tanggal",
+      "Cek persediaan topping, glaze, cokelat, dan filling pastry",
+    ],
+  },
+  {
+    id: "baker-cat-4",
+    category: "Display & Kualitas Produk Jadi",
+    items: [
+      "Cek tekstur, kerapuhan (flakiness), & warna kematangan pastry",
+      "Pastikan etalase display pastry bersih dan lampu display menyala",
+      "Pastikan label nama produk dan tag harga terpasang rapi",
+    ],
+  },
 ];
 
 type Division = "BAR" | "KITCHEN" | "BAKER";
 
-const ensureArray = (v: any, fallback: string[]): string[] => {
-  if (Array.isArray(v) && v.length > 0) return v;
-  if (typeof v === "string") {
+// Helper parser to support new TaskCategoryGroup[] and convert legacy string[]
+const ensureCategoryArray = (raw: any, fallback: TaskCategoryGroup[]): TaskCategoryGroup[] => {
+  if (!raw) return fallback;
+  let parsed = raw;
+  if (typeof raw === "string") {
     try {
-      const parsed = JSON.parse(v);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    } catch {}
+      parsed = JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
   }
+  if (!Array.isArray(parsed) || parsed.length === 0) return fallback;
+
+  // If already TaskCategoryGroup[]
+  if (
+    typeof parsed[0] === "object" &&
+    parsed[0] !== null &&
+    "category" in parsed[0] &&
+    Array.isArray(parsed[0].items)
+  ) {
+    return parsed;
+  }
+
+  // If legacy string[], convert to structured category groups
+  if (typeof parsed[0] === "string") {
+    return parsed.map((str: string, idx: number) => {
+      const match = str.match(/^(.*?)\s*\((.*?)\)$/);
+      if (match) {
+        const catName = match[1].replace(/^Pekerjaan\s*/i, "").trim() || "Tugas Operasional";
+        const subItems = match[2].split(",").map((s) => s.trim()).filter(Boolean);
+        return {
+          id: `legacy-${idx}`,
+          category: catName,
+          items: subItems.length > 0 ? subItems : [str],
+        };
+      }
+      return {
+        id: `legacy-${idx}`,
+        category: "Tugas Umum",
+        items: [str],
+      };
+    });
+  }
+
   return fallback;
 };
+
+// Unique task identifier helper (category + item)
+const getTaskKey = (catName: string, item: string) => `${catName}:::${item}`;
 
 export const LeaderChecklist: React.FC = () => {
   const { 
@@ -70,14 +208,14 @@ export const LeaderChecklist: React.FC = () => {
 
   // Setting template state for supervisor
   const [editingDivision, setEditingDivision] = useState<Division>("BAR");
-  const [barTasks, setBarTasks] = useState<string[]>(() =>
-    ensureArray(settings?.leaderBarTasks, DEFAULT_LEADER_BAR_TASKS)
+  const [barCategories, setBarCategories] = useState<TaskCategoryGroup[]>(() =>
+    ensureCategoryArray(settings?.leaderBarTasks, DEFAULT_BAR_CATEGORIES)
   );
-  const [kitchenTasks, setKitchenTasks] = useState<string[]>(() =>
-    ensureArray(settings?.leaderKitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS)
+  const [kitchenCategories, setKitchenCategories] = useState<TaskCategoryGroup[]>(() =>
+    ensureCategoryArray(settings?.leaderKitchenTasks, DEFAULT_KITCHEN_CATEGORIES)
   );
-  const [bakerTasks, setBakerTasks] = useState<string[]>(() =>
-    ensureArray(settings?.leaderBakerTasks, DEFAULT_LEADER_BAKER_TASKS)
+  const [bakerCategories, setBakerCategories] = useState<TaskCategoryGroup[]>(() =>
+    ensureCategoryArray(settings?.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES)
   );
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -89,16 +227,16 @@ export const LeaderChecklist: React.FC = () => {
 
   // Synchronize tasks when settings change
   React.useEffect(() => {
-    setBarTasks(ensureArray(settings?.leaderBarTasks, DEFAULT_LEADER_BAR_TASKS));
-    setKitchenTasks(ensureArray(settings?.leaderKitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS));
-    setBakerTasks(ensureArray(settings?.leaderBakerTasks, DEFAULT_LEADER_BAKER_TASKS));
+    setBarCategories(ensureCategoryArray(settings?.leaderBarTasks, DEFAULT_BAR_CATEGORIES));
+    setKitchenCategories(ensureCategoryArray(settings?.leaderKitchenTasks, DEFAULT_KITCHEN_CATEGORIES));
+    setBakerCategories(ensureCategoryArray(settings?.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES));
   }, [settings]);
 
-  // Master tasks getter by division
-  const getTasksForDivision = (div: Division): string[] => {
-    if (div === "BAR") return ensureArray(barTasks, DEFAULT_LEADER_BAR_TASKS);
-    if (div === "KITCHEN") return ensureArray(kitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS);
-    return ensureArray(bakerTasks, DEFAULT_LEADER_BAKER_TASKS);
+  // Master categories getter by division
+  const getCategoriesForDivision = (div: Division): TaskCategoryGroup[] => {
+    if (div === "BAR") return ensureCategoryArray(barCategories, DEFAULT_BAR_CATEGORIES);
+    if (div === "KITCHEN") return ensureCategoryArray(kitchenCategories, DEFAULT_KITCHEN_CATEGORIES);
+    return ensureCategoryArray(bakerCategories, DEFAULT_BAKER_CATEGORIES);
   };
 
   // Helper to detect division from checklist record
@@ -112,18 +250,13 @@ export const LeaderChecklist: React.FC = () => {
     if (c.notes?.includes("[BAKER]")) return "BAKER";
     if (c.notes?.includes("[BAR]")) return "BAR";
 
-    const kTasks = kitchenTasks;
-    const bTasks = bakerTasks;
-    const completed = c.leaderTasks || [];
-    const kMatch = completed.filter((t: string) => kTasks.includes(t)).length;
-    const bMatch = completed.filter((t: string) => bTasks.includes(t)).length;
-    if (kMatch > 0 && kMatch >= bMatch) return "KITCHEN";
-    if (bMatch > 0) return "BAKER";
     return "BAR";
   };
 
   // ─── LEADER FILLING STATE ────────────────────────────────────────────────
-  // Existing checklist for currently logged in leader for TODAY
+  const activeLeaderCategories = getCategoriesForDivision(leaderActiveDivision);
+
+  // Find existing checklist for currently logged in leader for TODAY
   const leaderExistingChecklist = useMemo(() => {
     return dailyChecklists.find(
       (c) => c.date.startsWith(today) && getDivisionForChecklist(c) === leaderActiveDivision
@@ -144,12 +277,25 @@ export const LeaderChecklist: React.FC = () => {
     setLeaderNotes(leaderExistingChecklist?.notes?.replace(/^\[(BAR|KITCHEN|BAKER)\]\s*/, "") || "");
   }, [leaderExistingChecklist, leaderActiveDivision]);
 
-  const toggleLeaderTask = (task: string) => {
+  // Check if a task is completed (handles both full key and item name)
+  const isTaskChecked = (completedList: string[], catName: string, item: string) => {
+    const key = getTaskKey(catName, item);
+    return completedList.includes(key) || completedList.includes(item);
+  };
+
+  const toggleLeaderTask = (catName: string, item: string) => {
     if (isReadOnly) return;
     setLeaderSaved(false);
-    setLeaderCompletedTasks((prev) =>
-      prev.includes(task) ? prev.filter((t) => t !== task) : [...prev, task]
-    );
+    const key = getTaskKey(catName, item);
+
+    setLeaderCompletedTasks((prev) => {
+      const checked = prev.includes(key) || prev.includes(item);
+      if (checked) {
+        return prev.filter((t) => t !== key && t !== item);
+      } else {
+        return [...prev, key];
+      }
+    });
   };
 
   const handleSaveLeaderChecklist = () => {
@@ -160,8 +306,8 @@ export const LeaderChecklist: React.FC = () => {
       id: leaderExistingChecklist?.id || crypto.randomUUID(),
       employeeId: currentUser.id,
       date: today,
-      cleaningDone: leaderExistingChecklist?.cleaningDone || true,
-      equipmentChecked: leaderExistingChecklist?.equipmentChecked || true,
+      cleaningDone: true,
+      equipmentChecked: true,
       leaderTasks: leaderCompletedTasks,
       notes: formattedNotes,
     };
@@ -178,6 +324,27 @@ export const LeaderChecklist: React.FC = () => {
     setTimeout(() => setLeaderSaved(false), 3000);
   };
 
+  // Calculate Leader counts
+  const totalSubTasksLeader = useMemo(() => {
+    return activeLeaderCategories.reduce((acc, cat) => acc + (cat.items?.length || 0), 0);
+  }, [activeLeaderCategories]);
+
+  const completedSubTasksLeader = useMemo(() => {
+    let count = 0;
+    activeLeaderCategories.forEach((cat) => {
+      (cat.items || []).forEach((item) => {
+        if (isTaskChecked(leaderCompletedTasks, cat.category, item)) {
+          count++;
+        }
+      });
+    });
+    return count;
+  }, [activeLeaderCategories, leaderCompletedTasks]);
+
+  const leaderPercentage = totalSubTasksLeader > 0 
+    ? Math.round((completedSubTasksLeader / totalSubTasksLeader) * 100) 
+    : 0;
+
   // ─── SUPERVISOR MONITORING COMPUTATION ────────────────────────────────────
   const divisionStats = useMemo(() => {
     const targetDateChecklists = dailyChecklists.filter((c) => c.date.startsWith(selectedDate));
@@ -189,12 +356,31 @@ export const LeaderChecklist: React.FC = () => {
     ];
 
     return divisions.map((div) => {
-      const tasks = getTasksForDivision(div.key);
-      const totalTasks = tasks.length;
+      const categories = getCategoriesForDivision(div.key);
+      const totalTasks = categories.reduce((acc, cat) => acc + (cat.items?.length || 0), 0);
       
       const found = targetDateChecklists.find((c) => getDivisionForChecklist(c) === div.key);
-      const completedTasks = found?.leaderTasks || [];
-      const completedCount = completedTasks.length;
+      const completedList = found?.leaderTasks || [];
+
+      // Category breakdown calculation
+      const categoryBreakdown = categories.map((cat) => {
+        const catTotal = cat.items?.length || 0;
+        let catCompleted = 0;
+        (cat.items || []).forEach((item) => {
+          if (isTaskChecked(completedList, cat.category, item)) {
+            catCompleted++;
+          }
+        });
+        const catPct = catTotal > 0 ? Math.round((catCompleted / catTotal) * 100) : 0;
+        return {
+          ...cat,
+          catTotal,
+          catCompleted,
+          catPct,
+        };
+      });
+
+      const completedCount = categoryBreakdown.reduce((acc, c) => acc + c.catCompleted, 0);
       const percentage = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
       
       const leaderUser = found ? users.find((u) => u.id === found.employeeId) : null;
@@ -203,6 +389,7 @@ export const LeaderChecklist: React.FC = () => {
 
       return {
         ...div,
+        categories: categoryBreakdown,
         totalTasks,
         completedCount,
         percentage,
@@ -210,10 +397,9 @@ export const LeaderChecklist: React.FC = () => {
         leaderName,
         checklist: found,
         cleanNotes,
-        tasks,
       };
     });
-  }, [dailyChecklists, selectedDate, barTasks, kitchenTasks, bakerTasks, users]);
+  }, [dailyChecklists, selectedDate, barCategories, kitchenCategories, bakerCategories, users]);
 
   // Overall average percentage for today
   const overallPercentage = useMemo(() => {
@@ -222,45 +408,72 @@ export const LeaderChecklist: React.FC = () => {
   }, [divisionStats]);
 
   // ─── SUPERVISOR TASK CONFIGURATION HANDLERS ───────────────────────────────
-  const currentEditingTasks = 
-    editingDivision === "BAR" ? barTasks : 
-    editingDivision === "KITCHEN" ? kitchenTasks : bakerTasks;
+  const currentEditingCategories = 
+    editingDivision === "BAR" ? barCategories : 
+    editingDivision === "KITCHEN" ? kitchenCategories : bakerCategories;
 
-  const setCurrentEditingTasks = (newTasks: string[]) => {
-    if (editingDivision === "BAR") setBarTasks(newTasks);
-    else if (editingDivision === "KITCHEN") setKitchenTasks(newTasks);
-    else setBakerTasks(newTasks);
+  const setCurrentEditingCategories = (newCats: TaskCategoryGroup[]) => {
+    if (editingDivision === "BAR") setBarCategories(newCats);
+    else if (editingDivision === "KITCHEN") setKitchenCategories(newCats);
+    else setBakerCategories(newCats);
   };
 
-  const handleAddTask = () => {
-    const updated = [...currentEditingTasks, "Tugas Baru"];
-    setCurrentEditingTasks(updated);
+  const handleAddCategory = () => {
+    const newCat: TaskCategoryGroup = {
+      id: `cat-${Date.now()}`,
+      category: "Kategori Baru",
+      items: ["Contoh rincian tugas baru"],
+    };
+    setCurrentEditingCategories([...currentEditingCategories, newCat]);
   };
 
-  const handleUpdateTask = (idx: number, text: string) => {
-    const updated = [...currentEditingTasks];
-    updated[idx] = text;
-    setCurrentEditingTasks(updated);
+  const handleUpdateCategoryName = (catIdx: number, newName: string) => {
+    const updated = [...currentEditingCategories];
+    updated[catIdx] = { ...updated[catIdx], category: newName };
+    setCurrentEditingCategories(updated);
   };
 
-  const handleRemoveTask = (idx: number) => {
-    const updated = currentEditingTasks.filter((_, i) => i !== idx);
-    setCurrentEditingTasks(updated);
+  const handleRemoveCategory = (catIdx: number) => {
+    const updated = currentEditingCategories.filter((_, i) => i !== catIdx);
+    setCurrentEditingCategories(updated);
+  };
+
+  const handleAddSubTask = (catIdx: number) => {
+    const updated = [...currentEditingCategories];
+    const cat = updated[catIdx];
+    cat.items = [...(cat.items || []), "Sub-tugas baru"];
+    setCurrentEditingCategories(updated);
+  };
+
+  const handleUpdateSubTask = (catIdx: number, itemIdx: number, text: string) => {
+    const updated = [...currentEditingCategories];
+    const cat = updated[catIdx];
+    const items = [...cat.items];
+    items[itemIdx] = text;
+    cat.items = items;
+    setCurrentEditingCategories(updated);
+  };
+
+  const handleRemoveSubTask = (catIdx: number, itemIdx: number) => {
+    const updated = [...currentEditingCategories];
+    const cat = updated[catIdx];
+    cat.items = cat.items.filter((_, i) => i !== itemIdx);
+    setCurrentEditingCategories(updated);
   };
 
   const handleResetToDefault = () => {
-    if (!window.confirm("Kembalikan tugas divisi ini ke daftar standar sistem?")) return;
-    if (editingDivision === "BAR") setBarTasks(DEFAULT_LEADER_BAR_TASKS);
-    else if (editingDivision === "KITCHEN") setKitchenTasks(DEFAULT_LEADER_KITCHEN_TASKS);
-    else setBakerTasks(DEFAULT_LEADER_BAKER_TASKS);
+    if (!window.confirm("Kembalikan daftar kategori & sub-tugas divisi ini ke standar sistem?")) return;
+    if (editingDivision === "BAR") setBarCategories(DEFAULT_BAR_CATEGORIES);
+    else if (editingDivision === "KITCHEN") setKitchenCategories(DEFAULT_KITCHEN_CATEGORIES);
+    else setBakerCategories(DEFAULT_BAKER_CATEGORIES);
   };
 
   const handleSaveSettings = () => {
     updateSettings({
       ...settings,
-      leaderBarTasks: barTasks,
-      leaderKitchenTasks: kitchenTasks,
-      leaderBakerTasks: bakerTasks,
+      leaderBarTasks: barCategories,
+      leaderKitchenTasks: kitchenCategories,
+      leaderBakerTasks: bakerCategories,
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 3000);
@@ -286,7 +499,7 @@ export const LeaderChecklist: React.FC = () => {
               </h2>
             </div>
             <p className="text-slate-500 text-sm mt-1">
-              Pantau laporan penyelesaian tugas harian Head Bar, Kitchen, & Baker serta atur daftar jobdesk mereka.
+              Pantau laporan terperinci per kategori tugas (Kebersihan, Alat, Bahan, dll) & atur SOP rincian jobdesk.
             </p>
           </div>
 
@@ -312,7 +525,7 @@ export const LeaderChecklist: React.FC = () => {
               }`}
             >
               <Sliders className="w-4 h-4 text-emerald-600" />
-              Atur Daftar Tugas Jobdesk
+              Atur Kategori & Rincian Tugas
             </button>
           </div>
         </div>
@@ -372,57 +585,75 @@ export const LeaderChecklist: React.FC = () => {
                   <div
                     key={div.key}
                     onClick={() => setInspectedDivision(div.key)}
-                    className={`p-5 rounded-2xl border transition-all cursor-pointer bg-white ${
+                    className={`p-5 rounded-2xl border transition-all cursor-pointer bg-white flex flex-col justify-between ${
                       inspectedDivision === div.key
                         ? "border-blue-500 ring-2 ring-blue-500/20 shadow-md"
                         : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
                     }`}
                   >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl ${
-                          div.key === "BAR" ? "bg-amber-100 text-amber-700" :
-                          div.key === "KITCHEN" ? "bg-orange-100 text-orange-700" :
-                          "bg-emerald-100 text-emerald-700"
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 rounded-xl ${
+                            div.key === "BAR" ? "bg-amber-100 text-amber-700" :
+                            div.key === "KITCHEN" ? "bg-orange-100 text-orange-700" :
+                            "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-800">{div.label}</h3>
+                            <p className="text-xs text-slate-500">
+                              {div.leaderName ? `Diisi oleh: ${div.leaderName}` : "Belum ada laporan"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                          isFull
+                            ? "bg-emerald-100 text-emerald-700"
+                            : isStarted
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-500"
                         }`}>
-                          <Icon className="w-5 h-5" />
+                          {isFull ? "Selesai 100%" : isStarted ? "Sedang Berjalan" : "Belum Diisi"}
+                        </span>
+                      </div>
+
+                      {/* Progress Bar & Percentage */}
+                      <div className="mt-3">
+                        <div className="flex justify-between items-baseline mb-1.5">
+                          <span className="text-xs font-medium text-slate-500">
+                            {div.completedCount} dari {div.totalTasks} Sub-Tugas
+                          </span>
+                          <span className="text-lg font-black text-slate-800">
+                            {div.percentage}%
+                          </span>
                         </div>
-                        <div>
-                          <h3 className="font-bold text-slate-800">{div.label}</h3>
-                          <p className="text-xs text-slate-500">
-                            {div.leaderName ? `Diisi oleh: ${div.leaderName}` : "Belum ada laporan masuk"}
-                          </p>
+                        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              isFull ? "bg-emerald-500" : isStarted ? "bg-amber-500" : "bg-slate-300"
+                            }`}
+                            style={{ width: `${div.percentage}%` }}
+                          />
                         </div>
                       </div>
 
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                        isFull
-                          ? "bg-emerald-100 text-emerald-700"
-                          : isStarted
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-slate-100 text-slate-500"
-                      }`}>
-                        {isFull ? "Selesai 100%" : isStarted ? "Sedang Berjalan" : "Belum Diisi"}
-                      </span>
-                    </div>
-
-                    {/* Progress Bar & Percentage */}
-                    <div className="mt-4">
-                      <div className="flex justify-between items-baseline mb-1.5">
-                        <span className="text-xs font-medium text-slate-500">
-                          {div.completedCount} dari {div.totalTasks} Tugas
-                        </span>
-                        <span className="text-lg font-black text-slate-800">
-                          {div.percentage}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
-                        <div
-                          className={`h-full transition-all duration-500 ${
-                            isFull ? "bg-emerald-500" : isStarted ? "bg-amber-500" : "bg-slate-300"
-                          }`}
-                          style={{ width: `${div.percentage}%` }}
-                        />
+                      {/* Mini Category Badges */}
+                      <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5">
+                        {div.categories.map((c, i) => (
+                          <div key={i} className="flex justify-between items-center text-xs">
+                            <span className="text-slate-600 truncate max-w-[170px]" title={c.category}>
+                              {c.category}
+                            </span>
+                            <span className={`font-bold ${
+                              c.catPct === 100 ? "text-emerald-600" : c.catPct > 0 ? "text-amber-600" : "text-slate-400"
+                            }`}>
+                              {c.catCompleted}/{c.catTotal} ({c.catPct}%)
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -437,79 +668,114 @@ export const LeaderChecklist: React.FC = () => {
               })}
             </div>
 
-            {/* Detail Checklist Terpilih */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+            {/* Rincian Terperinci per Kategori Tugas untuk Divisi Terpilih */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                     <ClipboardList className="w-5 h-5 text-blue-600" />
-                    Rincian Tugas: {selectedDivisionStat.label}
+                    Rincian Kategori Tugas: {selectedDivisionStat.label}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Status checklist tugas per tanggal {selectedDate}
+                    Ceklis detail tugas harian per kategori per tanggal {selectedDate}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Penyelesaian: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
-                  </span>
+                <div className="bg-slate-100 px-3.5 py-1.5 rounded-xl text-sm font-bold text-slate-700">
+                  Total Terlaksana: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
                 </div>
               </div>
 
-              {!Array.isArray(selectedDivisionStat?.tasks) || selectedDivisionStat.tasks.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">
-                  Belum ada daftar tugas yang dikonfigurasi untuk divisi ini.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedDivisionStat.tasks.map((task, idx) => {
-                    const isDone = (selectedDivisionStat.checklist?.leaderTasks || []).includes(task);
+              {/* Loop Kategori Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {selectedDivisionStat.categories.map((cat, catIdx) => {
+                  const isCatFull = cat.catPct === 100;
 
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-4 rounded-xl border flex items-center justify-between transition-colors ${
-                          isDone
-                            ? "bg-emerald-50/70 border-emerald-200"
-                            : "bg-slate-50 border-slate-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          {isDone ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-slate-300 shrink-0" />
-                          )}
-                          <span className={`text-sm font-medium ${isDone ? "text-emerald-950 font-semibold" : "text-slate-600"}`}>
-                            {task}
+                  return (
+                    <div 
+                      key={catIdx}
+                      className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-3"
+                    >
+                      {/* Header Kategori */}
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Kategori {catIdx + 1}
                           </span>
+                          <h4 className="font-bold text-slate-800 text-sm">{cat.category}</h4>
                         </div>
-
-                        <span className={`text-xs px-2.5 py-1 rounded-md font-bold shrink-0 ml-4 ${
-                          isDone ? "bg-emerald-200/60 text-emerald-800" : "bg-slate-200 text-slate-600"
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                          isCatFull 
+                            ? "bg-emerald-100 text-emerald-700" 
+                            : cat.catCompleted > 0 
+                            ? "bg-amber-100 text-amber-700" 
+                            : "bg-slate-200 text-slate-600"
                         }`}>
-                          {isDone ? "Terlaksana" : "Belum"}
+                          {cat.catCompleted}/{cat.catTotal} ({cat.catPct}%)
                         </span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+
+                      {/* Mini Bar */}
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            isCatFull ? "bg-emerald-500" : "bg-amber-500"
+                          }`}
+                          style={{ width: `${cat.catPct}%` }}
+                        />
+                      </div>
+
+                      {/* Sub-tugas Items */}
+                      <div className="space-y-2 pt-2">
+                        {cat.items.map((item, itemIdx) => {
+                          const isDone = isTaskChecked(
+                            selectedDivisionStat.checklist?.leaderTasks || [],
+                            cat.category,
+                            item
+                          );
+
+                          return (
+                            <div
+                              key={itemIdx}
+                              className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                                isDone
+                                  ? "bg-emerald-50 border-emerald-200 text-emerald-950 font-medium"
+                                  : "bg-white border-slate-200 text-slate-600"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                {isDone ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-slate-300 shrink-0" />
+                                )}
+                                <span>{item}</span>
+                              </div>
+                              <span className={`font-bold ml-2 shrink-0 ${isDone ? "text-emerald-700" : "text-slate-400"}`}>
+                                {isDone ? "Selesai" : "Belum"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 2: PENGATURAN DAFTAR TUGAS JOBDESK */}
+        {/* TAB 2: PENGATURAN KATEGORI & RINCIAN TUGAS JOBDESK */}
         {activeTab === "settings" && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">
-                  Kelola Template Tugas Harian Leader
+                  Kelola Kategori & Rincian Tugas Jobdesk
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tentukan item tugas checklist harian yang wajib dijalankan oleh masing-masing Leader.
+                  Atur struktur kelompok kerja (Kebersihan, Pengecekan Alat, Gudang) beserta butir-butir sub-tugasnya.
                 </p>
               </div>
 
@@ -523,7 +789,7 @@ export const LeaderChecklist: React.FC = () => {
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Head Bar ({barTasks.length})
+                  Head Bar ({barCategories.length} Kategori)
                 </button>
                 <button
                   onClick={() => setEditingDivision("KITCHEN")}
@@ -533,7 +799,7 @@ export const LeaderChecklist: React.FC = () => {
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Head Kitchen ({kitchenTasks.length})
+                  Head Kitchen ({kitchenCategories.length} Kategori)
                 </button>
                 <button
                   onClick={() => setEditingDivision("BAKER")}
@@ -543,52 +809,94 @@ export const LeaderChecklist: React.FC = () => {
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Head Baker ({bakerTasks.length})
+                  Head Baker ({bakerCategories.length} Kategori)
                 </button>
               </div>
             </div>
 
-            {/* List Tugas Editable */}
-            <div className="space-y-3">
-              {(Array.isArray(currentEditingTasks) ? currentEditingTasks : []).map((task, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="w-7 text-xs font-bold text-slate-400 text-center shrink-0">
-                    {idx + 1}.
-                  </span>
-                  <input
-                    type="text"
-                    value={task}
-                    onChange={(e) => handleUpdateTask(idx, e.target.value)}
-                    className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Nama rincian tugas..."
-                  />
-                  <button
-                    onClick={() => handleRemoveTask(idx)}
-                    className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl border border-transparent hover:border-rose-200 transition-colors shrink-0"
-                    title="Hapus tugas ini"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            {/* List Kategori Groups */}
+            <div className="space-y-6">
+              {currentEditingCategories.map((cat, catIdx) => (
+                <div 
+                  key={cat.id || catIdx}
+                  className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4"
+                >
+                  {/* Category Header with Title input & Delete button */}
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
+                      {catIdx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={cat.category}
+                      onChange={(e) => handleUpdateCategoryName(catIdx, e.target.value)}
+                      className="flex-1 font-bold text-slate-800 bg-white px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Nama Kategori (contoh: Kebersihan & Sanitasi Area)..."
+                    />
+                    <button
+                      onClick={() => handleRemoveCategory(catIdx)}
+                      className="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shrink-0"
+                      title="Hapus seluruh kategori ini"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Sub-tugas Items inside this category */}
+                  <div className="space-y-2 pl-9">
+                    <p className="text-xs font-semibold text-slate-500">
+                      Rincian Sub-Tugas Checklist:
+                    </p>
+                    {cat.items.map((item, itemIdx) => (
+                      <div key={itemIdx} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-bold w-5 text-right">
+                          {itemIdx + 1}.
+                        </span>
+                        <input
+                          type="text"
+                          value={item}
+                          onChange={(e) => handleUpdateSubTask(catIdx, itemIdx, e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Rincian sub-tugas yang perlu diselesaikan..."
+                        />
+                        <button
+                          onClick={() => handleRemoveSubTask(catIdx, itemIdx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Hapus sub-tugas"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={() => handleAddSubTask(catIdx)}
+                      className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      + Tambah Sub-Tugas ke Kategori Ini
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* Tombol Aksi Tambah & Reset */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
+            {/* Bottom Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleAddTask}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
+                  onClick={handleAddCategory}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors border border-blue-200"
                 >
-                  <Plus className="w-4 h-4 text-slate-500" />
-                  + Tambah Tugas Baru
+                  <Plus className="w-4 h-4" />
+                  + Tambah Kategori Baru
                 </button>
                 <button
                   onClick={handleResetToDefault}
-                  className="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-medium transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Reset ke Standar
+                  Reset ke Standar Sistem
                 </button>
               </div>
 
@@ -616,12 +924,6 @@ export const LeaderChecklist: React.FC = () => {
   // ─────────────────────────────────────────────────────────────────────────
   // 2. RENDER UNTUK LEADER (HEAD BAR, HEAD KITCHEN, HEAD BAKER)
   // ─────────────────────────────────────────────────────────────────────────
-  const activeLeaderTasks = getTasksForDivision(leaderActiveDivision);
-  const totalTasks = activeLeaderTasks.length;
-  const completedCount = leaderCompletedTasks.length;
-  const percentage = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
-  const isFull = percentage === 100;
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header Pengisian Tugas Harian */}
@@ -636,7 +938,7 @@ export const LeaderChecklist: React.FC = () => {
             </h2>
           </div>
           <p className="text-slate-500 text-sm mt-1">
-            Centang tugas-tugas harian yang sudah Anda selesaikan untuk divisi Anda hari ini.
+            Centang rincian tugas per kategori yang sudah Anda selesaikan untuk divisi Anda hari ini.
           </p>
         </div>
 
@@ -684,52 +986,86 @@ export const LeaderChecklist: React.FC = () => {
           </div>
 
           <div className="text-right">
-            <span className="text-2xl font-black text-slate-800">{percentage}%</span>
-            <p className="text-xs font-semibold text-slate-500">{completedCount} dari {totalTasks} Tugas</p>
+            <span className="text-2xl font-black text-slate-800">{leaderPercentage}%</span>
+            <p className="text-xs font-semibold text-slate-500">
+              {completedSubTasksLeader} dari {totalSubTasksLeader} Sub-Tugas
+            </p>
           </div>
         </div>
 
-        {/* Progress Bar Visual */}
+        {/* Progress Bar Visual Utama */}
         <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-slate-200">
           <div
             className={`h-full transition-all duration-300 ${
-              isFull ? "bg-emerald-500" : completedCount > 0 ? "bg-amber-500" : "bg-slate-300"
+              leaderPercentage === 100 ? "bg-emerald-500" : completedSubTasksLeader > 0 ? "bg-amber-500" : "bg-slate-300"
             }`}
-            style={{ width: `${percentage}%` }}
+            style={{ width: `${leaderPercentage}%` }}
           />
         </div>
 
-        {/* List Checkbox Tugas */}
-        <div className="space-y-3">
-          {(Array.isArray(activeLeaderTasks) ? activeLeaderTasks : []).map((task, index) => {
-            const isCompleted = leaderCompletedTasks.includes(task);
+        {/* Grouped Categories Checklist */}
+        <div className="space-y-6">
+          {activeLeaderCategories.map((cat, catIdx) => {
+            const catTotal = cat.items?.length || 0;
+            let catDone = 0;
+            (cat.items || []).forEach((item) => {
+              if (isTaskChecked(leaderCompletedTasks, cat.category, item)) catDone++;
+            });
+            const catPct = catTotal > 0 ? Math.round((catDone / catTotal) * 100) : 0;
+            const isCatComplete = catPct === 100;
 
             return (
-              <div
-                key={index}
-                onClick={() => toggleLeaderTask(task)}
-                className={`p-4 rounded-xl border flex items-start gap-4 cursor-pointer transition-all select-none ${
-                  isCompleted
-                    ? "bg-emerald-50/70 border-emerald-300 text-emerald-950 shadow-xs"
-                    : "bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-700"
-                }`}
+              <div 
+                key={catIdx}
+                className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4"
               >
-                <div className="mt-0.5 shrink-0">
-                  {isCompleted ? (
-                    <CheckSquare className="w-5 h-5 text-emerald-600" />
-                  ) : (
-                    <Square className="w-5 h-5 text-slate-400" />
-                  )}
+                {/* Category Header */}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0">
+                      {catIdx + 1}
+                    </span>
+                    <h4 className="font-bold text-slate-800 text-sm">{cat.category}</h4>
+                  </div>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                    isCatComplete ? "bg-emerald-100 text-emerald-700" : catDone > 0 ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {catDone}/{catTotal} Selesai ({catPct}%)
+                  </span>
                 </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-semibold ${isCompleted ? "text-emerald-900 line-through opacity-80" : "text-slate-800"}`}>
-                    {task.split(" (")[0]}
-                  </p>
-                  {task.includes("(") && (
-                    <p className={`text-xs mt-1 ${isCompleted ? "text-emerald-700" : "text-slate-500"}`}>
-                      {task.substring(task.indexOf("("))}
-                    </p>
-                  )}
+
+                {/* Sub-tugas Checkbox Items */}
+                <div className="space-y-2.5">
+                  {cat.items.map((item, itemIdx) => {
+                    const isChecked = isTaskChecked(leaderCompletedTasks, cat.category, item);
+
+                    return (
+                      <div
+                        key={itemIdx}
+                        onClick={() => toggleLeaderTask(cat.category, item)}
+                        className={`p-3.5 rounded-xl border flex items-start gap-3 cursor-pointer transition-all select-none ${
+                          isChecked
+                            ? "bg-emerald-50/70 border-emerald-300 text-emerald-950 shadow-xs"
+                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                        }`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {isChecked ? (
+                            <CheckSquare className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <Square className="w-5 h-5 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-xs sm:text-sm font-semibold ${
+                            isChecked ? "text-emerald-900 line-through opacity-80" : "text-slate-800"
+                          }`}>
+                            {item}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
