@@ -18,6 +18,12 @@ import {
   UserCheck,
   X,
   Mail,
+  MapPin,
+  Camera,
+  ExternalLink,
+  Eye,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -89,10 +95,12 @@ export function HRManagement() {
   const [autoCreateUser, setAutoCreateUser] = useState(true);
   const [contractForm, setContractForm] = useState({ employeeId: "", basicSalary: 0, positionAllowance: 0, mealAllowance: 0, transportAllowance: 0, alphaDeductionPerDay: 0, kpiBonusTarget: 0,  startDate: "", endDate: "", status: "ACTIVE" as any });
 
-    const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [verifyingAttendance, setVerifyingAttendance] = useState<any | null>(null);
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
+  const [attendanceDateFilter, setAttendanceDateFilter] = useState<string>("");
+  const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
   const [isKpiModalOpen, setIsKpiModalOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<any | null>(null);
 
@@ -854,80 +862,28 @@ export function HRManagement() {
                 </table>
               </div>
 
-              {/* Daily Attendances for Manager */}
-              <div className="mt-12">
-                <h3 className="text-lg font-bold text-slate-800 mb-6">
-                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                        <th className="py-3 px-4 font-semibold">Tanggal</th>
-                        <th className="py-3 px-4 font-semibold">Karyawan</th>
-                        <th className="py-3 px-4 font-semibold">Status</th>
-                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
-                        <th className="py-3 px-4 font-semibold">Durasi</th>
-                        <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyAttendances.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
-                            Belum ada log kehadiran harian.
-                          </td>
-                        </tr>
-                      ) : (
-                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
-                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
-                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
-                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
-                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
-                                "bg-slate-100 text-slate-700"
-                              }`}>
-                                {d.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600">
-                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
-                              {" - "}
-                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
-                              {d.clockInTime && d.clockOutTime 
-                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
-                                : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
-                              {d.notes || "-"}
-                            </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
-                                <button
-                                  onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
-                                  }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
-                                >
-                                  Tolak (Alpha)
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+              {/* Callout Pemantauan Kehadiran */}
+              <div className="mt-8 p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl shrink-0">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">
+                      Pemantauan Kehadiran Lapangan & Foto GPS
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Lihat foto selfie kamera, peta lokasi GPS interaktif, dan verifikasi kehadiran karyawan secara real-time di tab Absensi.
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("attendance")}
+                  className="px-4 py-2 bg-white border border-slate-300 hover:border-blue-500 hover:text-blue-600 rounded-lg text-xs font-bold text-slate-700 shadow-2xs transition-colors shrink-0 flex items-center justify-center gap-1.5"
+                >
+                  Buka Tab Absensi →
+                </button>
               </div>
             </div>
           )}
@@ -1076,82 +1032,6 @@ export function HRManagement() {
                     )}
                   </tbody>
                 </table>
-              </div>
-
-              {/* Daily Attendances for Manager */}
-              <div className="mt-12">
-                <h3 className="text-lg font-bold text-slate-800 mb-6">
-                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                        <th className="py-3 px-4 font-semibold">Tanggal</th>
-                        <th className="py-3 px-4 font-semibold">Karyawan</th>
-                        <th className="py-3 px-4 font-semibold">Status</th>
-                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
-                        <th className="py-3 px-4 font-semibold">Durasi</th>
-                        <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyAttendances.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
-                            Belum ada log kehadiran harian.
-                          </td>
-                        </tr>
-                      ) : (
-                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
-                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
-                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
-                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
-                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
-                                "bg-slate-100 text-slate-700"
-                              }`}>
-                                {d.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600">
-                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
-                              {" - "}
-                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
-                              {d.clockInTime && d.clockOutTime 
-                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
-                                : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
-                              {d.notes || "-"}
-                            </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
-                                <button
-                                  onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
-                                  }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
-                                >
-                                  Tolak (Alpha)
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             </div>
           )}
@@ -1344,82 +1224,6 @@ export function HRManagement() {
                   </tbody>
                 </table>
               </div>
-
-              {/* Daily Attendances for Manager */}
-              <div className="mt-12">
-                <h3 className="text-lg font-bold text-slate-800 mb-6">
-                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                        <th className="py-3 px-4 font-semibold">Tanggal</th>
-                        <th className="py-3 px-4 font-semibold">Karyawan</th>
-                        <th className="py-3 px-4 font-semibold">Status</th>
-                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
-                        <th className="py-3 px-4 font-semibold">Durasi</th>
-                        <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyAttendances.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
-                            Belum ada log kehadiran harian.
-                          </td>
-                        </tr>
-                      ) : (
-                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
-                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
-                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
-                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
-                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
-                                "bg-slate-100 text-slate-700"
-                              }`}>
-                                {d.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600">
-                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
-                              {" - "}
-                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
-                              {d.clockInTime && d.clockOutTime 
-                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
-                                : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
-                              {d.notes || "-"}
-                            </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
-                                <button
-                                  onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
-                                  }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
-                                >
-                                  Tolak (Alpha)
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1526,76 +1330,259 @@ export function HRManagement() {
               </div>
 
               {/* Daily Attendances for Manager */}
-              <div className="mt-12">
-                <h3 className="text-lg font-bold text-slate-800 mb-6">
-                  {isIndo ? "Log Kehadiran & Pengajuan Harian" : "Daily Attendance & Leave Log"}
-                </h3>
-                <div className="overflow-x-auto">
+              <div className="mt-12 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 tracking-tight">
+                        {isIndo ? "Pemantauan Kehadiran Lapangan & Foto GPS" : "Field Attendance Log & GPS Photo Verification"}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {isIndo
+                        ? "Verifikasi foto selfie dan lokasi GPS saat karyawan melakukan Clock In & Out untuk memastikan kehadiran fisik di outlet."
+                        : "Verify employee selfie photos and GPS coordinates on Clock In & Out to confirm physical presence on site."}
+                    </p>
+                  </div>
+
+                  {/* Filter Controls */}
+                  <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-600">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type="date"
+                        value={attendanceDateFilter}
+                        onChange={(e) => setAttendanceDateFilter(e.target.value)}
+                        className="bg-transparent border-0 outline-none text-xs text-slate-700 cursor-pointer font-medium"
+                      />
+                      {attendanceDateFilter && (
+                        <button
+                          onClick={() => setAttendanceDateFilter("")}
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold ml-1"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      value={attendanceEmpFilter}
+                      onChange={(e) => setAttendanceEmpFilter(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 outline-none"
+                    >
+                      <option value="ALL">Semua Karyawan</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.position})
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => setAttendanceDateFilter(new Date().toISOString().substring(0, 10))}
+                      className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors"
+                    >
+                      Hari Ini
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-100">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                        <th className="py-3 px-4 font-semibold">Tanggal</th>
-                        <th className="py-3 px-4 font-semibold">Karyawan</th>
-                        <th className="py-3 px-4 font-semibold">Status</th>
-                        <th className="py-3 px-4 font-semibold">Jam In/Out</th>
-                        <th className="py-3 px-4 font-semibold">Durasi</th>
-                        <th className="py-3 px-4 font-semibold">Catatan</th>
-                        <th className="py-3 px-4 font-semibold">Aksi</th>
+                      <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                        <th className="py-3 px-4 font-bold">Tanggal</th>
+                        <th className="py-3 px-4 font-bold">Karyawan</th>
+                        <th className="py-3 px-4 font-bold">Status</th>
+                        <th className="py-3 px-4 font-bold">Foto Selfie (In / Out)</th>
+                        <th className="py-3 px-4 font-bold">Lokasi GPS</th>
+                        <th className="py-3 px-4 font-bold">Jam In / Out</th>
+                        <th className="py-3 px-4 font-bold">Durasi</th>
+                        <th className="py-3 px-4 font-bold text-right">Verifikasi Manager</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {dailyAttendances.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 italic">
-                            Belum ada log kehadiran harian.
-                          </td>
-                        </tr>
-                      ) : (
-                        [...dailyAttendances].sort((a,b) => b.date.localeCompare(a.date)).map((d) => (
-                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 text-slate-600">{d.date}</td>
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(d.employeeId)}</td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                d.status === "HADIR" ? "bg-emerald-100 text-emerald-700" :
-                                d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-700" :
-                                d.status === "IZIN" ? "bg-blue-100 text-blue-700" :
-                                d.status === "SAKIT" ? "bg-rose-100 text-rose-700" :
-                                "bg-slate-100 text-slate-700"
-                              }`}>
-                                {d.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600">
-                              {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
-                              {" - "}
-                              {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm font-bold text-slate-700">
-                              {d.clockInTime && d.clockOutTime 
-                                ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
-                                : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 max-w-[200px] truncate" title={d.notes}>
-                              {d.notes || "-"}
-                            </td>
-                            <td className="py-3 px-4">
-                              {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
-                                <button
-                                  onClick={() => {
-                                    if(confirm("Tolak kehadiran/pengajuan ini dan ubah menjadi ALPHA?")) {
-                                      updateDailyAttendance({...d, status: "ALPHA"});
-                                    }
-                                  }}
-                                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 px-2 py-1 rounded"
-                                >
-                                  Tolak (Alpha)
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
+                      {(() => {
+                        const filtered = [...dailyAttendances]
+                          .filter((d) => {
+                            if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
+                            if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                            return true;
+                          })
+                          .sort((a, b) => b.date.localeCompare(a.date) || (b.clockInTime || "").localeCompare(a.clockInTime || ""));
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={8} className="py-12 text-center text-slate-400 italic text-sm">
+                                Tidak ada catatan kehadiran sesuai filter yang dipilih.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((d) => {
+                          const emp = employees.find((e) => e.id === d.employeeId);
+                          return (
+                            <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
+                              <td className="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">
+                                {d.date}
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                    {emp?.name ? emp.name.charAt(0).toUpperCase() : "U"}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-slate-800 leading-tight">
+                                      {emp?.name || getEmployeeName(d.employeeId)}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 font-medium">
+                                      {emp?.position || "Staff"} • {emp?.department || "-"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <span className={`px-2.5 py-1 text-[11px] font-bold rounded-lg ${
+                                  d.status === "HADIR" ? "bg-emerald-100 text-emerald-800" :
+                                  d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-800" :
+                                  d.status === "IZIN" ? "bg-blue-100 text-blue-800" :
+                                  d.status === "SAKIT" ? "bg-rose-100 text-rose-800" :
+                                  "bg-slate-200 text-slate-700"
+                                }`}>
+                                  {d.status}
+                                </span>
+                              </td>
+                              {/* Foto Bukti In & Out */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  {d.clockInPhotoUrl ? (
+                                    <div
+                                      onClick={() => { setVerifyingAttendance(d); setIsVerificationModalOpen(true); }}
+                                      className="relative group cursor-pointer"
+                                      title="Klik untuk zoom foto Clock In"
+                                    >
+                                      <img
+                                        src={d.clockInPhotoUrl}
+                                        alt="Clock In"
+                                        className="w-10 h-10 rounded-lg object-cover border-2 border-emerald-400 shadow-2xs group-hover:scale-105 transition-transform"
+                                      />
+                                      <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold px-1 rounded-sm">
+                                        IN
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-[10px] text-slate-400">
+                                      <Camera className="w-3.5 h-3.5 text-slate-300" />
+                                      <span>In</span>
+                                    </div>
+                                  )}
+
+                                  {d.clockOutPhotoUrl ? (
+                                    <div
+                                      onClick={() => { setVerifyingAttendance(d); setIsVerificationModalOpen(true); }}
+                                      className="relative group cursor-pointer"
+                                      title="Klik untuk zoom foto Clock Out"
+                                    >
+                                      <img
+                                        src={d.clockOutPhotoUrl}
+                                        alt="Clock Out"
+                                        className="w-10 h-10 rounded-lg object-cover border-2 border-rose-400 shadow-2xs group-hover:scale-105 transition-transform"
+                                      />
+                                      <span className="absolute -bottom-1 -right-1 bg-rose-600 text-white text-[9px] font-bold px-1 rounded-sm">
+                                        OUT
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-[10px] text-slate-400">
+                                      <Camera className="w-3.5 h-3.5 text-slate-300" />
+                                      <span>Out</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              {/* Lokasi GPS */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex flex-col gap-1">
+                                  {d.clockInLocation ? (
+                                    <a
+                                      href={`https://maps.google.com/?q=${d.clockInLocation.lat},${d.clockInLocation.lng}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200/60 w-fit"
+                                      title={`Koordinat: ${d.clockInLocation.lat.toFixed(5)}, ${d.clockInLocation.lng.toFixed(5)}`}
+                                    >
+                                      <MapPin className="w-3 h-3 text-emerald-600" />
+                                      GPS Masuk ↗
+                                    </a>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 italic">GPS Masuk: Tidak ada</span>
+                                  )}
+
+                                  {d.clockOutLocation ? (
+                                    <a
+                                      href={`https://maps.google.com/?q=${d.clockOutLocation.lat},${d.clockOutLocation.lng}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200/60 w-fit"
+                                      title={`Koordinat: ${d.clockOutLocation.lat.toFixed(5)}, ${d.clockOutLocation.lng.toFixed(5)}`}
+                                    >
+                                      <MapPin className="w-3 h-3 text-rose-600" />
+                                      GPS Pulang ↗
+                                    </a>
+                                  ) : null}
+                                </div>
+                              </td>
+                              {/* Jam In / Out */}
+                              <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-700">
+                                {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                                {" - "}
+                                {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                              </td>
+                              {/* Durasi */}
+                              <td className="py-3 px-4 font-bold text-slate-800 whitespace-nowrap">
+                                {d.clockInTime && d.clockOutTime 
+                                  ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
+                                  : "-"}
+                              </td>
+                              {/* Aksi & Verifikasi */}
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setVerifyingAttendance(d);
+                                      setIsVerificationModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs"
+                                    title="Lihat foto besar dan peta lokasi GPS lengkap"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Bukti & Peta</span>
+                                  </button>
+
+                                  {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                    <button
+                                      onClick={() => {
+                                        if(confirm(`Tolak kehadiran ${emp?.name || 'karyawan ini'} dan ubah status menjadi ALPHA?`)) {
+                                          updateDailyAttendance({...d, status: "ALPHA", approvalStatus: "REJECTED"});
+                                        }
+                                      }}
+                                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                                      title="Tolak kehadiran jika terbukti tidak hadir di lapangan"
+                                    >
+                                      Tolak
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -1998,102 +1985,320 @@ export function HRManagement() {
       </div>
 
             {/* Verification Modal */}
-      {isVerificationModalOpen && verifyingAttendance && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0">
-              <h3 className="text-lg font-bold text-slate-800">
-                Verifikasi Kehadiran
-              </h3>
-              <button onClick={() => setIsVerificationModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+      {isVerificationModalOpen && verifyingAttendance && (() => {
+        const emp = employees.find((e) => e.id === verifyingAttendance.employeeId);
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 z-10 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
+                  {emp?.name ? emp.name.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 leading-tight">
+                      {emp?.name || getEmployeeName(verifyingAttendance.employeeId)}
+                    </h3>
+                    <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                      verifyingAttendance.status === 'HADIR' ? 'bg-emerald-100 text-emerald-800' :
+                      verifyingAttendance.status === 'TERLAMBAT' ? 'bg-amber-100 text-amber-800' :
+                      verifyingAttendance.status === 'ALPHA' ? 'bg-rose-100 text-rose-800' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {verifyingAttendance.status}
+                    </span>
+                    {verifyingAttendance.approvalStatus && (
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider ${
+                        verifyingAttendance.approvalStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        verifyingAttendance.approvalStatus === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                        'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {verifyingAttendance.approvalStatus === 'APPROVED' ? 'Terverifikasi Sah' :
+                         verifyingAttendance.approvalStatus === 'REJECTED' ? 'Ditolak' : 'Menunggu Review'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {emp?.position || 'Staff'} • {emp?.department || 'Main'} | Tanggal: <span className="font-bold text-slate-700">{verifyingAttendance.date}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsVerificationModalOpen(false)} 
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto space-y-6">
-              <div className="flex gap-4 items-center">
-                <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-bold text-lg">
-                  {getEmployeeName(verifyingAttendance.employeeId)}
-                </div>
-                <div className="text-slate-600 font-medium">
-                  {verifyingAttendance.date}
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-bold ${verifyingAttendance.status === 'HADIR' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                  {verifyingAttendance.status}
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/30">
+              {/* Petunjuk Untuk Manager */}
+              <div className="p-3.5 bg-blue-50/80 border border-blue-200/70 rounded-xl flex items-start gap-3 text-xs text-blue-900">
+                <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Validasi Kehadiran Fisik Lapangan</p>
+                  <p className="text-blue-700/90 mt-0.5">
+                    Pastikan foto selfie diambil langsung di lokasi outlet coffee shop dan titik lokasi GPS peta sesuai dengan area operasional sebelum melakukan persetujuan.
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                {/* Clock In */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                  <h4 className="font-bold text-slate-700 mb-3 text-center border-b pb-2">Clock In</h4>
-                  <div className="text-center font-mono text-xl mb-3 text-indigo-700">
-                    {verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+              {/* Grid 2 Kolom: Clock In vs Clock Out */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Clock In Card */}
+                <div className="border border-slate-200/80 rounded-2xl p-5 bg-white shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                          IN
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm">Clock In (Masuk)</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-emerald-700 text-base">
+                          {verifyingAttendance.clockInTime 
+                            ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                            : '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Foto Selfie In */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-1.5 text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Camera className="w-3.5 h-3.5 text-slate-400" /> Foto Selfie Masuk
+                        </span>
+                        {verifyingAttendance.clockInPhotoUrl && (
+                          <a
+                            href={verifyingAttendance.clockInPhotoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            Buka Foto Penuh ↗
+                          </a>
+                        )}
+                      </div>
+                      {verifyingAttendance.clockInPhotoUrl ? (
+                        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner">
+                          <img 
+                            src={verifyingAttendance.clockInPhotoUrl} 
+                            alt="Foto Clock In" 
+                            className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-102" 
+                          />
+                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                            Kamera Selfie
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-52 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                          <Camera className="w-8 h-8 text-slate-300" />
+                          <span>Tidak ada foto selfie tersimpan</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Peta GPS In */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5 text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" /> Lokasi Titik GPS Masuk
+                        </span>
+                        {verifyingAttendance.clockInLocation && (
+                          <a 
+                            href={`https://maps.google.com/?q=${verifyingAttendance.clockInLocation.lat},${verifyingAttendance.clockInLocation.lng}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            Buka Google Maps ↗
+                          </a>
+                        )}
+                      </div>
+
+                      {verifyingAttendance.clockInLocation ? (
+                        <div>
+                          <div className="text-[11px] text-slate-500 font-mono bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 mb-2 flex items-center justify-between">
+                            <span>Lat: {verifyingAttendance.clockInLocation.lat.toFixed(5)}</span>
+                            <span>Lng: {verifyingAttendance.clockInLocation.lng.toFixed(5)}</span>
+                          </div>
+                          <iframe
+                            title="Peta Lokasi Clock In"
+                            width="100%"
+                            height="160"
+                            className="rounded-xl border border-slate-200 shadow-inner"
+                            loading="lazy"
+                            src={`https://maps.google.com/maps?q=${verifyingAttendance.clockInLocation.lat},${verifyingAttendance.clockInLocation.lng}&hl=id&z=16&output=embed`}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-24 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xs">
+                          Koordinat GPS tidak terekam
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {verifyingAttendance.clockInPhotoUrl ? (
-                    <img src={verifyingAttendance.clockInPhotoUrl} alt="Clock In" className="w-full h-48 object-cover rounded-lg mb-3 shadow-sm border border-slate-200" />
-                  ) : (
-                    <div className="w-full h-48 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 mb-3">Tidak ada foto</div>
-                  )}
-                  {verifyingAttendance.clockInLocation ? (
-                    <a href={`https://maps.google.com/?q=${verifyingAttendance.clockInLocation.lat},${verifyingAttendance.clockInLocation.lng}`} target="_blank" rel="noreferrer" className="block text-center text-sm font-medium text-blue-600 hover:underline bg-blue-50 py-2 rounded-lg">
-                      Buka Google Maps
-                    </a>
-                  ) : (
-                    <div className="text-center text-sm text-slate-500 py-2">GPS tidak tersedia</div>
-                  )}
                 </div>
 
-                {/* Clock Out */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                  <h4 className="font-bold text-slate-700 mb-3 text-center border-b pb-2">Clock Out</h4>
-                  <div className="text-center font-mono text-xl mb-3 text-indigo-700">
-                    {verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                {/* Clock Out Card */}
+                <div className="border border-slate-200/80 rounded-2xl p-5 bg-white shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xs">
+                          OUT
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm">Clock Out (Pulang)</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-rose-700 text-base">
+                          {verifyingAttendance.clockOutTime 
+                            ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                            : 'Belum Pulang'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Foto Selfie Out */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-1.5 text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Camera className="w-3.5 h-3.5 text-slate-400" /> Foto Selfie Pulang
+                        </span>
+                        {verifyingAttendance.clockOutPhotoUrl && (
+                          <a
+                            href={verifyingAttendance.clockOutPhotoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            Buka Foto Penuh ↗
+                          </a>
+                        )}
+                      </div>
+                      {verifyingAttendance.clockOutPhotoUrl ? (
+                        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner">
+                          <img 
+                            src={verifyingAttendance.clockOutPhotoUrl} 
+                            alt="Foto Clock Out" 
+                            className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-102" 
+                          />
+                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                            Kamera Selfie
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-52 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                          <Camera className="w-8 h-8 text-slate-300" />
+                          <span>{verifyingAttendance.clockOutTime ? 'Tidak ada foto selfie pulang' : 'Belum melakukan Clock Out'}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Peta GPS Out */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5 text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" /> Lokasi Titik GPS Pulang
+                        </span>
+                        {verifyingAttendance.clockOutLocation && (
+                          <a 
+                            href={`https://maps.google.com/?q=${verifyingAttendance.clockOutLocation.lat},${verifyingAttendance.clockOutLocation.lng}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            Buka Google Maps ↗
+                          </a>
+                        )}
+                      </div>
+
+                      {verifyingAttendance.clockOutLocation ? (
+                        <div>
+                          <div className="text-[11px] text-slate-500 font-mono bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 mb-2 flex items-center justify-between">
+                            <span>Lat: {verifyingAttendance.clockOutLocation.lat.toFixed(5)}</span>
+                            <span>Lng: {verifyingAttendance.clockOutLocation.lng.toFixed(5)}</span>
+                          </div>
+                          <iframe
+                            title="Peta Lokasi Clock Out"
+                            width="100%"
+                            height="160"
+                            className="rounded-xl border border-slate-200 shadow-inner"
+                            loading="lazy"
+                            src={`https://maps.google.com/maps?q=${verifyingAttendance.clockOutLocation.lat},${verifyingAttendance.clockOutLocation.lng}&hl=id&z=16&output=embed`}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-24 bg-slate-100 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xs">
+                          {verifyingAttendance.clockOutTime ? 'Koordinat GPS pulang tidak terekam' : 'Belum ada data GPS pulang'}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {verifyingAttendance.clockOutPhotoUrl ? (
-                    <img src={verifyingAttendance.clockOutPhotoUrl} alt="Clock Out" className="w-full h-48 object-cover rounded-lg mb-3 shadow-sm border border-slate-200" />
-                  ) : (
-                    <div className="w-full h-48 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 mb-3">Tidak ada foto</div>
-                  )}
-                  {verifyingAttendance.clockOutLocation ? (
-                    <a href={`https://maps.google.com/?q=${verifyingAttendance.clockOutLocation.lat},${verifyingAttendance.clockOutLocation.lng}`} target="_blank" rel="noreferrer" className="block text-center text-sm font-medium text-blue-600 hover:underline bg-blue-50 py-2 rounded-lg">
-                      Buka Google Maps
-                    </a>
-                  ) : (
-                    <div className="text-center text-sm text-slate-500 py-2">GPS tidak tersedia</div>
-                  )}
                 </div>
               </div>
+
+              {/* Catatan Karyawan */}
+              {verifyingAttendance.notes && (
+                <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                  <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Catatan dari Karyawan:</h5>
+                  <p className="text-sm text-slate-600 italic">"{verifyingAttendance.notes}"</p>
+                </div>
+              )}
             </div>
-            <div className="px-6 py-4 bg-slate-50 flex justify-between gap-3 border-t border-slate-100 shrink-0">
-              <button onClick={() => setIsVerificationModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">
-                Kembali
+
+            {/* Modal Actions Footer */}
+            <div className="px-6 py-4 bg-slate-50 flex items-center justify-between gap-3 border-t border-slate-100 shrink-0">
+              <button 
+                type="button"
+                onClick={() => setIsVerificationModalOpen(false)} 
+                className="px-5 py-2.5 text-slate-600 font-semibold hover:bg-slate-200/70 rounded-xl text-sm transition-colors"
+              >
+                Tutup
               </button>
-              <div className="flex gap-3">
+              
+              <div className="flex items-center gap-3">
                 <button 
+                  type="button"
                   onClick={() => {
-                    if(confirm("Tolak kehadiran ini? Status karyawan akan menjadi ALPHA.")) {
-                      updateDailyAttendance({...verifyingAttendance, approvalStatus: "REJECTED", status: "ALPHA"});
+                    if (confirm("Tolak kehadiran ini? Status karyawan akan diubah menjadi ALPHA dan tunjangan/gaji akan disesuaikan.")) {
+                      updateDailyAttendance({
+                        ...verifyingAttendance, 
+                        approvalStatus: 'REJECTED', 
+                        status: 'ALPHA'
+                      });
                       setIsVerificationModalOpen(false);
                     }
                   }} 
-                  className="px-6 py-2 bg-rose-100 text-rose-700 font-bold rounded-lg hover:bg-rose-200 transition-colors"
+                  className="px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-sm transition-colors"
                 >
-                  Tolak (Alpha)
+                  Tolak (Set Alpha)
                 </button>
                 <button 
+                  type="button"
                   onClick={() => {
-                    updateDailyAttendance({...verifyingAttendance, approvalStatus: "APPROVED"});
+                    updateDailyAttendance({
+                      ...verifyingAttendance, 
+                      approvalStatus: 'APPROVED'
+                    });
                     setIsVerificationModalOpen(false);
                   }} 
-                  className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-200"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center gap-1.5"
                 >
-                  Approve (Sah)
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Verifikasi Sah (Approve)</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Attendance Modal */}
       {isAttendanceModalOpen && (

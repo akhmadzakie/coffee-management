@@ -208,14 +208,12 @@ export const Layout: React.FC<LayoutProps> = ({
       "shifts", "suppliers", "purchases",
       "users",   // Manager bisa onboard staff (dibatasi role-nya di Users.tsx)
       "audit_log",
-      "attendance_clock",
     ],
     FINANCE: [
       "dashboard_finance",
       "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
       "payroll", "purchases",
       "audit_log",
-      "attendance_clock"
     ],
     KASIR: [
       "shifts", "leader_checklist",
