@@ -146,6 +146,7 @@ function AppContent() {
     ],
     MANAGER: [
       "dashboard_manager",
+      "dashboard_owner",
       "dashboard_inventory",
       "inventory", "import_sales",
       "hr", "leader_checklist",
@@ -155,6 +156,7 @@ function AppContent() {
     ],
     FINANCE: [
       "dashboard_finance",
+      "dashboard_owner",
       "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
       "payroll", "purchases",
       "audit_log",

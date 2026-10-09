@@ -302,6 +302,7 @@ export interface Settings {
   leaderBakerTasks?: any;
   managerTasks?: any;
   geminiApiKey?: string;
+  monthlyRevenueTarget?: number;
 }
 
 export interface CashAccount {

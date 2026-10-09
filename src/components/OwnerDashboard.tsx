@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import { ViewState } from "../types";
@@ -59,15 +59,31 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     shifts,
     settings,
     employees,
+    currentUser,
+    updateSettings,
   } = useStore();
 
   // Period Filter: "this_month" | "last_30_days" | "this_year" | "today"
   const [period, setPeriod] = useState<"this_month" | "last_30_days" | "this_year" | "today">("this_month");
   
-  // Target Omzet Bulanan (Default Rp 150.000.000, editable oleh owner)
-  const [monthlyTarget, setMonthlyTarget] = useState<number>(150000000);
+  // Target Omzet Bulanan (Tersimpan di database settings, hanya dapat diubah oleh Manager)
+  const monthlyTarget = settings.monthlyRevenueTarget || 150000000;
+  const canSetTarget = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
   const [isEditingTarget, setIsEditingTarget] = useState(false);
-  const [targetInput, setTargetInput] = useState<string>("150000000");
+  const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
+
+  useEffect(() => {
+    setTargetInput((settings.monthlyRevenueTarget || 150000000).toString());
+  }, [settings.monthlyRevenueTarget]);
+
+  const handleSaveTarget = () => {
+    const val = Math.max(0, parseInt(targetInput) || monthlyTarget);
+    updateSettings({
+      ...settings,
+      monthlyRevenueTarget: val,
+    });
+    setIsEditingTarget(false);
+  };
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -385,41 +401,44 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Target Omzet Bulanan
                 </span>
-                {!isEditingTarget ? (
-                  <button
-                    onClick={() => {
-                      setTargetInput(monthlyTarget.toString());
-                      setIsEditingTarget(true);
-                    }}
-                    className="text-[10px] text-amber-600 hover:text-amber-700 underline font-medium"
-                  >
-                    Ubah Target
-                  </button>
-                ) : null}
+                {canSetTarget ? (
+                  !isEditingTarget ? (
+                    <button
+                      onClick={() => {
+                        setTargetInput(monthlyTarget.toString());
+                        setIsEditingTarget(true);
+                      }}
+                      className="text-[10px] text-amber-600 hover:text-amber-700 underline font-semibold cursor-pointer"
+                    >
+                      Tentukan Target (Manajer)
+                    </button>
+                  ) : null
+                ) : (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80">
+                    Ditetapkan oleh Manajer
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline gap-2">
-                {isEditingTarget ? (
+                {isEditingTarget && canSetTarget ? (
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-xs text-slate-400">Rp</span>
                     <input
                       type="number"
                       value={targetInput}
                       onChange={(e) => setTargetInput(e.target.value)}
-                      className="px-2 py-0.5 text-sm font-bold border border-slate-300 rounded-md w-32 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      placeholder="150000000"
+                      className="px-2 py-0.5 text-sm font-bold border border-slate-300 rounded-md w-36 focus:outline-none focus:ring-1 focus:ring-amber-500"
                     />
                     <button
-                      onClick={() => {
-                        const val = parseInt(targetInput) || monthlyTarget;
-                        setMonthlyTarget(val);
-                        setIsEditingTarget(false);
-                      }}
-                      className="px-2 py-0.5 bg-slate-900 text-white text-[10px] font-semibold rounded-md"
+                      onClick={handleSaveTarget}
+                      className="px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-semibold rounded-md hover:bg-slate-800 transition-all cursor-pointer"
                     >
-                      Simpan
+                      Simpan Target
                     </button>
                     <button
                       onClick={() => setIsEditingTarget(false)}
-                      className="px-2 py-0.5 text-slate-500 text-[10px]"
+                      className="px-2 py-0.5 text-slate-500 text-[10px] hover:text-slate-700 cursor-pointer"
                     >
                       Batal
                     </button>
