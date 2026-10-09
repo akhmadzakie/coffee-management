@@ -277,8 +277,8 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {/* Sidebar - Desktop */}
-      <aside className={`hidden md:flex flex-col bg-primary border-r border-slate-700/50 text-secondary transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`p-6 border-b border-slate-700/50 flex items-center ${isSidebarCollapsed ? 'justify-center px-4' : 'gap-3'}`}>
+      <aside className={`hidden md:flex flex-col bg-primary border-r border-[#3a281f] text-secondary transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        <div className={`p-6 border-b border-[#3a281f] flex items-center ${isSidebarCollapsed ? 'justify-center px-4' : 'gap-3'}`}>
           {settings.logoDataUrl ? (
             <img
               src={settings.logoDataUrl}
@@ -286,7 +286,7 @@ export const Layout: React.FC<LayoutProps> = ({
               className={`h-8 w-auto object-contain ${isSidebarCollapsed ? 'max-w-[40px]' : 'max-w-[120px]'}`}
             />
           ) : (
-            <div className="w-8 h-8 shrink-0 bg-accent rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
+            <div className="w-8 h-8 shrink-0 bg-accent rounded-xl flex items-center justify-center text-white font-bold shadow-coffee-sm">
               {settings.brandName
                 ? settings.brandName.substring(0, 2).toUpperCase()
                 : "NS"}
@@ -298,7 +298,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </span>
           )}
         </div>
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
           {(() => {
             const groupedNav = navigation.reduce((acc, item) => {
               const g = item.group || "Lainnya";
@@ -322,13 +322,13 @@ export const Layout: React.FC<LayoutProps> = ({
                           key={item.view}
                           onClick={() => onViewChange(item.view)}
                           title={item.name}
-                          className={`w-full flex items-center justify-center p-2 rounded-lg text-sm transition-colors mb-1 ${
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm transition-all mb-1 ${
                             isActive
-                              ? "bg-accent/20 text-accent font-medium"
-                              : "text-slate-300 hover:bg-white/10 hover:text-white"
+                              ? "bg-amber-500/20 text-amber-300 font-semibold shadow-2xs"
+                              : "text-stone-300 hover:bg-white/10 hover:text-white"
                           }`}
                         >
-                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`} />
+                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-amber-400" : "text-stone-400"}`} />
                         </button>
                       );
                     })}
@@ -340,20 +340,20 @@ export const Layout: React.FC<LayoutProps> = ({
                 <div key={group} className="mb-2">
                   <button
                     onClick={() => toggleGroup(group)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${isActiveGroup ? 'text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors ${isActiveGroup ? 'text-amber-200 font-semibold' : 'text-stone-400 hover:text-stone-200'}`}
                   >
-                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                    <span className="font-bold uppercase tracking-wider text-[10px]">
                       {group}
                     </span>
                     {isExpanded ? (
-                      <ChevronDown className="w-4 h-4 opacity-70" />
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 opacity-70" />
+                      <ChevronRight className="w-3.5 h-3.5 opacity-70" />
                     )}
                   </button>
                   
                   {isExpanded && (
-                    <div className="mt-1 space-y-1 pl-2">
+                    <div className="mt-1 space-y-1 pl-1">
                       {items.map((item) => {
                         const Icon = item.icon;
                         const isActive = currentView === item.view;
@@ -361,16 +361,16 @@ export const Layout: React.FC<LayoutProps> = ({
                           <button
                             key={item.view}
                             onClick={() => onViewChange(item.view)}
-                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-all ${
                               isActive
-                                ? "bg-accent/20 text-accent font-medium"
-                                : "text-slate-300 hover:bg-white/10 hover:text-white"
+                                ? "bg-amber-500/15 text-amber-300 font-semibold border-l-2 border-amber-500 shadow-2xs"
+                                : "text-stone-300 hover:bg-white/10 hover:text-white"
                             }`}
                           >
                             <Icon
-                              className={`w-4 h-4 shrink-0 ${isActive ? "text-accent" : "text-slate-400"}`}
+                              className={`w-4 h-4 shrink-0 ${isActive ? "text-amber-400" : "text-stone-400"}`}
                             />
-                            <span>{item.name}</span>
+                            <span className="truncate">{item.name}</span>
                           </button>
                         );
                       })}
@@ -383,11 +383,11 @@ export const Layout: React.FC<LayoutProps> = ({
         </nav>
 
         {/* User Card & Actions - Desktop Sidebar */}
-        <div className={`p-4 border-t border-slate-700/50 bg-black/20 ${isSidebarCollapsed ? 'flex flex-col items-center gap-4' : 'space-y-3'}`}>
+        <div className={`p-4 border-t border-[#3a281f] bg-black/25 ${isSidebarCollapsed ? 'flex flex-col items-center gap-4' : 'space-y-3'}`}>
           <div className="flex items-center">
             <div 
               title={isSidebarCollapsed ? currentUser?.name : undefined}
-              className="w-10 h-10 shrink-0 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold border border-accent/30"
+              className="w-10 h-10 shrink-0 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-300 font-bold border border-amber-500/30 shadow-coffee-sm"
             >
               {currentUser?.name.charAt(0).toUpperCase() || "U"}
             </div>
@@ -397,10 +397,10 @@ export const Layout: React.FC<LayoutProps> = ({
                   {currentUser?.name}
                 </p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent uppercase border border-accent/30">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 uppercase border border-amber-500/30">
                     {currentUser?.role}
                   </span>
-                  <span className="text-xs text-slate-400 truncate">
+                  <span className="text-xs text-stone-400 truncate">
                     @{currentUser?.username}
                   </span>
                 </div>
@@ -412,14 +412,14 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 onClick={() => setIsSwitchAccountOpen(true)}
-                className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-slate-300 bg-[#132F4C] hover:bg-[#1A3A5A] border border-[#1A3A5A] rounded-lg transition-colors shadow-2xs"
+                className="flex items-center justify-center px-2 py-2 text-xs font-medium text-stone-200 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl transition-all shadow-2xs"
               >
-                <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                <UserCheck className="w-3.5 h-3.5 mr-1 text-stone-300" />
                 Ganti Akun
               </button>
               <button
                 onClick={() => logout()}
-                className="flex items-center justify-center px-2 py-1.5 text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors shadow-2xs"
+                className="flex items-center justify-center px-2 py-2 text-xs font-medium text-rose-300 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/20 rounded-xl transition-all shadow-2xs"
               >
                 <LogOut className="w-3.5 h-3.5 mr-1" />
                 Keluar
@@ -430,14 +430,14 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 onClick={() => setIsSwitchAccountOpen(true)}
                 title="Ganti Akun"
-                className="flex items-center justify-center p-2 text-slate-300 bg-[#132F4C] hover:bg-[#1A3A5A] border border-[#1A3A5A] rounded-lg transition-colors shadow-2xs"
+                className="flex items-center justify-center p-2.5 text-stone-200 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl transition-all shadow-2xs"
               >
                 <UserCheck className="w-4 h-4" />
               </button>
               <button
                 onClick={() => logout()}
                 title="Keluar"
-                className="flex items-center justify-center p-2 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors shadow-2xs"
+                className="flex items-center justify-center p-2.5 text-rose-300 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/20 rounded-xl transition-all shadow-2xs"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -449,7 +449,7 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Mobile & Desktop */}
-        <header className="flex justify-between items-center px-4 py-3 sm:px-6 sm:py-3.5 bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 transition-all shadow-xs">
+        <header className="flex justify-between items-center px-4 py-3 sm:px-6 sm:py-3.5 bg-white/90 backdrop-blur-md border-b border-stone-200/80 sticky top-0 z-30 transition-all shadow-coffee-sm">
           <div className="flex items-center">
             <button
               onClick={() => {
@@ -459,7 +459,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsMobileMenuOpen(!isMobileMenuOpen);
                 }
               }}
-              className="text-slate-600 hover:text-slate-900 p-1.5 rounded-lg bg-white border border-slate-200 mr-2.5 shadow-2xs"
+              className="text-stone-700 hover:text-stone-900 p-2 rounded-xl bg-white border border-stone-200/80 mr-2.5 shadow-2xs hover:bg-stone-50 transition-all"
               aria-label="Toggle Menu"
             >
               {isMobileMenuOpen ? (
@@ -475,13 +475,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 className="h-6 w-auto object-contain mr-2 md:hidden"
               />
             ) : null}
-            <span className="font-bold text-slate-800 text-sm line-clamp-1 md:hidden">
+            <span className="font-bold text-stone-900 text-sm line-clamp-1 md:hidden">
               {settings.brandName}
             </span>
           </div>
 
           <div className="hidden md:block">
-            <h2 className="text-2xl font-bold text-slate-800 capitalize">
+            <h2 className="text-xl font-bold text-stone-900 tracking-tight capitalize">
               {{
                 dashboard_employee: "Portal Karyawan & Leader",
                 dashboard_finance: "Dashboard Keuangan",
@@ -504,7 +504,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 leader_checklist: "Checklist Jobdesk",
               }[currentView] || currentView}
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-xs text-stone-500 mt-0.5">
               {{
                 dashboard_employee: "Pantau status kehadiran, evaluasi KPI, dan progres tugas operasional Anda.",
                 dashboard_finance: "Ringkasan keuangan dan arus kas bisnis Anda.",
@@ -535,7 +535,7 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 onClick={() => setIsAIAssistantOpen(true)}
                 title="Magic AI Assistant (Catat dari Nota/Teks)"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md shadow-blue-500/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-600 to-amber-700 text-white hover:from-amber-700 hover:to-amber-800 transition-all shadow-coffee-sm"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">AI Assistant</span>
@@ -556,9 +556,9 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsExportModalOpen(true);
                 }}
                 title="Pusat Ekspor Laporan CSV & PDF Resmi"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-stone-200/90 text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition-all shadow-2xs"
               >
-                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <Download className="w-3.5 h-3.5 text-amber-700" />
                 <span className="hidden sm:inline">Ekspor & Laporan</span>
               </button>
             )}
@@ -567,27 +567,27 @@ export const Layout: React.FC<LayoutProps> = ({
             <button
               onClick={() => syncData()}
               title="Sinkronisasi Cloud Database (Klik untuk update data manual)"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 isSyncing
-                  ? "bg-amber-50 border-amber-200 text-amber-700 shadow-2xs"
-                  : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 shadow-2xs"
+                  ? "bg-amber-50 border-amber-200 text-amber-800 shadow-2xs"
+                  : "bg-stone-100/80 border-stone-200 text-stone-700 hover:bg-stone-200/60 shadow-2xs"
               }`}
             >
               {isSyncing ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
               ) : (
-                <Cloud className="w-3.5 h-3.5 text-blue-600" />
+                <Cloud className="w-3.5 h-3.5 text-stone-500" />
               )}
               <span className="hidden sm:inline">
-                {isSyncing ? "Menyinkronkan..." : "Cloud DB Aktif"}
+                {isSyncing ? "Menyinkronkan..." : "Cloud DB"}
               </span>
             </button>
 
             <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400">
-                Current Date
+              <span className="text-[10px] uppercase font-bold text-stone-400">
+                Hari Ini
               </span>
-              <span className="text-xs font-semibold text-slate-700">
+              <span className="text-xs font-semibold text-stone-700">
                 {new Date().toLocaleDateString("id-ID", {
                   day: "numeric",
                   month: "short",
@@ -600,36 +600,36 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-full md:rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all shadow-2xs"
+                className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full md:rounded-xl bg-white border border-stone-200/80 hover:border-stone-300 hover:bg-stone-50 transition-all shadow-2xs"
               >
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold border border-blue-200 text-xs">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-800 font-bold border border-amber-200 text-xs shadow-2xs">
                   {currentUser?.name.charAt(0).toUpperCase() || "U"}
                 </div>
                 <div className="hidden md:flex flex-col items-start text-left">
-                  <span className="text-xs font-bold text-slate-800 line-clamp-1 leading-tight">
+                  <span className="text-xs font-bold text-stone-900 line-clamp-1 leading-tight">
                     {currentUser?.name}
                   </span>
-                  <span className="text-[10px] text-blue-600 font-semibold leading-tight">
+                  <span className="text-[10px] text-amber-700 font-semibold leading-tight">
                     {currentUser?.role}
                   </span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
+                  className={`w-3.5 h-3.5 text-stone-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
               {/* Dropdown Floating Menu */}
               {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-4 py-2.5 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-coffee-lg border border-stone-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-2.5 border-b border-stone-100">
+                    <p className="text-xs font-bold text-stone-900 truncate">
                       {currentUser?.name}
                     </p>
-                    <p className="text-[11px] text-slate-500 truncate">
+                    <p className="text-[11px] text-stone-500 truncate">
                       @{currentUser?.username}
                     </p>
                     <div className="mt-1">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase border border-amber-200">
                         Peran: {currentUser?.role}
                       </span>
                     </div>
@@ -643,9 +643,9 @@ export const Layout: React.FC<LayoutProps> = ({
                           setExportModalModule("executive");
                           setIsExportModalOpen(true);
                         }}
-                        className="w-full flex items-center px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                        className="w-full flex items-center px-4 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 transition-colors"
                       >
-                        <FileSpreadsheet className="w-4 h-4 mr-2.5 text-blue-600" />
+                        <FileSpreadsheet className="w-4 h-4 mr-2.5 text-amber-700" />
                         Pusat Ekspor & Laporan
                       </button>
                     )}
@@ -654,9 +654,9 @@ export const Layout: React.FC<LayoutProps> = ({
                         setIsUserDropdownOpen(false);
                         setIsSwitchAccountOpen(true);
                       }}
-                      className="w-full flex items-center px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="w-full flex items-center px-4 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 transition-colors"
                     >
-                      <UserCheck className="w-4 h-4 mr-2.5 text-blue-600" />
+                      <UserCheck className="w-4 h-4 mr-2.5 text-stone-600" />
                       Ganti Akun / Switch User
                     </button>
                     <button
@@ -678,11 +678,11 @@ export const Layout: React.FC<LayoutProps> = ({
 
         {/* Mobile Navigation Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden bg-primary border-b border-slate-700/50 shadow-lg relative z-10 animate-in slide-in-from-top-2 duration-150">
+          <div className="md:hidden bg-primary border-b border-[#3a281f] text-secondary shadow-xl relative z-10 animate-in slide-in-from-top-2 duration-150">
             {/* User Profile on Mobile Menu */}
-            <div className="p-4 bg-black/20 border-b border-slate-700/50 flex items-center justify-between">
+            <div className="p-4 bg-black/25 border-b border-[#3a281f] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold border border-accent/30">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-300 font-bold border border-amber-500/30 shadow-coffee-sm">
                   {currentUser?.name.charAt(0).toUpperCase() || "U"}
                 </div>
                 <div>
@@ -690,10 +690,10 @@ export const Layout: React.FC<LayoutProps> = ({
                     {currentUser?.name}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/20 text-accent uppercase border border-accent/30">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 uppercase border border-amber-500/30">
                       {currentUser?.role}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-stone-400">
                       @{currentUser?.username}
                     </span>
                   </div>
@@ -701,7 +701,7 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
 
-            <nav className="p-3 space-y-1 max-h-[60vh] overflow-y-auto">
+            <nav className="p-3 space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
               {(() => {
                 const groupedNav = navigation.reduce((acc, item) => {
                   const g = item.group || "Lainnya";
@@ -718,20 +718,20 @@ export const Layout: React.FC<LayoutProps> = ({
                     <div key={group} className="mb-2">
                       <button
                         onClick={() => toggleGroup(group)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${isActiveGroup ? 'text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-colors ${isActiveGroup ? 'text-amber-200 font-semibold' : 'text-stone-400 hover:text-stone-200'}`}
                       >
-                        <span className="text-[11px] font-bold uppercase tracking-wider">
+                        <span className="font-bold uppercase tracking-wider text-[10px]">
                           {group}
                         </span>
                         {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 opacity-70" />
+                          <ChevronDown className="w-3.5 h-3.5 opacity-70" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 opacity-70" />
+                          <ChevronRight className="w-3.5 h-3.5 opacity-70" />
                         )}
                       </button>
                       
                       {isExpanded && (
-                        <div className="mt-1 space-y-1 pl-2">
+                        <div className="mt-1 space-y-1 pl-1">
                           {items.map((item) => {
                             const Icon = item.icon;
                             const isActive = currentView === item.view;
@@ -742,14 +742,14 @@ export const Layout: React.FC<LayoutProps> = ({
                                   onViewChange(item.view);
                                   setIsMobileMenuOpen(false);
                                 }}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all ${
                                   isActive
-                                    ? "bg-accent/20 text-accent font-medium"
-                                    : "text-slate-300 hover:bg-white/10 hover:text-white"
+                                    ? "bg-amber-500/15 text-amber-300 font-semibold border-l-2 border-amber-500 shadow-2xs"
+                                    : "text-stone-300 hover:bg-white/10 hover:text-white"
                                 }`}
                               >
                                 <Icon
-                                  className={`w-5 h-5 ${isActive ? "text-accent" : "text-slate-400"}`}
+                                  className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-stone-400"}`}
                                 />
                                 <span>{item.name}</span>
                               </button>
@@ -764,15 +764,15 @@ export const Layout: React.FC<LayoutProps> = ({
             </nav>
 
             {/* Fast Action Buttons in Mobile Menu */}
-            <div className="p-3 bg-black/20 border-t border-slate-700/50 grid grid-cols-2 gap-2">
+            <div className="p-3 bg-black/25 border-t border-[#3a281f] grid grid-cols-2 gap-2">
               <button
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   setIsSwitchAccountOpen(true);
                 }}
-                className="flex items-center justify-center py-2.5 px-3 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-medium text-xs rounded-xl shadow-2xs transition-colors"
+                className="flex items-center justify-center py-2.5 px-3 bg-white/10 hover:bg-white/15 border border-white/10 text-stone-200 font-medium text-xs rounded-xl shadow-2xs transition-colors"
               >
-                <UserCheck className="w-4 h-4 mr-1.5 text-slate-400" />
+                <UserCheck className="w-4 h-4 mr-1.5 text-stone-300" />
                 Ganti Akun
               </button>
               <button
@@ -780,7 +780,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsMobileMenuOpen(false);
                   logout();
                 }}
-                className="flex items-center justify-center py-2.5 px-3 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 font-medium text-xs rounded-xl shadow-2xs transition-colors"
+                className="flex items-center justify-center py-2.5 px-3 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/20 text-rose-300 font-medium text-xs rounded-xl shadow-2xs transition-colors"
               >
                 <LogOut className="w-4 h-4 mr-1.5" />
                 Keluar
@@ -790,14 +790,14 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* Page Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50  relative z-10 rounded-tl-2xl border-t border-l border-slate-200/50 shadow-inner">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#fbf9f5] relative z-10 rounded-tl-3xl border-t border-l border-stone-200/60 shadow-inner">
           {/* Banner Read-Only untuk OWNER */}
           {currentUser?.role === "OWNER" && (
-            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm shadow-sm">
-              <Eye className="w-4 h-4 shrink-0 text-amber-600" />
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-amber-900 text-sm shadow-coffee-sm">
+              <Eye className="w-4 h-4 shrink-0 text-amber-700" />
               <div>
                 <span className="font-bold">Mode Pantau (View Only)</span>
-                <span className="ml-2 text-amber-700">
+                <span className="ml-2 text-amber-800">
                   Anda login sebagai <strong>Owner</strong> — dapat melihat semua data namun tidak dapat membuat perubahan.
                 </span>
               </div>
@@ -806,10 +806,10 @@ export const Layout: React.FC<LayoutProps> = ({
           <AnimatePresence mode="wait">
             <motion.main
               key={currentView}
-              initial={{ opacity: 0, y: 15, filter: "blur(4px)" }}
+              initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -15, filter: "blur(4px)" }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
               className="max-w-7xl mx-auto h-full"
             >
               {children}

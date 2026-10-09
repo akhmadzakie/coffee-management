@@ -1,22 +1,59 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #1f3b57;
-  --color-accent: #b8863b;
-  --color-secondary: #f2ece4;
+  --color-primary: #241813;
+  --color-accent: #c27803;
+  --color-secondary: #f5eee6;
+  --color-coffee-dark: #1b130f;
+  --color-coffee-roast: #2c1d17;
+  --color-coffee-crema: #d97706;
+  --color-coffee-latte: #f8f4ee;
+  --color-coffee-border: #ede4d8;
 }
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+    width: 5px;
+    height: 5px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
-    border-radius: 20px;
+    background-color: #d6cbbe;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #b8a896;
+  }
+
+  /* Glassmorphism coffee styles */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 214, 199, 0.7);
+  }
+
+  .glass-header {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(235, 224, 211, 0.8);
+  }
+
+  /* Apple-inspired subtle elevation */
+  .shadow-coffee-sm {
+    box-shadow: 0 1px 3px rgba(44, 29, 23, 0.04), 0 1px 2px rgba(44, 29, 23, 0.02);
+  }
+  .shadow-coffee {
+    box-shadow: 0 4px 16px -2px rgba(44, 29, 23, 0.06), 0 2px 6px -1px rgba(44, 29, 23, 0.03);
+  }
+  .shadow-coffee-lg {
+    box-shadow: 0 12px 32px -4px rgba(44, 29, 23, 0.1), 0 4px 12px -2px rgba(44, 29, 23, 0.04);
   }
 }
+
 @layer base {
   html {
     font-size: 14px;
@@ -28,12 +65,18 @@
 
   body {
     font-family: inherit;
-    color: #1e293b;
-    background-color: #f8fafc;
+    color: #26201c;
+    background-color: #fbf9f5;
   }
 
   /* Tabular numbers for clean currency and KPI alignment */
   .font-mono, td, th {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus ring aesthetic */
+  *:focus-visible {
+    outline: 2px solid rgba(194, 120, 3, 0.5);
+    outline-offset: 2px;
   }
 }
