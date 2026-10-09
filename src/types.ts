@@ -187,7 +187,7 @@ export interface EmployeeContract {
   mealAllowance: number; // Tunjangan makan
   positionAllowance: number; // Tunjangan jabatan
   transportAllowance: number; // Tunjangan transport
-  alphaDeductionPerDay: number; // Potongan Alpha per hari
+  alphaDeductionPerDay?: number; // Opsional / legacy: Potongan Alpha per hari
   kpiBonusTarget: number; // Target bonus KPI
   workingDaysPerMonth?: number; // HKE - Hari Kerja Efektif normal
   startDate: string; // ISO string
