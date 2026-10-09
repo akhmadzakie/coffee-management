@@ -246,6 +246,10 @@ export const Layout: React.FC<LayoutProps> = ({
     currentUser &&
       ["OWNER", "MANAGER", "FINANCE", "SUPER_ADMIN"].includes(currentUser.role)
   );
+  const canAccessAIAssistant = Boolean(
+    currentUser &&
+      ["FINANCE", "MANAGER", "SUPER_ADMIN"].includes(currentUser.role)
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -257,7 +261,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
       {/* AI Assistant Modal */}
       <AIAssistantModal
-        isOpen={isAIAssistantOpen}
+        isOpen={isAIAssistantOpen && canAccessAIAssistant}
         onClose={() => setIsAIAssistantOpen(false)}
         onApplyTransactions={(txs) => {
           // Temporarily just alert until we hook it to StoreContext
@@ -526,15 +530,17 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
 
           <div className="flex gap-2.5 items-center">
-            {/* AI Assistant Button */}
-            <button
-              onClick={() => setIsAIAssistantOpen(true)}
-              title="Magic AI Assistant (Catat dari Nota/Teks)"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md shadow-blue-500/20"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">AI Assistant</span>
-            </button>
+            {/* AI Assistant Button (Only for Finance, Manager, and Super Admin) */}
+            {canAccessAIAssistant && (
+              <button
+                onClick={() => setIsAIAssistantOpen(true)}
+                title="Magic AI Assistant (Catat dari Nota/Teks)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md shadow-blue-500/20"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">AI Assistant</span>
+              </button>
+            )}
 
             {/* Export & Business Reports Center Button (Only Owner/Boss, Manager, Finance, and Super Admin) */}
             {canAccessBusinessReports && (
