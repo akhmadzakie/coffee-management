@@ -175,53 +175,67 @@ export function HRManagement() {
 
   const handleSaveEmployee = () => {
     if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
+    
+    const posUpper = (empForm.position || "").toUpperCase();
+    const deptUpper = (empForm.department || "").toUpperCase();
+
+    // Mapping peran sistem yang presisi berdasarkan Jabatan & Departemen
+    let calculatedRole: Role = "KASIR";
+    if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
+      calculatedRole = "MANAGER";
+    } else if (posUpper.includes("LEADER")) {
+      calculatedRole = "LEADER";
+    } else if (posUpper.includes("KASIR")) {
+      calculatedRole = "KASIR";
+    } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
+      calculatedRole = "BAR";
+    } else if (
+      deptUpper.includes("KITCHEN") ||
+      deptUpper.includes("DAPUR") ||
+      posUpper.includes("KITCHEN")
+    ) {
+      calculatedRole = "KITCHEN";
+    } else if (deptUpper.includes("BAKER") || posUpper.includes("BAKER")) {
+      calculatedRole = "BAKER";
+    }
+
     if (editingEmployee) {
       updateEmployee({ ...editingEmployee, ...empForm });
       
-      const relatedUser = users.find(u => u.username === editingEmployee.username);
+      const relatedUser = users.find(
+        (u) =>
+          (u.employeeId && u.employeeId === editingEmployee.id) ||
+          u.username.toLowerCase() === editingEmployee.username.toLowerCase() ||
+          u.username.toLowerCase() === empForm.username.toLowerCase()
+      );
+
       if (relatedUser) {
         if (empForm.status !== "AKTIF") {
           deleteUser(relatedUser.id);
-          alert("Akun pengguna terkait telah dihapus karena status karyawan menjadi " + empForm.status);
+          alert("Akun login terkait telah dinonaktifkan/dihapus karena status karyawan menjadi " + empForm.status);
         } else {
-          let role = relatedUser.role;
-          const deptUpper = empForm.department.toUpperCase();
-          const posUpper = empForm.position.toUpperCase();
-          
-          if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) role = "MANAGER";
-          else if (deptUpper.includes("BAR")) role = "BAR";
-          else if (deptUpper.includes("KITCHEN") || deptUpper.includes("DAPUR")) role = "KITCHEN";
-          else if (deptUpper.includes("BAKER")) role = "BAKER";
-          
           updateUser({
             ...relatedUser,
-            username: empForm.username.toLowerCase(),
-            name: empForm.name,
-            role: role
+            username: empForm.username.toLowerCase().trim(),
+            name: empForm.name.trim(),
+            role: calculatedRole,
+            department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
+            employeeId: editingEmployee.id,
           });
         }
       }
     } else {
       const newEmpId = addEmployee(empForm);
       if (autoCreateUser && newEmpId) {
-        // Auto create user account
-        let defaultRole: any = "KASIR";
-        const deptUpper = empForm.department.toUpperCase();
-        const posUpper = empForm.position.toUpperCase();
-        
-        if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) defaultRole = "MANAGER";
-        else if (deptUpper.includes("BAR")) defaultRole = "BAR";
-        else if (deptUpper.includes("KITCHEN") || deptUpper.includes("DAPUR")) defaultRole = "KITCHEN";
-        else if (deptUpper.includes("BAKER")) defaultRole = "BAKER";
-        
         addUser({
-          name: empForm.name,
-          username: empForm.username.toLowerCase(),
+          name: empForm.name.trim(),
+          username: empForm.username.toLowerCase().trim(),
           pin: "123456",
-          role: defaultRole,
+          role: calculatedRole,
+          department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
           employeeId: newEmpId
         });
-        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.username.toLowerCase()}\nPIN: 123456\nRole: ${defaultRole}`);
+        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.username.toLowerCase().trim()}\nPIN: 123456\nRole: ${calculatedRole}`);
       }
     }
     setIsEmployeeModalOpen(false);

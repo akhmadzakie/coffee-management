@@ -200,7 +200,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "dashboard_finance",
       "cash_flow",
       "finance_reports",
-      "settings",
     ],
     MANAGER: [
       "dashboard_inventory",

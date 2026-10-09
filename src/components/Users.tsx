@@ -28,7 +28,7 @@ const DEPARTMENTS = [
 ];
 
 export const UsersComponent = () => {
-  const { users, employees, addUser, updateUser, deleteUser, currentUser, settings } =
+  const { users, employees, addUser, updateUser, deleteUser, updateEmployee, currentUser, settings } =
     useStore();
   const { t } = useTranslation(settings.language || "id");
   const [isEditing, setIsEditing] = useState(false);
@@ -60,12 +60,26 @@ export const UsersComponent = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const role = formData.get("role") as Role;
+    const cleanUsername = (formData.get("username") as string).trim().toLowerCase();
+    const cleanName = (formData.get("name") as string).trim();
+    const formEmpId = formData.get("employeeId") ? (formData.get("employeeId") as string) : null;
+
+    // Cari ID karyawan terkait (dari form atau pencocokan username)
+    const targetEmpId =
+      formEmpId ||
+      employees.find(
+        (emp) =>
+          (editingUser?.employeeId && emp.id === editingUser.employeeId) ||
+          emp.username.toLowerCase() === editingUser?.username.toLowerCase() ||
+          emp.username.toLowerCase() === cleanUsername
+      )?.id || null;
+
     const userData: any = {
-      username: formData.get("username") as string,
+      username: cleanUsername,
       pin: formData.get("pin") as string,
-      name: formData.get("name") as string,
+      name: cleanName,
       role: role,
-      employeeId: formData.get("employeeId") ? (formData.get("employeeId") as string) : null,
+      employeeId: targetEmpId,
     };
     if (role === "LEADER") {
       userData.department = formData.get("department");
@@ -78,6 +92,42 @@ export const UsersComponent = () => {
     } else {
       addUser(userData);
     }
+
+    // Sinkronkan juga langsung ke data karyawan jika ada karyawan terkait
+    if (targetEmpId) {
+      const existingEmp = employees.find((emp) => emp.id === targetEmpId);
+      if (existingEmp) {
+        let pos = existingEmp.position;
+        let dept = existingEmp.department;
+
+        if (role === "KASIR") {
+          pos = "Kasir";
+        } else if (role === "MANAGER") {
+          pos = "Manager";
+        } else if (role === "LEADER") {
+          pos = "Leader";
+          if (userData.department) dept = userData.department;
+        } else if (role === "BAR") {
+          pos = "Karyawan";
+          dept = "BAR";
+        } else if (role === "KITCHEN") {
+          pos = "Karyawan";
+          dept = "KITCHEN";
+        } else if (role === "BAKER") {
+          pos = "Karyawan";
+          dept = "BAKER";
+        }
+
+        updateEmployee({
+          ...existingEmp,
+          username: cleanUsername,
+          name: cleanName,
+          position: pos,
+          department: dept,
+        });
+      }
+    }
+
     setIsEditing(false);
     setEditingUser(null);
   };
@@ -394,7 +444,15 @@ export const UsersComponent = () => {
                 </label>
                 <select
                   name="employeeId"
-                  defaultValue={editingUser?.employeeId || ""}
+                  defaultValue={
+                    editingUser?.employeeId ||
+                    employees.find(
+                      (emp) =>
+                        emp.username.toLowerCase() ===
+                        editingUser?.username.toLowerCase()
+                    )?.id ||
+                    ""
+                  }
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   <option value="">-- Tidak ditautkan --</option>

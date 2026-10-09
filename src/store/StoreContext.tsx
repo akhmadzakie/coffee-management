@@ -827,12 +827,58 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updateEmployee = (emp: Employee) => {
     setEmployees((prev) => prev.map((e) => (e.id === emp.id ? emp : e)));
+
+    // Sinkronisasi otomatis ke akun pengguna (users)
+    setUsers((prev) =>
+      prev.map((u) => {
+        const isMatched =
+          (u.employeeId && u.employeeId === emp.id) ||
+          u.username.toLowerCase() === emp.username.toLowerCase();
+
+        if (!isMatched) return u;
+
+        let role: Role = u.role;
+        const posUpper = (emp.position || "").toUpperCase();
+        const deptUpper = (emp.department || "").toUpperCase();
+
+        if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
+          role = "MANAGER";
+        } else if (posUpper.includes("LEADER")) {
+          role = "LEADER";
+        } else if (posUpper.includes("KASIR")) {
+          role = "KASIR";
+        } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
+          role = "BAR";
+        } else if (
+          deptUpper.includes("KITCHEN") ||
+          deptUpper.includes("DAPUR") ||
+          posUpper.includes("KITCHEN")
+        ) {
+          role = "KITCHEN";
+        } else if (deptUpper.includes("BAKER") || posUpper.includes("BAKER")) {
+          role = "BAKER";
+        }
+
+        return {
+          ...u,
+          username: emp.username.toLowerCase().trim(),
+          name: emp.name.trim(),
+          role,
+          department: role === "LEADER" ? (emp.department as any) : (u.department || null),
+          employeeId: emp.id,
+        };
+      })
+    );
+
     writeAuditLog("UPDATE", "employees", emp.id);
     markChanged();
   };
 
   const deleteEmployee = (id: string) => {
     setEmployees((prev) => prev.filter((e) => e.id !== id));
+    setUsers((prev) =>
+      prev.map((u) => (u.employeeId === id ? { ...u, employeeId: null } : u))
+    );
     writeAuditLog("DELETE", "employees", id);
     markChanged();
   };
@@ -914,6 +960,47 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setUsers((prev) =>
       prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
     );
+
+    // Sinkronisasi otomatis ke data karyawan (employees)
+    setEmployees((prev) =>
+      prev.map((emp) => {
+        const isMatched =
+          (updatedUser.employeeId && emp.id === updatedUser.employeeId) ||
+          emp.username.toLowerCase() === updatedUser.username.toLowerCase();
+
+        if (!isMatched) return emp;
+
+        let pos = emp.position;
+        let dept = emp.department;
+
+        if (updatedUser.role === "KASIR") {
+          pos = "Kasir";
+        } else if (updatedUser.role === "MANAGER") {
+          pos = "Manager";
+        } else if (updatedUser.role === "LEADER") {
+          pos = "Leader";
+          if (updatedUser.department) dept = updatedUser.department;
+        } else if (updatedUser.role === "BAR") {
+          pos = "Karyawan";
+          dept = "BAR";
+        } else if (updatedUser.role === "KITCHEN") {
+          pos = "Karyawan";
+          dept = "KITCHEN";
+        } else if (updatedUser.role === "BAKER") {
+          pos = "Karyawan";
+          dept = "BAKER";
+        }
+
+        return {
+          ...emp,
+          username: updatedUser.username.toLowerCase().trim(),
+          name: updatedUser.name.trim(),
+          position: pos,
+          department: dept,
+        };
+      })
+    );
+
     writeAuditLog("UPDATE", "users", updatedUser.id);
     markChanged();
   };
