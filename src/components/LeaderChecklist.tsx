@@ -154,7 +154,7 @@ export const LeaderChecklist = () => {
         </div>
 
         <div className="space-y-3 mb-8">
-          {tasks.map((task, index) => (
+          {(Array.isArray(tasks) ? tasks : []).map((task, index) => (
             <div 
               key={index}
               onClick={() => toggleTask(task)}
