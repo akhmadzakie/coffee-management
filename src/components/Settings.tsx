@@ -273,6 +273,9 @@ export const SettingsComponent = () => {
       </div>
     </>
   )}
+
+  {currentUser?.role !== "OWNER" && (
+    <>
           
       <div className="pt-6 border-t border-slate-200">
             <h4 className="font-semibold text-slate-800 mb-4">{language === "id" ? "Tugas Checklist Leader (Bar)" : "Leader Bar Tasks"}</h4>
@@ -325,23 +328,27 @@ export const SettingsComponent = () => {
             </div>
             <button onClick={() => addTask(setManagerTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Manager</button>
           </div>
+    </>
+  )}
           
 
 
-        <div className="mt-8 flex justify-end items-center space-x-4">
-          {saveStatus && (
-            <span className="text-blue-600 font-medium text-sm flex items-center bg-blue-50 px-3 py-1.5 rounded-lg">
-              {saveStatus}
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm font-medium"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {language === "id" ? "Simpan Pengaturan" : "Save Settings"}
-          </button>
-        </div>
+  {currentUser?.role !== "OWNER" && (
+    <div className="mt-8 flex justify-end items-center space-x-4">
+      {saveStatus && (
+        <span className="text-blue-600 font-medium text-sm flex items-center bg-blue-50 px-3 py-1.5 rounded-lg">
+          {saveStatus}
+        </span>
+      )}
+      <button
+        onClick={handleSave}
+        className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm font-medium"
+      >
+        <Save className="w-4 h-4 mr-2" />
+        {language === "id" ? "Simpan Pengaturan" : "Save Settings"}
+      </button>
+    </div>
+  )}
     </div>
   );
 };
