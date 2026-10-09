@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useStore } from "../store/StoreContext";
 import { User } from "../types";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   ShieldCheck,
@@ -9,6 +10,11 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Delete,
+  CheckCircle2,
+  ArrowRight,
+  Sparkles,
+  Users,
 } from "lucide-react";
 
 interface SwitchAccountModalProps {
@@ -34,10 +40,32 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     setError("");
   };
 
-  const handleSwitchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleKeypadPress = (num: string) => {
+    if (pin.length < 8) {
+      const nextPin = pin + num;
+      setPin(nextPin);
+      setError("");
+    }
+  };
+
+  const handleKeypadBackspace = () => {
+    setPin((prev) => prev.slice(0, -1));
+    setError("");
+  };
+
+  const handleKeypadClear = () => {
+    setPin("");
+    setError("");
+  };
+
+  const handleSwitchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedUser) {
-      setError("Pilih akun terlebih dahulu");
+      setError("Pilih operator yang ingin beralih");
+      return;
+    }
+    if (!pin) {
+      setError("Masukkan PIN operator");
       return;
     }
 
@@ -49,172 +77,224 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
       onClose();
     } else {
       setError("PIN salah. Silakan coba lagi.");
+      setPin("");
+    }
+  };
+
+  const getRoleBadge = (role: string) => {
+    switch (role?.toUpperCase()) {
+      case "SUPER_ADMIN":
+      case "OWNER":
+        return { label: "Owner", bg: "bg-amber-100 text-amber-800 border-amber-300", icon: "👑" };
+      case "MANAGER":
+        return { label: "Manager", bg: "bg-indigo-100 text-indigo-800 border-indigo-300", icon: "💼" };
+      case "FINANCE":
+        return { label: "Finance", bg: "bg-blue-100 text-blue-800 border-blue-300", icon: "📊" };
+      case "KASIR":
+        return { label: "Kasir POS", bg: "bg-emerald-100 text-emerald-800 border-emerald-300", icon: "💳" };
+      case "LEADER":
+        return { label: "Leader Bar", bg: "bg-orange-100 text-orange-800 border-orange-300", icon: "☕" };
+      default:
+        return { label: role || "Staff", bg: "bg-slate-100 text-slate-700 border-slate-300", icon: "👤" };
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-              <UserCheck className="w-4 h-4" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col"
+      >
+        {/* Header Modal */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-amber-50/40">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold border border-amber-500/20 shadow-xs">
+              <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Ganti Akun / Switch User
+              <h3 className="text-base font-black text-slate-900 tracking-tight">
+                Ganti Akun Operator (Fast Switch)
               </h3>
               <p className="text-xs text-slate-500">
-                Pilih akun dan masukkan PIN
+                Beralih sesi kerja kasir atau otoritas manajer dengan cepat.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {/* User List Selection */}
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[80vh] custom-scrollbar">
+          {/* Current Operator Card */}
+          {currentUser && (
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-slate-500">Operator Aktif Saat Ini:</span>
+                <strong className="text-slate-800 font-bold">{currentUser.name}</strong>
+              </div>
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getRoleBadge(currentUser.role).bg}`}>
+                {getRoleBadge(currentUser.role).icon} {currentUser.role}
+              </span>
+            </div>
+          )}
+
+          {/* Grid Operator Selection */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">
-              Pilih Akun
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
+              1. Pilih Operator Tujuan
             </label>
-            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-              {users.map((user) => {
-                const isSelected = selectedUser?.id === user.id;
-                const isCurrent = currentUser?.id === user.id;
+
+            <div className="grid grid-cols-2 gap-2.5 max-h-44 overflow-y-auto pr-1 custom-scrollbar">
+              {users.map((u) => {
+                const isSelected = selectedUser?.id === u.id;
+                const isCurrent = currentUser?.id === u.id;
+                const badge = getRoleBadge(u.role);
 
                 return (
                   <button
-                    key={user.id}
+                    key={u.id}
                     type="button"
-                    onClick={() => handleSelectUser(user)}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                    onClick={() => handleSelectUser(u)}
+                    className={`flex items-center gap-2.5 p-3 rounded-2xl border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20"
-                        : isCurrent
-                          ? "border-slate-200 bg-slate-50 opacity-90"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/80"
+                        ? "border-amber-500 bg-amber-50/70 ring-2 ring-amber-500/20 shadow-sm"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
-                          isSelected
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-200 text-slate-700"
-                        }`}
-                      >
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-900">
-                            {user.name}
-                          </span>
-                          {isCurrent && (
-                            <span className="text-[10px] bg-slate-200 text-slate-700 font-medium px-1.5 py-0.5 rounded">
-                              Aktif
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          @{user.username}
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        user.role === "SUPER_ADMIN" || user.role === "OWNER"
-                          ? "bg-purple-100 text-purple-700"
-                          : user.role === "MANAGER"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-slate-100 text-slate-700"
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                        isSelected
+                          ? "bg-amber-500 text-slate-950 font-black shadow-xs"
+                          : "bg-slate-100 text-slate-700 border border-slate-200"
                       }`}
                     >
-                      {user.role}
-                    </span>
+                      {u.name?.charAt(0).toUpperCase() || "U"}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className={`text-xs font-bold truncate ${isSelected ? "text-amber-950" : "text-slate-800"}`}>
+                          {u.name}
+                        </p>
+                        {isCurrent && (
+                          <span className="text-[9px] text-slate-400 font-semibold">(Aktif)</span>
+                        )}
+                      </div>
+                      <div className="mt-0.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded border ${badge.bg}`}>
+                          {badge.icon} {badge.label}
+                        </span>
+                      </div>
+                    </div>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* PIN Input & Verification */}
-          {selectedUser && (
-            <form
-              onSubmit={handleSwitchSubmit}
-              className="space-y-4 pt-2 border-t border-slate-100"
-            >
-              {error && (
-                <div className="p-2.5 bg-rose-50 border border-rose-100 text-rose-600 text-xs font-medium rounded-lg text-center">
-                  {error}
-                </div>
+          {/* PIN Input & Keypad */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                2. Masukkan PIN {selectedUser ? `(${selectedUser.name})` : ""}
+              </label>
+              {selectedUser && (
+                <span className="text-[11px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                  Target: {selectedUser.username}
+                </span>
               )}
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Masukkan PIN untuk{" "}
-                  <span className="text-blue-700 font-bold">
-                    {selectedUser.name}
-                  </span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type={showPin ? "text" : "password"}
-                    required
-                    autoFocus
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all tracking-widest"
-                    placeholder="****"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl text-center"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            {/* PIN Display Dots */}
+            <div className="flex items-center justify-center gap-3 py-3 bg-slate-50 rounded-2xl border border-slate-200">
+              {[0, 1, 2, 3].map((idx) => {
+                const isFilled = pin.length > idx;
+                return (
+                  <div
+                    key={idx}
+                    className={`w-4 h-4 rounded-full transition-all duration-200 ${
+                      isFilled
+                        ? "bg-amber-500 scale-110 shadow-sm shadow-amber-500/50 ring-4 ring-amber-500/20"
+                        : "bg-slate-200 border border-slate-300"
+                    }`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPin(!showPin)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
-                  >
-                    {showPin ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+                );
+              })}
+            </div>
 
-              <div className="flex gap-2 pt-1">
+            {/* Numeric Keypad for fast tablet touch */}
+            <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200 space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleKeypadPress(num)}
+                    className="py-3 rounded-xl bg-white hover:bg-slate-100 active:bg-amber-500 active:text-slate-950 text-slate-800 font-mono font-bold text-base transition-all border border-slate-200 shadow-xs cursor-pointer"
+                  >
+                    {num}
+                  </button>
+                ))}
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedUser(null);
-                    setPin("");
-                    setError("");
-                  }}
-                  className="flex-1 py-2.5 px-3 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors"
+                  onClick={handleKeypadClear}
+                  className="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs transition-colors border border-slate-200 cursor-pointer"
                 >
-                  Batal
+                  Clear
                 </button>
                 <button
-                  type="submit"
-                  className="flex-1 py-2.5 px-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  type="button"
+                  onClick={() => handleKeypadPress("0")}
+                  className="py-3 rounded-xl bg-white hover:bg-slate-100 active:bg-amber-500 active:text-slate-950 text-slate-800 font-mono font-bold text-base transition-all border border-slate-200 shadow-xs cursor-pointer"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  Ganti ke Akun Ini
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeypadBackspace}
+                  className="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center transition-colors border border-slate-200 cursor-pointer"
+                  title="Hapus"
+                >
+                  <Delete className="w-5 h-5" />
                 </button>
               </div>
-            </form>
-          )}
+            </div>
+
+            {/* Submit Action */}
+            <button
+              type="button"
+              onClick={() => handleSwitchSubmit()}
+              disabled={!selectedUser}
+              className={`w-full py-3.5 rounded-2xl font-black text-xs sm:text-sm tracking-wide uppercase transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer ${
+                selectedUser
+                  ? "bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-amber-500/20 active:scale-[0.99]"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+              <span>Konfirmasi & Beralih Akun</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
