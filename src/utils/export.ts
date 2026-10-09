@@ -6,6 +6,10 @@ import {
   StockMovement,
   CashTransaction,
   Settings,
+  PayrollRecord,
+  DailyAttendance,
+  KPIRecord,
+  Employee,
 } from "../types";
 import { formatCurrency } from "./format";
 
@@ -445,3 +449,319 @@ export const exportFinanceToCSV = ({
   }));
   exportToCSV(`Arus_Kas_${formatDateIndo(new Date())}`, rows);
 };
+
+export const exportPayrollToPDF = ({
+  payroll,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  payroll: PayrollRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = new jsPDF("l", "mm", "a4");
+  setupPdfHeader(doc, settings, "Laporan Rekapitulasi Penggajian & Bonus", periodLabel);
+
+  const tableData =
+    payroll.length > 0
+      ? payroll.map((p, idx) => {
+          const emp = employees.find((e) => e.id === p.employeeId);
+          return [
+            String(idx + 1),
+            emp?.name || p.employeeId,
+            emp?.position || "-",
+            emp?.department || "-",
+            formatCurrency(p.basicSalary),
+            formatCurrency(p.positionAllowance),
+            formatCurrency((p.mealAllowance || 0) + (p.transportAllowance || 0)),
+            formatCurrency(p.kpiBonus),
+            formatCurrency(p.alphaDeduction),
+            formatCurrency(p.netPay),
+            p.status,
+          ];
+        })
+      : [["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "Tidak ada data penggajian"]];
+
+  const totalBasic = payroll.reduce((s, p) => s + p.basicSalary, 0);
+  const totalKpiBonus = payroll.reduce((s, p) => s + p.kpiBonus, 0);
+  const totalDeductions = payroll.reduce((s, p) => s + p.alphaDeduction + (p.otherDeductions || 0), 0);
+  const totalNet = payroll.reduce((s, p) => s + p.netPay, 0);
+
+  autoTable(doc, {
+    startY: 50,
+    head: [
+      [
+        "No",
+        "Nama Karyawan",
+        "Jabatan",
+        "Divisi",
+        "Gaji Pokok",
+        "Tunj. Jabatan",
+        "Makan & Trp",
+        "Bonus KPI",
+        "Potongan",
+        "Total THP",
+        "Status",
+      ],
+    ],
+    body: tableData,
+    theme: "grid",
+    headStyles: {
+      fillColor: [30, 58, 138],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 9,
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [51, 65, 85],
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 10 },
+      4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right" },
+      7: { halign: "right", fontStyle: "bold", textColor: [5, 150, 105] },
+      8: { halign: "right", textColor: [225, 29, 72] },
+      9: { halign: "right", fontStyle: "bold", textColor: [30, 58, 138] },
+      10: { halign: "center" },
+    },
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || 50;
+  if (finalY < 165) {
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(14, finalY + 8, 269, 22, 3, 3, "FD");
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 58, 138);
+    doc.text("TOTAL BEBAN PENGGAJIAN & BONUS OUTLET:", 20, finalY + 16);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Gaji Pokok: ${formatCurrency(totalBasic)}`, 20, finalY + 23);
+    doc.text(`Bonus KPI: ${formatCurrency(totalKpiBonus)}`, 95, finalY + 23);
+    doc.text(`Potongan: -${formatCurrency(totalDeductions)}`, 165, finalY + 23);
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(5, 150, 105);
+    doc.text(`Take Home Pay (THP): ${formatCurrency(totalNet)}`, 225, finalY + 23);
+  }
+
+  doc.save(`Laporan_Penggajian_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportPayrollToCSV = ({
+  payroll,
+  employees,
+}: {
+  payroll: PayrollRecord[];
+  employees: Employee[];
+}) => {
+  const rows = payroll.map((p, idx) => {
+    const emp = employees.find((e) => e.id === p.employeeId);
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || p.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: p.period,
+      "Gaji Pokok": p.basicSalary,
+      "Tunjangan Jabatan": p.positionAllowance,
+      "Uang Makan": p.mealAllowance,
+      "Uang Transport": p.transportAllowance || 0,
+      "Bonus KPI": p.kpiBonus,
+      "Lembur / Insentif": p.overtimePay || 0,
+      "Potongan Alpha": p.alphaDeduction,
+      "Potongan Lain": p.otherDeductions || 0,
+      "Take Home Pay (THP)": p.netPay,
+      Status: p.status,
+      "Tanggal Dibayar": p.paidDate || "-",
+    };
+  });
+  exportToCSV(`Rekap_Payroll_${formatDateIndo(new Date())}`, rows);
+};
+
+export const exportAttendanceToPDF = ({
+  attendances,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  attendances: DailyAttendance[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = new jsPDF();
+  setupPdfHeader(doc, settings, "Laporan Rekapitulasi Absensi & Jam Kerja", periodLabel);
+
+  const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
+  attendances.forEach((att) => {
+    const prev = empMap.get(att.employeeId) || { present: 0, late: 0, sick: 0, alpha: 0, totalHours: 0 };
+    if (att.status === "HADIR") prev.present++;
+    else if (att.status === "TERLAMBAT") {
+      prev.present++;
+      prev.late++;
+    } else if (["IZIN", "SAKIT"].includes(att.status)) prev.sick++;
+    else if (["ALPHA", "DITOLAK"].includes(att.status)) prev.alpha++;
+
+    if (att.clockInTime && att.clockOutTime) {
+      const dur = (new Date(att.clockOutTime).getTime() - new Date(att.clockInTime).getTime()) / 3600000;
+      if (dur > 0 && dur < 24) prev.totalHours += dur;
+    }
+    empMap.set(att.employeeId, prev);
+  });
+
+  const tableData = Array.from(empMap.entries()).map(([empId, stats], idx) => {
+    const emp = employees.find((e) => e.id === empId);
+    const totalDays = stats.present + stats.sick + stats.alpha;
+    const rate = totalDays > 0 ? Math.round((stats.present / totalDays) * 100) : 0;
+    return [
+      String(idx + 1),
+      emp?.name || empId,
+      emp?.position || "-",
+      `${stats.present} Hari`,
+      `${stats.late}x`,
+      `${stats.sick} Hari`,
+      `${stats.alpha} Hari`,
+      `${stats.totalHours.toFixed(1)} Jam`,
+      `${rate}%`,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 50,
+    head: [["No", "Nama Karyawan", "Jabatan", "Hadir", "Terlambat", "Izin/Sakit", "Alpha", "Total Jam", "% Hadir"]],
+    body: tableData.length > 0 ? tableData : [["-", "-", "-", "-", "-", "-", "-", "-", "Tidak ada log absensi"]],
+    theme: "grid",
+    headStyles: {
+      fillColor: [30, 58, 138],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    bodyStyles: { textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: "center" },
+      3: { halign: "center", fontStyle: "bold", textColor: [5, 150, 105] },
+      4: { halign: "center", textColor: [217, 119, 6] },
+      5: { halign: "center" },
+      6: { halign: "center", textColor: [225, 29, 72] },
+      7: { halign: "right" },
+      8: { halign: "center", fontStyle: "bold" },
+    },
+  });
+
+  doc.save(`Laporan_Absensi_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportAttendanceToCSV = ({
+  attendances,
+  employees,
+}: {
+  attendances: DailyAttendance[];
+  employees: Employee[];
+}) => {
+  const rows = attendances.map((a, idx) => {
+    const emp = employees.find((e) => e.id === a.employeeId);
+    return {
+      No: idx + 1,
+      Tanggal: a.date,
+      "Nama Karyawan": emp?.name || a.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Status: a.status,
+      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID") : "-",
+      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID") : "-",
+      "Status Verifikasi": a.approvalStatus,
+    };
+  });
+  exportToCSV(`Rekap_Absensi_${formatDateIndo(new Date())}`, rows);
+};
+
+export const exportKpiToPDF = ({
+  kpiRecords,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  kpiRecords: KPIRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = new jsPDF();
+  setupPdfHeader(doc, settings, "Laporan Capaian KPI & Kinerja Karyawan", periodLabel);
+
+  const tableData =
+    kpiRecords.length > 0
+      ? kpiRecords.map((k, idx) => {
+          const emp = employees.find((e) => e.id === k.employeeId);
+          const grade =
+            k.totalScore >= 85 ? "Sangat Baik (A)" : k.totalScore >= 70 ? "Baik (B)" : k.totalScore >= 55 ? "Cukup (C)" : "Perlu Evaluasi (D)";
+          return [
+            String(idx + 1),
+            emp?.name || k.employeeId,
+            emp?.position || "-",
+            k.period || `Bulan ${k.month}/${k.year}`,
+            `${k.totalScore.toFixed(1)} / 100`,
+            grade,
+            formatCurrency(k.kpiBonus),
+            k.notes || "-",
+          ];
+        })
+      : [["-", "-", "-", "-", "-", "-", "-", "Belum ada evaluasi KPI tercatat"]];
+
+  autoTable(doc, {
+    startY: 50,
+    head: [["No", "Nama Karyawan", "Jabatan", "Periode", "Skor KPI", "Grade", "Bonus KPI", "Catatan Evaluasi"]],
+    body: tableData,
+    theme: "grid",
+    headStyles: {
+      fillColor: [30, 58, 138],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    bodyStyles: { textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: "center" },
+      4: { halign: "center", fontStyle: "bold", textColor: [30, 58, 138] },
+      5: { halign: "center", fontStyle: "bold" },
+      6: { halign: "right", fontStyle: "bold", textColor: [5, 150, 105] },
+    },
+  });
+
+  doc.save(`Laporan_KPI_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportKpiToCSV = ({
+  kpiRecords,
+  employees,
+}: {
+  kpiRecords: KPIRecord[];
+  employees: Employee[];
+}) => {
+  const rows = kpiRecords.map((k, idx) => {
+    const emp = employees.find((e) => e.id === k.employeeId);
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || k.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      "Total Skor (0-100)": k.totalScore,
+      "Bonus KPI (Rp)": k.kpiBonus,
+      "Catatan Evaluator": k.notes || "-",
+    };
+  });
+  exportToCSV(`Rekap_KPI_${formatDateIndo(new Date())}`, rows);
+};
+

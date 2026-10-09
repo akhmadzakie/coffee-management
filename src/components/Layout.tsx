@@ -58,7 +58,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [isSwitchAccountOpen, setIsSwitchAccountOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportModalModule, setExportModalModule] = useState<
-    "sales" | "inventory" | "finance" | "executive"
+    "sales" | "inventory" | "finance" | "payroll" | "attendance" | "kpi" | "executive"
   >("sales");
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -570,14 +570,20 @@ export const Layout: React.FC<LayoutProps> = ({
                 onClick={() => {
                   // Preselect module based on currentView if applicable
                   if (currentView === "sales") setExportModalModule("sales");
-                  else if (currentView === "inventory")
+                  else if (currentView === "inventory" || currentView === "purchases")
                     setExportModalModule("inventory");
-                  else if (currentView === "finance")
+                  else if (currentView === "finance" || currentView === "cash_flow" || currentView === "finance_reports" || currentView === "dashboard_finance")
                     setExportModalModule("finance");
+                  else if (currentView === "payroll")
+                    setExportModalModule("payroll");
+                  else if (currentView === "attendance_clock" || currentView === "shifts")
+                    setExportModalModule("attendance");
+                  else if (currentView === "hr")
+                    setExportModalModule("payroll");
                   else setExportModalModule("executive");
                   setIsExportModalOpen(true);
                 }}
-                title="Pusat Ekspor Laporan CSV & PDF Resmi"
+                title="Pusat Ekspor Laporan CSV, Excel & PDF Resmi"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-stone-200/90 text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition-all shadow-2xs"
               >
                 <Download className="w-3.5 h-3.5 text-amber-700" />

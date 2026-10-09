@@ -6,6 +6,10 @@ import {
   CashTransaction,
   Settings,
   ExpenseCategory,
+  PayrollRecord,
+  DailyAttendance,
+  KPIRecord,
+  Employee,
 } from "../types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -504,3 +508,188 @@ export const parseFinanceImportFile = (
     reader.readAsArrayBuffer(file);
   });
 };
+
+export const exportPayrollToXlsx = ({
+  payroll,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  payroll: PayrollRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const wb = XLSX.utils.book_new();
+
+  const dataRows = payroll.map((p, idx) => {
+    const emp = employees.find((e) => e.id === p.employeeId);
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || p.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: p.period,
+      "Gaji Pokok (Rp)": p.basicSalary,
+      "Tunj. Jabatan (Rp)": p.positionAllowance,
+      "Uang Makan (Rp)": p.mealAllowance,
+      "Transport (Rp)": p.transportAllowance || 0,
+      "Bonus KPI (Rp)": p.kpiBonus,
+      "Lembur (Rp)": p.overtimePay || 0,
+      "Potongan Alpha (Rp)": p.alphaDeduction,
+      "Potongan Lain (Rp)": p.otherDeductions || 0,
+      "Take Home Pay (Rp)": p.netPay,
+      Status: p.status,
+      "Tgl Dibayar": p.paidDate ? toDateIndo(p.paidDate) : "-",
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(dataRows);
+  const cols = 16;
+  boldFirstRow(ws, cols);
+  styleDataRows(ws, 1, dataRows.length, cols);
+
+  ws["!cols"] = [
+    { wch: 5 },
+    { wch: 22 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 15 },
+    { wch: 13 },
+    { wch: 16 },
+    { wch: 15 },
+    { wch: 18 },
+    { wch: 10 },
+    { wch: 14 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Rekap Penggajian");
+  XLSX.writeFile(wb, `Laporan_Penggajian_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
+};
+
+export const exportAttendanceToXlsx = ({
+  attendances,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  attendances: DailyAttendance[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const wb = XLSX.utils.book_new();
+
+  const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
+  attendances.forEach((att) => {
+    const prev = empMap.get(att.employeeId) || { present: 0, late: 0, sick: 0, alpha: 0, totalHours: 0 };
+    if (att.status === "HADIR") prev.present++;
+    else if (att.status === "TERLAMBAT") {
+      prev.present++;
+      prev.late++;
+    } else if (["IZIN", "SAKIT"].includes(att.status)) prev.sick++;
+    else if (["ALPHA", "DITOLAK"].includes(att.status)) prev.alpha++;
+
+    if (att.clockInTime && att.clockOutTime) {
+      const dur = (new Date(att.clockOutTime).getTime() - new Date(att.clockInTime).getTime()) / 3600000;
+      if (dur > 0 && dur < 24) prev.totalHours += dur;
+    }
+    empMap.set(att.employeeId, prev);
+  });
+
+  const dataRows = Array.from(empMap.entries()).map(([empId, stats], idx) => {
+    const emp = employees.find((e) => e.id === empId);
+    const totalDays = stats.present + stats.sick + stats.alpha;
+    const rate = totalDays > 0 ? Math.round((stats.present / totalDays) * 100) : 0;
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || empId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      "Hadir (Hari)": stats.present,
+      "Terlambat (Kali)": stats.late,
+      "Izin / Sakit (Hari)": stats.sick,
+      "Alpha (Hari)": stats.alpha,
+      "Total Jam Kerja": parseFloat(stats.totalHours.toFixed(1)),
+      "Persentase Kehadiran (%)": `${rate}%`,
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(dataRows);
+  const cols = 10;
+  boldFirstRow(ws, cols);
+  styleDataRows(ws, 1, dataRows.length, cols);
+
+  ws["!cols"] = [
+    { wch: 5 },
+    { wch: 22 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 13 },
+    { wch: 15 },
+    { wch: 16 },
+    { wch: 13 },
+    { wch: 16 },
+    { wch: 22 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
+  XLSX.writeFile(wb, `Laporan_Absensi_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
+};
+
+export const exportKpiToXlsx = ({
+  kpiRecords,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  kpiRecords: KPIRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const wb = XLSX.utils.book_new();
+
+  const dataRows = kpiRecords.map((k, idx) => {
+    const emp = employees.find((e) => e.id === k.employeeId);
+    const grade =
+      k.totalScore >= 85 ? "Sangat Baik (A)" : k.totalScore >= 70 ? "Baik (B)" : k.totalScore >= 55 ? "Cukup (C)" : "Perlu Evaluasi (D)";
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || k.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      "Total Skor (0-100)": k.totalScore,
+      "Predikat Grade": grade,
+      "Bonus KPI (Rp)": k.kpiBonus,
+      "Catatan Evaluator": k.notes || "-",
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(dataRows);
+  const cols = 9;
+  boldFirstRow(ws, cols);
+  styleDataRows(ws, 1, dataRows.length, cols);
+
+  ws["!cols"] = [
+    { wch: 5 },
+    { wch: 22 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 30 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Capaian KPI");
+  XLSX.writeFile(wb, `Laporan_KPI_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
+};
+

@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/StoreContext';
 import { formatCurrency } from '../utils/format';
 
-import { Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { Lock, Unlock, AlertTriangle, Download } from 'lucide-react';
+import { ExportModal } from './ExportModal';
 
 const FinanceReports: React.FC = () => {
   const { 
@@ -18,6 +19,7 @@ const FinanceReports: React.FC = () => {
   const [period, setPeriod] = useState<string>(
     new Date().toISOString().substring(0, 7) // YYYY-MM
   );
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const isPeriodClosed = useMemo(() => {
     return closedPeriods.some(p => p.period === period);
@@ -72,23 +74,35 @@ const FinanceReports: React.FC = () => {
   }, [budgets, periodTransactions, expenseCategories, period]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Laporan Keuangan</h1>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <label className="mr-2 text-gray-700 font-medium">Periode:</label>
-          <input 
-            type="month" 
-            className="border p-2 rounded"
-            value={period}
-            onChange={e => setPeriod(e.target.value)}
-          />
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Laporan Keuangan & Laba Rugi</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Analisis arus kas masuk, pengeluaran, realisasi anggaran, dan penutupan buku periode.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600">Periode:</span>
+            <input 
+              type="month" 
+              className="border border-slate-300 p-2 rounded-xl text-xs font-semibold bg-white"
+              value={period}
+              onChange={e => setPeriod(e.target.value)}
+            />
+          </div>
           {isPeriodClosed && (
-            <span className="ml-4 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-              <Lock className="w-4 h-4 mr-1" />
-              Periode Ditutup
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+              <Lock className="w-3.5 h-3.5 mr-1" />
+              Terkunci
             </span>
           )}
+          <button
+            onClick={() => setIsExportOpen(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-amber-400" />
+            <span>Ekspor Laporan</span>
+          </button>
         </div>
       </div>
 
@@ -194,6 +208,12 @@ const FinanceReports: React.FC = () => {
           <p className="text-gray-500 text-center py-8">Belum ada data anggaran dan pengeluaran pada periode ini.</p>
         )}
       </div>
+
+      <ExportModal 
+        isOpen={isExportOpen} 
+        onClose={() => setIsExportOpen(false)} 
+        defaultModule="finance" 
+      />
     </div>
   );
 };
