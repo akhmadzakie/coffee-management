@@ -1,19 +1,36 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "../store/StoreContext";
-import { Camera, MapPin, CheckCircle, XCircle, Clock } from "lucide-react";
-import { motion } from "motion/react";
+import {
+  Camera,
+  MapPin,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  RefreshCw,
+  RotateCcw,
+  Sparkles,
+  Info,
+  Calendar,
+  User,
+  Coffee,
+  Check,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { DailyAttendance } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 
 export function ClockIn() {
   const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance } = useStore();
   
+  const [activeMode, setActiveMode] = useState<"ATTENDANCE" | "LEAVE">("ATTENDANCE");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string>("");
+  const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,10 +48,18 @@ export function ClockIn() {
   const isClockedIn = !!todayAttendance?.clockInTime;
   const isClockedOut = !!todayAttendance?.clockOutTime;
 
+  // Auto clear feedback after 4 seconds
+  useEffect(() => {
+    if (feedback) {
+      const t = setTimeout(() => setFeedback(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [feedback]);
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" },
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false 
       });
       if (videoRef.current) {
@@ -44,7 +69,10 @@ export function ClockIn() {
       setIsCameraActive(true);
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("Tidak dapat mengakses kamera. Pastikan izin diberikan.");
+      setFeedback({
+        type: "error",
+        message: "Tidak dapat mengakses kamera. Pastikan izin kamera aktif pada browser Anda.",
+      });
     }
   };
 
@@ -57,8 +85,10 @@ export function ClockIn() {
   }, []);
 
   const getLocation = () => {
+    setIsRefreshingLocation(true);
     if (!navigator.geolocation) {
       setLocationError("Geolokasi tidak didukung oleh browser Anda");
+      setIsRefreshingLocation(false);
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -68,11 +98,13 @@ export function ClockIn() {
           lng: position.coords.longitude,
         });
         setLocationError("");
+        setIsRefreshingLocation(false);
       },
       (error) => {
-        setLocationError("Gagal mendapatkan lokasi: " + error.message);
+        setLocationError("Gagal mengambil titik GPS: " + error.message);
+        setIsRefreshingLocation(false);
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -90,8 +122,8 @@ export function ClockIn() {
     const canvas = canvasRef.current;
     
     // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
     
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -100,20 +132,27 @@ export function ClockIn() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     
     // Add Watermark
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+    ctx.fillRect(0, canvas.height - 55, canvas.width, 55);
     
     ctx.fillStyle = "#ffffff";
-    ctx.font = "16px Arial";
+    ctx.font = "bold 14px 'Plus Jakarta Sans', Arial, sans-serif";
     
     const now = new Date();
-    const timeStr = now.toLocaleString("id-ID");
-    const locStr = location ? `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}` : "Lokasi tidak diketahui";
+    const timeStr = now.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const locStr = location ? `GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "GPS: Tidak diketahui";
     
-    ctx.fillText(`Waktu: ${timeStr}`, 10, canvas.height - 35);
-    ctx.fillText(`Lokasi: ${locStr}`, 10, canvas.height - 15);
+    ctx.fillText(`${activeEmployee?.name || currentUser?.name || "Karyawan"} • ${timeStr}`, 14, canvas.height - 30);
+    ctx.fillText(`${locStr} • Julia Coffee`, 14, canvas.height - 12);
     
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     setPhotoDataUrl(dataUrl);
     stopCamera();
   };
@@ -125,11 +164,11 @@ export function ClockIn() {
 
   const handleSubmit = async () => {
     if (!photoDataUrl) {
-      alert("Harap ambil foto selfie terlebih dahulu.");
+      setFeedback({ type: "error", message: "Harap ambil foto selfie kamera terlebih dahulu." });
       return;
     }
     if (!location) {
-      alert("Lokasi belum didapatkan. Pastikan GPS aktif.");
+      setFeedback({ type: "error", message: "Koordinat GPS belum didapatkan. Pastikan izin lokasi aktif." });
       return;
     }
     if (!currentUser) return;
@@ -142,7 +181,7 @@ export function ClockIn() {
         // Clock In
         let status: "HADIR" | "TERLAMBAT" = "HADIR";
         const hour = new Date().getHours();
-        if (hour >= 9) status = "TERLAMBAT"; // Example: Late after 9 AM
+        if (hour >= 9) status = "TERLAMBAT"; // Terlambat lewat jam 9
         
         addDailyAttendance({
           employeeId: activeEmployeeId as string,
@@ -154,9 +193,9 @@ export function ClockIn() {
           clockInPhotoUrl: photoDataUrl,
           clockOutPhotoUrl: null,
           status,
-          notes
+          notes: notes.trim()
         });
-        alert("Berhasil Clock In!");
+        setFeedback({ type: "success", message: "Clock In berhasil dicatat! Selamat bertugas." });
       } else if (!isClockedOut && todayAttendance) {
         // Clock Out
         updateDailyAttendance({
@@ -164,25 +203,24 @@ export function ClockIn() {
           clockOutTime: now,
           clockOutLocation: location,
           clockOutPhotoUrl: photoDataUrl,
-          notes: todayAttendance.notes ? `${todayAttendance.notes} | ${notes}` : notes
+          notes: todayAttendance.notes ? `${todayAttendance.notes} | ${notes.trim()}` : notes.trim()
         });
-        alert("Berhasil Clock Out!");
+        setFeedback({ type: "success", message: "Clock Out berhasil dicatat! Terima kasih atas dedikasi Anda." });
       }
       
       setPhotoDataUrl(null);
       setNotes("");
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan saat menyimpan data.");
+      setFeedback({ type: "error", message: "Terjadi kesalahan saat menyimpan data absensi." });
     } finally {
       setIsLoading(false);
     }
   };
 
-
   const handleLeaveSubmit = async (leaveStatus: "IZIN" | "SAKIT") => {
-    if (!notes) {
-      alert("Harap isi alasan / catatan untuk pengajuan ini.");
+    if (!notes.trim()) {
+      setFeedback({ type: "error", message: "Harap isi keterangan alasan pengajuan izin/sakit." });
       return;
     }
     if (!currentUser || !activeEmployeeId) return;
@@ -201,63 +239,193 @@ export function ClockIn() {
         clockInPhotoUrl: photoDataUrl || "",
         clockOutPhotoUrl: photoDataUrl || "",
         status: leaveStatus,
-        notes
+        notes: notes.trim()
       });
-      alert(`Berhasil mengajukan ${leaveStatus}!`);
+      setFeedback({ type: "success", message: `Pengajuan ${leaveStatus} berhasil dikirim ke Manager!` });
       setPhotoDataUrl(null);
       setNotes("");
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan.");
+      setFeedback({ type: "error", message: "Terjadi kesalahan saat pengajuan." });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!currentUser) return <div>Silakan login.</div>;
+  if (!currentUser) return <div className="p-8 text-center text-slate-500">Silakan login terlebih dahulu.</div>;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Absensi Harian</h2>
-        <p className="text-slate-500 mb-6">Ambil foto selfie beserta lokasi Anda untuk Clock In / Clock Out.</p>
+    <div className="max-w-2xl mx-auto space-y-6 pb-12">
+      {/* Toast Feedback */}
+      <AnimatePresence>
+        {feedback && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`p-4 rounded-2xl flex items-center gap-3 text-sm font-semibold shadow-lg border ${
+              feedback.type === "success"
+                ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                : "bg-rose-50 text-rose-900 border-rose-200"
+            }`}
+          >
+            {feedback.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span>{feedback.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* Main Card */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200/80">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5 mb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+                Absensi Kehadiran
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                Selfie & GPS
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              {currentUser.name} • {currentUser.role} {activeEmployee?.department ? `(${activeEmployee.department})` : ""}
+            </p>
+          </div>
+
+          {/* Mode Switcher */}
+          {!isClockedOut && (
+            <div className="flex p-1 bg-slate-100 rounded-xl text-xs font-bold self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setActiveMode("ATTENDANCE")}
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  activeMode === "ATTENDANCE"
+                    ? "bg-white text-slate-800 shadow-2xs"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Hadir Shift
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMode("LEAVE")}
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  activeMode === "LEAVE"
+                    ? "bg-white text-slate-800 shadow-2xs"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Izin / Sakit
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */}
         {isClockedOut ? (
-          <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl flex flex-col items-center justify-center text-center">
-            <CheckCircle className="w-12 h-12 text-emerald-500 mb-3" />
-            <h3 className="text-lg font-bold text-emerald-800">Anda sudah menyelesaikan shift hari ini.</h3>
-            <p className="text-sm text-emerald-600 mt-1">Clock In: {new Date(todayAttendance.clockInTime!).toLocaleTimeString("id-ID")}</p>
-            <p className="text-sm text-emerald-600">Clock Out: {new Date(todayAttendance.clockOutTime!).toLocaleTimeString("id-ID")}</p>
+          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-blue-50/50 border border-emerald-200/80 p-8 rounded-2xl flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 shadow-sm">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">
+              Shift Anda Hari Ini Telah Selesai
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md">
+              Data kehadiran Anda telah tercatat dengan aman dan siap diverifikasi oleh Manager.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-6">
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs text-left">
+                <span className="text-[11px] text-slate-400 block">Jam Masuk (IN)</span>
+                <span className="text-base font-black text-emerald-700 font-mono">
+                  {new Date(todayAttendance.clockInTime!).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs text-left">
+                <span className="text-[11px] text-slate-400 block">Jam Pulang (OUT)</span>
+                <span className="text-base font-black text-rose-700 font-mono">
+                  {new Date(todayAttendance.clockOutTime!).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            </div>
+
             {todayAttendance.clockInTime && todayAttendance.clockOutTime && (
-              <div className="mt-4 p-3 bg-white rounded-lg border border-emerald-100 w-full">
-                <p className="text-sm font-bold text-slate-700">Durasi Kerja:</p>
-                <p className="text-xl font-bold text-emerald-600">
-                  {((new Date(todayAttendance.clockOutTime).getTime() - new Date(todayAttendance.clockInTime).getTime()) / 3600000).toFixed(1)} Jam
-                </p>
-                <p className="text-xs text-slate-500 mt-1">*(Standar: 8 Jam Kerja)</p>
+              <div className="mt-4 p-4 bg-white rounded-xl border border-emerald-100 w-full max-w-sm shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600">Durasi Kerja Total:</span>
+                  <span className="text-lg font-black text-emerald-600 font-mono">
+                    {((new Date(todayAttendance.clockOutTime).getTime() - new Date(todayAttendance.clockInTime).getTime()) / 3600000).toFixed(1)} Jam
+                  </span>
+                </div>
               </div>
             )}
           </div>
-        ) : (
+        ) : activeMode === "ATTENDANCE" ? (
+          /* ─── STATE 2: ATTENDANCE (CLOCK IN / CLOCK OUT) ─── */
           <div className="space-y-6">
-            <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <MapPin className="text-blue-500 w-6 h-6" />
-              <div className="flex-1">
-                <p className="font-semibold text-slate-700">Status Lokasi</p>
+            {/* Status Shift Badge */}
+            <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="text-blue-900 font-semibold">
+                  {isClockedIn ? "Langkah Berikutnya: Absen Pulang (Clock Out)" : "Langkah Berikutnya: Absen Masuk (Clock In)"}
+                </span>
+              </div>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                isClockedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+              }`}>
+                {isClockedIn ? "SEDANG BERTUGAS" : "BELUM ABSEN"}
+              </span>
+            </div>
+
+            {/* GPS Location Box */}
+            <div className="flex items-center gap-3 bg-slate-50/90 p-4 rounded-2xl border border-slate-200/80">
+              <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shrink-0">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-800 text-xs">Titik Lokasi GPS</p>
                 {location ? (
-                  <p className="text-sm text-slate-500">{location.lat.toFixed(6)}, {location.lng.toFixed(6)}</p>
+                  <p className="text-[11px] text-slate-600 font-mono truncate">
+                    Lat: {location.lat.toFixed(5)}, Lng: {location.lng.toFixed(5)}
+                  </p>
                 ) : (
-                  <p className="text-sm text-rose-500">{locationError || "Sedang mencari lokasi..."}</p>
+                  <p className="text-[11px] text-rose-500 font-medium">
+                    {locationError || "Sedang mengunci sinyal GPS presisi..."}
+                  </p>
                 )}
               </div>
-              <button onClick={getLocation} className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-200">
-                Refresh GPS
+              <button
+                type="button"
+                onClick={getLocation}
+                disabled={isRefreshingLocation}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingLocation ? "animate-spin text-blue-600" : ""}`} />
+                <span>Refresh GPS</span>
               </button>
             </div>
 
-            <div className="bg-slate-100 rounded-2xl overflow-hidden relative aspect-video flex items-center justify-center border border-slate-200">
+            {/* Camera Viewfinder */}
+            <div className="bg-slate-900 rounded-3xl overflow-hidden relative aspect-video flex items-center justify-center border-2 border-slate-200 shadow-inner group">
               {photoDataUrl ? (
-                <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
+                <div className="relative w-full h-full">
+                  <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
+                  <div className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                    <Check className="w-3 h-3" /> Foto Siap
+                  </div>
+                </div>
               ) : (
                 <>
                   <video
@@ -267,14 +435,35 @@ export function ClockIn() {
                     muted
                     className={`w-full h-full object-cover ${isCameraActive ? "block" : "hidden"}`}
                   />
+
+                  {/* Face Guide Overlay when Camera Active */}
+                  {isCameraActive && (
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                      <div className="w-48 h-60 sm:w-56 sm:h-64 border-2 border-dashed border-white/60 rounded-full flex items-center justify-center">
+                        <span className="text-[11px] text-white/80 bg-black/40 backdrop-blur-xs px-3 py-1 rounded-full font-semibold">
+                          Posisikan Wajah di Sini
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {!isCameraActive && (
-                    <div className="text-center p-6">
-                      <Camera className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <div className="text-center p-6 space-y-3">
+                      <div className="w-14 h-14 rounded-2xl bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
+                        <Camera className="w-7 h-7 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="text-white font-bold text-sm">Ambil Foto Selfie</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Verifikasi kehadiran fisik di lokasi outlet
+                        </p>
+                      </div>
                       <button
+                        type="button"
                         onClick={startCamera}
-                        className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors"
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-md transition-all"
                       >
-                        Buka Kamera
+                        Buka Kamera Depan
                       </button>
                     </div>
                   )}
@@ -283,13 +472,16 @@ export function ClockIn() {
               <canvas ref={canvasRef} className="hidden" />
             </div>
 
+            {/* Shutter / Retake Controls */}
             {isCameraActive && !photoDataUrl && (
               <div className="flex justify-center">
                 <button
+                  type="button"
                   onClick={capturePhoto}
-                  className="px-8 py-3 bg-indigo-600 text-white rounded-full font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-colors"
+                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-full font-bold text-sm shadow-lg shadow-blue-500/30 transition-all flex items-center gap-2"
                 >
-                  Ambil Foto
+                  <Camera className="w-4 h-4" />
+                  <span>Ambil Foto Selfie</span>
                 </button>
               </div>
             )}
@@ -297,58 +489,95 @@ export function ClockIn() {
             {photoDataUrl && (
               <div className="flex justify-center">
                 <button
+                  type="button"
                   onClick={handleRetake}
-                  className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300 transition-colors"
+                  className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
                 >
-                  Ulangi Foto
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Ulangi Ambil Foto</span>
                 </button>
               </div>
             )}
 
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-700">Catatan (Opsional)</label>
+            {/* Notes Input */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Catatan Shift (Opsional)
+              </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 min-h-[80px]"
-                placeholder="Tambahkan catatan jika perlu..."
+                className="w-full rounded-2xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 p-3 text-xs text-slate-700 min-h-[70px] outline-none transition-all placeholder:text-slate-400"
+                placeholder="Misal: Tukar shift dengan Rian, atau alasan keterlambatan..."
               />
             </div>
 
+            {/* Submit Button */}
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={isLoading || !photoDataUrl || !location}
-              className={`w-full py-4 rounded-xl font-bold text-white transition-all flex justify-center items-center gap-2 ${
+              className={`w-full py-4 rounded-2xl font-black text-white text-sm transition-all shadow-lg flex justify-center items-center gap-2 ${
                 isLoading || !photoDataUrl || !location
-                  ? "bg-slate-300 cursor-not-allowed"
-                  : isClockedIn ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-500 hover:bg-emerald-600"
+                  ? "bg-slate-300 cursor-not-allowed shadow-none"
+                  : isClockedIn
+                  ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/25 active:scale-[0.99]"
+                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25 active:scale-[0.99]"
               }`}
             >
               <Clock className="w-5 h-5" />
-              {isClockedIn ? "CLOCK OUT" : "CLOCK IN"}
+              <span>
+                {isLoading
+                  ? "Menyimpan Data..."
+                  : isClockedIn
+                  ? "KONFIRMASI ABSEN PULANG (CLOCK OUT)"
+                  : "KONFIRMASI ABSEN MASUK (CLOCK IN)"}
+              </span>
             </button>
-
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              <button
-                onClick={() => handleLeaveSubmit("IZIN")}
-                disabled={isLoading}
-                className={`py-3 rounded-xl font-bold text-white transition-all ${
-                  isLoading ? "bg-slate-300 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-600"
-                }`}
-              >
-                IZIN
-              </button>
-              <button
-                onClick={() => handleLeaveSubmit("SAKIT")}
-                disabled={isLoading}
-                className={`py-3 rounded-xl font-bold text-white transition-all ${
-                  isLoading ? "bg-slate-300 cursor-not-allowed" : "bg-rose-400 hover:bg-rose-500"
-                }`}
-              >
-                SAKIT
-              </button>
+          </div>
+        ) : (
+          /* ─── STATE 3: LEAVE / PERMISSION REQUEST ─── */
+          <div className="space-y-6">
+            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Pengajuan Izin atau Sakit</p>
+                <p className="text-amber-800/90 mt-0.5">
+                  Tuliskan keterangan lengkap alasan Anda tidak dapat hadir bertugas hari ini. Manager akan menerima notifikasi untuk verifikasi.
+                </p>
+              </div>
             </div>
 
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Alasan / Keterangan Tidak Hadir <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 p-3.5 text-xs text-slate-700 min-h-[100px] outline-none transition-all placeholder:text-slate-400"
+                placeholder="Tuliskan alasan izin / sakit secara rinci (misal: Sakit demam dengan surat dokter, atau keperluan mendesak)..."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => handleLeaveSubmit("IZIN")}
+                disabled={isLoading}
+                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
+              >
+                <span>Ajukan Izin</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLeaveSubmit("SAKIT")}
+                disabled={isLoading}
+                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <span>Ajukan Sakit</span>
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -111,7 +111,7 @@ export const Login = () => {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
                 Pilih Akun Tersimpan
               </label>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                 {users.map((u) => (
                   <button
                     key={u.id}

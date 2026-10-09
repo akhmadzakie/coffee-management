@@ -19,11 +19,21 @@
 }
 @layer base {
   html {
-    /* Scale down default 16px to 14px (approx 87.5%) 
-       This shrinks all Tailwind text, paddings, margins proportionally
-       making the dashboard feel more compact and professional */
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: inherit;
+    color: #1e293b;
+    background-color: #f8fafc;
+  }
+
+  /* Tabular numbers for clean currency and KPI alignment */
+  .font-mono, td, th {
+    font-variant-numeric: tabular-nums;
   }
 }

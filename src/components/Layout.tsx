@@ -445,7 +445,7 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Mobile & Desktop */}
-        <header className="flex justify-between items-center p-4 sm:p-6 bg-transparent relative z-20">
+        <header className="flex justify-between items-center px-4 py-3 sm:px-6 sm:py-3.5 bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 transition-all shadow-xs">
           <div className="flex items-center">
             <button
               onClick={() => {
