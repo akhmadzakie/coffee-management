@@ -13,7 +13,9 @@ export const KPI: React.FC = () => {
     employees, 
     updateKpiTask, 
     kpiBonusRules, 
-    updateKpiBonusRule, 
+    updateKpiBonusRule,
+    deleteKpiBonusRule,
+    deleteKpiTask, 
     currentUser, 
     user,
     settings,
@@ -103,6 +105,29 @@ export const KPI: React.FC = () => {
     });
     setEditingRuleId(null);
     setRuleForm({});
+  };
+
+  const handleToggleRuleStatus = (rule: any) => {
+    updateKpiBonusRule(rule.id, {
+      ...rule,
+      isActive: !rule.isActive,
+    });
+  };
+
+  const handleDeleteRule = (id: string) => {
+    if (confirm("Hapus aturan rentang skor bonus ini?")) {
+      deleteKpiBonusRule(id);
+    }
+  };
+
+  const handleLoadDefaultRules = () => {
+    const defaults = [
+      { id: "rule-1", minScore: 90, maxScore: 100, bonusAmount: 400000, isActive: true },
+      { id: "rule-2", minScore: 80, maxScore: 89, bonusAmount: 250000, isActive: true },
+      { id: "rule-3", minScore: 70, maxScore: 79, bonusAmount: 100000, isActive: true },
+      { id: "rule-4", minScore: 0, maxScore: 69, bonusAmount: 0, isActive: true },
+    ];
+    defaults.forEach(d => updateKpiBonusRule(d.id, d));
   };
 
   const handleSaveStoreTargetSettings = (e: React.FormEvent) => {
@@ -657,34 +682,56 @@ export const KPI: React.FC = () => {
 
         {/* ─── TAB 4: ATURAN BONUS BERTINGKAT (TIERED) ─── */}
         {activeSubTab === "rules" && (
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="space-y-6">
+            {/* Info Explanation Card */}
+            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block">Cara Kerja Aturan Tier Skor di Payroll:</span>
+                <p className="text-amber-800 leading-relaxed">
+                  Jika aturan ini <strong>Aktif</strong>, sistem saat generate slip gaji akan mengecek total skor evaluasi KPI karyawan. Bila skor karyawan masuk dalam rentang skor (misalnya skor 85 berada di rentang 80–89), maka karyawan otomatis mendapatkan nominal bonus pada tier tersebut (misal Rp 250.000).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-800">Aturan Bonus Berdasarkan Rentang Skor (Tiered)</h3>
-                <p className="text-xs text-slate-500">Tentukan plafon bonus tetap berdasarkan rentang total nilai evaluasi.</p>
+                <h3 className="text-base font-bold text-slate-800">Daftar Rentang Nilai (Tiered Rules)</h3>
+                <p className="text-xs text-slate-500">Kelola batas skor minimal, maksimal, nominal rupiah bonus, dan status aktif.</p>
               </div>
               {canEditHR && (
-                <button 
-                  onClick={() => { setEditingRuleId(""); setRuleForm({ isActive: true }); }}
-                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
-                >
-                  <Plus className="w-4 h-4" /> Tambah Rentang Nilai
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleLoadDefaultRules}
+                    className="px-3 py-2 border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold rounded-xl transition-colors shadow-xs"
+                    title="Muat template standar 4 tingkat (Grade A, B, C, D)"
+                  >
+                    Muat Template Standar (A/B/C/D)
+                  </button>
+                  <button 
+                    onClick={() => { setEditingRuleId(""); setRuleForm({ isActive: true, minScore: 80, maxScore: 89, bonusAmount: 200000 }); }}
+                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" /> Tambah Rentang Nilai
+                  </button>
+                </div>
               )}
             </div>
             
             {editingRuleId !== null && (
-              <div className="bg-indigo-50/70 p-5 rounded-2xl mb-6 border border-indigo-100">
-                <h4 className="font-bold text-indigo-900 text-sm mb-4">{editingRuleId ? "Edit Rentang Nilai" : "Rentang Nilai Baru"}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-indigo-50/70 p-5 rounded-2xl border border-indigo-100 space-y-4">
+                <h4 className="font-bold text-indigo-900 text-sm">
+                  {editingRuleId ? "Edit Rentang Nilai" : "Tambah Rentang Nilai Baru"}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Skor Minimal (0 - 100)</label>
                     <input
                       type="number"
                       className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.minScore || ""}
+                      value={ruleForm.minScore !== undefined ? ruleForm.minScore : ""}
                       onChange={(e) => setRuleForm({ ...ruleForm, minScore: e.target.value })}
-                      placeholder="85"
+                      placeholder="80"
                     />
                   </div>
                   <div>
@@ -692,59 +739,107 @@ export const KPI: React.FC = () => {
                     <input
                       type="number"
                       className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.maxScore || ""}
+                      value={ruleForm.maxScore !== undefined ? ruleForm.maxScore : ""}
                       onChange={(e) => setRuleForm({ ...ruleForm, maxScore: e.target.value })}
-                      placeholder="100"
+                      placeholder="89"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Nominal Bonus (Rp)</label>
                     <input
                       type="number"
+                      step="25000"
                       className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.bonusAmount || ""}
+                      value={ruleForm.bonusAmount !== undefined ? ruleForm.bonusAmount : ""}
                       onChange={(e) => setRuleForm({ ...ruleForm, bonusAmount: e.target.value })}
-                      placeholder="350000"
+                      placeholder="250000"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Status Aturan</label>
+                    <select
+                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white"
+                      value={ruleForm.isActive ? "true" : "false"}
+                      onChange={(e) => setRuleForm({ ...ruleForm, isActive: e.target.value === "true" })}
+                    >
+                      <option value="true">Aktif</option>
+                      <option value="false">Nonaktif</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 pt-1">
                   <button onClick={() => setEditingRuleId(null)} className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 bg-white text-xs font-semibold">Batal</button>
-                  <button onClick={handleSaveRule} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs"><Save className="w-4 h-4" /> Simpan Aturan</button>
+                  <button onClick={handleSaveRule} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs"><Save className="w-4 h-4" /> Simpan Rentang Nilai</button>
                 </div>
               </div>
             )}
 
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                    <th className="py-3 px-4 font-semibold">Skor Minimal</th>
-                    <th className="py-3 px-4 font-semibold">Skor Maksimal</th>
-                    <th className="py-3 px-4 font-semibold">Jumlah Bonus (Rp)</th>
+                    <th className="py-3 px-4 font-semibold">Grade / Rentang</th>
+                    <th className="py-3 px-4 font-semibold text-center">Skor Minimal</th>
+                    <th className="py-3 px-4 font-semibold text-center">Skor Maksimal</th>
+                    <th className="py-3 px-4 font-semibold text-right">Nominal Bonus (Rp)</th>
                     <th className="py-3 px-4 font-semibold text-center">Status</th>
                     <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {kpiBonusRules?.map((rule: any) => (
-                    <tr key={rule.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-800">{rule.minScore}</td>
-                      <td className="py-3 px-4 font-mono font-bold text-slate-800">{rule.maxScore}</td>
-                      <td className="py-3 px-4 text-emerald-600 font-mono font-bold">{formatCurrency(rule.bonusAmount)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${rule.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
-                          {rule.isActive ? 'Aktif' : 'Nonaktif'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <button onClick={() => handleEditRule(rule)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"><Edit2 className="w-4 h-4" /></button>
-                      </td>
-                    </tr>
-                  ))}
+                  {kpiBonusRules?.map((rule: any) => {
+                    const gradeLabel = rule.minScore >= 90 ? "Grade A (Sangat Baik)" :
+                                       rule.minScore >= 80 ? "Grade B (Baik)" :
+                                       rule.minScore >= 70 ? "Grade C (Cukup)" : "Grade D (Kurang)";
+                    return (
+                      <tr key={rule.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-800">{gradeLabel}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">{rule.minScore}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">{rule.maxScore}</td>
+                        <td className="py-3 px-4 text-right text-emerald-600 font-mono font-bold">
+                          {formatCurrency(rule.bonusAmount)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleToggleRuleStatus(rule)}
+                            title="Klik untuk ubah status aktif/nonaktif"
+                            className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                              rule.isActive 
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300' 
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300'
+                            }`}
+                          >
+                            {rule.isActive ? '✓ Aktif' : '✕ Nonaktif'}
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => handleEditRule(rule)} 
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"
+                              title="Edit rentang nilai"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteRule(rule.id)} 
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                              title="Hapus aturan"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {(!kpiBonusRules || kpiBonusRules.length === 0) && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-400 italic">Belum ada aturan rentang skor bonus.</td>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 italic">
+                        Belum ada aturan rentang skor bonus. Klik "Muat Template Standar (A/B/C/D)" untuk mengisi otomatis.
+                      </td>
                     </tr>
                   )}
                 </tbody>

@@ -243,6 +243,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [dailyChecklists, setDailyChecklists] = useState<DailyChecklist[]>([]);
   const [employeeShifts, setEmployeeShifts] = useState<EmployeeShift[]>([]);
   const [kpiRecords, setKpiRecords] = useState<KPIRecord[]>([]);
+  const [kpiTasks, setKpiTasks] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("kpi_tasks");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [kpiBonusRules, setKpiBonusRules] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("kpi_bonus_rules");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      { id: "rule-1", minScore: 90, maxScore: 100, bonusAmount: 400000, isActive: true },
+      { id: "rule-2", minScore: 80, maxScore: 89, bonusAmount: 250000, isActive: true },
+      { id: "rule-3", minScore: 70, maxScore: 79, bonusAmount: 100000, isActive: true },
+      { id: "rule-4", minScore: 0, maxScore: 69, bonusAmount: 0, isActive: true },
+    ];
+  });
 
   // Fase 1-4 state
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
@@ -956,6 +976,48 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const updateKpiTask = (id: string, task: any) => {
+    setKpiTasks((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const updated = idx >= 0 
+        ? prev.map((t, i) => i === idx ? { ...task, id } : t)
+        : [...prev, { ...task, id }];
+      try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    markChanged();
+  };
+
+  const deleteKpiTask = (id: string) => {
+    setKpiTasks((prev) => {
+      const updated = prev.filter((t) => t.id !== id);
+      try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    markChanged();
+  };
+
+  const updateKpiBonusRule = (id: string, rule: any) => {
+    setKpiBonusRules((prev) => {
+      const idx = prev.findIndex((r) => r.id === id);
+      const updated = idx >= 0 
+        ? prev.map((r, i) => i === idx ? { ...rule, id } : r)
+        : [...prev, { ...rule, id }];
+      try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    markChanged();
+  };
+
+  const deleteKpiBonusRule = (id: string) => {
+    setKpiBonusRules((prev) => {
+      const updated = prev.filter((r) => r.id !== id);
+      try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    markChanged();
+  };
+
   const updateUser = (updatedUser: User) => {
     setUsers((prev) =>
       prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
@@ -1284,6 +1346,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         dailyChecklists,
             employeeShifts,
         kpiRecords,
+        kpiTasks,
+        kpiBonusRules,
+        updateKpiTask,
+        deleteKpiTask,
+        updateKpiBonusRule,
+        deleteKpiBonusRule,
         updateSettings,
         login,
         logout,
