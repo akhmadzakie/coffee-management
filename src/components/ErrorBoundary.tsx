@@ -23,9 +23,28 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error in ErrorBoundary:", error, errorInfo);
+
+    const isChunkError =
+      error.message?.includes("Failed to fetch dynamically imported module") ||
+      error.message?.includes("Importing a module script failed") ||
+      error.message?.includes("error loading dynamically imported module") ||
+      error.name === "ChunkLoadError";
+
+    if (isChunkError) {
+      const lastReload = sessionStorage.getItem("chunk_reload_attempted");
+      const now = Date.now();
+      // Jika belum pernah reload dalam 15 detik terakhir, auto-reload otomatis
+      if (!lastReload || now - parseInt(lastReload, 10) > 15000) {
+        sessionStorage.setItem("chunk_reload_attempted", now.toString());
+        window.location.reload();
+      }
+    }
   }
 
   private handleReload = () => {
+    // Clear cache reload marker and force reload
+    sessionStorage.removeItem("chunk_reload_attempted");
+    sessionStorage.removeItem("vite_chunk_reload");
     window.location.reload();
   };
 
@@ -35,22 +54,36 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const isChunkError =
+        this.state.error?.message?.includes("Failed to fetch dynamically imported module") ||
+        this.state.error?.message?.includes("Importing a module script failed") ||
+        this.state.error?.message?.includes("error loading dynamically imported module") ||
+        this.state.error?.name === "ChunkLoadError";
+
       return (
         <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
-          <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 border border-red-900/30 text-center shadow-xl shadow-black/50">
-            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle className="w-8 h-8 text-red-500" />
+          <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 border border-gray-700 text-center shadow-xl shadow-black/50">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
+              isChunkError ? "bg-amber-500/10" : "bg-red-500/10"
+            }`}>
+              {isChunkError ? (
+                <RefreshCw className="w-8 h-8 text-amber-500" />
+              ) : (
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              )}
             </div>
             
             <h1 className="text-2xl font-bold text-white mb-2">
-              Oops! Terjadi Kesalahan
+              {isChunkError ? "Versi Baru Tersedia" : "Oops! Terjadi Kesalahan"}
             </h1>
             
-            <p className="text-gray-400 mb-6 text-sm">
-              Sistem mendeteksi adanya error pada tampilan ini. Jangan khawatir, data Anda tetap aman.
+            <p className="text-gray-300 mb-6 text-sm">
+              {isChunkError
+                ? "Sistem baru saja diperbarui dengan fitur terbaru. Silakan muat ulang halaman untuk memuat pembaruan."
+                : "Sistem mendeteksi adanya kendala pada tampilan ini. Jangan khawatir, seluruh data Anda tetap aman."}
             </p>
             
-            {this.state.error && (
+            {this.state.error && !isChunkError && (
               <div className="bg-black/40 rounded border border-gray-700 p-3 mb-6 text-left overflow-auto max-h-32">
                 <p className="text-red-400 text-xs font-mono break-all">
                   {this.state.error.message}
@@ -60,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
             <button
               onClick={this.handleReload}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-brand-dark font-medium rounded-xl hover:bg-brand-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95"
             >
               <RefreshCw className="w-4 h-4" />
               Muat Ulang Halaman
