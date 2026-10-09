@@ -1,0 +1,792 @@
+import React, { useMemo, useState } from "react";
+import { useStore } from "../store/StoreContext";
+import { ViewState } from "../types";
+import { getLocalDateString } from "../utils/dateUtils";
+const formatRupiah = (amount: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+import {
+  Calendar,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Award,
+  TrendingUp,
+  CheckSquare,
+  Camera,
+  MapPin,
+  Users,
+  ArrowRight,
+  Sparkles,
+  ChevronRight,
+  Star,
+  Coffee,
+  ShieldCheck,
+  ClipboardList,
+  Info,
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES } from "./LeaderChecklist";
+
+interface EmployeeDashboardProps {
+  onNavigate: (view: ViewState) => void;
+}
+
+export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate }) => {
+  const {
+    currentUser,
+    employees,
+    dailyAttendances,
+    kpiRecords,
+    dailyChecklists,
+    settings,
+    users,
+  } = useStore();
+
+  const [showKpiDetails, setShowKpiDetails] = useState(false);
+
+  // 1. Identify the active employee record matching currentUser
+  const activeEmployee = useMemo(() => {
+    if (!currentUser) return null;
+    return employees.find((e) => e.username === currentUser.username) ||
+      employees.find((e) => e.id === currentUser.employeeId) ||
+      null;
+  }, [employees, currentUser]);
+
+  const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
+
+  // 2. Dates & Period
+  const todayStr = getLocalDateString();
+  const now = new Date();
+  const currentMonthNum = now.getMonth() + 1; // 1 - 12
+  const currentYear = now.getFullYear();
+  const currentMonthStr = `${currentYear}-${String(currentMonthNum).padStart(2, "0")}`;
+
+  // Time-based Indonesian greeting
+  const greeting = useMemo(() => {
+    const hour = now.getHours();
+    if (hour < 11) return "Selamat Pagi";
+    if (hour < 15) return "Selamat Siang";
+    if (hour < 18) return "Selamat Sore";
+    return "Selamat Malam";
+  }, [now]);
+
+  // 3. Today's Attendance
+  const todayAttendance = useMemo(() => {
+    return dailyAttendances.find(
+      (a) => a.employeeId === activeEmployeeId && a.date === todayStr
+    );
+  }, [dailyAttendances, activeEmployeeId, todayStr]);
+
+  const isClockedIn = !!todayAttendance?.clockInTime;
+  const isClockedOut = !!todayAttendance?.clockOutTime;
+
+  // 4. Monthly Attendance Stats
+  const monthlyLogs = useMemo(() => {
+    return dailyAttendances.filter(
+      (a) => a.employeeId === activeEmployeeId && a.date.startsWith(currentMonthStr)
+    );
+  }, [dailyAttendances, activeEmployeeId, currentMonthStr]);
+
+  const monthlyStats = useMemo(() => {
+    let present = 0;
+    let late = 0;
+    let sickLeave = 0;
+    let alpha = 0;
+
+    monthlyLogs.forEach((l) => {
+      if (l.status === "HADIR") present++;
+      else if (l.status === "TERLAMBAT") {
+        present++;
+        late++;
+      } else if (l.status === "IZIN" || l.status === "SAKIT") sickLeave++;
+      else if (l.status === "ALPHA" || l.status === "DITOLAK") alpha++;
+    });
+
+    return { present, late, sickLeave, alpha, totalDays: monthlyLogs.length };
+  }, [monthlyLogs]);
+
+  // 5. Recent 7 Attendance History
+  const recentAttendances = useMemo(() => {
+    return [...dailyAttendances]
+      .filter((a) => a.employeeId === activeEmployeeId)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 7);
+  }, [dailyAttendances, activeEmployeeId]);
+
+  // 6. Monthly KPI for Current Employee
+  const currentKpi = useMemo(() => {
+    return kpiRecords.find(
+      (k) =>
+        k.employeeId === activeEmployeeId &&
+        k.month === currentMonthNum &&
+        k.year === currentYear
+    ) || null;
+  }, [kpiRecords, activeEmployeeId, currentMonthNum, currentYear]);
+
+  // 7. LEADER SPECIFIC DATA
+  const isLeader = currentUser?.role === "LEADER";
+
+  // Determine Leader Division
+  const leaderDivision = useMemo(() => {
+    if (currentUser?.department === "KITCHEN") return "KITCHEN";
+    if (currentUser?.department === "BAR") return "BAR";
+    if (activeEmployee?.department === "KITCHEN") return "KITCHEN";
+    if (activeEmployee?.department === "BAR") return "BAR";
+    if (activeEmployee?.department === "BAKER") return "BAKER";
+    return "BAR";
+  }, [currentUser, activeEmployee]);
+
+  // Leader checklist progress today
+  const checklistProgress = useMemo(() => {
+    if (!isLeader) return null;
+
+    // Get categories for leader's division
+    const templates = settings.leaderChecklistTemplates;
+    let categories = DEFAULT_BAR_CATEGORIES;
+    if (leaderDivision === "KITCHEN") {
+      categories = templates?.kitchen || DEFAULT_KITCHEN_CATEGORIES;
+    } else if (leaderDivision === "BAKER") {
+      categories = templates?.baker || DEFAULT_BAKER_CATEGORIES;
+    } else {
+      categories = templates?.bar || DEFAULT_BAR_CATEGORIES;
+    }
+
+    const totalTasks = categories.reduce((sum, cat) => sum + (cat.items?.length || 0), 0);
+
+    // Find checklist submitted for today
+    const todayChecklist = dailyChecklists.find(
+      (c) =>
+        c.date.startsWith(todayStr) &&
+        (c.notes?.includes(`[${leaderDivision}]`) ||
+          users.find((u) => u.id === c.employeeId)?.role === leaderDivision ||
+          users.find((u) => u.id === c.employeeId)?.department === leaderDivision)
+    );
+
+    const completedCount = todayChecklist?.leaderTasks?.length || 0;
+    const percentage = totalTasks > 0 ? Math.min(100, Math.round((completedCount / totalTasks) * 100)) : 0;
+
+    return {
+      totalTasks,
+      completedCount,
+      percentage,
+      isFinished: percentage === 100,
+    };
+  }, [isLeader, leaderDivision, settings, dailyChecklists, todayStr, users]);
+
+  // Team members in leader's division
+  const divisionTeam = useMemo(() => {
+    if (!isLeader) return [];
+    return employees
+      .filter((e) => e.department === leaderDivision && e.status === "AKTIF")
+      .map((e) => {
+        const att = dailyAttendances.find((a) => a.employeeId === e.id && a.date === todayStr);
+        return {
+          employee: e,
+          attendance: att,
+          isClockedIn: !!att?.clockInTime,
+          isClockedOut: !!att?.clockOutTime,
+        };
+      });
+  }, [isLeader, employees, leaderDivision, dailyAttendances, todayStr]);
+
+  return (
+    <div className="space-y-6 pb-12 max-w-7xl mx-auto">
+      {/* ─── 1. GREETING & IDENTITY BANNER ─── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-white/10">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-20 -mb-16 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-blue-500/25 shrink-0 border border-white/20">
+              {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-blue-300 font-semibold text-xs tracking-wider uppercase">
+                  {greeting},
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 backdrop-blur-md border border-white/15 text-blue-200">
+                  {currentUser?.role || "Staff"}
+                </span>
+                {activeEmployee?.department && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                    Divisi {activeEmployee.department}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
+                {currentUser?.name || "Karyawan"}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 flex items-center gap-2">
+                <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                {now.toLocaleDateString("id-ID", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Action Navigation */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => onNavigate("attendance_clock")}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/30 flex items-center gap-2 shrink-0"
+            >
+              <Camera className="w-4 h-4" />
+              <span>{isClockedIn && !isClockedOut ? "Absen Pulang (Clock Out)" : "Absen Masuk (Clock In)"}</span>
+            </button>
+            <button
+              onClick={() => onNavigate("leader_checklist")}
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0"
+            >
+              <CheckSquare className="w-4 h-4 text-emerald-400" />
+              <span>Checklist Jobdesk</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 2. STATUS KEHADIRAN HARI INI ─── */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${
+              isClockedIn ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+            }`}>
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Status Kehadiran Anda Hari Ini
+              </h3>
+              <p className="text-xs text-slate-500">
+                {isClockedOut
+                  ? "Selesai kerja untuk hari ini. Terima kasih atas dedikasi Anda!"
+                  : isClockedIn
+                  ? "Anda sudah absen masuk dan aktif bertugas di outlet."
+                  : "Anda belum melakukan Clock In untuk shift hari ini."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+              isClockedOut
+                ? "bg-slate-100 text-slate-700"
+                : isClockedIn
+                ? "bg-emerald-100 text-emerald-800 animate-pulse"
+                : "bg-rose-100 text-rose-700"
+            }`}>
+              {isClockedOut
+                ? "SUDAH CLOCK OUT"
+                : isClockedIn
+                ? "SEDANG BERTUGAS"
+                : "BELUM CLOCK IN"}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Jam Masuk */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Jam Masuk (Clock In)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            </div>
+            <div className="text-lg font-black text-slate-800 font-mono">
+              {todayAttendance?.clockInTime
+                ? new Date(todayAttendance.clockInTime).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "-- : --"}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {todayAttendance?.status || "Belum Absen"}
+            </p>
+          </div>
+
+          {/* Jam Pulang */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Jam Pulang (Clock Out)</span>
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+            </div>
+            <div className="text-lg font-black text-slate-800 font-mono">
+              {todayAttendance?.clockOutTime
+                ? new Date(todayAttendance.clockOutTime).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "-- : --"}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {isClockedOut ? "Pulang Tepat Waktu" : "Belum Clock Out"}
+            </p>
+          </div>
+
+          {/* Durasi Kerja */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Total Jam Kerja</span>
+              <Clock className="w-3.5 h-3.5 text-blue-500" />
+            </div>
+            <div className="text-lg font-black text-blue-700 font-mono">
+              {todayAttendance?.clockInTime && todayAttendance?.clockOutTime
+                ? `${(
+                    (new Date(todayAttendance.clockOutTime).getTime() -
+                      new Date(todayAttendance.clockInTime).getTime()) /
+                    3600000
+                  ).toFixed(1)} Jam`
+                : isClockedIn
+                ? "Berjalan..."
+                : "0 Jam"}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">Hari ini</p>
+          </div>
+
+          {/* Lokasi & Foto */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Bukti Selfie & GPS</div>
+              <div className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                {todayAttendance?.clockInLocation ? (
+                  <span className="text-emerald-700 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" /> GPS Terverifikasi
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Tidak ada GPS</span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {todayAttendance?.approvalStatus === "APPROVED"
+                  ? "Disahkan Manager"
+                  : todayAttendance?.approvalStatus === "REJECTED"
+                  ? "Ditolak Manager"
+                  : "Menunggu Verifikasi"}
+              </p>
+            </div>
+            {todayAttendance?.clockInPhotoUrl && (
+              <img
+                src={todayAttendance.clockInPhotoUrl}
+                alt="Selfie"
+                className="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-2xs"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 3. KHUSUS LEADER: MONITORING DIVISI & JOBDESK TIM ─── */}
+      {isLeader && checklistProgress && (
+        <div className="bg-gradient-to-br from-indigo-50/80 via-white to-blue-50/50 rounded-2xl p-6 border border-indigo-100 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20">
+                <Coffee className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Monitoring Operasional Tim Divisi {leaderDivision}
+                  </h3>
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-md uppercase">
+                    Portal Leader
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pantau kesiapan checklist harian dan kehadiran anggota tim Anda hari ini.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => onNavigate("leader_checklist")}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>Kelola Checklist Divisi →</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Progress Jobdesk Hari Ini */}
+            <div className="lg:col-span-1 bg-white rounded-xl p-5 border border-indigo-100 shadow-2xs flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Progres Jobdesk Hari Ini
+                </span>
+                <div className="flex items-baseline justify-between mt-2 mb-2">
+                  <span className="text-3xl font-black text-indigo-900 font-mono">
+                    {checklistProgress.percentage}%
+                  </span>
+                  <span className="text-xs font-semibold text-slate-600">
+                    {checklistProgress.completedCount} dari {checklistProgress.totalTasks} Selesai
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/60 mb-3">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      checklistProgress.percentage === 100
+                        ? "bg-emerald-500"
+                        : checklistProgress.percentage >= 50
+                        ? "bg-indigo-600"
+                        : "bg-amber-500"
+                    }`}
+                    style={{ width: `${checklistProgress.percentage}%` }}
+                  />
+                </div>
+
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {checklistProgress.percentage === 100
+                    ? "Semua standar operasional dan kebersihan tim sudah lengkap!"
+                    : checklistProgress.percentage > 0
+                    ? "Sebagian tugas sudah diceklis. Pastikan seluruh poin closing/opening terselesaikan."
+                    : "Belum ada checklist yang disimpan untuk shift hari ini."}
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                <span>Status Target:</span>
+                <span className={`font-bold ${checklistProgress.percentage === 100 ? "text-emerald-600" : "text-amber-600"}`}>
+                  {checklistProgress.percentage === 100 ? "Lengkap 100%" : "Sedang Berjalan"}
+                </span>
+              </div>
+            </div>
+
+            {/* Rekap Absensi Anggota Tim Divisi Hari Ini */}
+            <div className="lg:col-span-2 bg-white rounded-xl p-5 border border-indigo-100 shadow-2xs">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-indigo-600" />
+                  Kehadiran Tim {leaderDivision} ({divisionTeam.length} Staf)
+                </span>
+                <span className="text-[11px] text-slate-400">Hari ini</span>
+              </div>
+
+              {divisionTeam.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 italic text-xs">
+                  Tidak ada staf lain di divisi ini.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {divisionTeam.map((member) => (
+                    <div
+                      key={member.employee.id}
+                      className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50/80 transition-colors text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
+                          {member.employee.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800">{member.employee.name}</p>
+                          <p className="text-[10px] text-slate-400">{member.employee.position}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-slate-600 text-[11px]">
+                          {member.attendance?.clockInTime
+                            ? new Date(member.attendance.clockInTime).toLocaleTimeString("id-ID", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            member.isClockedOut
+                              ? "bg-slate-100 text-slate-700"
+                              : member.isClockedIn
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-700"
+                          }`}
+                        >
+                          {member.isClockedOut ? "Pulang" : member.isClockedIn ? "Hadir" : "Belum Masuk"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 4. STATISTIK BULAN BERJALAN & KPI ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Ringkasan Kehadiran Bulan Ini (Col 1-2) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Ringkasan Kehadiran Bulan Ini
+              </h3>
+              <p className="text-xs text-slate-500">
+                Periode: {now.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+              </p>
+            </div>
+            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold text-xs rounded-lg">
+              {monthlyStats.totalDays} Catatan
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-100 text-center">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-1.5" />
+              <div className="text-2xl font-black text-emerald-900 font-mono">
+                {monthlyStats.present}
+              </div>
+              <span className="text-xs font-semibold text-emerald-700">Hari Hadir</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-100 text-center">
+              <Clock className="w-5 h-5 text-amber-600 mx-auto mb-1.5" />
+              <div className="text-2xl font-black text-amber-900 font-mono">
+                {monthlyStats.late}
+              </div>
+              <span className="text-xs font-semibold text-amber-700">Terlambat</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100 text-center">
+              <Info className="w-5 h-5 text-blue-600 mx-auto mb-1.5" />
+              <div className="text-2xl font-black text-blue-900 font-mono">
+                {monthlyStats.sickLeave}
+              </div>
+              <span className="text-xs font-semibold text-blue-700">Izin / Sakit</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-100 text-center">
+              <AlertCircle className="w-5 h-5 text-rose-600 mx-auto mb-1.5" />
+              <div className="text-2xl font-black text-rose-900 font-mono">
+                {monthlyStats.alpha}
+              </div>
+              <span className="text-xs font-semibold text-rose-700">Alpha</span>
+            </div>
+          </div>
+
+          {/* Riwayat Absensi Terakhir */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+              Riwayat 7 Kehadiran Terakhir
+            </h4>
+            {recentAttendances.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-4 text-center">
+                Belum ada riwayat kehadiran tercatat.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                      <th className="py-2 px-3">Tanggal</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3">Jam In/Out</th>
+                      <th className="py-2 px-3">Durasi</th>
+                      <th className="py-2 px-3 text-right">Verifikasi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentAttendances.map((att) => (
+                      <tr key={att.id} className="border-b border-slate-50 hover:bg-slate-50/80">
+                        <td className="py-2.5 px-3 font-semibold text-slate-700">{att.date}</td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              att.status === "HADIR"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : att.status === "TERLAMBAT"
+                                ? "bg-amber-100 text-amber-800"
+                                : att.status === "ALPHA"
+                                ? "bg-rose-100 text-rose-800"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {att.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">
+                          {att.clockInTime
+                            ? new Date(att.clockInTime).toLocaleTimeString("id-ID", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
+                          {" - "}
+                          {att.clockOutTime
+                            ? new Date(att.clockOutTime).toLocaleTimeString("id-ID", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-700">
+                          {att.clockInTime && att.clockOutTime
+                            ? `${(
+                                (new Date(att.clockOutTime).getTime() -
+                                  new Date(att.clockInTime).getTime()) /
+                                3600000
+                              ).toFixed(1)} Jam`
+                            : "-"}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <span
+                            className={`text-[10px] font-bold ${
+                              att.approvalStatus === "APPROVED"
+                                ? "text-emerald-600"
+                                : att.approvalStatus === "REJECTED"
+                                ? "text-rose-600"
+                                : "text-amber-600"
+                            }`}
+                          >
+                            {att.approvalStatus === "APPROVED"
+                              ? "Sah ✓"
+                              : att.approvalStatus === "REJECTED"
+                              ? "Ditolak ✗"
+                              : "Review"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Skor & Evaluasi KPI Bulan Ini (Col 3) */}
+        <div className="lg:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">KPI Kinerja</h3>
+                  <p className="text-[11px] text-slate-500">Bulan Berjalan</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                {now.toLocaleDateString("id-ID", { month: "short" })}
+              </span>
+            </div>
+
+            {currentKpi ? (
+              <div className="space-y-4">
+                {/* Total Score Display */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100/80 text-center">
+                  <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">
+                    Skor Pencapaian
+                  </span>
+                  <div className="text-4xl font-black text-indigo-950 font-mono mt-1">
+                    {currentKpi.totalScore}
+                    <span className="text-base font-medium text-slate-400"> / 100</span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-center gap-1.5">
+                    <span
+                      className={`px-3 py-0.5 rounded-full text-xs font-bold ${
+                        currentKpi.totalScore >= 85
+                          ? "bg-emerald-100 text-emerald-800"
+                          : currentKpi.totalScore >= 70
+                          ? "bg-blue-100 text-blue-800"
+                          : currentKpi.totalScore >= 55
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {currentKpi.totalScore >= 85
+                        ? "Sangat Baik (A)"
+                        : currentKpi.totalScore >= 70
+                        ? "Baik (B)"
+                        : currentKpi.totalScore >= 55
+                        ? "Cukup (C)"
+                        : "Perlu Evaluasi (D)"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI Bonus jika ada */}
+                {currentKpi.kpiBonus > 0 && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
+                    <span className="text-emerald-800 font-semibold flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      Estimasi Bonus KPI
+                    </span>
+                    <span className="font-mono font-bold text-emerald-700 text-sm">
+                      {formatRupiah(currentKpi.kpiBonus)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Catatan Evaluator */}
+                {currentKpi.notes && (
+                  <div className="p-3.5 bg-slate-50 border border-slate-200/70 rounded-xl text-xs">
+                    <span className="font-bold text-slate-700 block mb-1">Catatan Evaluator:</span>
+                    <p className="text-slate-600 italic">"{currentKpi.notes}"</p>
+                  </div>
+                )}
+
+                {/* Rincian Target Button */}
+                {currentKpi.targets && currentKpi.targets.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowKpiDetails(!showKpiDetails)}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                  >
+                    <span>{showKpiDetails ? "Tutup Rincian Target" : "Lihat Rincian Target KPI"}</span>
+                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showKpiDetails ? "rotate-90" : ""}`} />
+                  </button>
+                )}
+
+                {showKpiDetails && currentKpi.targets && (
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    {currentKpi.targets.map((t, idx) => (
+                      <div key={t.id || idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                        <div className="flex justify-between font-bold text-slate-800 mb-0.5">
+                          <span>{t.description}</span>
+                          <span className="font-mono text-indigo-700">{t.score} pt</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500">Bobot: {t.weight}%</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-slate-400 space-y-2">
+                <Award className="w-10 h-10 text-slate-200 mx-auto" />
+                <p className="text-xs font-medium text-slate-600">
+                  Belum Ada Penilaian Bulan Ini
+                </p>
+                <p className="text-[11px] text-slate-400 leading-relaxed px-4">
+                  Penilaian KPI biasanya diinput oleh Manager pada pertengahan atau akhir periode kerja.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 mt-4 text-[11px] text-slate-400 flex items-center justify-between">
+            <span>Sistem KPI Outlet</span>
+            <span className="text-indigo-600 font-semibold">Coffee Management</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

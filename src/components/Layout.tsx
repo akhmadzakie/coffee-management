@@ -95,6 +95,11 @@ export const Layout: React.FC<LayoutProps> = ({
   const allNavigation = [
     // ─── Dashboard Group ─────────────────────────────────────────
     { group: "Dasbor",
+      name: "Dashboard Karyawan",
+      view: "dashboard_employee" as ViewState,
+      icon: LayoutDashboard,
+    },
+    { group: "Dasbor",
       name: "Dashboard Keuangan",
       view: "dashboard_finance" as ViewState,
       icon: LayoutDashboard,
@@ -216,20 +221,23 @@ export const Layout: React.FC<LayoutProps> = ({
       "audit_log",
     ],
     KASIR: [
+      "dashboard_employee",
       "shifts", "leader_checklist",
       "import_sales",
       "attendance_clock"
     ],
     LEADER: [
+      "dashboard_employee",
+      "leader_checklist",
       "dashboard_inventory",
       "inventory",
-      "shifts", "leader_checklist",
+      "shifts",
       "suppliers", "purchases",
       "attendance_clock"
     ],
-    BAR: ["attendance_clock", "leader_checklist"],
-    KITCHEN: ["attendance_clock", "leader_checklist"],
-    BAKER: ["attendance_clock", "leader_checklist"],
+    BAR: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    KITCHEN: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAKER: ["dashboard_employee", "attendance_clock", "leader_checklist"],
   };
 
   const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];
@@ -471,6 +479,7 @@ export const Layout: React.FC<LayoutProps> = ({
           <div className="hidden md:block">
             <h2 className="text-2xl font-bold text-slate-800 capitalize">
               {{
+                dashboard_employee: "Portal Karyawan & Leader",
                 dashboard_finance: "Dashboard Keuangan",
                 dashboard_inventory: "Dashboard Inventori",
                 cash_flow: "Arus Kas",
@@ -487,10 +496,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 settings: "Pengaturan Sistem",
                 hr: "SDM & Karyawan",
                 payroll: "Penggajian (Payroll)",
+                attendance_clock: "Absensi & Clock In",
+                leader_checklist: "Checklist Jobdesk",
               }[currentView] || currentView}
             </h2>
             <p className="text-sm text-slate-500">
               {{
+                dashboard_employee: "Pantau status kehadiran, evaluasi KPI, dan progres tugas operasional Anda.",
                 dashboard_finance: "Ringkasan keuangan dan arus kas bisnis Anda.",
                 dashboard_inventory: "Pantau stok dan pergerakan inventori.",
                 cash_flow: "Kelola pemasukan, pengeluaran, dan posisi kas.",
@@ -507,6 +519,8 @@ export const Layout: React.FC<LayoutProps> = ({
                 settings: "Konfigurasi sistem dan preferensi aplikasi.",
                 hr: "Data karyawan, kontrak, dan absensi.",
                 payroll: "Hitung dan kelola penggajian karyawan.",
+                attendance_clock: "Ambil foto selfie dan rekam lokasi GPS untuk absensi harian.",
+                leader_checklist: "Lakukan evaluasi dan checklist operasional harian divisi.",
               }[currentView] || "Pantau dan kelola operasional bisnis Anda."}
             </p>
           </div>

@@ -64,6 +64,9 @@ const LeaderChecklist = React.lazy(() =>
 const ClockIn = React.lazy(() =>
   import("./components/ClockIn").then((m) => ({ default: m.ClockIn })),
 );
+const EmployeeDashboard = React.lazy(() =>
+  import("./components/EmployeeDashboard").then((m) => ({ default: m.EmployeeDashboard })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -104,15 +107,16 @@ function AppContent() {
     OWNER:       "dashboard_finance",
     MANAGER:     "dashboard_inventory",
     FINANCE:     "dashboard_finance",
-    KASIR:       "shifts",
-    LEADER:      "dashboard_inventory",
-    BAR:         "attendance_clock",
-    KITCHEN:     "attendance_clock",
-    BAKER:       "attendance_clock",
+    KASIR:       "dashboard_employee",
+    LEADER:      "dashboard_employee",
+    BAR:         "dashboard_employee",
+    KITCHEN:     "dashboard_employee",
+    BAKER:       "dashboard_employee",
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
   const ALL_VIEWS: ViewState[] = [
+    "dashboard_employee",
     "dashboard_finance", "dashboard_inventory", "cash_flow",
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
@@ -126,41 +130,39 @@ function AppContent() {
       "dashboard_finance",
       "cash_flow",
       "finance_reports",
-      "settings",
-      "leader_checklist"
     ],
     MANAGER: [
       "dashboard_inventory",
       "inventory", "import_sales",
       "hr", "leader_checklist",
       "shifts", "suppliers", "purchases",
-      "users",   // Manager bisa onboard staff (KASIR, LEADER) — dibatasi di Users.tsx
+      "users",
       "audit_log",
-      "attendance_clock",
-      "settings"
     ],
     FINANCE: [
       "dashboard_finance",
       "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
       "payroll", "purchases",
       "audit_log",
-      "attendance_clock"
     ],
     KASIR: [
+      "dashboard_employee",
       "shifts", "leader_checklist",
       "import_sales",
       "attendance_clock"
     ],
     LEADER: [
+      "dashboard_employee",
+      "leader_checklist",
       "dashboard_inventory",
       "inventory",
-      "shifts", "leader_checklist",
+      "shifts",
       "suppliers", "purchases",
       "attendance_clock"
     ],
-    BAR: ["attendance_clock", "leader_checklist"],
-    KITCHEN: ["attendance_clock", "leader_checklist"],
-    BAKER: ["attendance_clock", "leader_checklist"],
+    BAR: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    KITCHEN: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAKER: ["dashboard_employee", "attendance_clock", "leader_checklist"],
   };
 
   React.useEffect(() => {
@@ -219,6 +221,8 @@ function AppContent() {
         return <Payroll />;
       case "attendance_clock":
         return <ClockIn />;
+      case "dashboard_employee":
+        return <EmployeeDashboard onNavigate={setCurrentView} />;
       default:
         return <Dashboard view="FINANCE" />;
     }
