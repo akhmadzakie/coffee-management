@@ -326,7 +326,7 @@ export const SettingsComponent = () => {
             <button onClick={() => addTask(setManagerTasks)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium">+ Tambah Tugas Manager</button>
           </div>
           
-        </div>
+
 
         <div className="mt-8 flex justify-end items-center space-x-4">
           {saveStatus && (
@@ -342,7 +342,6 @@ export const SettingsComponent = () => {
             {language === "id" ? "Simpan Pengaturan" : "Save Settings"}
           </button>
         </div>
-      </div>
     </div>
   );
 };
