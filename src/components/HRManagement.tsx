@@ -502,7 +502,18 @@ export function HRManagement() {
           (k) =>
             k.employeeId === emp.id && k.quarter === quarter && k.year === year,
         );
-        const kpiBonus = kpi ? kpi.kpiBonus : 0;
+        const targetKpi = contract.kpiBonusTarget || 0;
+        const empChecklists = (dailyChecklists || []).filter(
+          (c) => c.employeeId === emp.id && c.date.startsWith(att.period)
+        );
+        const isLeader = emp.position?.toUpperCase().includes("LEADER") || emp.position?.toUpperCase().includes("HEAD");
+        const kpiBonus = kpi 
+          ? kpi.kpiBonus 
+          : (targetKpi > 0 
+              ? (isLeader 
+                  ? Math.round(targetKpi * Math.min(1, empChecklists.length / Math.max(1, att.presentDays || 25))) 
+                  : targetKpi) 
+              : 0);
 
         const total = basic + meal + position + kpiBonus - alphaDeduction;
 
@@ -520,7 +531,7 @@ export function HRManagement() {
         };
       })
       .filter(Boolean) as any[];
-  }, [attendances, employees, contracts, kpiRecords]);
+  }, [attendances, employees, contracts, kpiRecords, dailyChecklists]);
 
   // ─── TABS ──────────────────────────────────────────────────────────
   const tabs = [

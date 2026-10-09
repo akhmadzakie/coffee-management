@@ -98,17 +98,48 @@ export function Payroll() {
         const totalTransportAllowance = isManagerOrFinance ? (26 * transportAllowanceRate) : (presentDays * transportAllowanceRate);
         const totalDailyBonus = isManagerOrFinance ? (26 * dailyBonusRate) : (presentDays * dailyBonusRate);
         
-        const checklistDays = dailyChecklists.filter((c: any) => c.employeeId === emp.id && c.date.startsWith(period) && c.cleaningDone && c.equipmentChecked).length;
+        // ─── Otomatisasi Perhitungan Bonus KPI Berdasarkan Jobdesk & Disiplin ───
+        const userObj = (users || []).find((u: any) => u.id === emp.id || u.username === emp.username);
+        const isLeader = emp.position?.toUpperCase().includes("LEADER") || 
+                         emp.position?.toUpperCase().includes("HEAD") ||
+                         userObj?.role === "LEADER" || 
+                         dailyChecklists.some((c: any) => c.employeeId === emp.id || c.employeeId === userObj?.id);
+
+        const empChecklists = (dailyChecklists || []).filter(
+          (c: any) => (c.employeeId === emp.id || (userObj && c.employeeId === userObj.id)) && c.date.startsWith(period)
+        );
+        const checklistDays = empChecklists.length;
         const sopBonus = checklistDays >= 20 ? sopBonusRate : 0;
         
         const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage); // Penalty for alpha
         
-        // KPI Bonus Logic
+        const targetKpiBonus = contract?.kpiBonusTarget || 0;
+        const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
+        let calculatedKpiBonus = 0;
+
+        if (targetKpiBonus > 0) {
+          if (isLeader) {
+            // Leader: Dihitung proporsional dari % penyelesaian Daily Jobdesk Checklist
+            const expectedDays = Math.max(1, presentDays || 25);
+            const completionRatio = Math.min(1, checklistDays / expectedDays);
+            calculatedKpiBonus = Math.round(targetKpiBonus * completionRatio);
+          } else {
+            // Staff: Dihitung dari kedisiplinan (Ketepatan Waktu & Kehadiran)
+            const disciplineRatio = Math.max(0, 1 - (lateDays * 0.05) - (alphaDays * 0.10));
+            const scoreMultiplier = kpi ? (kpi.totalScore / 100) : disciplineRatio;
+            calculatedKpiBonus = Math.round(targetKpiBonus * scoreMultiplier);
+          }
+        }
+
+        // KPI Bonus Logic (Tiered Rules / Override jika ada aturan skor spesifik)
         const empKpiTasks = (kpiTasks || []).filter((t: any) => t.employeeId === emp.id && t.period === period);
         const totalKpiScore = empKpiTasks.reduce((sum: number, task: any) => sum + (task.score || 0), 0);
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
         const applicableRule = activeRules.find((r: any) => totalKpiScore >= r.minScore && totalKpiScore <= r.maxScore);
-        const kpiBonus = applicableRule ? applicableRule.bonusAmount : (kpi?.kpiBonus || kpi?.bonusAmount || 0); // fallback to old kpiRecord
+
+        const kpiBonus = applicableRule 
+          ? applicableRule.bonusAmount 
+          : (calculatedKpiBonus > 0 ? calculatedKpiBonus : (kpi?.kpiBonus || kpi?.bonusAmount || 0));
 
         const overtimePay = 0; // Default no overtime
         const otherDeductions = 0;
@@ -140,7 +171,7 @@ export function Payroll() {
           }
         };
       });
-  }, [employees, contracts, attendances, kpiRecords, period, payrollRecords]);
+  }, [employees, contracts, attendances, kpiRecords, period, payrollRecords, dailyAttendances, dailyChecklists, users, kpiTasks, kpiBonusRules]);
 
   const handleGenerateAll = () => {
     if (closedPeriods.some((p: any) => p.period === period)) {
