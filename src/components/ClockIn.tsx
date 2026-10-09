@@ -20,7 +20,7 @@ import { DailyAttendance } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 
 export function ClockIn() {
-  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance } = useStore();
+  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance, employeeShifts } = useStore();
   
   const [activeMode, setActiveMode] = useState<"ATTENDANCE" | "LEAVE">("ATTENDANCE");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -40,6 +40,11 @@ export function ClockIn() {
   const todayStr = getLocalDateString();
   const activeEmployee = employees.find(e => e.username === currentUser?.username);
   const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
+
+  const todayShift = (employeeShifts || []).find(
+    (s: any) => s.employeeId === activeEmployeeId && s.date === todayStr
+  );
+  const scheduledShift = todayShift?.shiftType || "PAGI";
 
   const todayAttendance = dailyAttendances.find(
     (a) => a.employeeId === activeEmployeeId && a.date === todayStr
@@ -149,7 +154,7 @@ export function ClockIn() {
     });
     const locStr = location ? `GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "GPS: Tidak diketahui";
     
-    ctx.fillText(`${activeEmployee?.name || currentUser?.name || "Karyawan"} • ${timeStr}`, 14, canvas.height - 30);
+    ctx.fillText(`${activeEmployee?.name || currentUser?.name || "Karyawan"} • Shift ${scheduledShift} • ${timeStr}`, 14, canvas.height - 30);
     ctx.fillText(`${locStr} • Julia Coffee`, 14, canvas.height - 12);
     
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
@@ -180,8 +185,12 @@ export function ClockIn() {
       if (!isClockedIn) {
         // Clock In
         let status: "HADIR" | "TERLAMBAT" = "HADIR";
-        const hour = new Date().getHours();
-        if (hour >= 9) status = "TERLAMBAT"; // Terlambat lewat jam 9
+        const nowDecimalHour = new Date().getHours() + new Date().getMinutes() / 60;
+        
+        // Toleransi 15 menit dari jam mulai shift
+        if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) status = "TERLAMBAT";
+        else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) status = "TERLAMBAT";
+        else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) status = "TERLAMBAT";
         
         addDailyAttendance({
           employeeId: activeEmployeeId as string,
@@ -195,7 +204,7 @@ export function ClockIn() {
           status,
           notes: notes.trim()
         });
-        setFeedback({ type: "success", message: "Clock In berhasil dicatat! Selamat bertugas." });
+        setFeedback({ type: "success", message: `Clock In berhasil dicatat untuk Shift ${scheduledShift}! Selamat bertugas.` });
       } else if (!isClockedOut && todayAttendance) {
         // Clock Out
         updateDailyAttendance({
@@ -324,6 +333,35 @@ export function ClockIn() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Jadwal Shift Banner */}
+        <div className="bg-gradient-to-r from-slate-50 to-indigo-50/40 p-4 rounded-2xl border border-slate-200/80 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
+              scheduledShift === "PAGI" ? "bg-emerald-100 text-emerald-800" :
+              scheduledShift === "MIDDLE" ? "bg-blue-100 text-blue-800" :
+              scheduledShift === "SORE" ? "bg-amber-100 text-amber-800" :
+              "bg-slate-200 text-slate-700"
+            }`}>
+              {scheduledShift === "PAGI" ? "PGI" : scheduledShift === "MIDDLE" ? "MID" : scheduledShift === "SORE" ? "SRE" : "OFF"}
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Jadwal Shift Anda Hari Ini
+              </p>
+              <p className="text-sm font-bold text-slate-800">
+                {scheduledShift === "PAGI" ? "Shift Pagi (07:00 – 15:00 WIB)" :
+                 scheduledShift === "MIDDLE" ? "Shift Middle (11:00 – 19:00 WIB)" :
+                 scheduledShift === "SORE" ? "Shift Sore (15:00 – 23:00 WIB)" :
+                 "Hari Libur (OFF)"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200/60 self-start sm:self-auto">
+            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Toleransi keterlambatan 15 mnt</span>
+          </div>
         </div>
 
         {/* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */}

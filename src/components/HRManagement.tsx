@@ -80,7 +80,7 @@ export function HRManagement() {
 
   const isIndo = settings.language === "id";
   const [activeTab, setActiveTab] = useState<
-    "overview" | "employees" | "contracts" | "kpi" | "attendance" | "payroll"
+    "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
   >("overview");
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
   const payslipRef = useRef<HTMLDivElement>(null);
@@ -535,12 +535,17 @@ export function HRManagement() {
       label: isIndo ? "Kontrak & Gaji" : "Contracts & Salary",
       icon: FileText,
     },
-    { id: "kpi", label: "KPI", icon: Target },
+    {
+      id: "schedule",
+      label: isIndo ? "Jadwal Shift" : "Shift Schedule",
+      icon: Clock,
+    },
     {
       id: "attendance",
       label: isIndo ? "Absensi" : "Attendance",
       icon: Calendar,
     },
+    { id: "kpi", label: "KPI", icon: Target },
     { id: "payroll", label: "Payroll", icon: DollarSign },
   ];
 
