@@ -476,7 +476,7 @@ export const exportPayrollToPDF = ({
             formatCurrency(p.basicSalary),
             formatCurrency(p.positionAllowance),
             formatCurrency((p.mealAllowance || 0) + (p.transportAllowance || 0)),
-            formatCurrency(p.kpiBonus),
+            formatCurrency(p.kpiBonus + (p.targetBonus || 0)),
             formatCurrency(p.alphaDeduction),
             formatCurrency(p.netPay),
             p.status,
@@ -485,7 +485,7 @@ export const exportPayrollToPDF = ({
       : [["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "Tidak ada data penggajian"]];
 
   const totalBasic = payroll.reduce((s, p) => s + p.basicSalary, 0);
-  const totalKpiBonus = payroll.reduce((s, p) => s + p.kpiBonus, 0);
+  const totalKpiBonus = payroll.reduce((s, p) => s + p.kpiBonus + (p.targetBonus || 0), 0);
   const totalDeductions = payroll.reduce((s, p) => s + p.alphaDeduction + (p.otherDeductions || 0), 0);
   const totalNet = payroll.reduce((s, p) => s + p.netPay, 0);
 
@@ -577,6 +577,7 @@ export const exportPayrollToCSV = ({
       "Uang Makan": p.mealAllowance,
       "Uang Transport": p.transportAllowance || 0,
       "Bonus KPI": p.kpiBonus,
+      "Bonus Target Omzet": p.targetBonus || 0,
       "Lembur / Insentif": p.overtimePay || 0,
       "Potongan Alpha": p.alphaDeduction,
       "Potongan Lain": p.otherDeductions || 0,

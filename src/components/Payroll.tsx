@@ -12,7 +12,10 @@ import {
   AlertCircle,
   Edit2,
   FileText,
-  X
+  X,
+  Target,
+  Award,
+  Sparkles
 } from "lucide-react";
 import { PayslipModal } from "./PayslipModal";
 
@@ -36,7 +39,9 @@ export function Payroll() {
     dailyChecklists,
     kpiTasks,
     kpiBonusRules,
-    closedPeriods
+    closedPeriods,
+    settings,
+    salesTransactions,
   } = (useStore() as any);
 
   const [period, setPeriod] = useState(
@@ -65,6 +70,18 @@ export function Payroll() {
     }
     return filtered;
   }, [payrollRecords, period, searchTerm, employees]);
+
+  // Store Revenue Target & Target Bonus Calculation
+  const periodSales = useMemo(() => {
+    return (salesTransactions || [])
+      .filter((s: any) => s.date && s.date.startsWith(period))
+      .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
+  }, [salesTransactions, period]);
+
+  const monthlyTarget = settings?.monthlyRevenueTarget || 0;
+  const isTargetAchieved = monthlyTarget > 0 && periodSales >= monthlyTarget;
+  const targetBonusPerEmployee = isTargetAchieved ? (settings?.targetBonusAmount || 0) : 0;
+  const achievementRate = monthlyTarget > 0 ? (periodSales / monthlyTarget) * 100 : 0;
 
   // Generate calculations for employees
   const generatedCalculations = useMemo(() => {
@@ -142,10 +159,11 @@ export function Payroll() {
           ? applicableRule.bonusAmount 
           : (calculatedKpiBonus > 0 ? calculatedKpiBonus : (kpi?.kpiBonus || kpi?.bonusAmount || 0));
 
+        const targetBonus = targetBonusPerEmployee;
         const overtimePay = 0; // Default no overtime
         const otherDeductions = 0;
         
-        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + overtimePay;
+        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay;
         const netPay = grossPay - alphaDeduction - otherDeductions;
 
         const existingRecord = (payrollRecords || []).find(
@@ -163,6 +181,7 @@ export function Payroll() {
             positionAllowance,
             transportAllowance: totalTransportAllowance,
             kpiBonus,
+            targetBonus,
             overtimePay,
             alphaDeduction,
             otherDeductions,
@@ -172,7 +191,7 @@ export function Payroll() {
           }
         };
       });
-  }, [employees, contracts, attendances, kpiRecords, period, payrollRecords, dailyAttendances, dailyChecklists, users, kpiTasks, kpiBonusRules]);
+  }, [employees, contracts, attendances, kpiRecords, period, payrollRecords, dailyAttendances, dailyChecklists, users, kpiTasks, kpiBonusRules, targetBonusPerEmployee]);
 
   const handleGenerateAll = () => {
     if (closedPeriods.some((p: any) => p.period === period)) {
@@ -185,6 +204,9 @@ export function Payroll() {
       .map(item => ({
         id: `pay-${Date.now()}-${item.emp.id}`,
         ...item.calculation,
+        notes: isTargetAchieved && targetBonusPerEmployee > 0 
+          ? `Termasuk Bonus Tembus Target Omzet (${formatCurrency(targetBonusPerEmployee)})` 
+          : null,
         createdAt: new Date().toISOString()
       }));
 
@@ -245,7 +267,44 @@ export function Payroll() {
       </div>
 
       {activeTab === "generate" ? (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm space-y-0">
+          {/* Target Omzet Store Status Banner */}
+          {monthlyTarget > 0 && (
+            <div className={`p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+              isTargetAchieved 
+                ? "bg-emerald-50/80 border-emerald-200 text-emerald-950" 
+                : "bg-indigo-50/70 border-indigo-200 text-indigo-950"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`p-2 rounded-xl text-white shadow-xs ${isTargetAchieved ? "bg-emerald-600" : "bg-indigo-600"}`}>
+                  <Target className="w-4 h-4" />
+                </span>
+                <div>
+                  <div className="font-bold flex items-center gap-2">
+                    Target Omzet Toko ({period}): 
+                    <span className="font-mono">{formatCurrency(periodSales)}</span> / <span className="font-mono">{formatCurrency(monthlyTarget)}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      isTargetAchieved ? "bg-emerald-200 text-emerald-900" : "bg-indigo-200 text-indigo-900"
+                    }`}>
+                      {achievementRate.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {isTargetAchieved 
+                      ? `🎉 TEMBUS TARGET! Seluruh staf otomatis menerima bonus omzet +${formatCurrency(targetBonusPerEmployee)}.` 
+                      : `Belum tembus target. Kurang ${formatCurrency(Math.max(0, monthlyTarget - periodSales))} lagi untuk mencairkan bonus omzet.`}
+                  </p>
+                </div>
+              </div>
+
+              {isTargetAchieved && targetBonusPerEmployee > 0 && (
+                <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-300 shadow-xs font-mono text-emerald-800 font-bold shrink-0">
+                  +{formatCurrency(targetBonusPerEmployee)} / Staf
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
             <h2 className="font-semibold text-slate-800">Preview Kalkulasi Gaji ({period})</h2>
             <button 
@@ -262,7 +321,7 @@ export function Payroll() {
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Total (Harian)</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Tunjangan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI & Target</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Potongan Alpha</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
@@ -274,7 +333,14 @@ export function Payroll() {
                     <td className="p-4 font-medium text-slate-800">{emp.name}</td>
                     <td className="p-4 text-right">{formatCurrency(calculation.basicSalary)}</td>
                     <td className="p-4 text-right">{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</td>
-                    <td className="p-4 text-right text-emerald-600">+{formatCurrency(calculation.kpiBonus)}</td>
+                    <td className="p-4 text-right text-emerald-600">
+                      <div>+{formatCurrency(calculation.kpiBonus)}</div>
+                      {(calculation.targetBonus || 0) > 0 && (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          🎯 +{formatCurrency(calculation.targetBonus)} (Omzet)
+                        </span>
+                      )}
+                    </td>
                     <td className="p-4 text-right text-rose-600">-{formatCurrency(calculation.alphaDeduction)}</td>
                     <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(calculation.netPay)}</td>
                     <td className="p-4">

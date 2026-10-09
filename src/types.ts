@@ -91,6 +91,7 @@ export interface PayrollRecord {
   mealAllowance: number;
   positionAllowance: number;
   kpiBonus: number;
+  targetBonus?: number; // Bonus tembus target omzet toko
   transportAllowance: number;
   overtimePay: number; // Lembur / Tambahan Manual
   alphaDeduction: number;
@@ -303,6 +304,7 @@ export interface Settings {
   managerTasks?: any;
   geminiApiKey?: string;
   monthlyRevenueTarget?: number;
+  targetBonusAmount?: number; // Bonus per karyawan jika omzet tembus target
   scheduleApprovals?: Record<string, { status: "DRAFT" | "APPROVED"; approvedBy?: string; approvedAt?: string }>;
 }
 

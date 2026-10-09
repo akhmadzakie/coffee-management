@@ -535,6 +535,7 @@ export const exportPayrollToXlsx = ({
       "Uang Makan (Rp)": p.mealAllowance,
       "Transport (Rp)": p.transportAllowance || 0,
       "Bonus KPI (Rp)": p.kpiBonus,
+      "Bonus Target (Rp)": p.targetBonus || 0,
       "Lembur (Rp)": p.overtimePay || 0,
       "Potongan Alpha (Rp)": p.alphaDeduction,
       "Potongan Lain (Rp)": p.otherDeductions || 0,

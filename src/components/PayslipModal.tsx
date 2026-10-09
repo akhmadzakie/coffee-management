@@ -12,6 +12,8 @@ import {
   Sparkles,
   AlertCircle,
   Building,
+  Target,
+  Award,
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
@@ -430,6 +432,23 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                       </div>
                       <span className="font-mono font-bold text-emerald-700 self-center">
                         +{formatCurrency(payroll.kpiBonus)}
+                      </span>
+                    </div>
+                  )}
+
+                  {(payroll.targetBonus || 0) > 0 && (
+                    <div className="flex justify-between py-1.5 bg-amber-50/70 px-2 rounded-lg border border-amber-100">
+                      <div>
+                        <span className="font-bold text-amber-800 flex items-center gap-1">
+                          <Target className="w-3.5 h-3.5 text-amber-600" />
+                          Bonus Tembus Target Omzet Kedai
+                        </span>
+                        <span className="text-[10px] text-amber-600 font-medium block">
+                          Insentif pencapaian omzet penjualan toko
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-amber-700 self-center">
+                        +{formatCurrency(payroll.targetBonus || 0)}
                       </span>
                     </div>
                   )}
