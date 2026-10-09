@@ -81,7 +81,16 @@ export const Layout: React.FC<LayoutProps> = ({
     setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
   };
 
-  const { settings, isSyncing, lastSyncTime, syncData, currentUser, logout } = useStore();
+  const {
+    settings,
+    isSyncing,
+    lastSyncTime,
+    syncData,
+    currentUser,
+    logout,
+    cashAccounts,
+    addCashTransaction,
+  } = useStore();
   const { t } = useTranslation(settings.language || "id");
 
   // Realtime clock ticker
@@ -307,7 +316,7 @@ export const Layout: React.FC<LayoutProps> = ({
   );
   const canAccessAIAssistant = Boolean(
     currentUser &&
-      ["FINANCE", "MANAGER", "SUPER_ADMIN"].includes(currentUser.role)
+      ["FINANCE", "MANAGER", "SUPER_ADMIN", "OWNER"].includes(currentUser.role)
   );
 
   const getRoleTheme = (role?: string) => {
@@ -343,7 +352,21 @@ export const Layout: React.FC<LayoutProps> = ({
         isOpen={isAIAssistantOpen && canAccessAIAssistant}
         onClose={() => setIsAIAssistantOpen(false)}
         onApplyTransactions={(txs) => {
-          alert(`Transaksi dari AI akan ditambahkan:\n` + JSON.stringify(txs, null, 2));
+          if (Array.isArray(txs) && txs.length > 0) {
+            const defaultAccountId = cashAccounts?.[0]?.id || "acc-main";
+            txs.forEach((tx) => {
+              addCashTransaction({
+                accountId: defaultAccountId,
+                type: tx.type === "CASH_IN" ? "IN" : "OUT",
+                amount: Number(tx.amount || 0),
+                category: tx.category || "Operasional",
+                description: tx.description || "Draft AI",
+                date: new Date().toISOString(),
+                createdBy: currentUser?.name || "AI Assistant",
+              });
+            });
+            alert(`Berhasil menyimpan ${txs.length} transaksi dari AI ke Buku Kas!`);
+          }
         }}
       />
 
@@ -465,15 +488,15 @@ export const Layout: React.FC<LayoutProps> = ({
                           <button
                             key={item.view}
                             onClick={() => onViewChange(item.view)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all ${
                               isActive
-                                ? "bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent text-amber-300 border-l-3 border-amber-500 shadow-xs"
-                                : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                                ? "bg-white/[0.08] text-white font-medium border-l-2 border-amber-400"
+                                : "text-stone-400 hover:bg-white/[0.03] hover:text-stone-200"
                             }`}
                           >
                             <Icon
                               className={`w-4 h-4 shrink-0 transition-transform ${
-                                isActive ? "text-amber-400 scale-110" : "text-slate-500"
+                                isActive ? "text-amber-400" : "text-stone-500"
                               }`}
                             />
                             <span className="truncate">{item.name}</span>
@@ -577,41 +600,39 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* Breadcrumb Title */}
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-black text-white tracking-tight truncate">
-                  {{
-                    dashboard_owner: "Dashboard Eksekutif Owner",
-                    dashboard_employee: "Portal Karyawan & Tim",
-                    dashboard_manager: "Dashboard Operasional Manajer",
-                    dashboard_finance: "Dashboard Keuangan",
-                    dashboard_inventory: "Dashboard Inventori",
-                    cash_flow: "Buku Kas & Arus Kas",
-                    expense_categories: "Kategori Pengeluaran",
-                    finance_reports: "Laporan Keuangan & Laba Rugi",
-                    bank_reconciliation: "Rekonsiliasi Bank",
-                    inventory: "Inventori & Resep",
-                    import_sales: "Penjualan & Kasir POS",
-                    users: "Manajemen Pengguna",
-                    audit_log: "Audit Log & Keamanan",
-                    shifts: "Manajemen Shift & Kasir",
-                    suppliers: "Supplier & Pemasok",
-                    purchases: "Pembelian Bahan Baku (PO)",
-                    settings: "Pengaturan Sistem",
-                    hr: "SDM, Jadwal & Kontrak",
-                    payroll: "Penggajian (Payroll)",
-                    attendance_clock: "Presensi & Clock In",
-                    leader_checklist: "Checklist Jobdesk Harian",
-                  }[currentView] || currentView}
-                </h2>
-              </div>
+              <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                {{
+                  dashboard_owner: "Dashboard Eksekutif Owner",
+                  dashboard_employee: "Portal Karyawan & Tim",
+                  dashboard_manager: "Dashboard Operasional Manajer",
+                  dashboard_finance: "Dashboard Keuangan",
+                  dashboard_inventory: "Dashboard Inventori",
+                  cash_flow: "Buku Kas & Arus Kas",
+                  expense_categories: "Kategori Pengeluaran",
+                  finance_reports: "Laporan Keuangan & Laba Rugi",
+                  bank_reconciliation: "Rekonsiliasi Bank",
+                  inventory: "Inventori & Resep",
+                  import_sales: "Penjualan & Kasir POS",
+                  users: "Manajemen Pengguna",
+                  audit_log: "Audit Log & Keamanan",
+                  shifts: "Manajemen Shift & Kasir",
+                  suppliers: "Supplier & Pemasok",
+                  purchases: "Pembelian Bahan Baku (PO)",
+                  settings: "Pengaturan Sistem",
+                  hr: "SDM, Jadwal & Kontrak",
+                  payroll: "Penggajian (Payroll)",
+                  attendance_clock: "Presensi & Clock In",
+                  leader_checklist: "Checklist Jobdesk Harian",
+                }[currentView] || currentView}
+              </h2>
             </div>
           </div>
 
           {/* Right Header: AI, Export, Clock, Profile Capsule */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Live Clock Pill (Desktop) */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-mono text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs font-mono text-stone-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>
                 {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
@@ -621,11 +642,11 @@ export const Layout: React.FC<LayoutProps> = ({
             {canAccessAIAssistant && (
               <button
                 onClick={() => setIsAIAssistantOpen(true)}
-                title="Magic AI Assistant (Catat dari Nota/Teks)"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 transition-all shadow-sm shadow-amber-500/20 cursor-pointer"
+                title="Julia Coffee AI Copilot & Business Consultant"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 transition-all shadow-xs"
               >
-                <Sparkles className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span className="hidden sm:inline">AI Asisten</span>
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">AI Copilot</span>
               </button>
             )}
 
@@ -648,9 +669,9 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsExportModalOpen(true);
                 }}
                 title="Pusat Ekspor Multi-Format"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 transition-all cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.07] text-stone-300 transition-all shadow-xs"
               >
-                <Download className="w-3.5 h-3.5 text-amber-400" />
+                <Download className="w-3.5 h-3.5 text-stone-400" />
                 <span className="hidden sm:inline">Ekspor & Laporan</span>
               </button>
             )}
@@ -659,10 +680,10 @@ export const Layout: React.FC<LayoutProps> = ({
             <button
               onClick={() => syncData()}
               title="Sinkronisasi Cloud DB"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 isSyncing
                   ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
-                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  : "bg-white/[0.03] border-white/[0.06] text-stone-400 hover:text-white"
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-400" : ""}`} />
@@ -673,51 +694,51 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all cursor-pointer shadow-xs"
+                className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-2xl bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.06] transition-all"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-amber-500 text-stone-950 flex items-center justify-center font-black text-xs">
                   {currentUser?.name?.charAt(0).toUpperCase() || "U"}
                 </div>
                 <div className="hidden sm:flex flex-col items-start text-left">
-                  <span className="text-xs font-bold text-white line-clamp-1 leading-tight">
+                  <span className="text-xs font-semibold text-white line-clamp-1 leading-tight">
                     {currentUser?.name}
                   </span>
-                  <span className="text-[10px] text-amber-400 font-semibold leading-tight">
-                    {roleTheme.icon} {roleTheme.label}
+                  <span className="text-[10px] text-stone-400 font-medium leading-tight">
+                    {roleTheme.label}
                   </span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
+                  className={`w-3.5 h-3.5 text-stone-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
               {/* Dropdown Floating Menu */}
               {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-[#0B0F17] rounded-2xl shadow-2xl border border-slate-800/90 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl">
+                <div className="absolute right-0 mt-2 w-64 bg-[#0E1017] rounded-2xl shadow-2xl border border-white/[0.08] py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl">
                   {/* Operator Info */}
-                  <div className="px-4 py-3 border-b border-slate-800/80">
+                  <div className="px-4 py-3 border-b border-white/[0.06]">
                     <p className="text-xs font-bold text-white truncate">
                       {currentUser?.name}
                     </p>
-                    <p className="text-[11px] text-slate-400 truncate">
+                    <p className="text-[11px] text-stone-400 truncate">
                       @{currentUser?.username}
                     </p>
                     <div className="mt-2">
-                      <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${roleTheme.bg}`}>
+                      <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border ${roleTheme.bg}`}>
                         {roleTheme.icon} Peran: {currentUser?.role}
                       </span>
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="p-1 space-y-0.5">
+                  <div className="p-1.5 space-y-0.5">
                     {/* Fast Switch Account */}
                     <button
                       onClick={() => {
                         setIsUserDropdownOpen(false);
                         setIsSwitchAccountOpen(true);
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/10 rounded-xl transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/10 rounded-xl transition-colors"
                     >
                       <KeyRound className="w-4 h-4 text-amber-400" />
                       <span>Ganti Akun Operator (Switch)</span>
@@ -730,22 +751,24 @@ export const Layout: React.FC<LayoutProps> = ({
                           setExportModalModule("executive");
                           setIsExportModalOpen(true);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800/70 rounded-xl transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-stone-300 hover:bg-white/[0.04] rounded-xl transition-colors"
                       >
-                        <FileSpreadsheet className="w-4 h-4 text-slate-400" />
+                        <FileSpreadsheet className="w-4 h-4 text-stone-400" />
                         <span>Pusat Ekspor & Laporan</span>
                       </button>
                     )}
+
+                    <div className="my-1 border-t border-white/[0.06]" />
 
                     <button
                       onClick={() => {
                         setIsUserDropdownOpen(false);
                         logout();
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/15 rounded-xl transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
                     >
-                      <LogOut className="w-4 h-4" />
-                      <span>Keluar / Logout</span>
+                      <LogOut className="w-4 h-4 text-rose-400" />
+                      <span>Keluar (Logout)</span>
                     </button>
                   </div>
                 </div>
