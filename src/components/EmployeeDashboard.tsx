@@ -45,6 +45,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     dailyChecklists,
     settings,
     users,
+    contracts,
   } = useStore();
 
   const [showKpiDetails, setShowKpiDetails] = useState(false);
@@ -193,6 +194,69 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
         };
       });
   }, [isLeader, employees, leaderDivision, dailyAttendances, todayStr]);
+
+  // 8. Active Contract & Target KPI Bonus
+  const activeContract = useMemo(() => {
+    return (
+      (contracts || []).find(
+        (c) => c.employeeId === activeEmployeeId && c.status === "ACTIVE"
+      ) ||
+      (contracts || []).find((c) => c.employeeId === activeEmployeeId) ||
+      null
+    );
+  }, [contracts, activeEmployeeId]);
+
+  const targetKpiBonus = activeContract?.kpiBonusTarget || 0;
+
+  // 9. Live Realtime Performance & Estimated KPI
+  const livePerformance = useMemo(() => {
+    const presentDays = monthlyStats.present;
+    const lateDays = monthlyStats.late;
+    const alphaDays = monthlyStats.alpha;
+    const expectedDays = Math.max(1, presentDays || 25);
+
+    if (isLeader) {
+      // Leader: Dihitung dari penyelesaian daily checklist jobdesk tim/divisinya bulan ini
+      const empChecklists = (dailyChecklists || []).filter(
+        (c) =>
+          (c.employeeId === activeEmployeeId ||
+            c.notes?.includes(`[${leaderDivision}]`)) &&
+          c.date.startsWith(currentMonthStr)
+      );
+      const checklistDays = empChecklists.length;
+      const ratio = Math.min(1, checklistDays / expectedDays);
+      const score = Math.round(ratio * 100);
+      const estimatedBonus = targetKpiBonus > 0 ? Math.round(targetKpiBonus * ratio) : 0;
+
+      return {
+        score,
+        ratio,
+        targetBonus: targetKpiBonus,
+        estimatedBonus,
+        metricTitle: "Capaian Jobdesk Divisi",
+        metricSubtitle: `${checklistDays} dari ${expectedDays} hari kerja terisi`,
+        isLeader: true,
+      };
+    } else {
+      // Staff: Dihitung dari kedisiplinan kehadiran & ketepatan waktu
+      let score = 100;
+      score -= lateDays * 5;
+      score -= alphaDays * 15;
+      const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+      const ratio = finalScore / 100;
+      const estimatedBonus = targetKpiBonus > 0 ? Math.round(targetKpiBonus * ratio) : 0;
+
+      return {
+        score: finalScore,
+        ratio,
+        targetBonus: targetKpiBonus,
+        estimatedBonus,
+        metricTitle: "Kedisiplinan & Ketepatan Waktu",
+        metricSubtitle: `${presentDays} Hadir (${lateDays} Terlambat, ${alphaDays} Alpha)`,
+        isLeader: false,
+      };
+    }
+  }, [monthlyStats, isLeader, dailyChecklists, activeEmployeeId, leaderDivision, currentMonthStr, targetKpiBonus]);
 
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
@@ -688,11 +752,16 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
             {currentKpi ? (
               <div className="space-y-4">
-                {/* Total Score Display */}
+                {/* Total Score Display (Official) */}
                 <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100/80 text-center">
-                  <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">
-                    Skor Pencapaian
-                  </span>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
+                      Skor Resmi Manager
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      Disahkan ✓
+                    </span>
+                  </div>
                   <div className="text-4xl font-black text-indigo-950 font-mono mt-1">
                     {currentKpi.totalScore}
                     <span className="text-base font-medium text-slate-400"> / 100</span>
@@ -726,7 +795,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
                     <span className="text-emerald-800 font-semibold flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-emerald-600" />
-                      Estimasi Bonus KPI
+                      Bonus KPI Cair
                     </span>
                     <span className="font-mono font-bold text-emerald-700 text-sm">
                       {formatRupiah(currentKpi.kpiBonus)}
@@ -769,13 +838,88 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 )}
               </div>
             ) : (
-              <div className="py-8 text-center text-slate-400 space-y-2">
-                <Award className="w-10 h-10 text-slate-200 mx-auto" />
-                <p className="text-xs font-medium text-slate-600">
-                  Belum Ada Penilaian Bulan Ini
-                </p>
-                <p className="text-[11px] text-slate-400 leading-relaxed px-4">
-                  Penilaian KPI biasanya diinput oleh Manager pada pertengahan atau akhir periode kerja.
+              <div className="space-y-4">
+                {/* Live Realtime Tracking Display */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-blue-50/40 to-slate-50 border border-indigo-100/90 text-center">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
+                      Estimasi Berjalan
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                      Live Tracking
+                    </span>
+                  </div>
+                  <div className="text-4xl font-black text-indigo-950 font-mono mt-1">
+                    {livePerformance.score}
+                    <span className="text-base font-medium text-slate-400"> / 100</span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-center gap-1.5">
+                    <span
+                      className={`px-3 py-0.5 rounded-full text-xs font-bold ${
+                        livePerformance.score >= 85
+                          ? "bg-emerald-100 text-emerald-800"
+                          : livePerformance.score >= 70
+                          ? "bg-blue-100 text-blue-800"
+                          : livePerformance.score >= 55
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {livePerformance.score >= 85
+                        ? "Sangat Baik (A)"
+                        : livePerformance.score >= 70
+                        ? "Baik (B)"
+                        : livePerformance.score >= 55
+                        ? "Cukup (C)"
+                        : "Perlu Ditingkatkan (D)"}
+                    </span>
+                  </div>
+
+                  {/* Progress Metric bar */}
+                  <div className="mt-3.5 pt-3 border-t border-indigo-100/60 text-left">
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
+                      <span className="font-semibold text-slate-700">{livePerformance.metricTitle}</span>
+                      <span className="font-bold text-indigo-600">{livePerformance.score}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden mb-1">
+                      <div
+                        className="h-full rounded-full bg-indigo-600 transition-all duration-500"
+                        style={{ width: `${livePerformance.score}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400">{livePerformance.metricSubtitle}</p>
+                  </div>
+                </div>
+
+                {/* Target & Estimasi Bonus KPI */}
+                {livePerformance.targetBonus > 0 ? (
+                  <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-medium">Target Bonus Kontrak:</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {formatRupiah(livePerformance.targetBonus)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-emerald-200/60">
+                      <span className="text-emerald-800 font-bold flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        Estimasi Bonus Saat Ini:
+                      </span>
+                      <span className="font-mono font-black text-emerald-700 text-sm">
+                        {formatRupiah(livePerformance.estimatedBonus)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] text-slate-500 flex items-center gap-2">
+                    <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>Target bonus KPI belum diset di kontrak kerja karyawan.</span>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-400 leading-relaxed px-1 italic">
+                  💡 Nilai di atas adalah estimasi otomatis berdasarkan capaian {livePerformance.isLeader ? "jobdesk harian divisi" : "kehadiran & disiplin"} Anda bulan ini sebelum disahkan oleh Manager.
                 </p>
               </div>
             )}

@@ -303,6 +303,7 @@ export interface Settings {
   managerTasks?: any;
   geminiApiKey?: string;
   monthlyRevenueTarget?: number;
+  scheduleApprovals?: Record<string, { status: "DRAFT" | "APPROVED"; approvedBy?: string; approvedAt?: string }>;
 }
 
 export interface CashAccount {

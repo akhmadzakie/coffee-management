@@ -170,7 +170,7 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     // ─── HR Group ────────────────────────────────────────────────
     { group: "SDM",
-      name: "SDM & HRD",
+      name: currentUser?.role === "LEADER" ? "Jadwal Shift Tim" : "SDM & HRD",
       view: "hr" as ViewState,
       icon: UserCheck,
     },
@@ -245,6 +245,7 @@ export const Layout: React.FC<LayoutProps> = ({
     ],
     LEADER: [
       "dashboard_employee",
+      "hr",
       "leader_checklist",
       "dashboard_inventory",
       "inventory",

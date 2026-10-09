@@ -25,6 +25,9 @@ import {
   Eye,
   ShieldCheck,
   Clock,
+  CheckCircle2,
+  RotateCcw,
+  Filter,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -53,6 +56,7 @@ export function HRManagement() {
     currentUser,
     users,
     settings,
+    updateSettings,
     isReadOnly,
     employees,
     contracts,
@@ -79,9 +83,16 @@ export function HRManagement() {
   } = useStore();
 
   const isIndo = settings.language === "id";
+  const isLeader = currentUser?.role === "LEADER";
+  const leaderDivision = currentUser?.department || 
+    (currentUser?.role === "KITCHEN" ? "KITCHEN" : 
+     currentUser?.role === "BAKER" ? "BAKER" : "BAR");
+  const [scheduleDivisionFilter, setScheduleDivisionFilter] = useState<string>(
+    currentUser?.role === "LEADER" ? (currentUser?.department || "BAR") : "ALL"
+  );
   const [activeTab, setActiveTab] = useState<
     "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
-  >("overview");
+  >(currentUser?.role === "LEADER" ? "schedule" : "overview");
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
   const payslipRef = useRef<HTMLDivElement>(null);
 
@@ -428,6 +439,131 @@ export function HRManagement() {
     return days;
   };
   const weekDays = generateWeekDays(currentWeekStart);
+  const weekKey = weekDays[0].toISOString().split("T")[0];
+  const currentWeekApproval = (settings?.scheduleApprovals as any)?.[weekKey] || { status: "DRAFT" };
+  const isWeekApproved = currentWeekApproval.status === "APPROVED";
+
+  const handleToggleWeekApproval = () => {
+    if (!isHRD || isReadOnly) return;
+    const newStatus = isWeekApproved ? "DRAFT" : "APPROVED";
+    const newApprovals = {
+      ...((settings?.scheduleApprovals as any) || {}),
+      [weekKey]: {
+        status: newStatus,
+        approvedBy: currentUser?.name || "Manager",
+        approvedAt: new Date().toISOString(),
+      }
+    };
+    updateSettings({
+      ...settings,
+      scheduleApprovals: newApprovals,
+    });
+  };
+
+  const canEditShiftForEmployee = (emp: any) => {
+    if (isReadOnly) return false;
+    if (isHRD) return true; // Manager, Owner, Super Admin can always edit
+    if (isLeader) {
+      if (isWeekApproved) return false; // Locked once approved!
+      const empDiv = emp.department || (emp.position?.toUpperCase().includes("KITCHEN") ? "KITCHEN" : emp.position?.toUpperCase().includes("BAKER") ? "BAKER" : "BAR");
+      return !leaderDivision || empDiv === leaderDivision;
+    }
+    return false;
+  };
+
+  const filteredScheduleEmployees = useMemo(() => {
+    let list = employees.filter(e => e.status === "AKTIF");
+    if (isLeader && leaderDivision) {
+      list = list.filter(e => e.department === leaderDivision || (!e.department && leaderDivision === "BAR"));
+    } else if (scheduleDivisionFilter !== "ALL") {
+      list = list.filter(e => e.department === scheduleDivisionFilter || (!e.department && scheduleDivisionFilter === "MAIN"));
+    }
+    return list;
+  }, [employees, isLeader, leaderDivision, scheduleDivisionFilter]);
+
+  // Smart Collision Detection
+  const scheduleCollisions = useMemo(() => {
+    const warnings: { id: string; type: "clopen" | "understaffed" | "overwork"; message: string; severity: "high" | "medium" }[] = [];
+    
+    // 1. Clopen Check (Shift Sore jam 15-23 lalu besoknya Shift Pagi jam 07-15)
+    const activeEmps = isLeader && leaderDivision 
+      ? employees.filter(e => e.status === "AKTIF" && (e.department === leaderDivision || (!e.department && leaderDivision === "BAR")))
+      : employees.filter(e => e.status === "AKTIF");
+
+    activeEmps.forEach(emp => {
+      for (let i = 0; i < 6; i++) {
+        const dayA = weekDays[i].toISOString().split("T")[0];
+        const dayB = weekDays[i + 1].toISOString().split("T")[0];
+        const shiftA = employeeShifts.find(s => s.employeeId === emp.id && s.date === dayA)?.shiftType;
+        const shiftB = employeeShifts.find(s => s.employeeId === emp.id && s.date === dayB)?.shiftType;
+        
+        if (shiftA === "SORE" && shiftB === "PAGI") {
+          const dayNameA = weekDays[i].toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
+          const dayNameB = weekDays[i + 1].toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
+          warnings.push({
+            id: `clopen-${emp.id}-${dayA}`,
+            type: "clopen",
+            severity: "high",
+            message: `Jeda Istirahat Kurang: ${emp.name} (${emp.department || emp.position}) Shift Sore pada ${dayNameA} lalu Shift Pagi pada ${dayNameB} (hanya jeda 8 jam).`
+          });
+        }
+      }
+      
+      // 2. Overwork Check (7 hari berturut-turut tanpa libur OFF)
+      const shiftsThisWeek = weekDays.map(d => {
+        const dStr = d.toISOString().split("T")[0];
+        return employeeShifts.find(s => s.employeeId === emp.id && s.date === dStr)?.shiftType || "OFF";
+      });
+      const workedDaysCount = shiftsThisWeek.filter(s => s !== "OFF").length;
+      if (workedDaysCount === 7) {
+        warnings.push({
+          id: `overwork-${emp.id}`,
+          type: "overwork",
+          severity: "medium",
+          message: `Tanpa Libur: ${emp.name} dijadwalkan masuk 7 hari berturut-turut tanpa hari OFF.`
+        });
+      }
+    });
+
+    // 3. Understaffed Check (Shift kosong di divisi yang ada stafnya)
+    const divisionsToCheck = isLeader && leaderDivision ? [leaderDivision] : ["BAR", "KITCHEN", "BAKER", "MAIN"];
+    weekDays.forEach((d) => {
+      const dStr = d.toISOString().split("T")[0];
+      const dayName = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
+      
+      divisionsToCheck.forEach(div => {
+        const divEmps = employees.filter(e => e.status === "AKTIF" && (e.department === div || (!e.department && div === "MAIN")));
+        if (divEmps.length >= 2) {
+          const morningCount = divEmps.filter(e => {
+            const s = employeeShifts.find(sh => sh.employeeId === e.id && sh.date === dStr)?.shiftType;
+            return s === "PAGI";
+          }).length;
+          const afternoonCount = divEmps.filter(e => {
+            const s = employeeShifts.find(sh => sh.employeeId === e.id && sh.date === dStr)?.shiftType;
+            return s === "SORE";
+          }).length;
+          
+          if (morningCount === 0 && afternoonCount > 0) {
+            warnings.push({
+              id: `understaffed-pagi-${div}-${dStr}`,
+              type: "understaffed",
+              severity: "medium",
+              message: `Shift Pagi Kosong: Divisi ${div} tidak memiliki staf bertugas di Shift Pagi pada ${dayName}.`
+            });
+          } else if (afternoonCount === 0 && morningCount > 0) {
+            warnings.push({
+              id: `understaffed-sore-${div}-${dStr}`,
+              type: "understaffed",
+              severity: "medium",
+              message: `Shift Sore Kosong: Divisi ${div} tidak memiliki staf bertugas di Shift Sore pada ${dayName}.`
+            });
+          }
+        }
+      });
+    });
+
+    return warnings;
+  }, [employees, employeeShifts, weekDays, isLeader, leaderDivision]);
 
   const handleShiftChange = (empId: string, dateStr: string, shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF") => {
     const existing = employeeShifts.find(s => s.employeeId === empId && s.date === dateStr);
@@ -534,7 +670,13 @@ export function HRManagement() {
   }, [attendances, employees, contracts, kpiRecords, dailyChecklists]);
 
   // ─── TABS ──────────────────────────────────────────────────────────
-  const tabs = [
+  const tabs = isLeader ? [
+    {
+      id: "schedule",
+      label: isIndo ? "Jadwal Shift Tim" : "Team Schedule",
+      icon: Clock,
+    }
+  ] : [
     { id: "overview", label: isIndo ? "Overview" : "Overview", icon: Target },
     {
       id: "employees",
@@ -1049,84 +1191,244 @@ export function HRManagement() {
 
           
           {activeTab === "schedule" && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo ? "Jadwal Shift Karyawan" : "Employee Shift Schedule"}
-                </h3>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => {
-                      const prev = new Date(currentWeekStart);
-                      prev.setDate(prev.getDate() - 7);
-                      setCurrentWeekStart(prev);
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
-                  >
-                    &laquo; Prev Week
-                  </button>
-                  <span className="font-semibold text-slate-700">
-                    {weekDays[0].toLocaleDateString("id-ID", { month: "short", day: "numeric" })} - {weekDays[6].toLocaleDateString("id-ID", { month: "short", day: "numeric" })}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const next = new Date(currentWeekStart);
-                      next.setDate(next.getDate() + 7);
-                      setCurrentWeekStart(next);
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200"
-                  >
-                    Next Week &raquo;
-                  </button>
+            <div className="space-y-6">
+              {/* Header: Title, Week Navigator, Division Filter, & Status/Approval */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-xl font-bold text-slate-800">
+                      {isLeader ? (isIndo ? `Jadwal Shift Tim ${leaderDivision || ""}` : `Team Shift Schedule`) : (isIndo ? "Jadwal Shift & Evaluasi" : "Shift Schedule & Review")}
+                    </h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      isWeekApproved 
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}>
+                      {isWeekApproved ? "● APPROVED (Disetujui Manajer)" : "● DRAFT (Penyusunan Leader)"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {isLeader 
+                      ? "Susun giliran shift tim Anda. Pastikan tidak ada jam shift kosong sebelum disetujui Manajer."
+                      : "Tinjau jadwal yang disusun Leader divisi. Periksa deteksi bentrok sebelum menyetujui jadwal."}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+                  {/* Week Navigator */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                    <button
+                      onClick={() => {
+                        const prev = new Date(currentWeekStart);
+                        prev.setDate(prev.getDate() - 7);
+                        setCurrentWeekStart(prev);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg hover:bg-white text-slate-700 transition-colors"
+                    >
+                      &laquo; Minggu Lalu
+                    </button>
+                    <span className="px-3 py-1 font-bold text-slate-800">
+                      {weekDays[0].toLocaleDateString("id-ID", { month: "short", day: "numeric" })} - {weekDays[6].toLocaleDateString("id-ID", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const next = new Date(currentWeekStart);
+                        next.setDate(next.getDate() + 7);
+                        setCurrentWeekStart(next);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg hover:bg-white text-slate-700 transition-colors"
+                    >
+                      Minggu Depan &raquo;
+                    </button>
+                  </div>
+
+                  {/* Manager Approval Button */}
+                  {isHRD && (
+                    <button
+                      onClick={handleToggleWeekApproval}
+                      disabled={isReadOnly}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
+                        isWeekApproved
+                          ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                    >
+                      {isWeekApproved ? (
+                        <>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Buka Kunci (Revisi Draft)</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Setujui Jadwal (Approve)</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
-                <table className="w-full text-left border-collapse min-w-[800px]">
+              {/* Division Filter Tabs for Manager */}
+              {!isLeader && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+                    <Filter className="w-3.5 h-3.5" /> Divisi:
+                  </span>
+                  {[
+                    { id: "ALL", label: "Semua Divisi" },
+                    { id: "BAR", label: "☕ Bar" },
+                    { id: "KITCHEN", label: "🍳 Kitchen" },
+                    { id: "BAKER", label: "🥐 Baker" },
+                    { id: "MAIN", label: "🛎️ Utama & Kasir" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setScheduleDivisionFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        scheduleDivisionFilter === tab.id
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* ─── SMART COLLISION DETECTION PANEL ─── */}
+              {scheduleCollisions.length > 0 ? (
+                <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 text-xs">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold mb-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Perhatian Evaluasi Jadwal: Terdeteksi {scheduleCollisions.length} Potensi Bentrok / Jam Kosong</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {scheduleCollisions.map((col) => (
+                      <div
+                        key={col.id}
+                        className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                          col.severity === "high"
+                            ? "bg-rose-50/80 border-rose-200 text-rose-900"
+                            : "bg-amber-50 border-amber-200 text-amber-900"
+                        }`}
+                      >
+                        <span className="shrink-0 mt-0.5">
+                          {col.type === "clopen" ? "⏱️" : col.type === "understaffed" ? "👥" : "🛌"}
+                        </span>
+                        <div className="leading-relaxed">
+                          <p className="font-semibold">{col.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 text-xs text-emerald-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-medium">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Jadwal Terstruktur Rapi: Tidak terdeteksi tabrakan shift (clopen), shift kosong, atau staf kurang libur.</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Siap Operasional</span>
+                </div>
+              )}
+
+              {/* Legend & Guide */}
+              <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 gap-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <span className="font-bold text-slate-700">Keterangan Shift:</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                    <strong>Pagi:</strong> 07:00 – 15:00
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                    <strong>Middle:</strong> 11:00 – 19:00
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                    <strong>Sore:</strong> 15:00 – 23:00
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" />
+                    <strong>OFF:</strong> Libur
+                  </span>
+                </div>
+                {isLeader && isWeekApproved && (
+                  <span className="text-emerald-700 font-semibold italic text-[11px]">
+                    🔒 Jadwal minggu ini telah dikunci/disetujui oleh Manajer.
+                  </span>
+                )}
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto bg-white rounded-2xl border border-slate-200 shadow-xs">
+                <table className="w-full text-left border-collapse min-w-[850px]">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                      <th className="py-3 px-4 font-semibold sticky left-0 bg-slate-50 z-10 w-48 shadow-[1px_0_0_0_#e2e8f0]">Karyawan</th>
+                    <tr className="bg-slate-50 text-slate-600 text-xs uppercase font-bold border-b border-slate-200">
+                      <th className="py-3.5 px-4 sticky left-0 bg-slate-50 z-10 w-52 shadow-[1px_0_0_0_#e2e8f0]">
+                        Karyawan & Divisi
+                      </th>
                       {weekDays.map((d, idx) => (
-                        <th key={idx} className="py-3 px-4 font-semibold text-center border-l border-slate-200">
-                          <div className="text-xs">{d.toLocaleDateString("id-ID", { weekday: "short" })}</div>
-                          <div>{d.getDate()}</div>
+                        <th key={idx} className="py-3 px-3 text-center border-l border-slate-200">
+                          <div className="text-[11px] text-slate-500">{d.toLocaleDateString("id-ID", { weekday: "short" })}</div>
+                          <div className="text-sm font-black text-slate-800">{d.getDate()}</div>
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {employees.filter(e => e.status === "AKTIF").map((emp) => (
-                      <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-3 px-4 font-medium text-slate-800 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
-                          <div className="truncate">{emp.name}</div>
-                          <div className="text-xs text-slate-500">{emp.position}</div>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredScheduleEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400 italic">
+                          Tidak ada karyawan aktif pada divisi ini.
                         </td>
-                        {weekDays.map((d, idx) => {
-                          const dateStr = d.toISOString().split("T")[0];
-                          const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
-                          return (
-                            <td key={idx} className="p-2 border-l border-slate-200">
-                              <select
-                                disabled={!canEditHR}
-                                value={shift}
-                                onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
-                                className={`w-full text-xs font-semibold py-1.5 px-2 rounded-lg border-0 focus:ring-2 focus:ring-indigo-500 ${
-                                  shift === "PAGI" ? "bg-emerald-100 text-emerald-700" :
-                                  shift === "SORE" ? "bg-amber-100 text-amber-700" :
-                                  shift === "MIDDLE" ? "bg-blue-100 text-blue-700" :
-                                  "bg-slate-100 text-slate-500"
-                                }`}
-                              >
-                                <option value="OFF">OFF (Libur)</option>
-                                <option value="PAGI">Pagi</option>
-                                <option value="MIDDLE">Middle</option>
-                                <option value="SORE">Sore</option>
-                              </select>
-                            </td>
-                          );
-                        })}
                       </tr>
-                    ))}
+                    ) : (
+                      filteredScheduleEmployees.map((emp) => {
+                        const canEditThisEmp = canEditShiftForEmployee(emp);
+                        return (
+                          <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
+                              <p className="font-bold text-slate-800 truncate">{emp.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 text-slate-600">
+                                  {emp.department || "MAIN"}
+                                </span>
+                                <span className="text-[11px] text-slate-400 truncate">{emp.position}</span>
+                              </div>
+                            </td>
+                            {weekDays.map((d, idx) => {
+                              const dateStr = d.toISOString().split("T")[0];
+                              const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
+                              return (
+                                <td key={idx} className="p-2 border-l border-slate-100 text-center">
+                                  <select
+                                    disabled={!canEditThisEmp}
+                                    value={shift}
+                                    onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
+                                    className={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border transition-all ${
+                                      !canEditThisEmp ? "cursor-not-allowed opacity-90" : "cursor-pointer"
+                                    } ${
+                                      shift === "PAGI" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
+                                      shift === "SORE" ? "bg-amber-50 text-amber-800 border-amber-300" :
+                                      shift === "MIDDLE" ? "bg-blue-50 text-blue-800 border-blue-300" :
+                                      "bg-slate-100 text-slate-500 border-slate-200"
+                                    }`}
+                                  >
+                                    <option value="OFF">OFF (Libur)</option>
+                                    <option value="PAGI">Pagi (07-15)</option>
+                                    <option value="MIDDLE">Middle (11-19)</option>
+                                    <option value="SORE">Sore (15-23)</option>
+                                  </select>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
