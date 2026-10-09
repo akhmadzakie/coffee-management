@@ -435,6 +435,15 @@ export function ExpenseCategories() {
             }))}
             templateFilename="template_kategori"
             buttonLabel="Import Kategori"
+            templateDropdowns={{
+              Tipe: CATEGORY_TYPES.map(t => t.value),
+            }}
+            templateHints={{
+              "Nama Kategori": "Wajib diisi",
+              "Tipe": "Pilih tipe kategori dari dropdown",
+              "Warna": "Kode HEX warna, contoh: #8B5CF6",
+              "Icon": "Nama icon (misal: users, coffee, tag, wallet)",
+            }}
           />
           <button
             onClick={handleAddRoot}

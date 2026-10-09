@@ -739,6 +739,20 @@ export function HRManagement() {
                       }))}
                       templateFilename="template_karyawan"
                       buttonLabel={isIndo ? "Import" : "Import"}
+                      templateDropdowns={{
+                        "Posisi": ["Kasir", "Karyawan", "Leader", "Manager"],
+                        "Departemen": ["MAIN", "BAR", "KITCHEN", "BAKER"],
+                        "Status": ["AKTIF", "TIDAK_AKTIF", "RESIGN", "PHK"],
+                        "Tipe": ["TETAP", "KONTRAK", "PARUH_WAKTU", "MAGANG"],
+                      }}
+                      templateHints={{
+                        "Username": "ID / Username unik karyawan",
+                        "Nama Karyawan": "Nama lengkap karyawan",
+                        "Posisi": "Pilih jabatan",
+                        "Departemen": "Pilih divisi/departemen",
+                        "Status": "Status keaktifan",
+                        "Tipe": "Tipe ikatan kerja",
+                      }}
                     />
                     <button
                       onClick={() => handleOpenEmployeeModal()}
@@ -918,6 +932,24 @@ export function HRManagement() {
                       templateExampleRow={["EMP-001", "3500000", "500000", "20000", "20000", "100000", "500000", "2024-01-01", "2024-12-31"]}
                       templateFilename="template_kontrak"
                       buttonLabel={isIndo ? "Import" : "Import"}
+                      templateDropdowns={{
+                        Username: employees.map(e => e.username).filter(Boolean),
+                      }}
+                      templateColumnTypes={{
+                        "Gaji Pokok": "number",
+                        "Tunjangan Jabatan": "number",
+                        "Tunjangan Makan": "number",
+                        "Tunjangan Transport": "number",
+                        "Potongan Alpha": "number",
+                        "Target Bonus KPI": "number",
+                        "Mulai Kontrak": "date",
+                        "Selesai Kontrak": "date",
+                      }}
+                      templateHints={{
+                        Username: "Pilih username karyawan dari daftar dropdown",
+                        "Mulai Kontrak": "Format YYYY-MM-DD",
+                        "Selesai Kontrak": "Format YYYY-MM-DD",
+                      }}
                     />
                     <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
@@ -1210,6 +1242,21 @@ export function HRManagement() {
                       templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
                       templateFilename="template_kpi"
                       buttonLabel={isIndo ? "Import" : "Import"}
+                      templateDropdowns={{
+                        Username: employees.map(e => e.username).filter(Boolean),
+                        "Kuartal (1-4)": ["1", "2", "3", "4"],
+                      }}
+                      templateColumnTypes={{
+                        "Kuartal (1-4)": "integer",
+                        "Tahun": "integer",
+                        "Total Skor": "number",
+                        "Bonus KPI": "number",
+                      }}
+                      templateHints={{
+                        Username: "Pilih username karyawan",
+                        "Kuartal (1-4)": "Pilih 1, 2, 3, atau 4",
+                        "Total Skor": "Nilai 0–100",
+                      }}
                     />
                     <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
@@ -1379,6 +1426,19 @@ export function HRManagement() {
                       templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
                       templateFilename="template_absensi"
                       buttonLabel={isIndo ? "Import" : "Import"}
+                      templateDropdowns={{
+                        Username: employees.map(e => e.username).filter(Boolean),
+                      }}
+                      templateColumnTypes={{
+                        Hadir: "integer",
+                        Sakit: "integer",
+                        Izin: "integer",
+                        Alpha: "integer",
+                      }}
+                      templateHints={{
+                        Username: "Pilih username karyawan",
+                        "Periode (YYYY-MM)": "Format: YYYY-MM (contoh: 2024-10)",
+                      }}
                     />
                     <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
