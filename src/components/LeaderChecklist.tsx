@@ -36,6 +36,17 @@ export const DEFAULT_LEADER_BAKER_TASKS = [
 
 type Division = "BAR" | "KITCHEN" | "BAKER";
 
+const ensureArray = (v: any, fallback: string[]): string[] => {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {}
+  }
+  return fallback;
+};
+
 export const LeaderChecklist: React.FC = () => {
   const { 
     currentUser, 
@@ -59,20 +70,14 @@ export const LeaderChecklist: React.FC = () => {
 
   // Setting template state for supervisor
   const [editingDivision, setEditingDivision] = useState<Division>("BAR");
-  const [barTasks, setBarTasks] = useState<string[]>(
-    settings.leaderBarTasks && settings.leaderBarTasks.length > 0
-      ? settings.leaderBarTasks
-      : DEFAULT_LEADER_BAR_TASKS
+  const [barTasks, setBarTasks] = useState<string[]>(() =>
+    ensureArray(settings?.leaderBarTasks, DEFAULT_LEADER_BAR_TASKS)
   );
-  const [kitchenTasks, setKitchenTasks] = useState<string[]>(
-    settings.leaderKitchenTasks && settings.leaderKitchenTasks.length > 0
-      ? settings.leaderKitchenTasks
-      : DEFAULT_LEADER_KITCHEN_TASKS
+  const [kitchenTasks, setKitchenTasks] = useState<string[]>(() =>
+    ensureArray(settings?.leaderKitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS)
   );
-  const [bakerTasks, setBakerTasks] = useState<string[]>(
-    settings.leaderBakerTasks && settings.leaderBakerTasks.length > 0
-      ? settings.leaderBakerTasks
-      : DEFAULT_LEADER_BAKER_TASKS
+  const [bakerTasks, setBakerTasks] = useState<string[]>(() =>
+    ensureArray(settings?.leaderBakerTasks, DEFAULT_LEADER_BAKER_TASKS)
   );
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -84,22 +89,16 @@ export const LeaderChecklist: React.FC = () => {
 
   // Synchronize tasks when settings change
   React.useEffect(() => {
-    if (settings.leaderBarTasks && settings.leaderBarTasks.length > 0) {
-      setBarTasks(settings.leaderBarTasks);
-    }
-    if (settings.leaderKitchenTasks && settings.leaderKitchenTasks.length > 0) {
-      setKitchenTasks(settings.leaderKitchenTasks);
-    }
-    if (settings.leaderBakerTasks && settings.leaderBakerTasks.length > 0) {
-      setBakerTasks(settings.leaderBakerTasks);
-    }
+    setBarTasks(ensureArray(settings?.leaderBarTasks, DEFAULT_LEADER_BAR_TASKS));
+    setKitchenTasks(ensureArray(settings?.leaderKitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS));
+    setBakerTasks(ensureArray(settings?.leaderBakerTasks, DEFAULT_LEADER_BAKER_TASKS));
   }, [settings]);
 
   // Master tasks getter by division
   const getTasksForDivision = (div: Division): string[] => {
-    if (div === "BAR") return barTasks;
-    if (div === "KITCHEN") return kitchenTasks;
-    return bakerTasks;
+    if (div === "BAR") return ensureArray(barTasks, DEFAULT_LEADER_BAR_TASKS);
+    if (div === "KITCHEN") return ensureArray(kitchenTasks, DEFAULT_LEADER_KITCHEN_TASKS);
+    return ensureArray(bakerTasks, DEFAULT_LEADER_BAKER_TASKS);
   };
 
   // Helper to detect division from checklist record
@@ -458,7 +457,7 @@ export const LeaderChecklist: React.FC = () => {
                 </div>
               </div>
 
-              {selectedDivisionStat.tasks.length === 0 ? (
+              {!Array.isArray(selectedDivisionStat?.tasks) || selectedDivisionStat.tasks.length === 0 ? (
                 <div className="text-center py-10 text-slate-400">
                   Belum ada daftar tugas yang dikonfigurasi untuk divisi ini.
                 </div>
@@ -551,7 +550,7 @@ export const LeaderChecklist: React.FC = () => {
 
             {/* List Tugas Editable */}
             <div className="space-y-3">
-              {currentEditingTasks.map((task, idx) => (
+              {(Array.isArray(currentEditingTasks) ? currentEditingTasks : []).map((task, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <span className="w-7 text-xs font-bold text-slate-400 text-center shrink-0">
                     {idx + 1}.
@@ -702,7 +701,7 @@ export const LeaderChecklist: React.FC = () => {
 
         {/* List Checkbox Tugas */}
         <div className="space-y-3">
-          {activeLeaderTasks.map((task, index) => {
+          {(Array.isArray(activeLeaderTasks) ? activeLeaderTasks : []).map((task, index) => {
             const isCompleted = leaderCompletedTasks.includes(task);
 
             return (

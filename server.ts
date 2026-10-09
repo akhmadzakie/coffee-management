@@ -823,10 +823,30 @@ async function startServer() {
         settings = [initialSettings] as any;
       }
 
+      const parseTasksJson = (val: any) => {
+        if (Array.isArray(val)) return val;
+        if (typeof val === "string") {
+          try {
+            const p = JSON.parse(val);
+            if (Array.isArray(p)) return p;
+          } catch {}
+        }
+        return [];
+      };
+
+      const rawSettings = settings.length > 0 ? settings[0] : initialSettings;
+      const formattedSettings = {
+        ...rawSettings,
+        leaderBarTasks: parseTasksJson(rawSettings.leaderBarTasks),
+        leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
+        leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
+        managerTasks: parseTasksJson(rawSettings.managerTasks),
+      };
+
       res.json({
         cash_accounts,
         cash_transactions,
-        settings: settings.length > 0 ? settings[0] : initialSettings,
+        settings: formattedSettings,
         users: users.map(sanitizeUser),
         device_sessions,
         ingredients,

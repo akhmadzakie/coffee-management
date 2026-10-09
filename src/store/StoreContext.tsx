@@ -400,7 +400,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setCashAccounts(data.cash_accounts);
         if (Array.isArray(data.cash_transactions))
           setCashTransactions(data.cash_transactions);
-        if (data.settings) setSettings(data.settings);
+        if (data.settings) {
+          const s = data.settings;
+          const parseArr = (v: any) => {
+            if (Array.isArray(v)) return v;
+            if (typeof v === "string") {
+              try {
+                const p = JSON.parse(v);
+                if (Array.isArray(p)) return p;
+              } catch {}
+            }
+            return [];
+          };
+          setSettings({
+            ...s,
+            leaderBarTasks: parseArr(s.leaderBarTasks),
+            leaderKitchenTasks: parseArr(s.leaderKitchenTasks),
+            leaderBakerTasks: parseArr(s.leaderBakerTasks),
+            managerTasks: parseArr(s.managerTasks),
+          });
+        }
         if (Array.isArray(data.users) && data.users.length > 0)
           setUsers(data.users);
         if (Array.isArray(data.device_sessions))
