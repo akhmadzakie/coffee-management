@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   RotateCcw,
   Filter,
+  Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -86,11 +87,21 @@ export function HRManagement() {
 
   const isIndo = settings.language === "id";
   const isLeader = currentUser?.role === "LEADER";
-  const leaderDivision = currentUser?.department || 
-    (currentUser?.role === "KITCHEN" ? "KITCHEN" : 
-     currentUser?.role === "BAKER" ? "BAKER" : "BAR");
+  const leaderEmp = employees.find(
+    (e) =>
+      (currentUser?.employeeId && e.id === currentUser.employeeId) ||
+      e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
+  );
+  const leaderDivision = (
+    currentUser?.department ||
+    leaderEmp?.department ||
+    (currentUser?.role === "KITCHEN" ? "KITCHEN" :
+     currentUser?.role === "BAKER" ? "BAKER" : "")
+  ).toUpperCase();
   const [scheduleDivisionFilter, setScheduleDivisionFilter] = useState<string>(
-    currentUser?.role === "LEADER" ? (currentUser?.department || "BAR") : "ALL"
+    currentUser?.role === "LEADER"
+      ? (leaderDivision || "ALL")
+      : "ALL"
   );
   const [activeTab, setActiveTab] = useState<
     "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
@@ -471,26 +482,86 @@ export function HRManagement() {
     });
   };
 
+  const handleUnlockForRevision = () => {
+    if (isReadOnly) return;
+    const newApprovals = {
+      ...((settings?.scheduleApprovals as any) || {}),
+      [weekKey]: {
+        status: "DRAFT",
+        revisedBy: currentUser?.name || "Leader",
+        revisedAt: new Date().toISOString(),
+      }
+    };
+    updateSettings({
+      ...settings,
+      scheduleApprovals: newApprovals,
+    });
+  };
+
+  const handleCopyLastWeekSchedule = () => {
+    if (isReadOnly) return;
+    const prevWeekDays = generateWeekDays(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000));
+    let copiedCount = 0;
+    let newShifts = [...employeeShifts];
+
+    filteredScheduleEmployees.forEach(emp => {
+      for (let i = 0; i < 7; i++) {
+        const prevDateStr = prevWeekDays[i].toISOString().split("T")[0];
+        const curDateStr = weekDays[i].toISOString().split("T")[0];
+        const prevShift = employeeShifts.find(s => s.employeeId === emp.id && s.date === prevDateStr)?.shiftType;
+        
+        if (prevShift && prevShift !== "OFF") {
+          const curIndex = newShifts.findIndex(s => s.employeeId === emp.id && s.date === curDateStr);
+          if (curIndex >= 0) {
+            newShifts[curIndex] = { ...newShifts[curIndex], shiftType: prevShift };
+          } else {
+            newShifts.push({
+              id: crypto.randomUUID(),
+              employeeId: emp.id,
+              date: curDateStr,
+              shiftType: prevShift,
+            });
+          }
+          copiedCount++;
+        }
+      }
+    });
+
+    if (copiedCount > 0) {
+      setEmployeeShifts(newShifts);
+      alert(`Berhasil menyalin ${copiedCount} penugasan shift dari minggu lalu.`);
+    } else {
+      alert("Tidak ada data jadwal shift dari minggu sebelumnya untuk disalin.");
+    }
+  };
+
   const canEditShiftForEmployee = (emp: any) => {
     if (isReadOnly) return false;
     if (isHRD) return true; // Manager, Owner, Super Admin can always edit
     if (isLeader) {
-      if (isWeekApproved) return false; // Locked once approved!
-      const empDiv = emp.department || (emp.position?.toUpperCase().includes("KITCHEN") ? "KITCHEN" : emp.position?.toUpperCase().includes("BAKER") ? "BAKER" : "BAR");
-      return !leaderDivision || empDiv === leaderDivision;
+      // Leader dapat menyusun dan mengedit jadwal seluruh anggota tim operasional (non-Manager/Owner)
+      const posUpper = (emp.position || "").toUpperCase();
+      const isExecutive = posUpper.includes("MANAGER") || posUpper.includes("MANAJER") || posUpper.includes("OWNER");
+      return !isExecutive;
     }
     return false;
   };
 
   const filteredScheduleEmployees = useMemo(() => {
     let list = employees.filter(e => e.status === "AKTIF");
-    if (isLeader && leaderDivision) {
-      list = list.filter(e => e.department === leaderDivision || (!e.department && leaderDivision === "BAR"));
-    } else if (scheduleDivisionFilter !== "ALL") {
-      list = list.filter(e => e.department === scheduleDivisionFilter || (!e.department && scheduleDivisionFilter === "MAIN"));
+    if (scheduleDivisionFilter !== "ALL") {
+      list = list.filter(e => {
+        const d = (e.department || "").toUpperCase();
+        const pos = (e.position || "").toUpperCase();
+        if (scheduleDivisionFilter === "BAR") return d === "BAR" || pos.includes("BAR");
+        if (scheduleDivisionFilter === "KITCHEN") return d === "KITCHEN" || pos.includes("KITCHEN") || pos.includes("DAPUR");
+        if (scheduleDivisionFilter === "BAKER") return d === "BAKER" || pos.includes("BAKER") || pos.includes("PASTRY");
+        if (scheduleDivisionFilter === "MAIN") return d === "MAIN" || pos.includes("KASIR") || (!d && !pos.includes("BAR") && !pos.includes("KITCHEN") && !pos.includes("BAKER"));
+        return d === scheduleDivisionFilter;
+      });
     }
     return list;
-  }, [employees, isLeader, leaderDivision, scheduleDivisionFilter]);
+  }, [employees, scheduleDivisionFilter]);
 
   // Smart Collision Detection
   const scheduleCollisions = useMemo(() => {
@@ -577,19 +648,40 @@ export function HRManagement() {
   }, [employees, employeeShifts, weekDays, isLeader, leaderDivision]);
 
   const handleShiftChange = (empId: string, dateStr: string, shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF") => {
-    const existing = employeeShifts.find(s => s.employeeId === empId && s.date === dateStr);
-    let newShifts = [...employeeShifts];
-    if (existing) {
-      existing.shiftType = shiftType;
+    const exists = employeeShifts.some(s => s.employeeId === empId && s.date === dateStr);
+    let newShifts: any[];
+    if (exists) {
+      newShifts = employeeShifts.map(s => 
+        s.employeeId === empId && s.date === dateStr ? { ...s, shiftType } : s
+      );
     } else {
-      newShifts.push({
-        id: crypto.randomUUID(),
-        employeeId: empId,
-        date: dateStr,
-        shiftType: shiftType
-      });
+      newShifts = [
+        ...employeeShifts,
+        {
+          id: crypto.randomUUID(),
+          employeeId: empId,
+          date: dateStr,
+          shiftType: shiftType
+        }
+      ];
     }
     setEmployeeShifts(newShifts);
+
+    // Jika jadwal sebelumnya APPROVED dan diubah oleh Leader, buka status ke DRAFT agar Manajer mengetahui revisi
+    if (isWeekApproved && isLeader) {
+      const newApprovals = {
+        ...((settings?.scheduleApprovals as any) || {}),
+        [weekKey]: {
+          status: "DRAFT",
+          revisedBy: currentUser?.name || "Leader",
+          revisedAt: new Date().toISOString(),
+        }
+      };
+      updateSettings({
+        ...settings,
+        scheduleApprovals: newApprovals,
+      });
+    }
   };
 
   // --- Chart Data ---
@@ -1253,60 +1345,86 @@ export function HRManagement() {
                     </button>
                   </div>
 
-                  {/* Manager Approval Button */}
-                  {isHRD && (
+                  {/* Copy Schedule & Approval / Revision Action Buttons */}
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={handleToggleWeekApproval}
+                      type="button"
+                      onClick={handleCopyLastWeekSchedule}
                       disabled={isReadOnly}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
-                        isWeekApproved
-                          ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
-                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      }`}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-2xs border border-slate-200"
+                      title="Salin jadwal shift dari minggu lalu ke minggu yang sedang aktif"
                     >
-                      {isWeekApproved ? (
-                        <>
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Buka Kunci (Revisi Draft)</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Setujui Jadwal (Approve)</span>
-                        </>
-                      )}
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Salin Minggu Lalu</span>
                     </button>
-                  )}
+
+                    {/* Manager Approval Button */}
+                    {isHRD && (
+                      <button
+                        onClick={handleToggleWeekApproval}
+                        disabled={isReadOnly}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
+                          isWeekApproved
+                            ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                      >
+                        {isWeekApproved ? (
+                          <>
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Buka Kunci (Revisi Draft)</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Setujui Jadwal (Approve)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Leader: Tombol Buka Kunci jika Jadwal APPROVED */}
+                    {isLeader && isWeekApproved && (
+                      <button
+                        type="button"
+                        onClick={handleUnlockForRevision}
+                        disabled={isReadOnly}
+                        className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-all shadow-2xs"
+                        title="Buka status kunci untuk menyusun revisi shift tim"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Buka Kunci (Revisi)</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Division Filter Tabs for Manager */}
-              {!isLeader && (
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
-                    <Filter className="w-3.5 h-3.5" /> Divisi:
-                  </span>
-                  {[
-                    { id: "ALL", label: "Semua Divisi" },
-                    { id: "BAR", label: "☕ Bar" },
-                    { id: "KITCHEN", label: "🍳 Kitchen" },
-                    { id: "BAKER", label: "🥐 Baker" },
-                    { id: "MAIN", label: "🛎️ Utama & Kasir" },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setScheduleDivisionFilter(tab.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        scheduleDivisionFilter === tab.id
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Division Filter Tabs for Leader & Manager */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5" /> Divisi:
+                </span>
+                {[
+                  { id: "ALL", label: "Semua Divisi" },
+                  { id: "BAR", label: "☕ Bar" },
+                  { id: "KITCHEN", label: "🍳 Kitchen" },
+                  { id: "BAKER", label: "🥐 Baker" },
+                  { id: "MAIN", label: "🛎️ Utama & Kasir" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setScheduleDivisionFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      scheduleDivisionFilter === tab.id
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
               {/* ─── SMART COLLISION DETECTION PANEL ─── */}
               {scheduleCollisions.length > 0 ? (
@@ -1367,8 +1485,8 @@ export function HRManagement() {
                   </span>
                 </div>
                 {isLeader && isWeekApproved && (
-                  <span className="text-emerald-700 font-semibold italic text-[11px]">
-                    🔒 Jadwal minggu ini telah dikunci/disetujui oleh Manajer.
+                  <span className="text-amber-700 font-medium text-[11px] flex items-center gap-1 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                    <span>🔒 Status telah disetujui Manajer. Anda tetap dapat mengubah shift tim; perubahan akan otomatis memindahkan status ke DRAFT agar dapat ditinjau ulang oleh Manajer.</span>
                   </span>
                 )}
               </div>
