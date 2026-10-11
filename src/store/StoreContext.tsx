@@ -1069,6 +1069,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteUser = (id: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== id));
+    setSessions((prev) => prev.filter((s) => s.userId !== id));
     writeAuditLog("DELETE", "users", id);
     markChanged();
   };

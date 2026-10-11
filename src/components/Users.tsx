@@ -65,15 +65,35 @@ export const UsersComponent = () => {
   const editableUsers = users.filter((u) =>
     isManager ? MANAGER_ALLOWED_ROLES.includes(u.role) : true
   );
-  // MANAGER tidak bisa hapus dirinya sendiri atau user role tinggi
-  const canDelete = (targetUser: User) => {
-    if (targetUser.id === currentUser?.id) return false;
-    if (isManager && !MANAGER_ALLOWED_ROLES.includes(targetUser.role)) return false;
-    return true;
+  const getDeleteDisabledReason = (targetUser: User): string | null => {
+    if (targetUser.id === currentUser?.id) {
+      return "Tidak dapat menghapus akun Anda sendiri yang sedang aktif login.";
+    }
+    if (currentUser?.role === "OWNER") {
+      return "Akun Owner hanya memiliki akses pantau (Read-only).";
+    }
+    if (isManager && !MANAGER_ALLOWED_ROLES.includes(targetUser.role)) {
+      return `Manager tidak memiliki wewenang untuk menghapus akun role ${targetUser.role}.`;
+    }
+    return null;
   };
+
+  const canDelete = (targetUser: User) => {
+    return getDeleteDisabledReason(targetUser) === null;
+  };
+
+  const getEditDisabledReason = (targetUser: User): string | null => {
+    if (currentUser?.role === "OWNER") {
+      return "Akun Owner hanya memiliki akses pantau (Read-only).";
+    }
+    if (isManager && !MANAGER_ALLOWED_ROLES.includes(targetUser.role)) {
+      return `Manager tidak memiliki wewenang untuk mengedit akun role ${targetUser.role}.`;
+    }
+    return null;
+  };
+
   const canEdit = (targetUser: User) => {
-    if (isManager && !MANAGER_ALLOWED_ROLES.includes(targetUser.role)) return false;
-    return true;
+    return getEditDisabledReason(targetUser) === null;
   };
 
   const handleSelectEmployee = (empId: string) => {
@@ -228,9 +248,9 @@ export const UsersComponent = () => {
 
   const handleDelete = (user: User) => {
     confirm.open({
-      title: `Hapus ${user.name}?`,
-      message: `Akun "${user.name}" (${user.username}) akan dihapus secara permanen dan tidak dapat dikembalikan.`,
-      confirmLabel: "Ya, Hapus",
+      title: `Hapus Akun ${user.name}?`,
+      message: `Akun login "${user.name}" (@${user.username}) dengan role ${user.role} akan dihapus secara permanen dari sistem login. Data absensi dan riwayat transaksi yang sudah ada akan tetap aman tersimpan.`,
+      confirmLabel: "Ya, Hapus Pengguna",
       variant: "danger",
       onConfirm: () => deleteUser(user.id),
     });
@@ -456,11 +476,14 @@ export const UsersComponent = () => {
                           <Edit className="w-4 h-4" />
                         </button>
                       ) : (
-                        <span className="p-2 text-slate-200 inline-block" title="Tidak dapat mengedit role ini">
+                        <span
+                          className="p-2 text-slate-200 inline-block cursor-not-allowed"
+                          title={getEditDisabledReason(user) || "Tidak dapat mengedit role ini"}
+                        >
                           <Edit className="w-4 h-4" />
                         </span>
                       )}
-                      {canDelete(user) && (
+                      {canDelete(user) ? (
                         <button
                           onClick={() => handleDelete(user)}
                           className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1"
@@ -468,6 +491,13 @@ export const UsersComponent = () => {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      ) : (
+                        <span
+                          className="p-2 text-slate-200 inline-block cursor-not-allowed ml-1"
+                          title={getDeleteDisabledReason(user) || "Tidak dapat menghapus pengguna ini"}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </span>
                       )}
                     </td>
                   </tr>
