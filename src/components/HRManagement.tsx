@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { Role } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
@@ -2135,9 +2137,9 @@ export function HRManagement() {
         </div>
 
       {/* Modals */}
-      {isEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 flex justify-center items-start pt-5 sm:pt-8 pb-8">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh]">
+      {isEmployeeModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh] my-auto">
             {/* Header */}
             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-base text-slate-900 flex items-center">
@@ -2353,12 +2355,13 @@ export function HRManagement() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {isContractModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+      {isContractModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingContract ? "Edit Kontrak" : "Tambah Kontrak"}
@@ -2413,7 +2416,8 @@ export function HRManagement() {
               <button onClick={handleSaveContract} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       </div>
@@ -2421,9 +2425,9 @@ export function HRManagement() {
             {/* Verification Modal */}
       {isVerificationModalOpen && verifyingAttendance && (() => {
         const emp = employees.find((e) => e.id === verifyingAttendance.employeeId);
-        return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+        return createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100 my-auto">
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 z-10 shrink-0">
               <div className="flex items-center gap-3">
@@ -2730,14 +2734,15 @@ export function HRManagement() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
         );
       })()}
 
       {/* Attendance Modal */}
-      {isAttendanceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+      {isAttendanceModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingAttendance ? (isIndo ? "Edit Absensi" : "Edit Attendance") : (isIndo ? "Tambah Absensi" : "Add Attendance")}
@@ -2788,13 +2793,14 @@ export function HRManagement() {
               <button onClick={handleSaveAttendance} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* KPI Modal */}
-      {isKpiModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50  p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+      {isKpiModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingKpi ? (isIndo ? "Edit KPI" : "Edit KPI") : (isIndo ? "Tambah KPI" : "Add KPI")}
@@ -2890,7 +2896,8 @@ export function HRManagement() {
               <button onClick={handleSaveKpi} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
 
