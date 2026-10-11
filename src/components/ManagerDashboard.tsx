@@ -25,6 +25,7 @@ import {
   Calculator,
   Sparkles,
   Sliders,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -44,6 +45,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     salesTransactions,
     purchaseOrders,
     recipes,
+    settings,
+    updateSettings,
+    employeeShifts,
+    currentUser,
     updateDailyAttendance,
   } = useStore();
 
@@ -75,6 +80,97 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       calculatedCount: validRecipeCount,
     };
   }, [recipes, ingredients]);
+
+  // Deteksi Jadwal Shift yang Menunggu ACC Manajer
+  const scheduleApprovalAlerts = useMemo(() => {
+    const today = new Date();
+    const day = today.getDay(); // 0 = Sunday, 1 = Monday
+    const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
+
+    // Minggu Ini
+    const thisMonday = new Date(today);
+    thisMonday.setDate(diffToMonday);
+    thisMonday.setHours(0, 0, 0, 0);
+
+    // Minggu Depan
+    const nextMonday = new Date(thisMonday);
+    nextMonday.setDate(nextMonday.getDate() + 7);
+
+    const weeks = [
+      { key: thisMonday.toISOString().split("T")[0], label: "Minggu Ini", start: thisMonday },
+      { key: nextMonday.toISOString().split("T")[0], label: "Minggu Depan", start: nextMonday },
+    ];
+
+    const alerts: {
+      weekKey: string;
+      weekLabel: string;
+      dateRangeStr: string;
+      shiftCount: number;
+      divisions: string[];
+    }[] = [];
+
+    weeks.forEach((w) => {
+      const endSunday = new Date(w.start);
+      endSunday.setDate(endSunday.getDate() + 6);
+
+      const approval = (settings?.scheduleApprovals as any)?.[w.key];
+      const isApproved = approval?.status === "APPROVED";
+
+      const startDateStr = w.key;
+      const endDateStr = endSunday.toISOString().split("T")[0];
+
+      const weekShifts = employeeShifts.filter(
+        (s) => s.date >= startDateStr && s.date <= endDateStr && s.shiftType !== "OFF"
+      );
+
+      if (weekShifts.length > 0 && !isApproved) {
+        const divSet = new Set<string>();
+        weekShifts.forEach((s) => {
+          const emp = employees.find((e) => e.id === s.employeeId);
+          if (emp) {
+            const div = emp.department || (emp.position?.toUpperCase().includes("KITCHEN") ? "KITCHEN" : emp.position?.toUpperCase().includes("BAKER") ? "BAKER" : "BAR");
+            divSet.add(div);
+          }
+        });
+
+        const dateRangeStr = `${w.start.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - ${endSunday.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`;
+
+        alerts.push({
+          weekKey: w.key,
+          weekLabel: w.label,
+          dateRangeStr,
+          shiftCount: weekShifts.length,
+          divisions: Array.from(divSet),
+        });
+      }
+    });
+
+    return alerts;
+  }, [settings?.scheduleApprovals, employeeShifts, employees]);
+
+  const [approvedToast, setApprovedToast] = useState<string | null>(null);
+
+  const handleQuickApproveSchedule = (weekKey: string, weekLabel: string) => {
+    const newApprovals = {
+      ...((settings?.scheduleApprovals as any) || {}),
+      [weekKey]: {
+        status: "APPROVED",
+        approvedBy: currentUser?.name || "Manager",
+        approvedAt: new Date().toISOString(),
+      },
+    };
+    updateSettings({
+      ...settings,
+      scheduleApprovals: newApprovals,
+    });
+    setApprovedToast(`Jadwal ${weekLabel} berhasil di-ACC & disahkan resmi!`);
+    setTimeout(() => setApprovedToast(null), 4000);
+  };
+
+  const handleNavigateToSchedule = () => {
+    sessionStorage.setItem("hr_target_tab", "schedule");
+    onNavigate("hr");
+  };
 
   // Tanggal hari ini YYYY-MM-DD
   const todayStr = useMemo(() => {
@@ -279,6 +375,77 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Toast Notifikasi ACC Cepat */}
+      <AnimatePresence>
+        {approvedToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{approvedToast}</span>
+            </div>
+            <button
+              onClick={() => setApprovedToast(null)}
+              className="font-bold text-emerald-700 hover:text-emerald-900"
+            >
+              Tutup
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Schedule Approval Banner for Manager */}
+      {scheduleApprovalAlerts.length > 0 && (
+        <div className="space-y-3">
+          {scheduleApprovalAlerts.map((alert) => (
+            <div
+              key={alert.weekKey}
+              className="p-5 bg-gradient-to-r from-amber-50 to-orange-50/80 border border-amber-200/90 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-coffee-sm"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center shrink-0">
+                  <Calendar className="w-5 h-5 text-amber-800" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900 uppercase">
+                      Menunggu ACC Manajer
+                    </span>
+                    <span className="text-xs font-bold text-amber-950">
+                      {alert.weekLabel} ({alert.dateRangeStr})
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-600 leading-relaxed">
+                    Leader divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> telah menyusun <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                <button
+                  onClick={handleNavigateToSchedule}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-white border border-stone-200 hover:bg-stone-50 text-stone-800 text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                >
+                  <span>Tinjau di Jadwal SDM</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-coffee-sm flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>ACC Sekarang (Sah)</span>
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

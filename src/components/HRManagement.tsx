@@ -92,7 +92,14 @@ export function HRManagement() {
   );
   const [activeTab, setActiveTab] = useState<
     "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
-  >(currentUser?.role === "LEADER" ? "schedule" : "overview");
+  >(() => {
+    const target = sessionStorage.getItem("hr_target_tab");
+    if (target) {
+      sessionStorage.removeItem("hr_target_tab");
+      return target as any;
+    }
+    return currentUser?.role === "LEADER" ? "schedule" : "overview";
+  });
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
   const payslipRef = useRef<HTMLDivElement>(null);
 
