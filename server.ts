@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import path from "path";
@@ -36,6 +37,25 @@ const initialUsers = [
 ];
 
 async function ensureTables() {
+  try {
+    // Quick test if database is reachable (1.5s timeout)
+    const client = await Promise.race([
+      pool.connect(),
+      new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error("Database connection timeout")), 1500)
+      ),
+    ]);
+    if (client) {
+      client.release();
+    }
+  } catch (err: any) {
+    console.warn(
+      "⚠️  Database PostgreSQL tidak terhubung / offline. Server akan berjalan dalam mode in-memory fallback:",
+      err?.message
+    );
+    return;
+  }
+
   const queries = [
     `CREATE TABLE IF NOT EXISTS expense_categories (
         id TEXT PRIMARY KEY,
@@ -463,7 +483,7 @@ async function startServer() {
     leaderKitchenTasks: Array.isArray(st?.leaderKitchenTasks) ? JSON.stringify(st.leaderKitchenTasks) : (st?.leaderKitchenTasks || "[]"),
     leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
     managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
-    geminiApiKey: st?.geminiApiKey || null,
+    gemini_api_key: st?.gemini_api_key || st?.geminiApiKey || process.env.GEMINI_API_KEY || null,
   });
 
   const sanitizeUser = (u: any) => {
@@ -835,8 +855,15 @@ async function startServer() {
       };
 
       const rawSettings = settings.length > 0 ? settings[0] : initialSettings;
+      const effectiveApiKey =
+        rawSettings.gemini_api_key ||
+        rawSettings.geminiApiKey ||
+        process.env.GEMINI_API_KEY ||
+        "";
       const formattedSettings = {
         ...rawSettings,
+        geminiApiKey: effectiveApiKey,
+        gemini_api_key: effectiveApiKey,
         leaderBarTasks: parseTasksJson(rawSettings.leaderBarTasks),
         leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
         leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
@@ -1691,8 +1718,12 @@ async function startServer() {
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
       const { text, imageBase64, mimeType, fileName } = req.body;
-      const settings = await db.select().from(schema.settings).limit(1);
-      const apiKey = settings[0]?.gemini_api_key;
+      let apiKey = process.env.GEMINI_API_KEY || null;
+      try {
+        const settings = await db.select().from(schema.settings).limit(1);
+        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+      } catch {}
 
       // Extract text content if it's a text-based, CSV, or JSON document
       let effectiveText = text || "";
@@ -1874,8 +1905,12 @@ async function startServer() {
         return res.status(400).json({ error: "Pesan tidak boleh kosong" });
       }
 
-      const settings = await db.select().from(schema.settings).limit(1);
-      const apiKey = settings[0]?.gemini_api_key;
+      let apiKey = process.env.GEMINI_API_KEY || null;
+      try {
+        const settings = await db.select().from(schema.settings).limit(1);
+        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+      } catch {}
 
       const systemInstruction = `Anda adalah "Julia Coffee AI Copilot" — konsultan bisnis eksekutif dan pakar operasional specialty coffee shop Indonesia.
 Tugas Anda:
@@ -1980,6 +2015,70 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     } catch (e: any) {
       console.error("AI Advisor error:", e);
       res.status(500).json({ error: e?.message || "Failed to process advisor query" });
+    }
+  });
+
+  // ─── AI Status & Test Connection API ───────────────────────────────────────
+  app.get("/api/ai/status", async (req, res) => {
+    try {
+      let apiKey = process.env.GEMINI_API_KEY || null;
+      try {
+        const settings = await db.select().from(schema.settings).limit(1);
+        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+      } catch {}
+
+      const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
+      res.json({
+        isConnected,
+        model: isConnected ? "gemini-2.5-flash" : "heuristic-fallback",
+        source: isConnected ? (process.env.GEMINI_API_KEY ? "Environment (.env)" : "Pengaturan Sistem") : "offline",
+        message: isConnected
+          ? "Koneksi Gemini 2.5 Flash aktif dan siap memproses konsultasi & OCR nota."
+          : "Kunci API Gemini belum terkonfigurasi. Berjalan dalam mode pintar lokal (offline fallback).",
+      });
+    } catch (err: any) {
+      res.status(500).json({ isConnected: false, error: err?.message });
+    }
+  });
+
+  app.post("/api/ai/test-key", async (req, res) => {
+    try {
+      const { apiKey: customKey } = req.body;
+      let keyToTest = customKey;
+      if (!keyToTest) {
+        try {
+          const settings = await db.select().from(schema.settings).limit(1);
+          keyToTest = settings[0]?.gemini_api_key || settings[0]?.geminiApiKey || process.env.GEMINI_API_KEY;
+        } catch {
+          keyToTest = process.env.GEMINI_API_KEY;
+        }
+      }
+
+      if (!keyToTest || keyToTest.trim().length < 5) {
+        return res.status(400).json({
+          success: false,
+          error: "API Key kosong atau format tidak valid.",
+        });
+      }
+
+      const ai = new GoogleGenAI({ apiKey: keyToTest.trim() });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ text: "Tes koneksi. Jawab singkat: OK!" }],
+      });
+
+      return res.json({
+        success: true,
+        reply: response.text?.trim() || "OK!",
+        message: "Koneksi ke Google Gemini 2.5 Flash berhasil!",
+      });
+    } catch (err: any) {
+      console.error("Gemini test connection failed:", err);
+      return res.status(400).json({
+        success: false,
+        error: err?.message || "Gagal menghubungi Gemini API. Periksa apakah API Key benar dan aktif.",
+      });
     }
   });
 

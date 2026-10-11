@@ -1,6 +1,18 @@
 import React, { useState } from "react";
 import { useStore } from "../store/StoreContext";
-import { Upload, Save, Building2, Shield } from "lucide-react";
+import {
+  Upload,
+  Save,
+  Building2,
+  Shield,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Eye,
+  EyeOff,
+  ExternalLink,
+} from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 
 export const SettingsComponent = () => {
@@ -14,6 +26,9 @@ export const SettingsComponent = () => {
   const [salesPerson, setSalesPerson] = useState(settings.salesPerson);
   const [footerMessage, setFooterMessage] = useState(settings.footerMessage);
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || "");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [language, setLanguage] = useState(settings.language || "id");
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
@@ -42,6 +57,44 @@ export const SettingsComponent = () => {
     });
     setSaveStatus("Settings saved successfully!");
     setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const handleTestApiKey = async () => {
+    if (!geminiApiKey.trim()) {
+      setTestResult({
+        success: false,
+        message: "Silakan masukkan Gemini API Key terlebih dahulu.",
+      });
+      return;
+    }
+
+    setIsTestingKey(true);
+    setTestResult(null);
+
+    try {
+      const res = await fetch("/api/ai/test-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: geminiApiKey.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal menghubungi Gemini API");
+      }
+
+      setTestResult({
+        success: true,
+        message: "Koneksi Berhasil! Model Gemini 2.5 Flash aktif dan siap digunakan.",
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err.message || "Gagal menghubungkan API Key. Pastikan key aktif dan valid.",
+      });
+    } finally {
+      setIsTestingKey(false);
+    }
   };
 
   const removeLogo = () => {
@@ -214,19 +267,85 @@ export const SettingsComponent = () => {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center">
-              <span className="mr-2">✨</span> Gemini API Key
-            </label>
-            <input
-              type="password"
-              value={geminiApiKey}
-              onChange={(e) => setGeminiApiKey(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="AI_..."
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Digunakan untuk fitur AI Assistant (Otomatisasi pengeluaran dari Struk/Teks).
+          {/* Gemini API Key Configuration Card */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-stone-800 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-600" />
+                <span>Google Gemini API Key (AI Copilot & OCR Struk)</span>
+              </label>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-amber-700 hover:text-amber-900 font-semibold inline-flex items-center gap-1 hover:underline"
+              >
+                <span>Dapatkan API Key Gratis</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={geminiApiKey}
+                  onChange={(e) => {
+                    setGeminiApiKey(e.target.value);
+                    setTestResult(null);
+                  }}
+                  className="w-full pl-3 pr-10 py-2 bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-xs sm:text-sm font-mono text-stone-900"
+                  placeholder="AIzaSy..."
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                  title={showApiKey ? "Sembunyikan Key" : "Tampilkan Key"}
+                >
+                  {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleTestApiKey}
+                disabled={isTestingKey}
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5 shadow-xs"
+              >
+                {isTestingKey ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menguji...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Tes Koneksi</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {testResult && (
+              <div
+                className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${
+                  testResult.success
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    : "bg-rose-50 border-rose-200 text-rose-800"
+                }`}
+              >
+                {testResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <span>{testResult.message}</span>
+              </div>
+            )}
+
+            <p className="text-[11px] text-stone-500 leading-relaxed">
+              Kunci API ini digunakan untuk mengaktifkan AI Copilot (konsultasi bisnis, resep, strategi margin) dan pembacaan otomatis dokumen nota/faktur PDF & foto secara cerdas.
             </p>
           </div>
 

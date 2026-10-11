@@ -66,6 +66,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [scanResult, setScanResult] = useState<any | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<{ isConnected: boolean; model: string; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll chat
@@ -74,6 +75,15 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, activeTab]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch("/api/ai/status")
+        .then((res) => res.json())
+        .then((data) => setAiStatus(data))
+        .catch(() => setAiStatus({ isConnected: false, model: "offline", message: "Server offline" }));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -254,9 +264,20 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-stone-900 tracking-tight">Julia Coffee AI Copilot</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-mono">
-                  PRO
-                </span>
+                {aiStatus?.isConnected ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Gemini 2.5 Flash Aktif
+                  </span>
+                ) : (
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-mono flex items-center gap-1.5 shadow-xs"
+                    title="Kunci API Gemini belum dipasang di Pengaturan. Sistem menggunakan modul analisis cerdas lokal."
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    Mode Cerdas Lokal
+                  </span>
+                )}
               </div>
               <p className="text-xs text-stone-500">Konsultan Operasional & Analisis Cerdas Toko</p>
             </div>
