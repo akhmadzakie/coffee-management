@@ -1860,7 +1860,7 @@ async function startServer() {
       contents.push({ text: promptText });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.8-flash",
         contents,
         config: {
           responseMimeType: "application/json",
@@ -1941,7 +1941,7 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
           });
 
           const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.8-flash",
             contents,
             config: {
               systemInstruction: {
@@ -2031,10 +2031,10 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
       res.json({
         isConnected,
-        model: isConnected ? "gemini-2.5-flash" : "heuristic-fallback",
+        model: isConnected ? "gemini-3.8-flash" : "heuristic-fallback",
         source: isConnected ? (process.env.GEMINI_API_KEY ? "Environment (.env)" : "Pengaturan Sistem") : "offline",
         message: isConnected
-          ? "Koneksi Gemini 2.5 Flash aktif dan siap memproses konsultasi & OCR nota."
+          ? "Koneksi Gemini 3.8 Flash aktif dan siap memproses konsultasi & OCR nota."
           : "Kunci API Gemini belum terkonfigurasi. Berjalan dalam mode pintar lokal (offline fallback).",
       });
     } catch (err: any) {
@@ -2064,14 +2064,14 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
       const ai = new GoogleGenAI({ apiKey: keyToTest.trim() });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.8-flash",
         contents: [{ text: "Tes koneksi. Jawab singkat: OK!" }],
       });
 
       return res.json({
         success: true,
         reply: response.text?.trim() || "OK!",
-        message: "Koneksi ke Google Gemini 2.5 Flash berhasil!",
+        message: "Koneksi ke Google Gemini 3.8 Flash berhasil!",
       });
     } catch (err: any) {
       console.error("Gemini test connection failed:", err);

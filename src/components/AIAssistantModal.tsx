@@ -267,7 +267,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 {aiStatus?.isConnected ? (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Gemini 2.5 Flash Aktif
+                    Gemini 3.8 Flash Aktif
                   </span>
                 ) : (
                   <span

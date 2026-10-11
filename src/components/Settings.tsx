@@ -85,7 +85,7 @@ export const SettingsComponent = () => {
 
       setTestResult({
         success: true,
-        message: "Koneksi Berhasil! Model Gemini 2.5 Flash aktif dan siap digunakan.",
+        message: "Koneksi Berhasil! Model Gemini 3.8 Flash aktif dan siap digunakan.",
       });
     } catch (err: any) {
       setTestResult({
