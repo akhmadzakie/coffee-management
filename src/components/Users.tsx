@@ -109,6 +109,8 @@ export const UsersComponent = () => {
       const deptUpper = (emp.department || "").toUpperCase();
       if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
         setFormRole("MANAGER");
+      } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
+        setFormRole("FINANCE");
       } else if (posUpper.includes("LEADER")) {
         setFormRole("LEADER");
       } else if (posUpper.includes("KASIR")) {
@@ -185,6 +187,9 @@ export const UsersComponent = () => {
           pos = "Kasir";
         } else if (formRole === "MANAGER") {
           pos = "Manager";
+        } else if (formRole === "FINANCE") {
+          pos = "Finance";
+          if (!dept || dept === "BAR") dept = "FINANCE";
         } else if (formRole === "LEADER") {
           pos = "Leader";
           if (userData.department) dept = userData.department;

@@ -247,6 +247,8 @@ export function HRManagement() {
     let calculatedRole: Role = "KASIR";
     if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
       calculatedRole = "MANAGER";
+    } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
+      calculatedRole = "FINANCE";
     } else if (posUpper.includes("LEADER")) {
       calculatedRole = "LEADER";
     } else if (posUpper.includes("KASIR")) {
@@ -2382,6 +2384,8 @@ export function HRManagement() {
                         <option value="BAR">Bar</option>
                         <option value="KITCHEN">Dapur (Kitchen)</option>
                         <option value="BAKER">Baker (Roti)</option>
+                        <option value="MANAGEMENT">Manajemen & Kantor</option>
+                        <option value="FINANCE">Keuangan (Finance)</option>
                       </select>
                     </div>
                     <div>
@@ -2395,6 +2399,9 @@ export function HRManagement() {
                         <option value="Kasir">Kasir</option>
                         <option value="Karyawan">Karyawan (Staff)</option>
                         <option value="Leader">Leader</option>
+                        {currentUser?.role !== "MANAGER" && (
+                          <option value="Finance">Finance / Staf Keuangan</option>
+                        )}
                         {currentUser?.role !== "MANAGER" && (
                           <option value="Manager">Manager</option>
                         )}

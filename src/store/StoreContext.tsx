@@ -863,6 +863,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
         if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
           role = "MANAGER";
+        } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
+          role = "FINANCE";
         } else if (posUpper.includes("LEADER")) {
           role = "LEADER";
         } else if (posUpper.includes("KASIR")) {
@@ -1039,6 +1041,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           pos = "Kasir";
         } else if (updatedUser.role === "MANAGER") {
           pos = "Manager";
+        } else if (updatedUser.role === "FINANCE") {
+          pos = "Finance";
+          if (!dept || dept === "BAR") dept = "FINANCE";
         } else if (updatedUser.role === "LEADER") {
           pos = "Leader";
           if (updatedUser.department) dept = updatedUser.department;
