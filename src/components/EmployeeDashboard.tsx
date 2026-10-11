@@ -32,7 +32,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES } from "./LeaderChecklist";
+import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES, ensureCategoryArray, normalizeTaskItem } from "./LeaderChecklist";
 import { PayrollRecord } from "../types";
 import { formatCurrency } from "../utils/format";
 import { PayslipModal } from "./PayslipModal";
@@ -52,6 +52,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     users,
     contracts,
     payrollRecords,
+    employeeShifts,
   } = useStore();
 
   const [showKpiDetails, setShowKpiDetails] = useState(false);
@@ -170,42 +171,75 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     return "BAR";
   }, [currentUser, activeEmployee]);
 
-  // Leader checklist progress today
-  const checklistProgress = useMemo(() => {
-    if (!isLeader) return null;
+  // User division & shift today
+  const myDivision = isLeader ? leaderDivision : getEmployeeDivision(activeEmployee);
+  const todayShiftRecord = (employeeShifts || []).find(
+    (s: any) => s.employeeId === activeEmployeeId && s.date === todayStr
+  );
+  const scheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || "PAGI";
 
-    // Get categories for leader's division
-    const templates = settings.leaderChecklistTemplates;
-    let categories = DEFAULT_BAR_CATEGORIES;
-    if (leaderDivision === "KITCHEN") {
-      categories = templates?.kitchen || DEFAULT_KITCHEN_CATEGORIES;
-    } else if (leaderDivision === "BAKER") {
-      categories = templates?.baker || DEFAULT_BAKER_CATEGORIES;
-    } else {
-      categories = templates?.bar || DEFAULT_BAR_CATEGORIES;
+  // Checklist progress today for this employee
+  const checklistProgress = useMemo(() => {
+    let rawCats = settings.leaderBarTasks;
+    if (myDivision === "KITCHEN") rawCats = settings.leaderKitchenTasks || DEFAULT_KITCHEN_CATEGORIES;
+    else if (myDivision === "BAKER") rawCats = settings.leaderBakerTasks || DEFAULT_BAKER_CATEGORIES;
+    else rawCats = settings.leaderBarTasks || DEFAULT_BAR_CATEGORIES;
+
+    const categories = ensureCategoryArray(rawCats, DEFAULT_BAR_CATEGORIES);
+
+    if (scheduledShift === "OFF") {
+      return {
+        totalTasks: 0,
+        completedCount: 0,
+        percentage: 100,
+        isFinished: true,
+        isOff: true,
+        scheduledShift: "OFF" as const,
+      };
     }
 
-    const totalTasks = categories.reduce((sum, cat) => sum + (cat.items?.length || 0), 0);
+    // Filter tasks matching scheduledShift and isActive
+    const activeShiftTasks: { catName: string; text: string }[] = [];
+    categories.forEach((cat) => {
+      (cat.items || []).forEach((item) => {
+        const norm = normalizeTaskItem(item);
+        if (norm.isActive && (norm.shift === "ALL" || norm.shift === scheduledShift)) {
+          activeShiftTasks.push({ catName: cat.category, text: norm.text });
+        }
+      });
+    });
+
+    const totalTasks = activeShiftTasks.length;
 
     // Find checklist submitted for today
     const todayChecklist = dailyChecklists.find(
       (c) =>
         c.date.startsWith(todayStr) &&
-        (c.notes?.includes(`[${leaderDivision}]`) ||
-          users.find((u) => u.id === c.employeeId)?.role === leaderDivision ||
-          users.find((u) => u.id === c.employeeId)?.department === leaderDivision)
+        (c.employeeId === activeEmployeeId ||
+          c.employeeId === currentUser?.id ||
+          (isLeader && c.notes?.includes(`[${leaderDivision}]`)))
     );
 
-    const completedCount = todayChecklist?.leaderTasks?.length || 0;
-    const percentage = totalTasks > 0 ? Math.min(100, Math.round((completedCount / totalTasks) * 100)) : 0;
+    const completedList = todayChecklist?.leaderTasks || [];
+    let completedCount = 0;
+    activeShiftTasks.forEach((t) => {
+      const key = `${t.catName}:::${t.text}`;
+      if (completedList.includes(key) || completedList.includes(t.text)) {
+        completedCount++;
+      }
+    });
+
+    const percentage = totalTasks > 0 ? Math.min(100, Math.round((completedCount / totalTasks) * 100)) : 100;
 
     return {
       totalTasks,
       completedCount,
       percentage,
       isFinished: percentage === 100,
+      isOff: false,
+      scheduledShift,
     };
-  }, [isLeader, leaderDivision, settings, dailyChecklists, todayStr, users]);
+  }, [myDivision, scheduledShift, settings, dailyChecklists, todayStr, activeEmployeeId, currentUser, isLeader, leaderDivision]);
 
   // Team members in leader's division (Kasir otomatis tergabung ke Divisi Bar)
   const divisionTeam = useMemo(() => {
@@ -234,24 +268,28 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     );
   }, [contracts, activeEmployeeId]);
 
-  const targetKpiBonus = activeContract?.kpiBonusTarget || 0;
+  const divisionPlafon = settings?.divisionKpiBonusTarget?.[myDivision] || 0;
+  const targetKpiBonus = activeContract?.kpiBonusTarget || divisionPlafon || 0;
 
   // 9. Live Realtime Performance & Estimated KPI
   const livePerformance = useMemo(() => {
     const presentDays = monthlyStats.present;
     const lateDays = monthlyStats.late;
     const alphaDays = monthlyStats.alpha;
-    const expectedDays = Math.max(1, presentDays || 25);
+    const expectedDays = Math.max(1, presentDays || 22);
 
-    if (isLeader) {
-      // Leader: Dihitung dari penyelesaian daily checklist jobdesk tim/divisinya bulan ini
-      const empChecklists = (dailyChecklists || []).filter(
-        (c) =>
-          (c.employeeId === activeEmployeeId ||
-            c.notes?.includes(`[${leaderDivision}]`)) &&
-          c.date.startsWith(currentMonthStr)
-      );
-      const checklistDays = empChecklists.length;
+    // Checklist bulan ini
+    const empChecklists = (dailyChecklists || []).filter(
+      (c) =>
+        (c.employeeId === activeEmployeeId ||
+          c.employeeId === currentUser?.id ||
+          (isLeader && c.notes?.includes(`[${leaderDivision}]`))) &&
+        c.date.startsWith(currentMonthStr)
+    );
+    const checklistDays = empChecklists.length;
+
+    if (checklistDays > 0) {
+      // Dihitung proporsional dari penyelesaian Daily Jobdesk Checklist shift bulan ini
       const ratio = Math.min(1, checklistDays / expectedDays);
       const score = Math.round(ratio * 100);
       const estimatedBonus = targetKpiBonus > 0 ? Math.round(targetKpiBonus * ratio) : 0;
@@ -261,12 +299,12 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
         ratio,
         targetBonus: targetKpiBonus,
         estimatedBonus,
-        metricTitle: "Capaian Jobdesk Divisi",
-        metricSubtitle: `${checklistDays} dari ${expectedDays} hari kerja terisi`,
-        isLeader: true,
+        metricTitle: isLeader ? "Capaian Jobdesk Divisi" : "Capaian Jobdesk Shift",
+        metricSubtitle: `${checklistDays} dari ${expectedDays} hari kerja terisi (${score}%)`,
+        isLeader,
       };
     } else {
-      // Staff: Dihitung dari kedisiplinan kehadiran & ketepatan waktu
+      // Fallback kedisiplinan jika belum ada checklist
       let score = 100;
       score -= lateDays * 5;
       score -= alphaDays * 15;
@@ -281,10 +319,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
         estimatedBonus,
         metricTitle: "Kedisiplinan & Ketepatan Waktu",
         metricSubtitle: `${presentDays} Hadir (${lateDays} Terlambat, ${alphaDays} Alpha)`,
-        isLeader: false,
+        isLeader,
       };
     }
-  }, [monthlyStats, isLeader, dailyChecklists, activeEmployeeId, leaderDivision, currentMonthStr, targetKpiBonus]);
+  }, [monthlyStats, isLeader, dailyChecklists, activeEmployeeId, currentUser, leaderDivision, currentMonthStr, targetKpiBonus]);
 
   // 10. My Payslips (Self-Service)
   const myPayslips = useMemo(() => {
@@ -629,6 +667,89 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 3B. UNTUK STAF: JOBDESK CHECKLIST SHIFT HARI INI ─── */}
+      {!isLeader && checklistProgress && (
+        <div className="bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 rounded-2xl p-6 border border-amber-200/90 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-500/20">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Jobdesk Shift Hari Ini
+                  </h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    checklistProgress.scheduledShift === "PAGI"
+                      ? "bg-amber-100 text-amber-800 border border-amber-200"
+                      : checklistProgress.scheduledShift === "MIDDLE"
+                      ? "bg-orange-100 text-orange-800 border border-orange-200"
+                      : checklistProgress.scheduledShift === "SORE"
+                      ? "bg-purple-100 text-purple-800 border border-purple-200"
+                      : "bg-slate-200 text-slate-700"
+                  }`}>
+                    {checklistProgress.scheduledShift === "OFF" ? "🏖️ Hari Ini Libur (OFF)" : `Shift ${checklistProgress.scheduledShift}`}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Checklist tugas otomatis mengikuti shift Anda. Selesaikan tugas untuk meraih KPI 100% dan bonus bulanan penuh.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => onNavigate("leader_checklist")}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 self-start sm:self-auto shrink-0"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>Buka Checklist Tugas →</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-amber-100/90">
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-800 flex items-center justify-center font-black text-2xl font-mono shrink-0">
+                {checklistProgress.percentage}%
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  {checklistProgress.isOff ? "Status: Libur (OFF)" : `${checklistProgress.completedCount} dari ${checklistProgress.totalTasks} Selesai`}
+                </span>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {checklistProgress.percentage === 100 ? "Lengkap 100%" : "Sedang Berjalan"}
+                </p>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 flex flex-col justify-center">
+              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/60 mb-2">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    checklistProgress.percentage === 100 ? "bg-emerald-500" : checklistProgress.percentage > 0 ? "bg-amber-500" : "bg-slate-300"
+                  }`}
+                  style={{ width: `${checklistProgress.percentage}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap justify-between items-center text-[11px] text-slate-500 gap-2">
+                <span>
+                  {checklistProgress.isOff 
+                    ? "🏖️ Anda tidak dibebani checklist hari ini (aman dari pengurangan KPI)."
+                    : checklistProgress.percentage === 100 
+                    ? "🎉 Seluruh checklist shift hari ini telah tuntas dikerjakan!" 
+                    : "Lengkapi tugas shift Anda sebelum waktu operasional berakhir."}
+                </span>
+                {livePerformance.targetBonus > 0 && (
+                  <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    Plafon Bonus: {formatCurrency(livePerformance.targetBonus)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

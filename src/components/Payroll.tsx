@@ -131,18 +131,19 @@ export function Payroll() {
         
         const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage); // Penalty for alpha
         
-        const targetKpiBonus = contract?.kpiBonusTarget || 0;
+        const divisionBonusPlafon = settings?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
+        const targetKpiBonus = contract?.kpiBonusTarget || divisionBonusPlafon || 0;
         const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
         let calculatedKpiBonus = 0;
 
         if (targetKpiBonus > 0) {
-          if (isLeader) {
-            // Leader: Dihitung proporsional dari % penyelesaian Daily Jobdesk Checklist
-            const expectedDays = Math.max(1, presentDays || 25);
+          const expectedDays = Math.max(1, presentDays || 22);
+          if (checklistDays > 0) {
+            // Dihitung proporsional dari % penyelesaian Daily Jobdesk Checklist shift bulan ini (% KPI × Plafon Bonus)
             const completionRatio = Math.min(1, checklistDays / expectedDays);
             calculatedKpiBonus = Math.round(targetKpiBonus * completionRatio);
           } else {
-            // Staff: Dihitung dari kedisiplinan (Ketepatan Waktu & Kehadiran)
+            // Fallback kedisiplinan (Ketepatan Waktu & Kehadiran) jika belum ada pengisian checklist
             const disciplineRatio = Math.max(0, 1 - (lateDays * 0.05) - (alphaDays * 0.10));
             const scoreMultiplier = kpi ? (kpi.totalScore / 100) : disciplineRatio;
             calculatedKpiBonus = Math.round(targetKpiBonus * scoreMultiplier);

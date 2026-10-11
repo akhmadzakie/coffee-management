@@ -284,10 +284,17 @@ export interface DeviceSession {
   isCurrent?: boolean;
 }
 
+export interface TaskItemDetail {
+  id?: string;
+  text: string;
+  shift?: "PAGI" | "MIDDLE" | "SORE" | "ALL";
+  isActive?: boolean;
+}
+
 export interface TaskCategoryGroup {
   id: string;
   category: string;
-  items: string[];
+  items: (string | TaskItemDetail)[];
 }
 
 export interface Settings {
@@ -306,6 +313,7 @@ export interface Settings {
   geminiApiKey?: string;
   monthlyRevenueTarget?: number;
   targetBonusAmount?: number; // Bonus per karyawan jika omzet tembus target
+  divisionKpiBonusTarget?: Record<string, number>; // Plafon Target Bonus KPI per divisi yang diatur Manager
   scheduleApprovals?: Record<string, { status: "DRAFT" | "APPROVED"; approvedBy?: string; approvedAt?: string }>;
 }
 
