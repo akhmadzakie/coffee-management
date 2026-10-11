@@ -2136,10 +2136,10 @@ export function HRManagement() {
 
       {/* Modals */}
       {isEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 flex min-h-full items-start sm:items-center justify-center py-6 sm:py-8">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[calc(100vh-3.5rem)] my-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 flex justify-center items-start pt-5 sm:pt-8 pb-8">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh]">
             {/* Header */}
-            <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-base text-slate-900 flex items-center">
                 <Users className="w-5 h-5 mr-2 text-indigo-600" />
                 {editingEmployee ? (isIndo ? "Edit Karyawan" : "Edit Employee") : (isIndo ? "Tambah Karyawan" : "Add Employee")}
@@ -2147,7 +2147,7 @@ export function HRManagement() {
               <button 
                 type="button"
                 onClick={() => setIsEmployeeModalOpen(false)} 
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-200/60"
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-200/60"
                 title="Tutup"
               >
                 <X className="w-5 h-5" />
@@ -2183,42 +2183,43 @@ export function HRManagement() {
             </div>
 
             {/* Form Content */}
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div className="p-5 space-y-3.5 overflow-y-auto flex-1">
               {empModalTab === "basic" ? (
                 <>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">
-                      Nama Lengkap <span className="text-rose-500">*</span>
-                    </label>
-                    <input 
-                      type="text" 
-                      required
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                      value={empForm.name} 
-                      onChange={e => setEmpForm({...empForm, name: e.target.value})} 
-                      placeholder="Contoh: Budi Santoso"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">
-                      Username (Login) <span className="text-rose-500">*</span>
-                    </label>
-                    <input 
-                      type="text" 
-                      required
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                      value={empForm.username} 
-                      onChange={e => setEmpForm({...empForm, username: e.target.value})} 
-                      placeholder="Contoh: budi"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                        Nama Lengkap <span className="text-rose-500">*</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.name} 
+                        onChange={e => setEmpForm({...empForm, name: e.target.value})} 
+                        placeholder="Contoh: Budi"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                        Username <span className="text-rose-500">*</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.username} 
+                        onChange={e => setEmpForm({...empForm, username: e.target.value})} 
+                        placeholder="Contoh: budi"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1">Departemen</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Departemen</label>
                       <select 
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.department} 
                         onChange={e => setEmpForm({...empForm, department: e.target.value})}
                       >
@@ -2230,9 +2231,9 @@ export function HRManagement() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1">Jabatan</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Jabatan</label>
                       <select 
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.position} 
                         onChange={e => setEmpForm({...empForm, position: e.target.value})}
                       >
@@ -2249,9 +2250,9 @@ export function HRManagement() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
                       <select 
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.status} 
                         onChange={e => setEmpForm({...empForm, status: e.target.value as any})}
                       >
@@ -2262,9 +2263,9 @@ export function HRManagement() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1">Tipe</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Tipe</label>
                       <select 
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
                         value={empForm.employmentType} 
                         onChange={e => setEmpForm({...empForm, employmentType: e.target.value as any})}
                       >
@@ -2277,7 +2278,7 @@ export function HRManagement() {
                   </div>
 
                   {!editingEmployee && (
-                    <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                    <div className="p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-100">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input 
                           type="checkbox" 
@@ -2297,36 +2298,37 @@ export function HRManagement() {
                 </>
               ) : (
                 <>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">No. HP / WhatsApp</label>
-                    <input 
-                      type="text" 
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                      value={empForm.phone} 
-                      onChange={e => setEmpForm({...empForm, phone: e.target.value})} 
-                      placeholder="08123456789" 
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">No. HP / WhatsApp</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.phone} 
+                        onChange={e => setEmpForm({...empForm, phone: e.target.value})} 
+                        placeholder="08123456789" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Email</label>
+                      <input 
+                        type="email" 
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.email} 
+                        onChange={e => setEmpForm({...empForm, email: e.target.value})} 
+                        placeholder="email@contoh.com" 
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
-                    <input 
-                      type="email" 
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                      value={empForm.email} 
-                      onChange={e => setEmpForm({...empForm, email: e.target.value})} 
-                      placeholder="email@contoh.com" 
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Alamat Domisili</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Alamat Domisili</label>
                     <textarea 
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm resize-none h-24 transition-all" 
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm resize-none h-20 transition-all" 
                       value={empForm.address} 
                       onChange={e => setEmpForm({...empForm, address: e.target.value})} 
                       placeholder="Alamat domisili lengkap..." 
-                      rows={3}
+                      rows={2}
                     />
                   </div>
                 </>
@@ -2334,18 +2336,18 @@ export function HRManagement() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-end space-x-2.5 shrink-0">
               <button 
                 type="button"
                 onClick={() => setIsEmployeeModalOpen(false)} 
-                className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors"
+                className="px-4 py-1.5 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors"
               >
                 Batal
               </button>
               <button 
                 type="button"
                 onClick={handleSaveEmployee} 
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm shadow-xs transition-colors"
+                className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm shadow-xs transition-colors"
               >
                 Simpan
               </button>

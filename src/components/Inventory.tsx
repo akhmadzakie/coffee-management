@@ -734,8 +734,8 @@ export const Inventory = () => {
       />
 
       {isAddIngredientOpen && (
-        <div className="fixed inset-0 bg-slate-900/50  flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h2 className="text-xl font-bold text-slate-800">
                 Tambah Bahan Baku
@@ -853,8 +853,8 @@ export const Inventory = () => {
       )}
 
       {isAddMovementOpen && (
-        <div className="fixed inset-0 bg-slate-900/50  flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h2 className="text-xl font-bold text-slate-800">Catat Pemakaian Harian</h2>
               <button
