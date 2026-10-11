@@ -90,6 +90,7 @@ export const Layout: React.FC<LayoutProps> = ({
     logout,
     cashAccounts,
     addCashTransaction,
+    employees,
   } = useStore();
   const { t } = useTranslation(settings.language || "id");
 
@@ -338,8 +339,19 @@ export const Layout: React.FC<LayoutProps> = ({
         return { label: "Finance", bg: "bg-blue-500/15 text-blue-300 border-blue-500/30", icon: "📊" };
       case "KASIR":
         return { label: "Kasir POS", bg: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30", icon: "💳" };
-      case "LEADER":
+      case "LEADER": {
+        const emp = employees?.find(
+          (e) => e.id === currentUser?.employeeId || e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
+        );
+        const dept = (currentUser?.department || emp?.department || emp?.position || "").toUpperCase();
+        if (dept.includes("KITCHEN")) {
+          return { label: "Leader Kitchen", bg: "bg-orange-500/15 text-orange-300 border-orange-500/30", icon: "🍳" };
+        }
+        if (dept.includes("BAKER") || dept.includes("PASTRY")) {
+          return { label: "Leader Baker", bg: "bg-amber-500/15 text-amber-300 border-amber-500/30", icon: "🥐" };
+        }
         return { label: "Leader Bar", bg: "bg-orange-500/15 text-orange-300 border-orange-500/30", icon: "☕" };
+      }
       default:
         return { label: role || "Staff", bg: "bg-slate-500/15 text-slate-300 border-slate-500/30", icon: "👤" };
     }

@@ -189,6 +189,7 @@ export const LeaderChecklist: React.FC = () => {
   const { 
     currentUser, 
     users, 
+    employees,
     dailyChecklists, 
     setDailyChecklists, 
     settings, 
@@ -196,7 +197,7 @@ export const LeaderChecklist: React.FC = () => {
     isReadOnly 
   } = useStore();
 
-  const isSupervisor = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
+  const isSupervisor = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
   const [activeTab, setActiveTab] = useState<"monitoring" | "settings">("monitoring");
 
   // Selected date for monitoring (defaults to today)
@@ -219,11 +220,23 @@ export const LeaderChecklist: React.FC = () => {
   );
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  // Leader role selection if current user is a leader
-  const initialLeaderRole: Division = 
-    currentUser?.role === "KITCHEN" || currentUser?.department === "KITCHEN" ? "KITCHEN" :
-    currentUser?.role === "BAKER" ? "BAKER" : "BAR";
-  const [leaderActiveDivision, setLeaderActiveDivision] = useState<Division>(initialLeaderRole);
+  // Deteksi divisi spesifik Leader yang bertugas (Bar, Kitchen, atau Baker)
+  const userEmployee = employees?.find(
+    (e) => e.id === currentUser?.employeeId || e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
+  );
+  const deptStr = (currentUser?.department || userEmployee?.department || "").toUpperCase();
+  const posStr = (userEmployee?.position || "").toUpperCase();
+  const roleStr = (currentUser?.role || "").toUpperCase();
+
+  const assignedLeaderDivision: Division = useMemo(() => {
+    if (deptStr.includes("KITCHEN") || posStr.includes("KITCHEN") || roleStr === "KITCHEN") return "KITCHEN";
+    if (deptStr.includes("BAKER") || posStr.includes("BAKER") || posStr.includes("PASTRY") || roleStr === "BAKER") return "BAKER";
+    if (deptStr.includes("BAR") || posStr.includes("BAR") || roleStr === "BAR") return "BAR";
+    return "BAR";
+  }, [deptStr, posStr, roleStr]);
+
+  // Kunci divisi leader HANYA ke divisi miliknya — tidak boleh mengakses divisi lain
+  const leaderActiveDivision: Division = assignedLeaderDivision;
 
   // Synchronize tasks when settings change
   React.useEffect(() => {
@@ -942,35 +955,18 @@ export const LeaderChecklist: React.FC = () => {
           </p>
         </div>
 
-        {/* Jika akun Leader umum, berikan toggle divisi */}
-        {currentUser?.role === "LEADER" && (
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button
-              onClick={() => setLeaderActiveDivision("BAR")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                leaderActiveDivision === "BAR" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
-              }`}
-            >
-              Bar
-            </button>
-            <button
-              onClick={() => setLeaderActiveDivision("KITCHEN")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                leaderActiveDivision === "KITCHEN" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
-              }`}
-            >
-              Kitchen
-            </button>
-            <button
-              onClick={() => setLeaderActiveDivision("BAKER")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                leaderActiveDivision === "BAKER" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
-              }`}
-            >
-              Baker
-            </button>
-          </div>
-        )}
+        {/* Badge Divisi Leader (Terkunci Sesuai Penugasan & Otoritas Divisi) */}
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-bold shadow-2xs">
+          <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+          <span>
+            {assignedLeaderDivision === "BAR" && "☕ Divisi Barista (Bar Station)"}
+            {assignedLeaderDivision === "KITCHEN" && "🍳 Divisi Kitchen (Dapur)"}
+            {assignedLeaderDivision === "BAKER" && "🥐 Divisi Baker & Pastry"}
+          </span>
+          <span className="text-[10px] text-amber-700/80 font-medium ml-1">
+            (Terkunci Khusus Divisi Anda)
+          </span>
+        </div>
       </div>
 
       {/* Kartu Checklist Utama */}
