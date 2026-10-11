@@ -92,17 +92,39 @@ export function HRManagement() {
       (currentUser?.employeeId && e.id === currentUser.employeeId) ||
       e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
   );
-  const leaderDivision = (
-    currentUser?.department ||
-    leaderEmp?.department ||
-    (currentUser?.role === "KITCHEN" ? "KITCHEN" :
-     currentUser?.role === "BAKER" ? "BAKER" : "")
-  ).toUpperCase();
-  const [scheduleDivisionFilter, setScheduleDivisionFilter] = useState<string>(
-    currentUser?.role === "LEADER"
-      ? (leaderDivision || "ALL")
-      : "ALL"
-  );
+
+  // Aturan pembagian divisi standar:
+  // - KITCHEN: Kitchen, Dapur, Cook
+  // - BAKER: Baker, Pastry, Roti
+  // - BAR: Barista, Kasir, Beverage, Main (Kasir digabung ke Divisi Bar)
+  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" => {
+    const dept = (emp.department || "").toUpperCase();
+    const pos = (emp.position || "").toUpperCase();
+
+    if (dept.includes("KITCHEN") || pos.includes("KITCHEN") || pos.includes("DAPUR") || pos.includes("COOK")) {
+      return "KITCHEN";
+    }
+    if (dept.includes("BAKER") || pos.includes("BAKER") || pos.includes("PASTRY") || pos.includes("ROTI")) {
+      return "BAKER";
+    }
+    // Kasir dan seluruh operasional bar masuk ke BAR
+    return "BAR";
+  };
+
+  const leaderDivision = useMemo<"BAR" | "KITCHEN" | "BAKER">(() => {
+    if (currentUser?.department) {
+      const d = currentUser.department.toUpperCase();
+      if (d.includes("KITCHEN") || d.includes("DAPUR")) return "KITCHEN";
+      if (d.includes("BAKER") || d.includes("PASTRY")) return "BAKER";
+      return "BAR";
+    }
+    if (leaderEmp) {
+      return getEmployeeDivision(leaderEmp);
+    }
+    return "BAR";
+  }, [currentUser, leaderEmp]);
+
+  const [scheduleDivisionFilter, setScheduleDivisionFilter] = useState<string>("ALL");
   const [activeTab, setActiveTab] = useState<
     "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
   >(() => {
@@ -537,31 +559,27 @@ export function HRManagement() {
 
   const canEditShiftForEmployee = (emp: any) => {
     if (isReadOnly) return false;
-    if (isHRD) return true; // Manager, Owner, Super Admin can always edit
+    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua divisi
     if (isLeader) {
-      // Leader dapat menyusun dan mengedit jadwal seluruh anggota tim operasional (non-Manager/Owner)
+      // Leader hanya dapat menyusun dan mengedit jadwal staf di divisinya sendiri (Kasir ikut ke Bar)
+      const empDiv = getEmployeeDivision(emp);
       const posUpper = (emp.position || "").toUpperCase();
       const isExecutive = posUpper.includes("MANAGER") || posUpper.includes("MANAJER") || posUpper.includes("OWNER");
-      return !isExecutive;
+      return empDiv === leaderDivision && !isExecutive;
     }
     return false;
   };
 
   const filteredScheduleEmployees = useMemo(() => {
-    let list = employees.filter(e => e.status === "AKTIF");
-    if (scheduleDivisionFilter !== "ALL") {
-      list = list.filter(e => {
-        const d = (e.department || "").toUpperCase();
-        const pos = (e.position || "").toUpperCase();
-        if (scheduleDivisionFilter === "BAR") return d === "BAR" || pos.includes("BAR");
-        if (scheduleDivisionFilter === "KITCHEN") return d === "KITCHEN" || pos.includes("KITCHEN") || pos.includes("DAPUR");
-        if (scheduleDivisionFilter === "BAKER") return d === "BAKER" || pos.includes("BAKER") || pos.includes("PASTRY");
-        if (scheduleDivisionFilter === "MAIN") return d === "MAIN" || pos.includes("KASIR") || (!d && !pos.includes("BAR") && !pos.includes("KITCHEN") && !pos.includes("BAKER"));
-        return d === scheduleDivisionFilter;
-      });
+    const activeList = employees.filter(e => e.status === "AKTIF");
+    if (isLeader) {
+      // Leader HANYA melihat staf di divisinya sendiri (Kasir otomatis tergabung ke Bar)
+      return activeList.filter(e => getEmployeeDivision(e) === leaderDivision);
     }
-    return list;
-  }, [employees, scheduleDivisionFilter]);
+    // Manager memiliki akses penuh ke semua divisi atau per divisi
+    if (scheduleDivisionFilter === "ALL") return activeList;
+    return activeList.filter(e => getEmployeeDivision(e) === scheduleDivisionFilter);
+  }, [employees, isLeader, leaderDivision, scheduleDivisionFilter]);
 
   // Smart Collision Detection
   const scheduleCollisions = useMemo(() => {
@@ -569,7 +587,7 @@ export function HRManagement() {
     
     // 1. Clopen Check (Shift Sore jam 15-23 lalu besoknya Shift Pagi jam 07-15)
     const activeEmps = isLeader && leaderDivision 
-      ? employees.filter(e => e.status === "AKTIF" && (e.department === leaderDivision || (!e.department && leaderDivision === "BAR")))
+      ? employees.filter(e => e.status === "AKTIF" && getEmployeeDivision(e) === leaderDivision)
       : employees.filter(e => e.status === "AKTIF");
 
     activeEmps.forEach(emp => {
@@ -608,13 +626,13 @@ export function HRManagement() {
     });
 
     // 3. Understaffed Check (Shift kosong di divisi yang ada stafnya)
-    const divisionsToCheck = isLeader && leaderDivision ? [leaderDivision] : ["BAR", "KITCHEN", "BAKER", "MAIN"];
+    const divisionsToCheck: ("BAR" | "KITCHEN" | "BAKER")[] = isLeader && leaderDivision ? [leaderDivision] : ["BAR", "KITCHEN", "BAKER"];
     weekDays.forEach((d) => {
       const dStr = d.toISOString().split("T")[0];
       const dayName = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
       
       divisionsToCheck.forEach(div => {
-        const divEmps = employees.filter(e => e.status === "AKTIF" && (e.department === div || (!e.department && div === "MAIN")));
+        const divEmps = employees.filter(e => e.status === "AKTIF" && getEmployeeDivision(e) === div);
         if (divEmps.length >= 2) {
           const morningCount = divEmps.filter(e => {
             const s = employeeShifts.find(sh => sh.employeeId === e.id && sh.date === dStr)?.shiftType;
@@ -625,19 +643,20 @@ export function HRManagement() {
             return s === "SORE";
           }).length;
           
+          const divLabel = div === "BAR" ? "Bar & Kasir" : div;
           if (morningCount === 0 && afternoonCount > 0) {
             warnings.push({
               id: `understaffed-pagi-${div}-${dStr}`,
               type: "understaffed",
               severity: "medium",
-              message: `Shift Pagi Kosong: Divisi ${div} tidak memiliki staf bertugas di Shift Pagi pada ${dayName}.`
+              message: `Shift Pagi Kosong: Divisi ${divLabel} tidak memiliki staf bertugas di Shift Pagi pada ${dayName}.`
             });
           } else if (afternoonCount === 0 && morningCount > 0) {
             warnings.push({
               id: `understaffed-sore-${div}-${dStr}`,
               type: "understaffed",
               severity: "medium",
-              message: `Shift Sore Kosong: Divisi ${div} tidak memiliki staf bertugas di Shift Sore pada ${dayName}.`
+              message: `Shift Sore Kosong: Divisi ${divLabel} tidak memiliki staf bertugas di Shift Sore pada ${dayName}.`
             });
           }
         }
@@ -648,6 +667,9 @@ export function HRManagement() {
   }, [employees, employeeShifts, weekDays, isLeader, leaderDivision]);
 
   const handleShiftChange = (empId: string, dateStr: string, shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF") => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp || !canEditShiftForEmployee(emp)) return;
+
     const exists = employeeShifts.some(s => s.employeeId === empId && s.date === dateStr);
     let newShifts: any[];
     if (exists) {
@@ -1300,7 +1322,9 @@ export function HRManagement() {
                 <div>
                   <div className="flex flex-wrap items-center gap-3">
                     <h3 className="text-xl font-bold text-slate-800">
-                      {isLeader ? (isIndo ? `Jadwal Shift Tim ${leaderDivision || ""}` : `Team Shift Schedule`) : (isIndo ? "Jadwal Shift & Evaluasi" : "Shift Schedule & Review")}
+                      {isLeader 
+                        ? (isIndo ? `Jadwal Shift Tim ${leaderDivision === "BAR" ? "Bar & Kasir" : leaderDivision || ""}` : `Team Shift Schedule`) 
+                        : (isIndo ? "Jadwal Shift & Evaluasi (Semua Divisi)" : "Shift Schedule & Review (All Divisions)")}
                     </h3>
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                       isWeekApproved 
@@ -1405,25 +1429,35 @@ export function HRManagement() {
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
                   <Filter className="w-3.5 h-3.5" /> Divisi:
                 </span>
-                {[
-                  { id: "ALL", label: "Semua Divisi" },
-                  { id: "BAR", label: "☕ Bar" },
-                  { id: "KITCHEN", label: "🍳 Kitchen" },
-                  { id: "BAKER", label: "🥐 Baker" },
-                  { id: "MAIN", label: "🛎️ Utama & Kasir" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setScheduleDivisionFilter(tab.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      scheduleDivisionFilter === tab.id
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                {isLeader ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 shadow-2xs">
+                      {leaderDivision === "BAR" ? "☕ Divisi Bar & Kasir" : leaderDivision === "KITCHEN" ? "🍳 Divisi Kitchen" : leaderDivision === "BAKER" ? "🥐 Divisi Baker" : `Divisi ${leaderDivision}`}
+                    </span>
+                    <span className="text-xs text-slate-400 italic">
+                      (Akses Leader: Terbatas hanya dapat mengatur dan meninjau divisi Anda sendiri)
+                    </span>
+                  </div>
+                ) : (
+                  [
+                    { id: "ALL", label: "Semua Divisi" },
+                    { id: "BAR", label: "☕ Bar & Kasir" },
+                    { id: "KITCHEN", label: "🍳 Kitchen" },
+                    { id: "BAKER", label: "🥐 Baker" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setScheduleDivisionFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        scheduleDivisionFilter === tab.id
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))
+                )}
               </div>
 
               {/* ─── SMART COLLISION DETECTION PANEL ─── */}
@@ -1522,8 +1556,8 @@ export function HRManagement() {
                             <td className="py-3 px-4 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
                               <p className="font-bold text-slate-800 truncate">{emp.name}</p>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 text-slate-600">
-                                  {emp.department || "MAIN"}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">
+                                  {getEmployeeDivision(emp) === "BAR" ? "BAR & KASIR" : getEmployeeDivision(emp)}
                                 </span>
                                 <span className="text-[11px] text-slate-400 truncate">{emp.position}</span>
                               </div>

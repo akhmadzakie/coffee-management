@@ -139,13 +139,34 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   // 7. LEADER SPECIFIC DATA
   const isLeader = currentUser?.role === "LEADER";
 
+  // Aturan pembagian divisi standar:
+  // - KITCHEN: Kitchen, Dapur, Cook
+  // - BAKER: Baker, Pastry, Roti
+  // - BAR: Barista, Kasir, Beverage, Main (Kasir digabung ke Divisi Bar)
+  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" => {
+    const dept = (emp.department || "").toUpperCase();
+    const pos = (emp.position || "").toUpperCase();
+
+    if (dept.includes("KITCHEN") || pos.includes("KITCHEN") || pos.includes("DAPUR") || pos.includes("COOK")) {
+      return "KITCHEN";
+    }
+    if (dept.includes("BAKER") || pos.includes("BAKER") || pos.includes("PASTRY") || pos.includes("ROTI")) {
+      return "BAKER";
+    }
+    return "BAR";
+  };
+
   // Determine Leader Division
-  const leaderDivision = useMemo(() => {
-    if (currentUser?.department === "KITCHEN") return "KITCHEN";
-    if (currentUser?.department === "BAR") return "BAR";
-    if (activeEmployee?.department === "KITCHEN") return "KITCHEN";
-    if (activeEmployee?.department === "BAR") return "BAR";
-    if (activeEmployee?.department === "BAKER") return "BAKER";
+  const leaderDivision = useMemo<"BAR" | "KITCHEN" | "BAKER">(() => {
+    if (currentUser?.department) {
+      const d = currentUser.department.toUpperCase();
+      if (d.includes("KITCHEN") || d.includes("DAPUR")) return "KITCHEN";
+      if (d.includes("BAKER") || d.includes("PASTRY")) return "BAKER";
+      return "BAR";
+    }
+    if (activeEmployee) {
+      return getEmployeeDivision(activeEmployee);
+    }
     return "BAR";
   }, [currentUser, activeEmployee]);
 
@@ -186,11 +207,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     };
   }, [isLeader, leaderDivision, settings, dailyChecklists, todayStr, users]);
 
-  // Team members in leader's division
+  // Team members in leader's division (Kasir otomatis tergabung ke Divisi Bar)
   const divisionTeam = useMemo(() => {
     if (!isLeader) return [];
     return employees
-      .filter((e) => e.department === leaderDivision && e.status === "AKTIF")
+      .filter((e) => getEmployeeDivision(e) === leaderDivision && e.status === "AKTIF")
       .map((e) => {
         const att = dailyAttendances.find((a) => a.employeeId === e.id && a.date === todayStr);
         return {
@@ -475,7 +496,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-slate-900">
-                    Monitoring Operasional Tim Divisi {leaderDivision}
+                    Monitoring Operasional Tim Divisi {leaderDivision === "BAR" ? "Bar & Kasir" : leaderDivision}
                   </h3>
                   <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-md uppercase">
                     Portal Leader
@@ -557,7 +578,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-indigo-600" />
-                  Kehadiran Tim {leaderDivision} ({divisionTeam.length} Staf)
+                  Kehadiran Tim {leaderDivision === "BAR" ? "Bar & Kasir" : leaderDivision} ({divisionTeam.length} Staf)
                 </span>
                 <span className="text-[11px] text-slate-400">Hari ini</span>
               </div>
