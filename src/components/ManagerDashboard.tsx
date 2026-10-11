@@ -251,11 +251,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : checklists.length > 0 ? 100 : 0;
 
+      const latestNotes = checklists
+        .map((c) => c.notes?.replace(/^\[(BAR|KITCHEN|BAKER|KASIR)\]\s*/, "").trim())
+        .filter(Boolean);
+
       return {
         ...div,
         staffCount: empInDiv.length,
         submittedCount: checklists.length,
         progress,
+        notes: latestNotes,
       };
     });
   }, [dailyChecklists, todayStr, activeEmployees]);
@@ -729,6 +734,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     style={{ width: `${div.progress}%` }}
                   />
                 </div>
+
+                {div.notes && div.notes.length > 0 && (
+                  <div className="mt-2.5 p-2 bg-amber-50/80 border border-amber-200/70 rounded-xl text-[11px] text-amber-950 flex items-start gap-1.5">
+                    <span className="font-bold shrink-0 text-amber-800">Catatan:</span>
+                    <span className="italic truncate" title={div.notes.join("; ")}>
+                      "{div.notes.join("; ")}"
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
