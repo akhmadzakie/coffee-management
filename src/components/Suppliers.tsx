@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import {
   Plus,
@@ -202,9 +203,9 @@ export const Suppliers = () => {
       </div>
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] my-auto border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
               <h3 className="text-lg font-semibold text-slate-800">
                 {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
@@ -302,7 +303,8 @@ export const Suppliers = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

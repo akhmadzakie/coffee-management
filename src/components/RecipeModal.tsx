@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Recipe, RecipeIngredient, Ingredient } from "../types";
 
 interface RecipeModalProps {
@@ -65,9 +66,9 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-50 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col my-auto border border-slate-200">
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <h2 className="text-xl font-bold text-slate-800">
             {editingRecipe ? "Edit Resep" : "Tambah Resep Baru"}
@@ -175,6 +176,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
             </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { User } from "../types";
 import {
@@ -28,6 +29,8 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
 
   if (!isOpen) return null;
 
+  const targetPinLength = selectedUser?.pin?.length === 4 ? 4 : 6;
+
   const handleSelectUser = (user: User) => {
     setSelectedUser(user);
     setPin("");
@@ -35,9 +38,26 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
   };
 
   const handleKeypadPress = (num: string) => {
-    if (pin.length < 8) {
-      setPin((prev) => prev + num);
+    const maxLen = selectedUser?.pin?.length || 6;
+    if (pin.length < maxLen) {
+      const nextPin = pin + num;
+      setPin(nextPin);
       setError("");
+      if (selectedUser?.pin && nextPin.length === selectedUser.pin.length) {
+        setIsSubmitting(true);
+        login(selectedUser.username, nextPin).then((success) => {
+          setIsSubmitting(false);
+          if (success) {
+            setError("");
+            setPin("");
+            setSelectedUser(null);
+            onClose();
+          } else {
+            setError("PIN otorisasi tidak sesuai.");
+            setPin("");
+          }
+        });
+      }
     }
   };
 
@@ -99,9 +119,9 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-md overflow-hidden flex flex-col text-stone-900">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-md overflow-hidden flex flex-col text-stone-900 my-auto max-h-[90vh]">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 bg-[#FAFAFA]">
@@ -198,7 +218,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
           <div className="pt-3 border-t border-stone-200/80 space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-                2. Masukkan PIN {selectedUser ? `(${selectedUser.name})` : ""}
+                2. Masukkan PIN ({targetPinLength} Digit) {selectedUser ? `(${selectedUser.name})` : ""}
               </label>
               {selectedUser && (
                 <span className="text-[10px] text-amber-800 font-mono font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
@@ -214,9 +234,9 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
               </div>
             )}
 
-            {/* PIN Dots Display */}
+            {/* PIN Dots Display (Responsive 4 or 6 digit) */}
             <div className="flex items-center justify-center gap-3 py-3 bg-stone-50 rounded-2xl border border-stone-200">
-              {[0, 1, 2, 3].map((idx) => {
+              {Array.from({ length: targetPinLength }).map((_, idx) => {
                 const isFilled = pin.length > idx;
                 return (
                   <div
@@ -293,6 +313,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

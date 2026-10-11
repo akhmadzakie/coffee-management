@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Trash2, X, Info } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -71,7 +72,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   const canConfirm = !verifyKeyword || typedKeyword === verifyKeyword;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -79,7 +80,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 bg-slate-900/60  flex items-center justify-center z-[100] p-4"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[100] p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}
@@ -160,7 +161,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 

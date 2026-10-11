@@ -72,9 +72,19 @@ export const Login = () => {
   };
 
   const handleKeypadPress = (num: string) => {
-    if (pin.length < 8) {
-      setPin((prev) => prev + num);
+    const maxLen = selectedUserObj?.pin?.length || 6;
+    if (pin.length < maxLen) {
+      const nextPin = pin + num;
+      setPin(nextPin);
       setError("");
+      if (selectedUserObj?.pin && nextPin.length === selectedUserObj.pin.length) {
+        login(username, nextPin).then((success) => {
+          if (!success) {
+            setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
+            setPin("");
+          }
+        });
+      }
     }
   };
 
@@ -275,15 +285,17 @@ export const Login = () => {
                   {selectedUserObj ? `Halo, ${selectedUserObj.name.split(" ")[0]}` : "Otorisasi Masuk"}
                 </h2>
                 <p className="text-xs text-stone-500 mt-1">
-                  {useKeypad ? "Masukkan 4-digit PIN keamanan kasir" : "Masukkan password akun Anda"}
+                  {useKeypad
+                    ? `Masukkan ${selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4)} Digit PIN Keamanan`
+                    : "Masukkan password / PIN akun Anda"}
                 </p>
               </div>
 
-              {/* PIN Indicator Dots */}
+              {/* PIN Indicator Dots (Support 4 or 6 digit PIN) */}
               {useKeypad ? (
                 <div className="mb-6 flex flex-col items-center">
                   <div className="flex items-center gap-3.5 my-2">
-                    {[0, 1, 2, 3].map((idx) => {
+                    {Array.from({ length: selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4) }).map((_, idx) => {
                       const isFilled = pin.length > idx;
                       return (
                         <div
@@ -297,11 +309,9 @@ export const Login = () => {
                       );
                     })}
                   </div>
-                  {pin.length > 4 && (
-                    <span className="text-[10px] text-stone-400 mt-1 font-mono">
-                      {pin.length} digit
-                    </span>
-                  )}
+                  <span className="text-[11px] text-stone-400 mt-1 font-mono">
+                    {pin.length} / {selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4)} digit
+                  </span>
                 </div>
               ) : (
                 <div className="w-full mb-6">

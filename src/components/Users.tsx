@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
-import { ShieldCheck, Plus, Trash2, Edit } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit, UserCheck, AlertCircle, X, Link } from "lucide-react";
 import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -35,6 +36,25 @@ export const UsersComponent = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const confirm = useConfirm();
 
+  // Controlled form states for real-time synchronization
+  const [formName, setFormName] = useState("");
+  const [formUsername, setFormUsername] = useState("");
+  const [formPin, setFormPin] = useState("");
+  const [formRole, setFormRole] = useState<Role>("KASIR");
+  const [formDept, setFormDept] = useState("BAR");
+  const [formEmployeeId, setFormEmployeeId] = useState("");
+
+  // Karyawan aktif yang belum memiliki akun login
+  const unlinkedEmployees = employees.filter(
+    (emp) =>
+      emp.status === "AKTIF" &&
+      !users.some(
+        (u) =>
+          (u.employeeId && u.employeeId === emp.id) ||
+          u.username.toLowerCase() === emp.username.toLowerCase()
+      )
+  );
+
   // Role yang tersedia berdasarkan siapa yang login
   const isManager = currentUser?.role === "MANAGER";
   const ROLES = ALL_ROLES.filter((r) =>
@@ -56,17 +76,58 @@ export const UsersComponent = () => {
     return true;
   };
 
+  const handleSelectEmployee = (empId: string) => {
+    setFormEmployeeId(empId);
+    if (!empId) return;
+    const emp = employees.find((e) => e.id === empId);
+    if (emp) {
+      setFormName(emp.name);
+      setFormUsername(emp.username || emp.name.toLowerCase().replace(/\s+/g, ""));
+      if (!formPin) setFormPin("123456");
+
+      const posUpper = (emp.position || "").toUpperCase();
+      const deptUpper = (emp.department || "").toUpperCase();
+      if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
+        setFormRole("MANAGER");
+      } else if (posUpper.includes("LEADER")) {
+        setFormRole("LEADER");
+      } else if (posUpper.includes("KASIR")) {
+        setFormRole("KASIR");
+      } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
+        setFormRole("BAR");
+      } else if (
+        deptUpper.includes("KITCHEN") ||
+        deptUpper.includes("DAPUR") ||
+        posUpper.includes("KITCHEN")
+      ) {
+        setFormRole("KITCHEN");
+      } else if (deptUpper.includes("BAKER") || posUpper.includes("ROTI")) {
+        setFormRole("BAKER");
+      } else {
+        setFormRole("KASIR");
+      }
+      if (emp.department) setFormDept(emp.department);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const role = formData.get("role") as Role;
-    const cleanUsername = (formData.get("username") as string).trim().toLowerCase();
-    const cleanName = (formData.get("name") as string).trim();
-    const formEmpId = formData.get("employeeId") ? (formData.get("employeeId") as string) : null;
+    const cleanUsername = formUsername.trim().toLowerCase();
+    const cleanName = formName.trim();
+    const cleanPin = formPin.trim();
+
+    if (!cleanUsername || !cleanName) {
+      alert("Nama lengkap dan username tidak boleh kosong.");
+      return;
+    }
+    if (!cleanPin || cleanPin.length < 4) {
+      alert("PIN otorisasi minimal 4 digit angka.");
+      return;
+    }
 
     // Cari ID karyawan terkait (dari form atau pencocokan username)
     const targetEmpId =
-      formEmpId ||
+      formEmployeeId ||
       employees.find(
         (emp) =>
           (editingUser?.employeeId && emp.id === editingUser.employeeId) ||
@@ -76,13 +137,13 @@ export const UsersComponent = () => {
 
     const userData: any = {
       username: cleanUsername,
-      pin: formData.get("pin") as string,
+      pin: cleanPin,
       name: cleanName,
-      role: role,
+      role: formRole,
       employeeId: targetEmpId,
     };
-    if (role === "LEADER") {
-      userData.department = formData.get("department");
+    if (formRole === "LEADER") {
+      userData.department = formDept;
     } else {
       userData.department = null;
     }
@@ -100,20 +161,20 @@ export const UsersComponent = () => {
         let pos = existingEmp.position;
         let dept = existingEmp.department;
 
-        if (role === "KASIR") {
+        if (formRole === "KASIR") {
           pos = "Kasir";
-        } else if (role === "MANAGER") {
+        } else if (formRole === "MANAGER") {
           pos = "Manager";
-        } else if (role === "LEADER") {
+        } else if (formRole === "LEADER") {
           pos = "Leader";
           if (userData.department) dept = userData.department;
-        } else if (role === "BAR") {
+        } else if (formRole === "BAR") {
           pos = "Karyawan";
           dept = "BAR";
-        } else if (role === "KITCHEN") {
+        } else if (formRole === "KITCHEN") {
           pos = "Karyawan";
           dept = "KITCHEN";
-        } else if (role === "BAKER") {
+        } else if (formRole === "BAKER") {
           pos = "Karyawan";
           dept = "BAKER";
         }
@@ -132,18 +193,36 @@ export const UsersComponent = () => {
     setEditingUser(null);
   };
 
-  const [selectedRole, setSelectedRole] = useState<Role>("KASIR");
-
   const startEdit = (user: User) => {
     setEditingUser(user);
-    setSelectedRole(user.role);
+    setFormName(user.name);
+    setFormUsername(user.username);
+    setFormPin(user.pin || "");
+    setFormRole(user.role);
+    setFormDept(user.department || "BAR");
+    const matchedEmp = employees.find(
+      (e) =>
+        (user.employeeId && e.id === user.employeeId) ||
+        e.username.toLowerCase() === user.username.toLowerCase()
+    );
+    setFormEmployeeId(user.employeeId || matchedEmp?.id || "");
     setIsEditing(true);
   };
 
   const handleAddNew = () => {
     setEditingUser(null);
-    // Default role: KASIR untuk semua, KASIR untuk Manager
-    setSelectedRole("KASIR");
+    setFormName("");
+    setFormUsername("");
+    setFormPin("123456");
+    setFormRole("KASIR");
+    setFormDept("BAR");
+    setFormEmployeeId("");
+    setIsEditing(true);
+  };
+
+  const handleCreateForEmployee = (emp: any) => {
+    setEditingUser(null);
+    handleSelectEmployee(emp.id);
     setIsEditing(true);
   };
 
@@ -249,6 +328,37 @@ export const UsersComponent = () => {
         </div>
       </div>
 
+      {/* Banner Karyawan yang Belum Punya Akun */}
+      {unlinkedEmployees.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5 md:mt-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">
+                Terdapat {unlinkedEmployees.length} Karyawan Belum Memiliki Akun Login
+              </h4>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Data karyawan di modul SDM/HR belum tersinkronisasi dengan akun sistem. Anda dapat membuatkan akun dengan 1 klik.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            {unlinkedEmployees.slice(0, 3).map((emp) => (
+              <button
+                key={emp.id}
+                onClick={() => handleCreateForEmployee(emp)}
+                className="text-xs font-semibold px-3 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Buat Akun: {emp.name.split(" ")[0]} ({emp.position})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Info banner untuk MANAGER */}
         {isManager && (
@@ -270,164 +380,217 @@ export const UsersComponent = () => {
                 <th className="p-4 font-bold text-slate-700 text-sm">
                   Peran / Role
                 </th>
+                <th className="p-4 font-bold text-slate-700 text-sm">
+                  Tautan Data Karyawan (SDM)
+                </th>
                 <th className="p-4 font-bold text-slate-700 text-sm text-right">
                   Aksi
                 </th>
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr
-                  key={user.id}
-                  className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
-                    !canEdit(user) ? "opacity-50" : ""
-                  }`}
-                >
-                  <td className="p-4">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center mr-3">
-                        {user.name.charAt(0).toUpperCase()}
+              {users.map((user) => {
+                const linkedEmp = employees.find(
+                  (e) =>
+                    (user.employeeId && e.id === user.employeeId) ||
+                    e.username.toLowerCase() === user.username.toLowerCase()
+                );
+
+                return (
+                  <tr
+                    key={user.id}
+                    className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
+                      !canEdit(user) ? "opacity-50" : ""
+                    }`}
+                  >
+                    <td className="p-4">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center mr-3 shrink-0">
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-slate-900">
+                          {user.name}
+                        </span>
                       </div>
-                      <span className="font-semibold text-slate-900">
-                        {user.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-slate-600 font-medium">
-                    {user.username}
-                  </td>
-                  <td className="p-4">
-                    <div>
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${
-                        user.role === "SUPER_ADMIN" ? "bg-rose-100 text-rose-700" :
-                        user.role === "OWNER"       ? "bg-purple-100 text-purple-700" :
-                        user.role === "MANAGER"     ? "bg-blue-100 text-blue-700" :
-                        user.role === "FINANCE"     ? "bg-emerald-100 text-emerald-700" :
-                        user.role === "LEADER"      ? "bg-amber-100 text-amber-700" :
-                        "bg-slate-100 text-slate-700"
-                      }`}>
-                        {ALL_ROLES.find((r) => r.value === user.role)?.label || user.role}
-                      </span>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {ALL_ROLES.find((r) => r.value === user.role)?.description}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="p-4 text-right">
-                    {canEdit(user) ? (
-                      <button
-                        onClick={() => startEdit(user)}
-                        className="text-slate-400 hover:text-blue-600 p-2 transition-colors"
-                        title="Edit pengguna"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <span className="p-2 text-slate-200 inline-block" title="Tidak dapat mengedit role ini">
-                        <Edit className="w-4 h-4" />
-                      </span>
-                    )}
-                    {canDelete(user) && (
-                      <button
-                        onClick={() => handleDelete(user)}
-                        className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1"
-                        title="Hapus pengguna"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="p-4 text-slate-600 font-medium">
+                      {user.username}
+                    </td>
+                    <td className="p-4">
+                      <div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${
+                          user.role === "SUPER_ADMIN" ? "bg-rose-100 text-rose-700" :
+                          user.role === "OWNER"       ? "bg-purple-100 text-purple-700" :
+                          user.role === "MANAGER"     ? "bg-blue-100 text-blue-700" :
+                          user.role === "FINANCE"     ? "bg-emerald-100 text-emerald-700" :
+                          user.role === "LEADER"      ? "bg-amber-100 text-amber-700" :
+                          "bg-slate-100 text-slate-700"
+                        }`}>
+                          {ALL_ROLES.find((r) => r.value === user.role)?.label || user.role}
+                        </span>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {ALL_ROLES.find((r) => r.value === user.role)?.description}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      {linkedEmp ? (
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60 w-fit">
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>{linkedEmp.name} ({linkedEmp.position})</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60 w-fit">
+                          <Link className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>Akun Mandiri / Belum Ditautkan</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      {canEdit(user) ? (
+                        <button
+                          onClick={() => startEdit(user)}
+                          className="text-slate-400 hover:text-blue-600 p-2 transition-colors"
+                          title="Edit pengguna"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span className="p-2 text-slate-200 inline-block" title="Tidak dapat mengedit role ini">
+                          <Edit className="w-4 h-4" />
+                        </span>
+                      )}
+                      {canDelete(user) && (
+                        <button
+                          onClick={() => handleDelete(user)}
+                          className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1"
+                          title="Hapus pengguna"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {isEditing && (
-        <div className="fixed inset-0 bg-slate-900/60  flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-900 flex items-center">
-                <ShieldCheck className="w-5 h-5 mr-2 text-blue-600" />
-                {editingUser ? "Edit Pengguna" : "Tambah Pengguna"}
+      {isEditing && createPortal(
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-base sm:text-lg text-slate-900 flex items-center">
+                <ShieldCheck className="w-5 h-5 mr-2 text-blue-600 shrink-0" />
+                {editingUser ? "Edit Pengguna" : "Tambah Pengguna Baru"}
               </h3>
               <button
                 onClick={() => setIsEditing(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/50 transition-colors"
               >
-                <X_Icon className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Nama Lengkap
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  defaultValue={editingUser?.name}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Budi Santoso"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  name="username"
-                  required
-                  defaultValue={editingUser?.username}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="kasir1"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  PIN (Password)
-                </label>
-                <input
-                  type="text"
-                  name="pin"
-                  required
-                  defaultValue={editingUser?.pin}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none tracking-widest"
-                  placeholder="****"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Peran (Role)
+            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+              {/* Opsi Tautkan ke Data Karyawan */}
+              <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
+                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-blue-600" />
+                  Tautkan ke Data Karyawan (SDM)
                 </label>
                 <select
-                  name="role"
-                  required
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as Role)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={formEmployeeId}
+                  onChange={(e) => handleSelectEmployee(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-2xs"
                 >
-                  {ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
+                  <option value="">-- Pilih Karyawan untuk Otomatisasi (Opsional) --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.position}) - @{emp.username}
                     </option>
                   ))}
                 </select>
+                <p className="text-[11px] text-blue-700/80 mt-1 leading-relaxed">
+                  Memilih data karyawan akan otomatis mengisi nama, username, role, dan PIN sesuai profil SDM sehingga data absensi langsung tersambung.
+                </p>
               </div>
 
-              {selectedRole === "LEADER" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Departemen / Lokasi
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Nama Lengkap *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Budi Santoso"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Username Login *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="budikopi"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    PIN Akses (4-6 Digit Angka) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={formPin}
+                    onChange={(e) => setFormPin(e.target.value.replace(/\D/g, ""))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono tracking-widest focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="123456"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Panjang: {formPin.length} digit (didukung 4 atau 6 digit)
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Peran (Role) *
                   </label>
                   <select
-                    name="department"
-                    required
-                    defaultValue={editingUser?.department || "BAR"}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={formRole}
+                    onChange={(e) => setFormRole(e.target.value as Role)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {formRole === "LEADER" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Departemen / Bidang Kerja *
+                  </label>
+                  <select
+                    value={formDept}
+                    onChange={(e) => setFormDept(e.target.value as "BAR" | "KITCHEN" | "MAIN")}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     {DEPARTMENTS.map((d) => (
                       <option key={d.value} value={d.value}>
@@ -438,73 +601,26 @@ export const UsersComponent = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Tautkan ke Data Karyawan (Opsional)
-                </label>
-                <select
-                  name="employeeId"
-                  defaultValue={
-                    editingUser?.employeeId ||
-                    employees.find(
-                      (emp) =>
-                        emp.username.toLowerCase() ===
-                        editingUser?.username.toLowerCase()
-                    )?.id ||
-                    ""
-                  }
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="">-- Tidak ditautkan --</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.position})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Berguna agar data absensi akun ini langsung masuk ke profil karyawan.
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors"
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm"
                 >
-                  Simpan
+                  Simpan Pengguna
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 };
-
-// Dummy component for X icon, since we didn't import it at the top
-const X_Icon = ({ className }: { className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <line x1="18" y1="6" x2="6" y2="18"></line>
-    <line x1="6" y1="6" x2="18" y2="18"></line>
-  </svg>
-);

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import {
   Plus,
@@ -733,7 +734,7 @@ export const Inventory = () => {
         }}
       />
 
-      {isAddIngredientOpen && (
+      {isAddIngredientOpen && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
@@ -849,10 +850,11 @@ export const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {isAddMovementOpen && (
+      {isAddMovementOpen && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
@@ -994,7 +996,8 @@ export const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
