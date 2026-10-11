@@ -25,6 +25,9 @@ const FinanceDashboard = React.lazy(() =>
 const ManagerDashboard = React.lazy(() =>
   import("./components/ManagerDashboard").then((m) => ({ default: m.ManagerDashboard })),
 );
+const HppCalculator = React.lazy(() =>
+  import("./components/HppCalculator").then((m) => ({ default: m.HppCalculator })),
+);
 const Inventory = React.lazy(() =>
   import("./components/Inventory").then((m) => ({ default: m.Inventory })),
 );
@@ -132,7 +135,7 @@ function AppContent() {
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
-    "attendance_clock"
+    "attendance_clock", "hpp_calculator"
   ];
 
   const roleAllowedViews: Record<string, ViewState[]> = {
@@ -143,6 +146,7 @@ function AppContent() {
       "dashboard_manager",
       "cash_flow",
       "finance_reports",
+      "hpp_calculator",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -153,6 +157,7 @@ function AppContent() {
       "shifts", "suppliers", "purchases",
       "users",
       "audit_log",
+      "hpp_calculator",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -243,6 +248,8 @@ function AppContent() {
         return <ClockIn />;
       case "dashboard_employee":
         return <EmployeeDashboard onNavigate={setCurrentView} />;
+      case "hpp_calculator":
+        return <HppCalculator onNavigate={setCurrentView} />;
       default:
         return <Dashboard view="FINANCE" />;
     }

@@ -177,6 +177,12 @@ export const Layout: React.FC<LayoutProps> = ({
       view: "suppliers" as ViewState,
       icon: Truck,
     },
+    { 
+      group: "Operasi",
+      name: "Kalkulator & Simulasi HPP",
+      view: "hpp_calculator" as ViewState,
+      icon: Calculator,
+    },
     // ─── HR & Team Group ─────────────────────────────────────────
     { 
       group: "SDM",
@@ -259,6 +265,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "dashboard_manager",
       "cash_flow",
       "finance_reports",
+      "hpp_calculator",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -273,6 +280,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "users",
       "audit_log",
+      "hpp_calculator",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -623,6 +631,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   payroll: "Penggajian (Payroll)",
                   attendance_clock: "Presensi & Clock In",
                   leader_checklist: "Checklist Jobdesk Harian",
+                  hpp_calculator: "Kalkulator & Simulasi HPP Menu",
                 }[currentView] || currentView}
               </h2>
             </div>

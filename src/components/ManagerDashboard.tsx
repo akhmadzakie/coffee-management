@@ -22,6 +22,9 @@ import {
   X,
   ExternalLink,
   Store,
+  Calculator,
+  Sparkles,
+  Sliders,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -40,10 +43,38 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     ingredients,
     salesTransactions,
     purchaseOrders,
+    recipes,
     updateDailyAttendance,
   } = useStore();
 
   const [selectedAttendancePhoto, setSelectedAttendancePhoto] = useState<DailyAttendance | null>(null);
+
+  // Metrik Ringkas HPP untuk Manager
+  const hppStats = useMemo(() => {
+    let totalEstimatedHpp = 0;
+    let validRecipeCount = 0;
+
+    recipes.forEach((r) => {
+      let cost = 0;
+      r.ingredients.forEach((ri) => {
+        const ing = ingredients.find((i) => i.id === ri.ingredientId);
+        if (ing && ing.costPerUnit) {
+          cost += ri.quantity * Number(ing.costPerUnit);
+        }
+      });
+      if (cost > 0) {
+        totalEstimatedHpp += cost;
+        validRecipeCount++;
+      }
+    });
+
+    const avgHpp = validRecipeCount > 0 ? Math.round(totalEstimatedHpp / validRecipeCount) : 0;
+    return {
+      totalRecipes: recipes.length,
+      avgHpp,
+      calculatedCount: validRecipeCount,
+    };
+  }, [recipes, ingredients]);
 
   // Tanggal hari ini YYYY-MM-DD
   const todayStr = useMemo(() => {
@@ -250,6 +281,55 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           )}
         </div>
       )}
+
+      {/* HPP & Margin Simulator Banner / Quick Command */}
+      <div className="bg-gradient-to-r from-amber-900 via-amber-950 to-stone-900 rounded-3xl p-6 sm:p-7 text-white shadow-coffee flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border border-amber-800/40 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-80 h-full bg-radial from-amber-500/10 via-transparent to-transparent pointer-events-none" />
+        <div className="space-y-2 relative z-10 max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-amber-500/20 text-amber-300 uppercase border border-amber-500/30 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-400" /> Fitur Baru Manajer
+            </span>
+            <span className="text-xs text-stone-300 font-medium">
+              Menu Engineering & Profitability
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <Calculator className="w-6 h-6 text-amber-400" />
+            Simulasi & Kalkulator HPP Menu
+          </h2>
+          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+            Hitung biaya bahan baku riil, kemasan takeaway, buffer penyusutan barista (5%), serta simulasi target harga jual & margin laba ideal (food cost 28% - 32%) didukung AI Gemini.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+            <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+              <span className="text-stone-300">Resep Terdaftar:</span>
+              <span className="font-bold font-mono text-amber-300">{hppStats.totalRecipes} Menu</span>
+            </div>
+            {hppStats.avgHpp > 0 && (
+              <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+                <span className="text-stone-300">Rata-rata HPP Bahan:</span>
+                <span className="font-bold font-mono text-emerald-300">~{formatCurrency(hppStats.avgHpp)}</span>
+              </div>
+            )}
+            <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+              <span className="text-stone-300">Target Food Cost:</span>
+              <span className="font-bold text-amber-200">28% - 32%</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 w-full sm:w-auto shrink-0">
+          <button
+            onClick={() => onNavigate("hpp_calculator")}
+            className="w-full sm:w-auto px-6 py-3.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs sm:text-sm rounded-2xl transition-all shadow-coffee-sm hover:shadow-coffee flex items-center justify-center gap-2 group cursor-pointer"
+          >
+            <span>Buka Kalkulator HPP</span>
+            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        </div>
+      </div>
 
       {/* Live Operational Section: Kasir & Absensi */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

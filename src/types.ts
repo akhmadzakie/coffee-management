@@ -42,7 +42,8 @@ export type ViewState =
   | "finance_reports"
   | "bank_reconciliation"
   | "attendance_clock"
-  | "dashboard_employee";
+  | "dashboard_employee"
+  | "hpp_calculator";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
