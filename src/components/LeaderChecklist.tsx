@@ -865,6 +865,7 @@ export const LeaderChecklist: React.FC = () => {
                       {/* Sub-tugas Items */}
                       <div className="space-y-2 pt-2">
                         {cat.items.map((item, itemIdx) => {
+                          const itemDetail = normalizeTaskItem(item);
                           const isDone = isTaskChecked(
                             selectedDivisionStat.checklist?.leaderTasks || [],
                             cat.category,
@@ -880,13 +881,18 @@ export const LeaderChecklist: React.FC = () => {
                                   : "bg-white border-slate-200 text-slate-600"
                               }`}
                             >
-                              <div className="flex items-center gap-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                 {isDone ? (
                                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                                 ) : (
                                   <XCircle className="w-4 h-4 text-slate-300 shrink-0" />
                                 )}
-                                <span>{item}</span>
+                                <span className="truncate">{itemDetail.text}</span>
+                                {itemDetail.shift && itemDetail.shift !== "ALL" && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
+                                    {itemDetail.shift}
+                                  </span>
+                                )}
                               </div>
                               <span className={`font-bold ml-2 shrink-0 ${isDone ? "text-emerald-700" : "text-slate-400"}`}>
                                 {isDone ? "Selesai" : "Belum"}
