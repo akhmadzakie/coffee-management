@@ -105,6 +105,7 @@ export function HRManagement() {
 
   // --- Modals State ---
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [empModalTab, setEmpModalTab] = useState<"basic" | "contact">("basic");
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<any | null>(null);
@@ -197,6 +198,7 @@ export function HRManagement() {
       setEmpForm({ username: "", name: "", position: "", department: "", status: "AKTIF", employmentType: "TETAP", phone: "", email: "", address: "" });
       setAutoCreateUser(true);
     }
+    setEmpModalTab("basic");
     setIsEmployeeModalOpen(true);
   };
 
@@ -2134,194 +2136,216 @@ export function HRManagement() {
 
       {/* Modals */}
       {isEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden my-auto border border-slate-100">
-            {/* Header - Sticky */}
-            <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                  <Users className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800 leading-tight">
-                    {editingEmployee ? (isIndo ? "Edit Karyawan" : "Edit Employee") : (isIndo ? "Tambah Karyawan" : "Add Employee")}
-                  </h3>
-                  <p className="text-xs text-slate-500">Lengkapi data identitas & akses sistem</p>
-                </div>
-              </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 flex min-h-full items-start sm:items-center justify-center py-6 sm:py-8">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[calc(100vh-3.5rem)] my-auto">
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h3 className="font-bold text-base text-slate-900 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-indigo-600" />
+                {editingEmployee ? (isIndo ? "Edit Karyawan" : "Edit Employee") : (isIndo ? "Tambah Karyawan" : "Add Employee")}
+              </h3>
               <button 
+                type="button"
                 onClick={() => setIsEmployeeModalOpen(false)} 
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-200/60"
                 title="Tutup"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Form Content - Scrollable & Compact */}
-            <div className="p-5 overflow-y-auto space-y-3 flex-1">
-              {/* Row 1: Username & Nama Lengkap */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Username (Login) <span className="text-rose-500">*</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
-                    value={empForm.username} 
-                    onChange={e => setEmpForm({...empForm, username: e.target.value})} 
-                    placeholder="Contoh: andi"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nama Lengkap <span className="text-rose-500">*</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
-                    value={empForm.name} 
-                    onChange={e => setEmpForm({...empForm, name: e.target.value})} 
-                    placeholder="Nama lengkap..."
-                  />
-                </div>
+            {/* Segmented Tab Bar */}
+            <div className="px-5 pt-3 pb-1 bg-white shrink-0">
+              <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setEmpModalTab("basic")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    empModalTab === "basic"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Data Utama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmpModalTab("contact")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    empModalTab === "contact"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Kontak & Domisili
+                </button>
               </div>
+            </div>
 
-              {/* Row 2: Departemen & Jabatan */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Departemen</label>
-                  <select 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.department} 
-                    onChange={e => setEmpForm({...empForm, department: e.target.value})}
-                  >
-                    <option value="">-- Pilih Departemen --</option>
-                    <option value="MAIN">Utama (Main)</option>
-                    <option value="BAR">Bar</option>
-                    <option value="KITCHEN">Dapur (Kitchen)</option>
-                    <option value="BAKER">Baker (Roti)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Jabatan</label>
-                  <select 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.position} 
-                    onChange={e => setEmpForm({...empForm, position: e.target.value})}
-                  >
-                    <option value="">-- Pilih Jabatan --</option>
-                    <option value="Kasir">Kasir</option>
-                    <option value="Karyawan">Karyawan (Staff)</option>
-                    <option value="Leader">Leader</option>
-                    {currentUser?.role !== "MANAGER" && (
-                      <option value="Manager">Manager</option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {/* Row 3: Status & Tipe */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status Kepegawaian</label>
-                  <select 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.status} 
-                    onChange={e => setEmpForm({...empForm, status: e.target.value as any})}
-                  >
-                    <option value="AKTIF">Aktif</option>
-                    <option value="TIDAK_AKTIF">Tidak Aktif</option>
-                    <option value="RESIGN">Resign</option>
-                    <option value="PHK">PHK</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tipe Kontrak</label>
-                  <select 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.employmentType} 
-                    onChange={e => setEmpForm({...empForm, employmentType: e.target.value as any})}
-                  >
-                    <option value="TETAP">Tetap</option>
-                    <option value="KONTRAK">Kontrak</option>
-                    <option value="PARUH_WAKTU">Paruh Waktu</option>
-                    <option value="MAGANG">Magang</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Row 4: Email & No. HP */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
-                  <input 
-                    type="email" 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.email} 
-                    onChange={e => setEmpForm({...empForm, email: e.target.value})} 
-                    placeholder="email@contoh.com" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">No. HP / WhatsApp</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
-                    value={empForm.phone} 
-                    onChange={e => setEmpForm({...empForm, phone: e.target.value})} 
-                    placeholder="08123xxx" 
-                  />
-                </div>
-              </div>
-
-              {/* Row 5: Alamat Domisili */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Alamat Domisili</label>
-                <textarea 
-                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg resize-none h-14 focus:ring-2 focus:ring-indigo-500" 
-                  value={empForm.address} 
-                  onChange={e => setEmpForm({...empForm, address: e.target.value})} 
-                  placeholder="Alamat domisili lengkap..." 
-                  rows={2}
-                />
-              </div>
-              
-              {/* Row 6: Buat Akun Otomatis */}
-              {!editingEmployee && (
-                <div className="p-2.5 bg-indigo-50/60 rounded-xl border border-indigo-100">
-                  <label className="flex items-center gap-2.5 cursor-pointer">
+            {/* Form Content */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {empModalTab === "basic" ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                      Nama Lengkap <span className="text-rose-500">*</span>
+                    </label>
                     <input 
-                      type="checkbox" 
-                      checked={autoCreateUser}
-                      onChange={(e) => setAutoCreateUser(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                      type="text" 
+                      required
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                      value={empForm.name} 
+                      onChange={e => setEmpForm({...empForm, name: e.target.value})} 
+                      placeholder="Contoh: Budi Santoso"
                     />
-                    <span className="text-xs font-semibold text-indigo-950">Buat Akun Login Otomatis</span>
-                  </label>
-                  {autoCreateUser && (
-                    <p className="text-[11px] text-indigo-700 mt-1 ml-6 leading-relaxed">
-                      Username: <strong className="font-semibold text-indigo-900">{empForm.username || "[Username]"}</strong>, PIN default: <strong className="font-semibold text-indigo-900">123456</strong>. Role otomatis mengikuti Departemen & Jabatan.
-                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                      Username (Login) <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                      value={empForm.username} 
+                      onChange={e => setEmpForm({...empForm, username: e.target.value})} 
+                      placeholder="Contoh: budi"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Departemen</label>
+                      <select 
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.department} 
+                        onChange={e => setEmpForm({...empForm, department: e.target.value})}
+                      >
+                        <option value="">-- Pilih --</option>
+                        <option value="MAIN">Utama (Main)</option>
+                        <option value="BAR">Bar</option>
+                        <option value="KITCHEN">Dapur (Kitchen)</option>
+                        <option value="BAKER">Baker (Roti)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Jabatan</label>
+                      <select 
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.position} 
+                        onChange={e => setEmpForm({...empForm, position: e.target.value})}
+                      >
+                        <option value="">-- Pilih --</option>
+                        <option value="Kasir">Kasir</option>
+                        <option value="Karyawan">Karyawan (Staff)</option>
+                        <option value="Leader">Leader</option>
+                        {currentUser?.role !== "MANAGER" && (
+                          <option value="Manager">Manager</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
+                      <select 
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.status} 
+                        onChange={e => setEmpForm({...empForm, status: e.target.value as any})}
+                      >
+                        <option value="AKTIF">Aktif</option>
+                        <option value="TIDAK_AKTIF">Tidak Aktif</option>
+                        <option value="RESIGN">Resign</option>
+                        <option value="PHK">PHK</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Tipe</label>
+                      <select 
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                        value={empForm.employmentType} 
+                        onChange={e => setEmpForm({...empForm, employmentType: e.target.value as any})}
+                      >
+                        <option value="TETAP">Tetap</option>
+                        <option value="KONTRAK">Kontrak</option>
+                        <option value="PARUH_WAKTU">Paruh Waktu</option>
+                        <option value="MAGANG">Magang</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {!editingEmployee && (
+                    <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={autoCreateUser}
+                          onChange={(e) => setAutoCreateUser(e.target.checked)}
+                          className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs font-bold text-indigo-950">Buat Akun Login Otomatis</span>
+                      </label>
+                      {autoCreateUser && (
+                        <p className="text-[11px] text-indigo-700 mt-1 ml-6 leading-relaxed">
+                          Username: <strong className="font-semibold text-indigo-900">{empForm.username || "[Username]"}</strong>, PIN default: <strong className="font-semibold text-indigo-900">123456</strong>
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">No. HP / WhatsApp</label>
+                    <input 
+                      type="text" 
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                      value={empForm.phone} 
+                      onChange={e => setEmpForm({...empForm, phone: e.target.value})} 
+                      placeholder="08123456789" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
+                      value={empForm.email} 
+                      onChange={e => setEmpForm({...empForm, email: e.target.value})} 
+                      placeholder="email@contoh.com" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Alamat Domisili</label>
+                    <textarea 
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm resize-none h-24 transition-all" 
+                      value={empForm.address} 
+                      onChange={e => setEmpForm({...empForm, address: e.target.value})} 
+                      placeholder="Alamat domisili lengkap..." 
+                      rows={3}
+                    />
+                  </div>
+                </>
               )}
             </div>
 
-            {/* Footer - Sticky with Save/Cancel buttons */}
-            <div className="px-5 py-3 bg-slate-50 flex items-center justify-end gap-2.5 border-t border-slate-100 shrink-0">
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
               <button 
                 type="button"
                 onClick={() => setIsEmployeeModalOpen(false)} 
-                className="px-4 py-1.5 text-sm text-slate-600 font-medium hover:bg-slate-200/80 rounded-lg transition-colors"
+                className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors"
               >
                 Batal
               </button>
               <button 
                 type="button"
                 onClick={handleSaveEmployee} 
-                className="px-5 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-xs transition-colors"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm shadow-xs transition-colors"
               >
                 Simpan
               </button>
