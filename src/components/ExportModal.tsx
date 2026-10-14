@@ -32,6 +32,8 @@ import {
   exportAttendanceToCSV,
   exportKpiToPDF,
   exportKpiToCSV,
+  exportMasterExecutiveReportPDF,
+  exportToCSV,
   filterByDateRange,
   formatDateIndo,
 } from "../utils/export";
@@ -42,10 +44,12 @@ import {
   exportPayrollToXlsx,
   exportAttendanceToXlsx,
   exportKpiToXlsx,
+  exportMasterExecutiveReportXlsx,
 } from "../utils/exportXlsx";
 import { ImportFinanceModal } from "./ImportFinanceModal";
 
 export type ExportModuleType =
+  | "all_in_one"
   | "sales"
   | "inventory"
   | "finance"
@@ -86,7 +90,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<ExportModuleType>(
-    defaultModule === "executive" ? "finance" : (defaultModule as ExportModuleType) || "sales"
+    defaultModule === "executive" ? "all_in_one" : (defaultModule as ExportModuleType) || "all_in_one"
   );
   const [datePreset, setDatePreset] = useState<
     | "ALL"
@@ -102,7 +106,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   React.useEffect(() => {
     if (isOpen && defaultModule) {
-      setActiveModule(defaultModule === "executive" ? "finance" : (defaultModule as ExportModuleType));
+      setActiveModule(defaultModule === "executive" ? "all_in_one" : (defaultModule as ExportModuleType));
     }
   }, [isOpen, defaultModule]);
 
@@ -216,7 +220,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   // ─── Export Triggers ────────────────────────────────────────────────────────
   const handleExportPDF = () => {
-    if (activeModule === "sales") {
+    if (activeModule === "all_in_one") {
+      exportMasterExecutiveReportPDF({
+        sales: filteredSales,
+        finance: filteredFinance,
+        ingredients,
+        payroll: filteredPayroll,
+        attendances: filteredAttendance,
+        kpiRecords: filteredKpi,
+        employees,
+        settings,
+        periodLabel,
+      });
+    } else if (activeModule === "sales") {
       exportSalesToPDF({ sales: filteredSales, settings, periodLabel });
     } else if (activeModule === "inventory") {
       exportInventoryToPDF({
@@ -252,7 +268,32 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const handleExportCSV = () => {
-    if (activeModule === "sales") {
+    if (activeModule === "all_in_one") {
+      const totalGrossSales = filteredSales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
+      const totalNetSales = filteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
+      const totalCashIn = filteredFinance
+        .filter((f) => f.type === "CASH_IN" || (f as any).type === "IN")
+        .reduce((sum, f) => sum + (f.amount || 0), 0);
+      const totalCashOut = filteredFinance
+        .filter((f) => f.type === "CASH_OUT" || (f as any).type === "OUT")
+        .reduce((sum, f) => sum + (f.amount || 0), 0);
+      const totalPayroll = filteredPayroll.reduce((sum, p) => sum + (p.netPay || 0), 0);
+
+      const summaryRows = [
+        { "Indikator Eksekutif": "Periode Laporan", "Nilai / Jumlah": periodLabel },
+        { "Indikator Eksekutif": "Total Penjualan Kotor (Gross Sales)", "Nilai / Jumlah": totalGrossSales },
+        { "Indikator Eksekutif": "Total Penjualan Bersih (Net Sales)", "Nilai / Jumlah": totalNetSales },
+        { "Indikator Eksekutif": "Total Transaksi Penjualan (Struk)", "Nilai / Jumlah": filteredSales.length },
+        { "Indikator Eksekutif": "Total Kas Masuk Non-Kasir (In)", "Nilai / Jumlah": totalCashIn },
+        { "Indikator Eksekutif": "Total Pengeluaran Kas (Out)", "Nilai / Jumlah": totalCashOut },
+        { "Indikator Eksekutif": "Total Beban Gaji Karyawan (Payroll)", "Nilai / Jumlah": totalPayroll },
+        { "Indikator Eksekutif": "Total Item Bahan Baku di Gudang", "Nilai / Jumlah": ingredients.length },
+        { "Indikator Eksekutif": "Total Catatan Mutasi Stok", "Nilai / Jumlah": filteredInventoryTrx.length },
+        { "Indikator Eksekutif": "Total Rekap Kehadiran Karyawan", "Nilai / Jumlah": filteredAttendance.length },
+        { "Indikator Eksekutif": "Total Evaluasi Kinerja KPI", "Nilai / Jumlah": filteredKpi.length },
+      ];
+      exportToCSV(`Ringkasan_Eksekutif_${periodLabel.replace(/\s+/g, "_")}`, summaryRows);
+    } else if (activeModule === "sales") {
       exportSalesToCSV({ sales: filteredSales, settings });
     } else if (activeModule === "inventory") {
       exportInventoryToCSV({
@@ -272,7 +313,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const handleExportXlsx = () => {
-    if (activeModule === "sales") {
+    if (activeModule === "all_in_one") {
+      exportMasterExecutiveReportXlsx({
+        sales: filteredSales,
+        finance: filteredFinance,
+        ingredients,
+        movements: filteredInventoryTrx,
+        payroll: filteredPayroll,
+        attendances: filteredAttendance,
+        kpiRecords: filteredKpi,
+        employees,
+        settings,
+        periodLabel,
+        expenseCategories,
+      });
+    } else if (activeModule === "sales") {
       exportSalesToXlsx({ sales: filteredSales, settings, periodLabel });
     } else if (activeModule === "inventory") {
       exportInventoryToXlsx({
@@ -344,11 +399,68 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <div className="p-6 space-y-6">
-            {/* 1. Pilih Modul (6 Modul Lengkap) */}
+            {/* 1. Pilih Modul Laporan */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
-                1. Pilih Modul Laporan
+                1. Pilih Jenis Laporan
               </label>
+
+              {/* Master All-in-One Option */}
+              <div className="mb-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveModule("all_in_one")}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+                    activeModule === "all_in_one"
+                      ? "border-amber-500 bg-gradient-to-r from-amber-50 via-amber-100/40 to-orange-50 ring-2 ring-amber-500/40 text-amber-950 shadow-md"
+                      : "border-slate-200 bg-white hover:border-amber-300 hover:bg-amber-50/20 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div
+                      className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                        activeModule === "all_in_one"
+                          ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-amber-500/25"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-extrabold text-slate-900 tracking-tight">
+                          Laporan Master Komprehensif (All-in-One)
+                        </span>
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500 text-white uppercase tracking-wider shadow-2xs">
+                          👑 Rekomendasi Owner / Atasan
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Satukan seluruh 6 modul laporan dalam <strong>1 File Excel Multi-Sheet (7 Sheet Terpisah)</strong> atau <strong>1 Berkas PDF Eksekutif</strong> siap cetak.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {activeModule === "all_in_one" ? (
+                      <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-200/60 px-3 py-1 rounded-xl">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600" /> Terpilih
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-xl">
+                        Pilih Ini
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 my-2.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="h-px bg-slate-200 flex-1" />
+                <span>Atau Pilih Laporan Spesifik Per Modul</span>
+                <div className="h-px bg-slate-200 flex-1" />
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {/* Penjualan */}
                 <button
@@ -553,14 +665,97 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
 
             {/* Live Data Summary Banner */}
-            <div className="bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border border-blue-200/80 rounded-2xl p-4 flex items-center gap-3 text-xs text-blue-950 font-medium">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
-              <div className="leading-relaxed">
+            <div className={`rounded-2xl p-4 flex items-start sm:items-center gap-3 text-xs leading-relaxed border transition-all ${
+              activeModule === "all_in_one"
+                ? "bg-gradient-to-r from-amber-50/90 via-orange-50/70 to-amber-50/90 border-amber-300 text-amber-950 shadow-2xs"
+                : "bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border-blue-200/80 text-blue-950"
+            }`}>
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 sm:mt-0 ${
+                activeModule === "all_in_one" ? "bg-amber-500 animate-bounce" : "bg-blue-600 animate-pulse"
+              }`} />
+              <div className="w-full">
+                {activeModule === "all_in_one" && (
+                  <div className="space-y-2">
+                    <div className="font-extrabold text-amber-950 flex items-center justify-between flex-wrap gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                        Ringkasan Gabungan Seluruh Divisi ({periodLabel}):
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
+                        7 Sheet Siap Diunduh
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Penjualan Bersih</span>
+                        <span className="font-bold text-slate-900 text-xs">
+                          {formatCurrency(filteredSales.reduce((s, i) => s + (i.total || i.totalPrice || 0), 0))}
+                        </span>
+                        <span className="text-[9px] text-blue-600 block">({filteredSales.length} struk kasir)</span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Kas Masuk (Non-Kasir)</span>
+                        <span className="font-bold text-emerald-700 text-xs">
+                          {formatCurrency(
+                            filteredFinance
+                              .filter((f) => f.type === "CASH_IN" || (f as any).type === "IN")
+                              .reduce((s, f) => s + f.amount, 0)
+                          )}
+                        </span>
+                        <span className="text-[9px] text-emerald-600 block">
+                          ({filteredFinance.filter((f) => f.type === "CASH_IN" || (f as any).type === "IN").length} penerimaan)
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Pengeluaran Kas</span>
+                        <span className="font-bold text-rose-700 text-xs">
+                          {formatCurrency(
+                            filteredFinance
+                              .filter((f) => f.type === "CASH_OUT" || (f as any).type === "OUT")
+                              .reduce((s, f) => s + f.amount, 0)
+                          )}
+                        </span>
+                        <span className="text-[9px] text-rose-600 block">Biaya operasional & belanja</span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Total Beban Gaji</span>
+                        <span className="font-bold text-indigo-700 text-xs">
+                          {formatCurrency(filteredPayroll.reduce((s, p) => s + (p.netPay || 0), 0))}
+                        </span>
+                        <span className="text-[9px] text-indigo-600 block">({filteredPayroll.length} slip gaji)</span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Inventaris & Bahan</span>
+                        <span className="font-bold text-slate-900 text-xs">
+                          {ingredients.length} Bahan Baku
+                        </span>
+                        <span className="text-[9px] text-amber-700 block">
+                          ({filteredInventoryTrx.length} mutasi stok)
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                        <span className="text-[10px] text-slate-500 font-semibold block">Kehadiran & Kinerja</span>
+                        <span className="font-bold text-slate-900 text-xs">
+                          {filteredAttendance.length} Presensi
+                        </span>
+                        <span className="text-[9px] text-purple-700 block">
+                          ({filteredKpi.length} penilaian KPI)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {activeModule === "sales" && (
                   <span>
                     Ditemukan <strong>{filteredSales.length} transaksi penjualan</strong> dengan total omzet{" "}
                     <strong>
-                      {formatCurrency(filteredSales.reduce((s, i) => s + i.totalPrice, 0))}
+                      {formatCurrency(filteredSales.reduce((s, i) => s + (i.total || i.totalPrice || 0), 0))}
                     </strong>{" "}
                     pada periode terpilih.
                   </span>
@@ -577,7 +772,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <strong>
                       {formatCurrency(
                         filteredFinance
-                          .filter((f) => f.type === "CASH_IN")
+                          .filter((f) => f.type === "CASH_IN" || (f as any).type === "IN")
                           .reduce((s, f) => s + f.amount, 0)
                       )}
                     </strong>
@@ -585,7 +780,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <strong>
                       {formatCurrency(
                         filteredFinance
-                          .filter((f) => f.type === "CASH_OUT")
+                          .filter((f) => f.type === "CASH_OUT" || (f as any).type === "OUT")
                           .reduce((s, f) => s + f.amount, 0)
                       )}
                     </strong>
@@ -654,19 +849,30 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 onClick={handleExportCSV}
                 className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
               >
-                <Table className="w-3.5 h-3.5 text-slate-500" /> Unduh CSV
+                <Table className="w-3.5 h-3.5 text-slate-500" />
+                {activeModule === "all_in_one" ? "Unduh Ringkasan CSV" : "Unduh CSV"}
               </button>
               <button
                 onClick={handleExportXlsx}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
+                className={`px-3.5 py-2 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all ${
+                  activeModule === "all_in_one"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 ring-2 ring-emerald-400/50 shadow-md"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" /> Unduh Excel (.xlsx)
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                {activeModule === "all_in_one" ? "👑 Unduh Master Excel (7 Sheet)" : "Unduh Excel (.xlsx)"}
               </button>
               <button
                 onClick={handleExportPDF}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all ${
+                  activeModule === "all_in_one"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 ring-2 ring-blue-400/50 shadow-md"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
-                <FileText className="w-3.5 h-3.5" /> Unduh PDF
+                <FileText className="w-3.5 h-3.5" />
+                {activeModule === "all_in_one" ? "Unduh PDF Eksekutif" : "Unduh PDF"}
               </button>
             </div>
           </div>

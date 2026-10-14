@@ -694,3 +694,232 @@ export const exportKpiToXlsx = ({
   XLSX.writeFile(wb, `Laporan_KPI_${periodLabel.replace(/\s+/g, "_")}.xlsx`);
 };
 
+// ─── Export All-in-One Master Executive Report to XLSX ─────────────────────────
+
+export interface ExportMasterExecutiveOptions {
+  sales: SalesTransaction[];
+  finance: CashTransaction[];
+  ingredients: Ingredient[];
+  movements?: StockMovement[];
+  payroll: PayrollRecord[];
+  attendances: DailyAttendance[];
+  kpiRecords: KPIRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+  expenseCategories?: ExpenseCategory[];
+}
+
+export const exportMasterExecutiveReportXlsx = ({
+  sales,
+  finance,
+  ingredients,
+  movements = [],
+  payroll,
+  attendances,
+  kpiRecords,
+  employees,
+  settings,
+  periodLabel,
+  expenseCategories = [],
+}: ExportMasterExecutiveOptions) => {
+  const wb = XLSX.utils.book_new();
+
+  // ─── 1. SHEET 1: RINGKASAN EKSEKUTIF (EXECUTIVE SUMMARY) ──────────────────────
+  const totalGrossSales = sales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
+  const totalDiscount = sales.reduce((sum, s) => sum + (s.discount || 0), 0);
+  const totalNetSales = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalSalesTransactions = sales.length;
+  const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
+
+  const totalCashIn = finance
+    .filter((f) => f.type === "IN" || (f as any).type === "INCOME")
+    .reduce((sum, f) => sum + (f.amount || 0), 0);
+  const totalCashOut = finance
+    .filter((f) => f.type === "OUT" || (f as any).type === "EXPENSE")
+    .reduce((sum, f) => sum + (f.amount || 0), 0);
+
+  const totalPayrollCost = payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0);
+  const estimatedOperatingProfit = totalNetSales - totalCashOut - totalPayrollCost;
+
+  const totalInventoryAssetValue = ingredients.reduce((sum, ing) => {
+    const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
+    return sum + (cost * (ing.stock || 0));
+  }, 0);
+  const lowStockCount = ingredients.filter((ing) => (ing.stock || 0) <= (ing.minStock || 0)).length;
+
+  const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+  const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
+
+  const summaryRows = [
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Nama Usaha / Outlet", Nilai: settings.storeName || "Julia Coffee", Keterangan: "-" },
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Periode Laporan", Nilai: periodLabel, Keterangan: "-" },
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Tanggal Pembuatan Laporan", Nilai: toDateIndo(new Date()), Keterangan: "Diekspor otomatis dari sistem" },
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Mata Uang", Nilai: settings.currency || "IDR", Keterangan: "Rupiah Indonesia" },
+
+    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Omzet Penjualan Kotor", Nilai: totalGrossSales, Keterangan: "Subtotal sebelum diskon" },
+    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Diskon & Promo", Nilai: totalDiscount, Keterangan: "Potongan harga yang diberikan" },
+    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Penjualan Bersih (Net Sales)", Nilai: totalNetSales, Keterangan: "Total penerimaan penjualan riil" },
+    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Struk / Transaksi", Nilai: totalSalesTransactions, Keterangan: "Jumlah transaksi berhasil" },
+    { Kategori: "RINGKASAN PENJUALAN", Indikator: "Average Order Value (AOV)", Nilai: aov, Keterangan: "Rata-rata belanja per struk" },
+
+    { Kategori: "RINGKASAN ARUS KAS", Indikator: "Total Kas Masuk Non-Sales", Nilai: totalCashIn, Keterangan: "Penerimaan kas di luar kasir" },
+    { Kategori: "RINGKASAN ARUS KAS", Indikator: "Total Pengeluaran Kas Operasional", Nilai: totalCashOut, Keterangan: "Beban belanja operasional & utilitas" },
+
+    { Kategori: "BEBAN SDM & PAYROLL", Indikator: "Total Beban Gaji & Upah (Payroll)", Nilai: totalPayrollCost, Keterangan: "Total take home pay karyawan" },
+    { Kategori: "BEBAN SDM & PAYROLL", Indikator: "Jumlah Karyawan Terbayar", Nilai: payroll.length, Keterangan: "Slip gaji yang diproses" },
+
+    { Kategori: "PROFITABILITAS OPERASIONAL", Indikator: "Estimasi Laba Bersih Operasional", Nilai: estimatedOperatingProfit, Keterangan: "Net Sales - Biaya Kas Keluar - Beban Payroll" },
+
+    { Kategori: "INVENTARIS & STOK", Indikator: "Total Item Bahan Baku Aktif", Nilai: ingredients.length, Keterangan: "Jumlah varian bahan baku" },
+    { Kategori: "INVENTARIS & STOK", Indikator: "Estimasi Nilai Aset Bahan Baku", Nilai: totalInventoryAssetValue, Keterangan: "Stok tersedia x Estimasi HPP" },
+    { Kategori: "INVENTARIS & STOK", Indikator: "Item Bahan Perlu Restock", Nilai: lowStockCount, Keterangan: "Stok saat ini <= Batas Minimum" },
+
+    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Total Catatan Presensi Shift", Nilai: attendances.length, Keterangan: "Catatan Clock In/Out" },
+    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Total Kehadiran Kerja", Nilai: totalPresentLogs, Keterangan: "Shift berstatus Hadir/Terlambat" },
+    { Kategori: "DISIPLIN KEHADIRAN", Indikator: "Tingkat Kehadiran (Disiplin)", Nilai: `${attendanceRate}%`, Keterangan: "Persentase kehadiran shift" },
+  ];
+
+  const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+  boldFirstRow(wsSummary, 4);
+  styleDataRows(wsSummary, 1, summaryRows.length, 4);
+  wsSummary["!cols"] = [{ wch: 28 }, { wch: 35 }, { wch: 22 }, { wch: 38 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan Eksekutif");
+
+  // ─── 2. SHEET 2: PENJUALAN (SALES) ──────────────────────────────────────────
+  const salesRows = sales.map((s, idx) => ({
+    No: idx + 1,
+    Tanggal: toDateIndo(s.date || (s as any).createdAt),
+    "No. Receipt": (s as any).receiptNumber || (s as any).invoiceNumber || s.id,
+    "Metode Pembayaran": (s as any).paymentMethod || "TUNAI",
+    Kasir: (s as any).cashierName || (s as any).servedBy || "-",
+    Subtotal: s.subtotal || s.total || 0,
+    Diskon: s.discount || 0,
+    Pajak: s.tax || 0,
+    "Total Bayar (Rp)": s.total || 0,
+    Status: (s as any).status || "COMPLETED",
+  }));
+  const wsSales = XLSX.utils.json_to_sheet(salesRows);
+  boldFirstRow(wsSales, 10);
+  styleDataRows(wsSales, 1, salesRows.length, 10);
+  wsSales["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsSales, "Penjualan (Sales)");
+
+  // ─── 3. SHEET 3: ARUS KAS (FINANCE) ─────────────────────────────────────────
+  const financeRows = finance.map((f, idx) => ({
+    No: idx + 1,
+    Tanggal: toDateIndo(f.date || (f as any).createdAt),
+    Tipe: f.type === "IN" || (f as any).type === "INCOME" ? "Pemasukan (IN)" : "Pengeluaran (OUT)",
+    Kategori: f.category || (f as any).categoryName || "-",
+    Keterangan: f.description || (f as any).notes || "-",
+    "Akun Kas/Bank": (f as any).accountId || (f as any).accountName || "Kas Utama",
+    "Jumlah (Rp)": f.amount || 0,
+    "Dicatat Oleh": (f as any).createdBy || "-",
+  }));
+  const wsFinance = XLSX.utils.json_to_sheet(financeRows);
+  boldFirstRow(wsFinance, 8);
+  styleDataRows(wsFinance, 1, financeRows.length, 8);
+  wsFinance["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 32 }, { wch: 18 }, { wch: 16 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsFinance, "Arus Kas (Finance)");
+
+  // ─── 4. SHEET 4: INVENTARIS & BAHAN (INVENTORY) ──────────────────────────────
+  const inventoryRows = ingredients.map((ing, idx) => {
+    const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
+    const assetVal = cost * (ing.stock || 0);
+    const isLow = (ing.stock || 0) <= (ing.minStock || 0);
+    return {
+      No: idx + 1,
+      "Nama Bahan": ing.name,
+      Kategori: ing.category || "Bahan Baku",
+      "Stok Saat Ini": ing.stock || 0,
+      Satuan: ing.unit,
+      "Stok Minimum": ing.minStock || 0,
+      "Biaya Satuan HPP (Rp)": cost,
+      "Nilai Aset Stok (Rp)": assetVal,
+      "Status Stok": isLow ? "MENIPIS / ORDER ULANG" : "AMAN",
+    };
+  });
+  const wsInventory = XLSX.utils.json_to_sheet(inventoryRows);
+  boldFirstRow(wsInventory, 9);
+  styleDataRows(wsInventory, 1, inventoryRows.length, 9);
+  wsInventory["!cols"] = [{ wch: 5 }, { wch: 26 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, wsInventory, "Stok Bahan (Inventory)");
+
+  // ─── 5. SHEET 5: PENGGAJIAN (PAYROLL) ───────────────────────────────────────
+  const payrollRows = payroll.map((p, idx) => {
+    const emp = employees.find((e) => e.id === p.employeeId);
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || p.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: p.period,
+      "Gaji Pokok": p.basicSalary || 0,
+      Tunjangan: (p.positionAllowance || 0) + (p.mealAllowance || 0) + (p.transportAllowance || 0),
+      "Bonus KPI": p.kpiBonus || 0,
+      "Bonus Target Omzet": p.targetBonus || 0,
+      "Potongan Alpha": p.alphaDeduction || 0,
+      "Take Home Pay (Rp)": p.netPay || 0,
+      Status: p.status || "DRAFT",
+    };
+  });
+  const wsPayroll = XLSX.utils.json_to_sheet(payrollRows);
+  boldFirstRow(wsPayroll, 12);
+  styleDataRows(wsPayroll, 1, payrollRows.length, 12);
+  wsPayroll["!cols"] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsPayroll, "Penggajian (Payroll)");
+
+  // ─── 6. SHEET 6: ABSENSI & KEHADIRAN (ATTENDANCE) ───────────────────────────
+  const attendanceRows = attendances.map((a, idx) => {
+    const emp = employees.find((e) => e.id === a.employeeId);
+    let dur = "-";
+    if (a.clockInTime && a.clockOutTime) {
+      dur = ((new Date(a.clockOutTime).getTime() - new Date(a.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam";
+    }
+    return {
+      No: idx + 1,
+      Tanggal: a.date,
+      "Nama Karyawan": emp?.name || a.employeeId,
+      Jabatan: emp?.position || "-",
+      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-",
+      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-",
+      Durasi: dur,
+      Status: a.status,
+      "Verifikasi Manager": a.approvalStatus === "APPROVED" ? "Disahkan" : a.approvalStatus === "REJECTED" ? "Ditolak" : "Menunggu",
+      Catatan: a.notes || "-",
+    };
+  });
+  const wsAttendance = XLSX.utils.json_to_sheet(attendanceRows);
+  boldFirstRow(wsAttendance, 10);
+  styleDataRows(wsAttendance, 1, attendanceRows.length, 10);
+  wsAttendance["!cols"] = [{ wch: 5 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, wsAttendance, "Kehadiran (Attendance)");
+
+  // ─── 7. SHEET 7: CAPAIAN KPI & KINERJA (KPI) ────────────────────────────────
+  const kpiRows = kpiRecords.map((k, idx) => {
+    const emp = employees.find((e) => e.id === k.employeeId);
+    const grade = k.totalScore >= 85 ? "Sangat Baik (A)" : k.totalScore >= 70 ? "Baik (B)" : k.totalScore >= 55 ? "Cukup (C)" : "Perlu Evaluasi (D)";
+    return {
+      No: idx + 1,
+      "Nama Karyawan": emp?.name || k.employeeId,
+      Jabatan: emp?.position || "-",
+      Divisi: emp?.department || "-",
+      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      "Skor KPI (0-100)": k.totalScore,
+      Grade: grade,
+      "Bonus KPI (Rp)": k.kpiBonus,
+      "Catatan Evaluator": k.notes || "-",
+    };
+  });
+  const wsKpi = XLSX.utils.json_to_sheet(kpiRows);
+  boldFirstRow(wsKpi, 9);
+  styleDataRows(wsKpi, 1, kpiRows.length, 9);
+  wsKpi["!cols"] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, wsKpi, "Kinerja KPI");
+
+  // Simpan File Master Workbook Multi-Sheet
+  const storeSlug = (settings.storeName || "Julia_Coffee").replace(/\s+/g, "_");
+  const periodSlug = periodLabel.replace(/\s+/g, "_");
+  XLSX.writeFile(wb, `Laporan_Komprehensif_${storeSlug}_${periodSlug}.xlsx`);
+};
+

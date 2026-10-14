@@ -766,3 +766,108 @@ export const exportKpiToCSV = ({
   exportToCSV(`Rekap_KPI_${formatDateIndo(new Date())}`, rows);
 };
 
+export const exportMasterExecutiveReportPDF = ({
+  sales,
+  finance,
+  ingredients,
+  payroll,
+  attendances,
+  kpiRecords,
+  employees,
+  settings,
+  periodLabel,
+}: {
+  sales: SalesTransaction[];
+  finance: CashTransaction[];
+  ingredients: Ingredient[];
+  payroll: PayrollRecord[];
+  attendances: DailyAttendance[];
+  kpiRecords: KPIRecord[];
+  employees: Employee[];
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const doc = new jsPDF();
+  setupPdfHeader(doc, settings, "Laporan Eksekutif Master (Executive Summary)", periodLabel);
+
+  const totalGrossSales = sales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
+  const totalDiscount = sales.reduce((sum, s) => sum + (s.discount || 0), 0);
+  const totalNetSales = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalSalesTransactions = sales.length;
+  const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
+
+  const totalCashIn = finance
+    .filter((f) => f.type === "IN" || (f as any).type === "INCOME")
+    .reduce((sum, f) => sum + (f.amount || 0), 0);
+  const totalCashOut = finance
+    .filter((f) => f.type === "OUT" || (f as any).type === "EXPENSE")
+    .reduce((sum, f) => sum + (f.amount || 0), 0);
+
+  const totalPayrollCost = payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0);
+  const estimatedOperatingProfit = totalNetSales - totalCashOut - totalPayrollCost;
+
+  const totalInventoryAssetValue = ingredients.reduce((sum, ing) => {
+    const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
+    return sum + (cost * (ing.stock || 0));
+  }, 0);
+  const lowStockCount = ingredients.filter((ing) => (ing.stock || 0) <= (ing.minStock || 0)).length;
+
+  const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+  const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
+
+  // 1. Table KPI Finansial
+  autoTable(doc, {
+    startY: 48,
+    head: [["No", "Indikator Kinerja Keuangan", "Nilai / Jumlah", "Catatan"]],
+    body: [
+      ["1", "Total Omzet Penjualan Kotor (Gross Sales)", formatCurrency(totalGrossSales), "Subtotal sebelum diskon promo"],
+      ["2", "Total Diskon & Promo", `-${formatCurrency(totalDiscount)}`, "Total potongan harga belanja"],
+      ["3", "Total Penjualan Bersih (Net Sales)", formatCurrency(totalNetSales), `${totalSalesTransactions} Struk (AOV: ${formatCurrency(aov)})`],
+      ["4", "Total Kas Masuk Non-Kasir (In)", formatCurrency(totalCashIn), "Penerimaan kas/transfer di luar kasir"],
+      ["5", "Total Pengeluaran Kas Operasional (Out)", `-${formatCurrency(totalCashOut)}`, "Beban operasional, belanja, & utilitas"],
+      ["6", "Total Pengeluaran Gaji Karyawan (Payroll)", `-${formatCurrency(totalPayrollCost)}`, `${payroll.length} Slip gaji karyawan aktif`],
+      ["7", "Estimasi Laba Bersih Operasional", formatCurrency(estimatedOperatingProfit), estimatedOperatingProfit >= 0 ? "Surplus / Laba Operasional Positif" : "Defisit Operasional"],
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold" },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 12 },
+      1: { fontStyle: "bold", cellWidth: 70 },
+      2: { halign: "right", fontStyle: "bold" },
+      3: { textColor: [100, 116, 139] },
+    },
+  });
+
+  // 2. Table KPI Operasional & SDM
+  const lastY = (doc as any).lastAutoTable?.finalY || 130;
+
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 41, 59);
+  doc.text("Ringkasan Operasional, Stok, & Kedisiplinan SDM", 14, lastY + 12);
+
+  autoTable(doc, {
+    startY: lastY + 16,
+    head: [["No", "Aspek Operasional & SDM", "Statistik", "Status & Keterangan"]],
+    body: [
+      ["1", "Nilai Aset Bahan Baku (Stok Tersedia)", formatCurrency(totalInventoryAssetValue), `${ingredients.length} Varian bahan baku tercatat`],
+      ["2", "Peringatan Stok Menipis", `${lowStockCount} Bahan`, lowStockCount > 0 ? "Perlu segera restock bahan baku" : "Stok bahan baku seluruhnya aman"],
+      ["3", "Total Shift Kehadiran Terekam", `${attendances.length} Shift`, `Tingkat Disiplin Hadir: ${attendanceRate}%`],
+      ["4", "Total Presensi Hadir / Terlambat", `${totalPresentLogs} Kali`, "Catatan presensi foto GPS terverifikasi"],
+      ["5", "Evaluasi Kinerja KPI Karyawan", `${kpiRecords.length} Catatan`, `Total Bonus KPI: ${formatCurrency(kpiRecords.reduce((s, k) => s + (k.kpiBonus || 0), 0))}`],
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: "bold" },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 12 },
+      1: { fontStyle: "bold", cellWidth: 70 },
+      2: { halign: "right", fontStyle: "bold" },
+      3: { textColor: [100, 116, 139] },
+    },
+  });
+
+  const storeSlug = (settings.storeName || "Julia_Coffee").replace(/\s+/g, "_");
+  const periodSlug = periodLabel.replace(/\s+/g, "_");
+  doc.save(`Laporan_Eksekutif_${storeSlug}_${periodSlug}.pdf`);
+};
+
