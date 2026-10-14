@@ -119,39 +119,76 @@ const setupPdfHeader = (
   title: string,
   periodLabel: string,
 ) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const bannerHeight = 48;
+
   // Brand Header Background
-  doc.setFillColor(30, 58, 138); // blue-900
-  doc.rect(0, 0, 210, 40, "F");
+  doc.setFillColor(30, 58, 138); // blue-900 (navy executive header)
+  doc.rect(0, 0, pageWidth, bannerHeight, "F");
 
-  // Brand Name
+  // Accent Line at bottom of banner
+  doc.setFillColor(59, 130, 246); // blue-500
+  doc.rect(0, bannerHeight - 1.5, pageWidth, 1.5, "F");
+
+  // --- BARIS 1: BRAND NAME (Kiri) & TANGGAL CETAK (Kanan) ---
+  const brandName = (
+    settings.brandName ||
+    settings.storeName ||
+    "JULIA'S MANAGEMENT SYSTEM"
+  ).toUpperCase();
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
+  doc.setFontSize(15);
   doc.setFont("helvetica", "bold");
-  doc.text(settings.brandName || "JULIA'S MANAGEMENT SYSTEM", 14, 20);
+  doc.text(brandName, 14, 14);
 
-  // Address
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(200, 212, 233);
-  if (settings.companyAddress) {
-    const addrLines = doc.splitTextToSize(settings.companyAddress, 100);
-    doc.text(addrLines, 14, 28);
-  }
-
-  // Report Title
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.text(title.toUpperCase(), 210 - 14, 20, { align: "right" });
-
-  // Report Meta
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(200, 212, 233);
-  doc.text(`Periode: ${periodLabel}`, 210 - 14, 28, { align: "right" });
-  doc.text(`Dicetak: ${formatDateIndo(new Date())}`, 210 - 14, 34, {
+  doc.setTextColor(203, 213, 225); // slate-300
+  doc.text(`Dicetak: ${formatDateIndo(new Date())}`, pageWidth - 14, 14, {
     align: "right",
   });
+
+  // --- BARIS 2: ALAMAT KEDAI (Kiri) & PERIODE LAPORAN (Kanan) ---
+  if (settings.companyAddress) {
+    const addr =
+      settings.companyAddress.length > 70
+        ? settings.companyAddress.substring(0, 67) + "..."
+        : settings.companyAddress;
+    doc.text(addr, 14, 20);
+  } else {
+    doc.text("Sistem Manajemen & Pembukuan Bisnis", 14, 20);
+  }
+
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(226, 232, 240); // slate-200
+  doc.text(`Periode: ${periodLabel}`, pageWidth - 14, 20, { align: "right" });
+
+  // --- GARIS PEMISAH HALUS DI DALAM BANNER ---
+  doc.setDrawColor(59, 130, 246); // blue-500
+  doc.setLineWidth(0.3);
+  doc.line(14, 24, pageWidth - 14, 24);
+
+  // --- BARIS 3: JUDUL LAPORAN MANDIRI (ANTI-TABRAKAN / BARIS TERPISAH) ---
+  doc.setTextColor(255, 255, 255);
+  const titleText = title.toUpperCase();
+  const titleFontSize =
+    titleText.length > 42 ? 11.5 : titleText.length > 32 ? 13 : 14.5;
+  doc.setFontSize(titleFontSize);
+  doc.setFont("helvetica", "bold");
+  doc.text(titleText, 14, 34);
+
+  // Subtitle dokumen resmi
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(191, 219, 254); // blue-200
+  doc.text("DOKUMEN RESMI SISTEM MANAJEMEN OPERASIONAL & KEUANGAN", 14, 40);
+
+  // Badge rahasia/eksekutif di kanan bawah banner
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(191, 219, 254);
+  doc.text("CONFIDENTIAL & PROPRIETARY", pageWidth - 14, 40, { align: "right" });
 
   // Reset text color for body
   doc.setTextColor(15, 23, 42); // slate-900
@@ -180,7 +217,7 @@ export const exportSalesToPDF = ({
       : [["-", "Tidak ada data transaksi di periode ini", "-", "-"]];
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [["Tanggal", "Nama Menu", "Quantity", "Total (Rp)"]],
     body: tableData,
     foot:
@@ -252,7 +289,7 @@ export const exportInventoryToPDF = ({
       : [["-", "Tidak ada mutasi stok di periode ini", "-", "-", "-"]];
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [["Tanggal", "Bahan Baku", "Jenis", "Jumlah", "Operator"]],
     body: tableData,
     theme: "grid",
@@ -320,7 +357,7 @@ export const exportFinanceToPDF = ({
   const netCash = totalIn - totalOut;
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [["Tanggal", "Jenis", "Kategori", "Keterangan", "Jumlah (Rp)"]],
     body: tableData,
     theme: "grid",
@@ -490,7 +527,7 @@ export const exportPayrollToPDF = ({
   const totalNet = payroll.reduce((s, p) => s + p.netPay, 0);
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [
       [
         "No",
@@ -638,7 +675,7 @@ export const exportAttendanceToPDF = ({
   });
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [["No", "Nama Karyawan", "Jabatan", "Hadir", "Terlambat", "Izin/Sakit", "Alpha", "Total Jam", "% Hadir"]],
     body: tableData.length > 0 ? tableData : [["-", "-", "-", "-", "-", "-", "-", "-", "Tidak ada log absensi"]],
     theme: "grid",
@@ -721,7 +758,7 @@ export const exportKpiToPDF = ({
       : [["-", "-", "-", "-", "-", "-", "-", "Belum ada evaluasi KPI tercatat"]];
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
     head: [["No", "Nama Karyawan", "Jabatan", "Periode", "Skor KPI", "Grade", "Bonus KPI", "Catatan Evaluasi"]],
     body: tableData,
     theme: "grid",
@@ -817,7 +854,7 @@ export const exportMasterExecutiveReportPDF = ({
 
   // 1. Table KPI Finansial
   autoTable(doc, {
-    startY: 48,
+    startY: 56,
     head: [["No", "Indikator Kinerja Keuangan", "Nilai / Jumlah", "Catatan"]],
     body: [
       ["1", "Total Omzet Penjualan Kotor (Gross Sales)", formatCurrency(totalGrossSales), "Subtotal sebelum diskon promo"],

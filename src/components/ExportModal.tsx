@@ -373,10 +373,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col my-8">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] my-auto">
           {/* Header */}
-          <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+          <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
                 <Download className="w-5 h-5" />
@@ -398,7 +398,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </button>
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-5 sm:p-6 space-y-6 flex-1 overflow-y-auto min-h-0">
             {/* 1. Pilih Modul Laporan */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
@@ -825,7 +825,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           {/* Action Footer */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3">
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3 shrink-0">
             <div className="flex items-center gap-2">
               {activeModule === "finance" && (
                 <button
