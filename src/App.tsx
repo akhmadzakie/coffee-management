@@ -82,6 +82,9 @@ const EmployeeDashboard = React.lazy(() =>
 const PosTerminal = React.lazy(() =>
   import("./components/pos/PosTerminal").then((m) => ({ default: m.PosTerminal })),
 );
+const PosCashierLogin = React.lazy(() =>
+  import("./components/pos/PosCashierLogin").then((m) => ({ default: m.PosCashierLogin })),
+);
 const KitchenDisplaySystem = React.lazy(() =>
   import("./components/pos/KitchenDisplaySystem").then((m) => ({ default: m.KitchenDisplaySystem })),
 );
@@ -116,14 +119,39 @@ const ComingSoon = ({ title }: { title: string }) => (
 );
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewState>(() => {
+  const isPosDedicatedRoute = (() => {
     try {
+      const pathname = window.location.pathname.toLowerCase();
       const params = new URLSearchParams(window.location.search);
-      const viewParam = params.get("view") as ViewState;
-      if (viewParam && ["pos_cashier", "kitchen_display"].includes(viewParam)) {
-        return viewParam;
-      }
-    } catch {}
+      return (
+        pathname === "/pos" ||
+        pathname.startsWith("/pos/") ||
+        params.get("view") === "pos_cashier" ||
+        params.get("mode") === "pos"
+      );
+    } catch {
+      return false;
+    }
+  })();
+
+  const isKdsDedicatedRoute = (() => {
+    try {
+      const pathname = window.location.pathname.toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      return (
+        pathname === "/kds" ||
+        pathname.startsWith("/kds/") ||
+        params.get("view") === "kitchen_display" ||
+        params.get("mode") === "kds"
+      );
+    } catch {
+      return false;
+    }
+  })();
+
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    if (isPosDedicatedRoute) return "pos_cashier";
+    if (isKdsDedicatedRoute) return "kitchen_display";
     return "dashboard_finance";
   });
   const { currentUser } = useStore();
@@ -211,17 +239,98 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!currentUser) {
-      setCurrentView("dashboard_finance");
+      if (!isPosDedicatedRoute && !isKdsDedicatedRoute) {
+        setCurrentView("dashboard_finance");
+      }
       return;
     }
     const allowed = roleAllowedViews[currentUser.role] || ALL_VIEWS;
     if (!allowed.includes(currentView)) {
       setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
     }
-  }, [currentUser?.role]);
+  }, [currentUser?.role, isPosDedicatedRoute, isKdsDedicatedRoute]);
 
+  // ─── 1. DEDICATED ROUTE: /pos (POS KASIR TERISOLASI) ──────────────────────────
+  if (isPosDedicatedRoute) {
+    if (!currentUser) {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            <PosCashierLogin onLoginSuccess={() => setCurrentView("pos_cashier")} />
+          </ErrorBoundary>
+        </Suspense>
+      );
+    }
+
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <PosTerminal onNavigateBack={undefined} />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
+
+  // ─── 2. DEDICATED ROUTE: /kds (LAYAR DAPUR KDS TERISOLASI) ────────────────────
+  if (isKdsDedicatedRoute) {
+    if (!currentUser) {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            <PosCashierLogin onLoginSuccess={() => setCurrentView("kitchen_display")} />
+          </ErrorBoundary>
+        </Suspense>
+      );
+    }
+
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <KitchenDisplaySystem onNavigateBack={undefined} />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
+
+  // ─── 3. WEB MANAJEMEN BACK-OFFICE (URL UMUM /) ────────────────────────────────
   if (!currentUser) {
     return <Login />;
+  }
+
+  // Jika user yang login di web manajemen adalah kasir murni, kunci di Terminal Kasir tanpa akses web
+  if (currentUser.role === "KASIR") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <PosTerminal onNavigateBack={undefined} />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
+
+  // Jika Owner/Manager sedang menguji atau membuka Terminal Kasir dari web manajemen
+  if (currentView === "pos_cashier") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <PosTerminal
+            onNavigateBack={() => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")}
+          />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
+
+  if (currentView === "kitchen_display") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <KitchenDisplaySystem
+            onNavigateBack={() => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")}
+          />
+        </ErrorBoundary>
+      </Suspense>
+    );
   }
 
   const renderView = () => {
@@ -252,7 +361,7 @@ function AppContent() {
         return <Suppliers />;
       case "purchases":
         return <Purchases />;
-            case "leader_checklist":
+      case "leader_checklist":
         return <LeaderChecklist />;
       case "hr":
         return <HRManagement />;
@@ -273,49 +382,10 @@ function AppContent() {
         return <EmployeeDashboard onNavigate={setCurrentView} />;
       case "hpp_calculator":
         return <HppCalculator onNavigate={setCurrentView} />;
-      case "pos_cashier":
-        return <PosTerminal onNavigateBack={() => setCurrentView("dashboard_employee")} />;
-      case "kitchen_display":
-        return <KitchenDisplaySystem onNavigateBack={() => setCurrentView("dashboard_employee")} />;
       default:
         return <Dashboard view="FINANCE" />;
     }
   };
-
-  // Jika Terminal Kasir POS atau Layar KDS Dapur: Render STANDALONE FULLSCREEN tanpa Sidebar Web Manajemen
-  if (currentView === "pos_cashier") {
-    const isKasirOnly = currentUser.role === "KASIR";
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          <PosTerminal
-            onNavigateBack={
-              isKasirOnly
-                ? undefined
-                : () => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")
-            }
-          />
-        </ErrorBoundary>
-      </Suspense>
-    );
-  }
-
-  if (currentView === "kitchen_display") {
-    const isStationWorker = ["BAR", "KITCHEN", "BAKER"].includes(currentUser.role);
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          <KitchenDisplaySystem
-            onNavigateBack={
-              isStationWorker
-                ? undefined
-                : () => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")
-            }
-          />
-        </ErrorBoundary>
-      </Suspense>
-    );
-  }
 
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView}>

@@ -2,12 +2,12 @@
   "name": "Julia Coffee POS & Management",
   "short_name": "Julia POS",
   "description": "Terminal Kasir POS & Sistem Manajemen Coffee Shop Terpadu",
-  "start_url": "/",
+  "start_url": "/pos",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "orientation": "landscape-primary",
-  "background_color": "#020617",
-  "theme_color": "#0f172a",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -27,14 +27,14 @@
       "name": "Terminal POS Kasir",
       "short_name": "POS Kasir",
       "description": "Buka Terminal Kasir Layar Sentuh Tablet",
-      "url": "/?view=pos_cashier",
+      "url": "/pos",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Layar Dapur & Bar (KDS)",
       "short_name": "KDS Barista",
       "description": "Buka Layar Antrean Barista & Dapur",
-      "url": "/?view=kitchen_display",
+      "url": "/kds",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
