@@ -67,22 +67,22 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="p-4 px-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+            <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">{title}</h3>
-              <p className="text-[11px] text-slate-400">Otorisasi Supervisor</p>
+              <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+              <p className="text-[11px] text-slate-500 font-medium">Otorisasi Supervisor</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -90,22 +90,22 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
 
         {/* Body */}
         <div className="p-5 flex flex-col items-center gap-4">
-          <p className="text-xs text-slate-300 text-center leading-relaxed">
+          <p className="text-xs text-slate-600 text-center leading-relaxed font-medium">
             {description}
           </p>
 
           {/* Reason input if required */}
           {requireReason && (
             <div className="w-full">
-              <label className="text-[10px] font-medium text-slate-400 mb-1 block">
-                Alasan Tindakan <span className="text-rose-400">*</span>
+              <label className="text-[10px] font-bold text-slate-600 mb-1 block">
+                Alasan Tindakan <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 placeholder="e.g. Tamu ganti menu / salah input kasir"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
               />
             </div>
           )}
@@ -117,15 +117,15 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
                 key={idx}
                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                   pin.length > idx
-                    ? "bg-amber-400 border-amber-400 scale-110 shadow-lg shadow-amber-500/40"
-                    : "border-slate-700 bg-slate-950"
+                    ? "bg-amber-500 border-amber-500 scale-110 shadow-sm shadow-amber-500/40"
+                    : "border-slate-300 bg-slate-100"
                 }`}
               />
             ))}
           </div>
 
           {errorMessage && (
-            <div className="text-[11px] text-rose-400 text-center flex items-center gap-1.5 bg-rose-500/10 px-3 py-1.5 rounded-xl border border-rose-500/20">
+            <div className="text-[11px] text-rose-700 text-center flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 font-medium">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -137,26 +137,26 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
               <button
                 key={num}
                 onClick={() => handleKeyClick(num)}
-                className="h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-base font-bold text-white border border-slate-700/60 shadow transition flex items-center justify-center"
+                className="h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-base font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
               >
                 {num}
               </button>
             ))}
             <button
               onClick={handleClear}
-              className="h-12 rounded-2xl bg-slate-950 hover:bg-slate-800 active:scale-95 text-xs font-semibold text-slate-400 border border-slate-800 transition flex items-center justify-center"
+              className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-bold text-slate-600 border border-slate-200 transition flex items-center justify-center"
             >
               C
             </button>
             <button
               onClick={() => handleKeyClick("0")}
-              className="h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-base font-bold text-white border border-slate-700/60 shadow transition flex items-center justify-center"
+              className="h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-base font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
             >
               0
             </button>
             <button
               onClick={handleBackspace}
-              className="h-12 rounded-2xl bg-slate-950 hover:bg-slate-800 active:scale-95 text-slate-400 border border-slate-800 transition flex items-center justify-center"
+              className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-200 transition flex items-center justify-center"
             >
               <Delete className="w-4 h-4" />
             </button>
@@ -164,16 +164,16 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 px-5 bg-slate-950 border-t border-slate-800 flex gap-2">
+        <div className="p-3 px-5 bg-slate-50 border-t border-slate-200 flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+            className="flex-1 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition"
           >
             Batal
           </button>
           <button
             onClick={handleVerify}
-            className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20"
+            className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white shadow-xs transition"
           >
             Verifikasi PIN
           </button>

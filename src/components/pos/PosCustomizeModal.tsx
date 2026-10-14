@@ -162,29 +162,29 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header Modal */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+            <div className="p-2 rounded-xl bg-amber-100 border border-amber-200 text-amber-700">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                 <span>{item.name}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                   {item.category}
                 </span>
               </h2>
-              <p className="text-[11px] text-amber-400 font-semibold">
+              <p className="text-[11px] text-amber-700 font-bold">
                 Harga Dasar: {formatCurrency(basePrice)}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -195,7 +195,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           {/* Suhu: Hot vs Iced (khusus minuman) */}
           {isDrink && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">
+              <label className="block text-xs font-bold text-slate-700 mb-2">
                 Pilihan Suhu Minuman
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -204,11 +204,11 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                   onClick={() => setTemperature("ICED")}
                   className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
                     temperature === "ICED"
-                      ? "bg-sky-500/20 border-sky-400 text-sky-300 shadow-md shadow-sky-500/10"
-                      : "bg-slate-800/80 border-slate-700 text-slate-400 hover:bg-slate-800"
+                      ? "bg-sky-50 border-sky-400 text-sky-800 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <Snowflake className="w-4 h-4 text-sky-400" />
+                  <Snowflake className="w-4 h-4 text-sky-600" />
                   <span>Dingin / Iced (+Rp 2.000)</span>
                 </button>
                 <button
@@ -216,11 +216,11 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                   onClick={() => setTemperature("HOT")}
                   className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
                     temperature === "HOT"
-                      ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow-md shadow-amber-500/10"
-                      : "bg-slate-800/80 border-slate-700 text-slate-400 hover:bg-slate-800"
+                      ? "bg-amber-50 border-amber-400 text-amber-900 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <Flame className="w-4 h-4 text-amber-400" />
+                  <Flame className="w-4 h-4 text-amber-600" />
                   <span>Panas / Hot (Rp 0)</span>
                 </button>
               </div>
@@ -230,7 +230,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           {/* Level Gula / Sweetness (khusus minuman) */}
           {isDrink && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">
+              <label className="block text-xs font-bold text-slate-700 mb-2">
                 Tingkat Kemanisan (Sweetness)
               </label>
               <div className="grid grid-cols-4 gap-1.5">
@@ -246,8 +246,8 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                     onClick={() => setSweetness(lvl)}
                     className={`py-2 px-1 rounded-xl border text-[11px] font-semibold text-center transition ${
                       sweetness === lvl
-                        ? "bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-sm"
-                        : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                        ? "bg-amber-600 text-white font-bold border-amber-600 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     {lvl}
@@ -260,7 +260,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           {/* Level Es (hanya jika Iced) */}
           {isDrink && temperature === "ICED" && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">
+              <label className="block text-xs font-bold text-slate-700 mb-2">
                 Porsi Es (Ice Level)
               </label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -271,8 +271,8 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                     onClick={() => setIceLevel(ice)}
                     className={`py-2 px-1 rounded-xl border text-[11px] font-semibold text-center transition ${
                       iceLevel === ice
-                        ? "bg-sky-500/20 text-sky-300 font-bold border-sky-400"
-                        : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                        ? "bg-sky-600 text-white font-bold border-sky-600 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     {ice}
@@ -285,8 +285,8 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           {/* Opsi Susu (khusus minuman) */}
           {isDrink && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
-                <Milk className="w-3.5 h-3.5 text-amber-400" />
+              <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                <Milk className="w-3.5 h-3.5 text-amber-600" />
                 <span>Pilihan Jenis Susu</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -299,12 +299,12 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                       onClick={() => setSelectedMilk(milk)}
                       className={`p-2.5 rounded-xl border text-xs text-left transition flex items-center justify-between ${
                         isSelected
-                          ? "bg-emerald-500/15 border-emerald-400 text-emerald-300 font-bold"
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750"
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-900 font-bold shadow-xs"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                       }`}
                     >
                       <span>{milk.name}</span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-500">
                         {milk.price > 0 ? `+${formatCurrency(milk.price)}` : "Rp 0"}
                       </span>
                     </button>
@@ -316,7 +316,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
 
           {/* Add-ons / Topping Tambahan */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">
+            <label className="block text-xs font-bold text-slate-700 mb-2">
               Ekstra Add-on / Topping Tambahan
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -331,12 +331,12 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                     onClick={() => toggleAddon(addon)}
                     className={`p-2.5 rounded-xl border text-xs text-left transition flex items-center justify-between ${
                       isSelected
-                        ? "bg-amber-500/15 border-amber-400 text-amber-300 font-bold"
-                        : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750"
+                        ? "bg-amber-50 border-amber-500 text-amber-900 font-bold shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     <span>{addon.name}</span>
-                    <span className="text-[10px] font-semibold text-amber-400">
+                    <span className="text-[10px] font-bold text-amber-700">
                       +{formatCurrency(addon.price)}
                     </span>
                   </button>
@@ -347,8 +347,8 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
 
           {/* Catatan Khusus untuk Barista/Dapur */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
               <span>Catatan Khusus Barista / Dapur</span>
             </label>
             <input
@@ -356,29 +356,29 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Pisah es di cup lain, bawa tumbler sendiri..."
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
             />
           </div>
         </div>
 
         {/* Footer: Kuantitas & Konfirmasi Tambah */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-3">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
           {/* Stepper Jumlah */}
-          <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-2xl border border-slate-700">
+          <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-xs">
             <button
               type="button"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition"
+              className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="w-8 text-center font-bold text-sm text-white">
+            <span className="w-8 text-center font-bold text-sm text-slate-900">
               {quantity}
             </span>
             <button
               type="button"
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition"
+              className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -388,10 +388,10 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center justify-between shadow-lg shadow-amber-500/20 transition"
+            className="flex-1 py-3 px-4 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-amber-600/20 transition"
           >
             <span>Tambah ke Keranjang</span>
-            <span className="bg-slate-950/20 px-2 py-0.5 rounded-lg text-slate-950 font-extrabold text-sm">
+            <span className="bg-amber-700/60 px-2 py-0.5 rounded-lg text-white font-extrabold text-sm">
               {formatCurrency(subtotal)}
             </span>
           </button>

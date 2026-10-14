@@ -97,33 +97,33 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-4 px-6 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
               <Printer className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 Routing Printer Stasiun & Kasir
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 Pemisahan tiket cetak otomatis ke Bar, Kitchen, Bakery, dan Kasir.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Station Tabs */}
-        <div className="p-3 bg-slate-950/60 border-b border-slate-800 flex gap-2">
+        <div className="p-3 bg-slate-50/70 border-b border-slate-200 flex gap-2">
           {[
             { id: "RECEIPT", label: "Kasir (Struk)", desc: "Thermal 80mm/58mm" },
             { id: "BAR", label: "Bar Minuman", desc: "Tiket Barista" },
@@ -161,8 +161,8 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                 }}
                 className={`flex-1 py-2 px-2.5 rounded-xl text-left border transition ${
                   isSelected
-                    ? "bg-sky-500/15 border-sky-500 text-white shadow-md shadow-sky-500/10"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                    ? "bg-white border-amber-500 text-slate-900 shadow-xs ring-1 ring-amber-500/30"
+                    : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900"
                 }`}
               >
                 <p className="text-xs font-bold leading-tight">{st.label}</p>
@@ -175,19 +175,19 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
         {/* Body Form */}
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
           <div>
-            <label className="text-xs font-semibold text-slate-300 mb-1 block">
+            <label className="text-xs font-bold text-slate-700 mb-1.5 block">
               Nama Printer / Identifikasi
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-300 mb-2 block">
+            <label className="text-xs font-bold text-slate-700 mb-2 block">
               Tipe Konektivitas
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -209,12 +209,12 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                     }
                     className={`p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
                       isSelected
-                        ? "bg-sky-500/20 border-sky-500 text-sky-300 font-bold"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                        ? "bg-amber-600 border-amber-600 text-white font-bold shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
-                    <span className="text-[11px]">{c.label}</span>
+                    <span className="text-[11px] font-semibold">{c.label}</span>
                   </button>
                 );
               })}
@@ -222,9 +222,9 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
           </div>
 
           {formData.connectionType === "LAN" && (
-            <div className="grid grid-cols-3 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               <div className="col-span-2">
-                <label className="text-[11px] font-medium text-slate-400 mb-1 block">
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
                   IP Address Printer Jaringan
                 </label>
                 <input
@@ -232,11 +232,11 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                   placeholder="e.g. 192.168.1.200"
                   value={formData.ipAddress}
                   onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono transition"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-slate-400 mb-1 block">
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
                   Port RAW ESC/POS
                 </label>
                 <input
@@ -244,33 +244,33 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                   placeholder="9100"
                   value={formData.port}
                   onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) || 9100 })}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 font-mono"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono transition"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-xs font-semibold text-slate-300 mb-1.5 block">
+            <label className="text-xs font-bold text-slate-700 mb-1.5 block">
               Lebar Kertas Thermal
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 onClick={() => setFormData({ ...formData, paperWidth: "80mm" })}
-                className={`py-1.5 text-xs font-semibold rounded-lg ${
+                className={`py-1.5 text-xs font-semibold rounded-lg transition ${
                   formData.paperWidth === "80mm"
-                    ? "bg-sky-500 text-slate-950"
-                    : "text-slate-400"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 80mm (Standar POS Kafe / Resto)
               </button>
               <button
                 onClick={() => setFormData({ ...formData, paperWidth: "58mm" })}
-                className={`py-1.5 text-xs font-semibold rounded-lg ${
+                className={`py-1.5 text-xs font-semibold rounded-lg transition ${
                   formData.paperWidth === "58mm"
-                    ? "bg-sky-500 text-slate-950"
-                    : "text-slate-400"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 58mm (Mobile Mini Printer)
@@ -280,17 +280,17 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
         </div>
 
         {/* Footer */}
-        <div className="p-4 px-6 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+        <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition"
           >
             Tutup
           </button>
           <button
             onClick={handleSavePrinter}
             disabled={isSaving}
-            className="px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold shadow-lg shadow-sky-500/20 flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs flex items-center gap-2 transition"
           >
             <Save className="w-4 h-4" />
             <span>Simpan Konfigurasi</span>

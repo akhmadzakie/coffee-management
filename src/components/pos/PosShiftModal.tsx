@@ -192,13 +192,13 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       {/* ── Modal Z-Report Print Slip ─────────────────────────────────── */}
       {isZReportOpen && closedShiftData && (
-        <div className="fixed inset-0 z-60 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Shift Berhasil Ditutup (Z-Report)</span>
               </div>
@@ -207,17 +207,17 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   setIsZReportOpen(false);
                   onClose();
                 }}
-                className="p-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+                className="p-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Slip Preview untuk Printer Thermal */}
-            <div className="flex-1 overflow-y-auto p-4 flex justify-center bg-slate-950">
+            <div className="flex-1 overflow-y-auto p-4 flex justify-center bg-slate-100">
               <div
                 id="thermal-z-report"
-                className="w-full max-w-[320px] bg-white text-black p-4 rounded-xl font-mono text-[11px] leading-tight shadow-md"
+                className="w-full max-w-[320px] bg-white text-black p-4 rounded-xl font-mono text-[11px] leading-tight shadow-md border border-slate-200"
               >
                 <div className="text-center pb-2 border-b border-dashed border-gray-400 mb-2">
                   <h3 className="font-bold text-sm uppercase">
@@ -351,10 +351,10 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               </div>
             </div>
 
-            <div className="p-3 border-t border-slate-800 flex items-center justify-end gap-2 bg-slate-900">
+            <div className="p-3 border-t border-slate-200 flex items-center justify-end gap-2 bg-slate-50">
               <button
                 onClick={handlePrintZReport}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-amber-500/20"
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 <span>Cetak Slip Z-Report</span>
@@ -364,7 +364,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   setIsZReportOpen(false);
                   onClose();
                 }}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
               >
                 Selesai
               </button>
@@ -374,15 +374,15 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
       )}
 
       {/* ── Dialog Utama: Buka atau Tutup Shift ───────────────────────── */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
             <div
               className={`p-2 rounded-xl ${
                 activeShift
-                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                  : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  ? "bg-rose-100 text-rose-700 border border-rose-200"
+                  : "bg-emerald-100 text-emerald-700 border border-emerald-200"
               }`}
             >
               {activeShift ? (
@@ -392,17 +392,17 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               )}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">
+              <h2 className="text-sm font-bold text-slate-900">
                 {activeShift ? "Tutup Shift Kasir (Z-Report)" : "Buka Shift Kasir Baru"}
               </h2>
-              <p className="text-[11px] text-slate-400">
-                Kasir: <span className="text-amber-400 font-medium">{currentUser?.name || "Kasir"}</span> • Peran: {currentUser?.role || "Staff"}
+              <p className="text-[11px] text-slate-500">
+                Kasir: <span className="text-amber-700 font-bold">{currentUser?.name || "Kasir"}</span> • Peran: {currentUser?.role || "Staff"}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -413,8 +413,8 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
           {!activeShift ? (
             /* FORM BUKA SHIFT */
             <form onSubmit={handleOpenShiftSubmit} className="space-y-4">
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                 <p>
                   Shift kasir belum aktif. Masukkan uang modal awal (float) untuk uang kembalian sebelum memulai transaksi kasir.
                 </p>
@@ -422,13 +422,13 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 
               {/* Pilihan Akun Kas Laci */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Laci Kasir / Akun Kas
                 </label>
                 <select
                   value={selectedAccountId}
                   onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 >
                   {cashOnlyAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -443,7 +443,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 
               {/* Input Modal Awal */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Modal Awal Kasir (Starting Cash)
                 </label>
                 <div className="relative">
@@ -459,7 +459,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     }
                     onChange={(e) => setStartingCashInput(e.target.value)}
                     placeholder="200.000"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                     required
                   />
                 </div>
@@ -471,7 +471,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       key={nom}
                       type="button"
                       onClick={() => setStartingCashInput(nom.toString())}
-                      className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 border border-slate-700/60 transition"
+                      className="py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-[11px] font-bold text-slate-700 border border-slate-200 transition"
                     >
                       {formatCurrency(nom)}
                     </button>
@@ -482,7 +482,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               <div className="pt-3">
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+                  className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   <span>Buka Laci & Mulai Shift Kasir</span>
@@ -494,12 +494,12 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
             <form onSubmit={handleCloseShiftSubmit} className="space-y-4">
               {/* Info Shift Berjalan */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
-                  <p className="text-[10px] text-slate-400 flex items-center gap-1 mb-1">
-                    <Clock className="w-3 h-3 text-amber-400" />
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1 mb-1 font-semibold">
+                    <Clock className="w-3 h-3 text-amber-600" />
                     Waktu Mulai Shift
                   </p>
-                  <p className="font-bold text-slate-200">
+                  <p className="font-bold text-slate-800">
                     {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -507,70 +507,70 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
-                  <p className="text-[10px] text-slate-400 flex items-center gap-1 mb-1">
-                    <Banknote className="w-3 h-3 text-emerald-400" />
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1 mb-1 font-semibold">
+                    <Banknote className="w-3 h-3 text-emerald-600" />
                     Modal Awal (Float)
                   </p>
-                  <p className="font-bold text-emerald-400">
+                  <p className="font-bold text-emerald-700">
                     {formatCurrency(activeShift.startingCash)}
                   </p>
                 </div>
               </div>
 
               {/* Rincian Penjualan POS */}
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
-                <div className="flex justify-between items-center text-[11px] font-semibold text-slate-300 pb-1.5 border-b border-slate-800">
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-200">
                   <span>Rincian Pembayaran POS ({shiftStats.transactionCount} Order)</span>
-                  <span className="text-amber-400 font-bold">
+                  <span className="text-amber-700 font-extrabold">
                     {formatCurrency(shiftStats.salesTotal)}
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-slate-600">
                   <span className="flex items-center gap-1">
-                    <Banknote className="w-3 h-3 text-emerald-400" /> Penjualan Tunai:
+                    <Banknote className="w-3 h-3 text-emerald-600" /> Penjualan Tunai:
                   </span>
-                  <span className="text-emerald-400 font-semibold">
+                  <span className="text-emerald-700 font-bold">
                     {formatCurrency(shiftStats.cashSales)}
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-slate-600">
                   <span className="flex items-center gap-1">
-                    <QrCode className="w-3 h-3 text-violet-400" /> QRIS Bank:
+                    <QrCode className="w-3 h-3 text-violet-600" /> QRIS Bank:
                   </span>
-                  <span>{formatCurrency(shiftStats.qrisSales)}</span>
+                  <span className="font-semibold text-slate-800">{formatCurrency(shiftStats.qrisSales)}</span>
                 </div>
-                <div className="flex justify-between text-slate-400">
+                <div className="flex justify-between text-slate-600">
                   <span className="flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-sky-400" /> EDC / Kartu:
+                    <CreditCard className="w-3 h-3 text-sky-600" /> EDC / Kartu:
                   </span>
-                  <span>{formatCurrency(shiftStats.edcSales)}</span>
+                  <span className="font-semibold text-slate-800">{formatCurrency(shiftStats.edcSales)}</span>
                 </div>
               </div>
 
               {/* Kalkulasi Kas yang Seharusnya Ada di Laci */}
-              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
-                <div className="flex justify-between text-slate-300">
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs space-y-1.5">
+                <div className="flex justify-between text-slate-700">
                   <span>Modal Awal:</span>
-                  <span>{formatCurrency(activeShift.startingCash)}</span>
+                  <span className="font-semibold">{formatCurrency(activeShift.startingCash)}</span>
                 </div>
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-slate-700">
                   <span>+ Penjualan Tunai:</span>
-                  <span>{formatCurrency(shiftStats.cashSales)}</span>
+                  <span className="font-semibold">{formatCurrency(shiftStats.cashSales)}</span>
                 </div>
                 {shiftStats.cashIn > 0 && (
-                  <div className="flex justify-between text-emerald-400">
+                  <div className="flex justify-between text-emerald-700">
                     <span>+ Kas Masuk Manual:</span>
-                    <span>{formatCurrency(shiftStats.cashIn)}</span>
+                    <span className="font-semibold">{formatCurrency(shiftStats.cashIn)}</span>
                   </div>
                 )}
                 {shiftStats.cashOut > 0 && (
-                  <div className="flex justify-between text-rose-400">
+                  <div className="flex justify-between text-rose-700">
                     <span>- Kas Keluar Manual:</span>
-                    <span>({formatCurrency(shiftStats.cashOut)})</span>
+                    <span className="font-semibold">({formatCurrency(shiftStats.cashOut)})</span>
                   </div>
                 )}
-                <div className="flex justify-between font-bold text-amber-400 pt-2 border-t border-amber-500/20 text-sm">
+                <div className="flex justify-between font-extrabold text-amber-800 pt-2 border-t border-amber-200 text-sm">
                   <span>Harus Ada di Laci (Expected):</span>
                   <span>{formatCurrency(shiftStats.expectedEndingCash)}</span>
                 </div>
@@ -578,9 +578,9 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 
               {/* Input Uang Fisik Dihitung Kasir */}
               <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
                   <span>Uang Fisik Dihitung Kasir (Actual Cash)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">
+                  <span className="text-[10px] text-slate-500 font-normal">
                     Hitung lembaran fisik di laci
                   </span>
                 </label>
@@ -597,7 +597,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     }
                     onChange={(e) => setActualCashInput(e.target.value)}
                     placeholder="Contoh: 1.250.000"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-500"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                     required
                   />
                 </div>
@@ -607,10 +607,10 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   <div
                     className={`mt-2 p-2.5 rounded-xl border flex items-center justify-between text-xs font-bold ${
                       difference === 0
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-800"
                         : difference > 0
-                        ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                        : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                        ? "bg-blue-50 border-blue-300 text-blue-800"
+                        : "bg-rose-50 border-rose-300 text-rose-800"
                     }`}
                   >
                     <span>
@@ -631,7 +631,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 
               {/* Catatan Kasir */}
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Catatan Rekonsiliasi (Opsional)
                 </label>
                 <input
@@ -639,7 +639,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Keterangan bila ada selisih uang atau penyerahan laci..."
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 />
               </div>
 
@@ -647,7 +647,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 <button
                   type="submit"
                   disabled={!actualCashInput}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-400 hover:to-amber-500 disabled:opacity-50 disabled:pointer-events-none text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20 transition"
+                  className="w-full py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:pointer-events-none text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-rose-600/20 transition"
                 >
                   <Square className="w-4 h-4 fill-current" />
                   <span>Tutup Shift & Buat Laporan Z-Report</span>

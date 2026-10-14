@@ -218,38 +218,38 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
         {/* Header Modal */}
-        <div className="p-4 px-6 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-amber-400" />
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-amber-600" />
               Pembayaran Pesanan Kasir
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               {orderType === "DINE_IN" ? `Dine In • ${tableNumber || "Meja"}` : "Take Away"}{" "}
               {customerName ? `• ${customerName}` : ""}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Total Display */}
-        <div className="p-5 bg-gradient-to-b from-slate-950 to-slate-900 border-b border-slate-800 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div className="p-5 bg-gradient-to-b from-amber-50/70 to-amber-50/30 border-b border-amber-100/80 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             Total yang Harus Dibayar
           </p>
-          <h1 className="text-3xl font-black text-amber-400 mt-1">
+          <h1 className="text-3xl font-black text-amber-700 mt-1">
             {formatCurrency(totalAmount)}
           </h1>
           {discountAmount > 0 && (
-            <p className="text-xs text-emerald-400 mt-0.5">
+            <p className="text-xs font-semibold text-emerald-700 mt-0.5">
               Hemat {formatCurrency(discountAmount)} ({discountReason || "Diskon"})
             </p>
           )}
@@ -259,7 +259,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
         <div className="p-6 space-y-5 overflow-y-auto max-h-[60vh]">
           {/* Metode Pembayaran Tabs */}
           <div>
-            <label className="text-xs font-semibold text-slate-300 mb-2 block">
+            <label className="text-xs font-bold text-slate-700 mb-2 block">
               Pilih Metode Pembayaran
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -280,8 +280,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     }}
                     className={`p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
                       isSelected
-                        ? "bg-amber-500/20 border-amber-500 text-amber-400 shadow-md shadow-amber-500/10 font-bold"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                        ? "bg-amber-600 border-amber-600 text-white shadow-md font-bold"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -294,10 +294,10 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
 
           {/* Form sesuai metode pembayaran */}
           {paymentMethod === "CASH" ? (
-            <div className="space-y-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+            <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               {/* Presets uang pas & pecahan */}
               <div>
-                <label className="text-[11px] font-medium text-slate-400 mb-1.5 block">
+                <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">
                   Pilihan Cepat Nominal Uang
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -307,8 +307,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                       onClick={() => setCashReceived(val)}
                       className={`py-2 px-1 rounded-xl text-xs font-bold border transition ${
                         cashReceived === val
-                          ? "bg-amber-500 text-slate-950 border-amber-500 shadow"
-                          : "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800"
+                          ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-amber-50 hover:border-amber-300"
                       }`}
                     >
                       {val === totalAmount ? "Uang Pas" : formatCurrency(val)}
@@ -319,28 +319,28 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
 
               {/* Input nominal uang diterima */}
               <div>
-                <label className="text-xs font-medium text-slate-300 mb-1 block">
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
                   Uang Diterima dari Pelanggan (Rp)
                 </label>
                 <input
                   type="number"
                   value={cashReceived || ""}
                   onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-lg font-bold text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 />
               </div>
 
               {/* Kembalian Display */}
-              <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+              <div className="pt-3 border-t border-slate-200 flex justify-between items-center bg-white p-3 rounded-xl">
                 <div>
-                  <p className="text-xs text-slate-400">Kembalian Pelanggan</p>
+                  <p className="text-xs font-semibold text-slate-500">Kembalian Pelanggan</p>
                   <p
-                    className={`text-xl font-black ${
+                    className={`text-2xl font-black ${
                       !isCashSufficient
-                        ? "text-rose-400"
+                        ? "text-rose-600"
                         : changeAmount > 0
-                        ? "text-emerald-400"
-                        : "text-slate-300"
+                        ? "text-emerald-600"
+                        : "text-slate-700"
                     }`}
                   >
                     {!isCashSufficient
@@ -349,26 +349,26 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   </p>
                 </div>
                 {isCashSufficient && changeAmount === 0 && (
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                     Uang Pas
                   </span>
                 )}
               </div>
             </div>
           ) : paymentMethod === "QRIS" ? (
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col items-center text-center space-y-3">
+              <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shadow-xs">
                 <QrCode className="w-8 h-8" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">QRIS Dinamis / Statis</h4>
-                <p className="text-xs text-slate-400 max-w-xs mt-0.5">
+                <h4 className="text-sm font-bold text-slate-900">QRIS Dinamis / Statis</h4>
+                <p className="text-xs text-slate-500 max-w-xs mt-0.5">
                   Arahkan pelanggan scan kode QR pada mesin EDC bank atau akrilik QRIS meja kasir.
                 </p>
               </div>
 
               <div className="w-full text-left">
-                <label className="text-[11px] font-medium text-slate-400 mb-1 block">
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
                   Nomor Referensi / Approval QRIS (Opsional)
                 </label>
                 <input
@@ -376,12 +376,12 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   placeholder="e.g. RRN-99201928"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 />
               </div>
             </div>
           ) : (
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
               <div className="grid grid-cols-4 gap-2">
                 {["BCA", "Mandiri", "BRI", "BNI"].map((b) => (
                   <button
@@ -389,8 +389,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     onClick={() => setSelectedBank(b)}
                     className={`py-2 rounded-xl text-xs font-bold border transition ${
                       selectedBank === b
-                        ? "bg-sky-500/20 border-sky-500 text-sky-400"
-                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                        ? "bg-sky-600 border-sky-600 text-white shadow-xs"
+                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
                     }`}
                   >
                     {b}
@@ -399,7 +399,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-300 mb-1 block">
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   Nomor Approval EDC / Trace Number
                 </label>
                 <input
@@ -407,7 +407,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   placeholder="e.g. 129482 (dari kertas slip EDC)"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 />
               </div>
             </div>
@@ -415,14 +415,14 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
 
           {/* Akun Kas Penyimpanan */}
           <div>
-            <label className="text-xs font-medium text-slate-400 mb-1 flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
               <span>Akun Kas / Laci Penyimpanan</span>
-              <span className="text-[10px] text-slate-500">Otomatis catat jurnal kas</span>
+              <span className="text-[10px] text-slate-400">Otomatis catat jurnal kas</span>
             </label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
             >
               {cashAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
@@ -433,7 +433,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           </div>
 
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -441,11 +441,11 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 px-6 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+        <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition"
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition"
           >
             Batal
           </button>
@@ -453,7 +453,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           <button
             onClick={handleProcessPayment}
             disabled={isSubmitting || !isCashSufficient}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 disabled:pointer-events-none text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold shadow-md shadow-amber-600/20 transition flex items-center gap-2"
           >
             {isSubmitting ? (
               <>
