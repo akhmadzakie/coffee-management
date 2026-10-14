@@ -271,18 +271,8 @@ function AppContent() {
     );
   }
 
-  // ─── 2. DEDICATED ROUTE: /kds (LAYAR DAPUR KDS TERISOLASI) ────────────────────
+  // ─── 2. DEDICATED ROUTE: /kds (LAYAR DAPUR, BAR & BAKER KDS MANDIRI) ───────
   if (isKdsDedicatedRoute) {
-    if (!currentUser) {
-      return (
-        <Suspense fallback={<PageLoader />}>
-          <ErrorBoundary>
-            <PosCashierLogin onLoginSuccess={() => setCurrentView("kitchen_display")} />
-          </ErrorBoundary>
-        </Suspense>
-      );
-    }
-
     return (
       <Suspense fallback={<PageLoader />}>
         <ErrorBoundary>

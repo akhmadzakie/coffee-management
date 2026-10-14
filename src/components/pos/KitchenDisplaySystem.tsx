@@ -47,15 +47,32 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   onNavigateBack,
 }) => {
   const { currentUser, logout } = useStore();
-  const [stationFilter, setStationFilter] = useState<string>("ALL");
+  // Read initial station from URL query param ?station= (e.g. ?station=BAR, ?station=KITCHEN, ?station=BAKERY)
+  const initialStation = (() => {
+    if (typeof window !== "undefined") {
+      const param = new URLSearchParams(window.location.search).get("station")?.toUpperCase();
+      if (param && ["ALL", "BAR", "KITCHEN", "BAKERY"].includes(param)) {
+        return param;
+      }
+    }
+    return "ALL";
+  })();
+
+  const [stationFilter, setStationFilter] = useState<string>(initialStation);
   const [tickets, setTickets] = useState<KdsTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const prevTicketCountRef = useRef<number>(0);
 
-  // Auto detect initial station based on user role or department
+  // Auto detect initial station based on user role or department if no URL param was set
   useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("station")?.toUpperCase();
+    if (param && ["ALL", "BAR", "KITCHEN", "BAKERY"].includes(param)) {
+      setStationFilter(param);
+      return;
+    }
+
     if (currentUser?.role === "BAR" || currentUser?.department === "BAR") {
       setStationFilter("BAR");
     } else if (currentUser?.role === "KITCHEN" || currentUser?.department === "KITCHEN") {
@@ -64,6 +81,20 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
       setStationFilter("BAKERY");
     }
   }, [currentUser]);
+
+  // Handle station change and synchronize URL query param
+  const handleSelectStation = (newStation: string) => {
+    setStationFilter(newStation);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (newStation === "ALL") {
+        url.searchParams.delete("station");
+      } else {
+        url.searchParams.set("station", newStation);
+      }
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   // Web Audio Chime synthesizer for new incoming order
   const playChimeSound = () => {
@@ -193,23 +224,27 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {/* Station Pills */}
           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
             {[
-              { id: "ALL", label: "Semua Stasiun" },
-              { id: "BAR", label: "Bar Minuman" },
-              { id: "KITCHEN", label: "Kitchen Makanan" },
-              { id: "BAKERY", label: "Bakery / Pastry" },
-            ].map((st) => (
-              <button
-                key={st.id}
-                onClick={() => setStationFilter(st.id)}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                  stationFilter === st.id
-                    ? "bg-orange-500 text-slate-950 font-bold shadow"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
+              { id: "ALL", label: "Semua Stasiun", icon: Sparkles },
+              { id: "BAR", label: "Bar Minuman", icon: Coffee },
+              { id: "KITCHEN", label: "Kitchen Dapur", icon: UtensilsCrossed },
+              { id: "BAKERY", label: "Baker / Pastry", icon: Cake },
+            ].map((st) => {
+              const IconComp = st.icon;
+              return (
+                <button
+                  key={st.id}
+                  onClick={() => handleSelectStation(st.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                    stationFilter === st.id
+                      ? "bg-amber-500 text-slate-950 font-bold shadow"
+                      : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
+                >
+                  <IconComp className="w-3.5 h-3.5" />
+                  <span>{st.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Sound Toggle */}
