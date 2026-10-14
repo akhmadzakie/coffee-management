@@ -41,6 +41,7 @@ import { PosReceiptModal } from "./PosReceiptModal";
 import { PosPrinterSettingsModal } from "./PosPrinterSettingsModal";
 import { PosTodayOrdersModal } from "./PosTodayOrdersModal";
 import { PosShiftModal } from "./PosShiftModal";
+import { PosCustomizeModal } from "./PosCustomizeModal";
 
 interface MenuItem {
   id: string;
@@ -100,6 +101,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
   const [isTodayOrdersOpen, setIsTodayOrdersOpen] = useState(false);
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
 
   // Active open bills count
   const [activeBillsCount, setActiveBillsCount] = useState<number>(0);
@@ -241,6 +243,26 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         },
       ];
     });
+  };
+
+  const handleAddToCartWithCustomization = (customizedItem: {
+    recipeId: string;
+    menuName: string;
+    variantName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    modifiers: OrderModifier[];
+    notes?: string;
+    printDestination: PrintDestination;
+  }) => {
+    setCart((prev) => [
+      ...prev,
+      {
+        cartId: crypto.randomUUID(),
+        ...customizedItem,
+      },
+    ]);
   };
 
   const handleUpdateQuantity = (cartId: string, delta: number) => {
@@ -583,9 +605,20 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 uppercase font-semibold">
                             {item.category}
                           </span>
-                          <span className="text-slate-500">
-                            → {item.defaultStation}
-                          </span>
+                          {item.isAvailable && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomizingItem(item);
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 flex items-center gap-1 text-[9px] font-bold transition"
+                              title="Kustomisasi suhu, gula, es, susu, dan add-on"
+                            >
+                              <Sliders className="w-3 h-3" />
+                              <span>Kustom</span>
+                            </button>
+                          )}
                         </div>
 
                         <h3 className="text-xs font-bold text-white line-clamp-2 leading-tight mb-1">
@@ -1027,6 +1060,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         isOpen={isShiftModalOpen}
         onClose={() => setIsShiftModalOpen(false)}
         activeShift={activeShift}
+      />
+
+      {/* Modal Kustomisasi Pesanan (Varian Suhu, Gula, Es, Susu, Topping) */}
+      <PosCustomizeModal
+        isOpen={!!customizingItem}
+        onClose={() => setCustomizingItem(null)}
+        item={customizingItem}
+        onAddToCartWithCustomization={handleAddToCartWithCustomization}
       />
     </div>
   );

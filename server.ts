@@ -2769,6 +2769,68 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     }
   });
 
+  // 7b. Get All POS Orders with Filters (for Web Management / Sales report)
+  app.get("/api/pos/orders/all", async (req, res) => {
+    try {
+      const { startDate, endDate, status } = req.query as {
+        startDate?: string;
+        endDate?: string;
+        status?: string;
+      };
+
+      let query = db.select().from(schema.orders);
+      const allOrders = await query.orderBy(desc(schema.orders.createdAt));
+
+      const filteredOrders = allOrders.filter((ord) => {
+        const ordDate = ord.createdAt?.slice(0, 10);
+        if (startDate && ordDate && ordDate < startDate) return false;
+        if (endDate && ordDate && ordDate > endDate) return false;
+        if (status && status !== "ALL" && ord.status !== status) return false;
+        return true;
+      });
+
+      const ordersWithDetails = await Promise.all(
+        filteredOrders.slice(0, 200).map(async (ord) => {
+          const items = await db
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, ord.id));
+          const payments = await db
+            .select()
+            .from(schema.payments)
+            .where(eq(schema.payments.orderId, ord.id));
+          return { ...ord, items, payments };
+        })
+      );
+
+      let totalRevenue = 0;
+      let totalTax = 0;
+      let totalDiscount = 0;
+      let paidCount = 0;
+
+      for (const ord of filteredOrders) {
+        if (ord.status === "PAID") {
+          totalRevenue += Number(ord.totalAmount) || 0;
+          totalTax += Number(ord.taxAmount) || 0;
+          totalDiscount += Number(ord.discountAmount) || 0;
+          paidCount++;
+        }
+      }
+
+      res.json({
+        orders: ordersWithDetails,
+        totalCount: filteredOrders.length,
+        paidCount,
+        totalRevenue,
+        totalTax,
+        totalDiscount,
+      });
+    } catch (e: any) {
+      console.error("Fetch all POS orders error:", e);
+      res.status(500).json({ error: e?.message || "Failed to fetch all orders" });
+    }
+  });
+
   // 8. POS Printers Configuration API
   app.get("/api/pos/printers", async (req, res) => {
     try {
