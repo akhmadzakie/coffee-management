@@ -148,19 +148,7 @@ export const Layout: React.FC<LayoutProps> = ({
       view: "dashboard_inventory" as ViewState,
       icon: Package,
     },
-    // ─── Operations & POS Group ──────────────────────────────────
-    { 
-      group: "Operasi",
-      name: "Terminal POS Kasir",
-      view: "pos_cashier" as ViewState,
-      icon: Store,
-    },
-    { 
-      group: "Operasi",
-      name: "Layar Dapur & Bar (KDS)",
-      view: "kitchen_display" as ViewState,
-      icon: UtensilsCrossed,
-    },
+    // ─── Operations Group (POS & KDS run standalone on /pos & /kds) ───
     { 
       group: "Operasi",
       name: t("shifts") || "Shift & Kasir",

@@ -163,10 +163,10 @@ function AppContent() {
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
     KASIR:       "pos_cashier",
-    LEADER:      "kitchen_display",
-    BAR:         "kitchen_display",
-    KITCHEN:     "kitchen_display",
-    BAKER:       "kitchen_display",
+    LEADER:      "leader_checklist",
+    BAR:         "dashboard_employee",
+    KITCHEN:     "dashboard_employee",
+    BAKER:       "dashboard_employee",
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
