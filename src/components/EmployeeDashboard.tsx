@@ -198,12 +198,16 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
       };
     }
 
-    // Filter tasks matching scheduledShift and isActive
+    // Filter tasks matching scheduledShift, isActive, and targetRole (LEADER vs STAFF)
     const activeShiftTasks: { catName: string; text: string }[] = [];
     categories.forEach((cat) => {
       (cat.items || []).forEach((item) => {
         const norm = normalizeTaskItem(item);
-        if (norm.isActive && (norm.shift === "ALL" || norm.shift === scheduledShift)) {
+        const roleMatches = isLeader
+          ? (!norm.targetRole || norm.targetRole === "ALL" || norm.targetRole === "LEADER")
+          : (!norm.targetRole || norm.targetRole === "ALL" || norm.targetRole === "STAFF");
+
+        if (norm.isActive && (norm.shift === "ALL" || norm.shift === scheduledShift) && roleMatches) {
           activeShiftTasks.push({ catName: cat.category, text: norm.text });
         }
       });

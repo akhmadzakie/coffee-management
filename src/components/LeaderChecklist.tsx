@@ -17,39 +17,39 @@ export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
     id: "bar-cat-1",
     category: "Kebersihan & Sanitasi Area",
     items: [
-      { text: "Lap dan sanitasi seluruh meja bar & undercounter", shift: "ALL", isActive: true },
-      { text: "Backflush mesin espresso dengan chemical & cuci portafilter", shift: "SORE", isActive: true },
-      { text: "Bersihkan hopper grinder & meja kasir/bar", shift: "ALL", isActive: true },
-      { text: "Sapu & pel lantai area bar serta buang ampas kopi (knockbox)", shift: "SORE", isActive: true },
-      { text: "Bersihkan sink bar, drain tray, dan kosongkan tempat sampah", shift: "SORE", isActive: true },
+      { text: "Lap dan sanitasi seluruh meja bar & undercounter", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Backflush mesin espresso dengan chemical & cuci portafilter", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Bersihkan hopper grinder & meja kasir/bar", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Sapu & pel lantai area bar serta buang ampas kopi (knockbox)", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Bersihkan sink bar, drain tray, dan kosongkan tempat sampah", shift: "SORE", targetRole: "STAFF", isActive: true },
     ],
   },
   {
     id: "bar-cat-2",
     category: "Pengecekan Alat & Mesin",
     items: [
-      { text: "Kalibrasi timbangan digital & dial-in espresso (rasio/ekstraksi)", shift: "PAGI", isActive: true },
-      { text: "Cek tekanan pompa & temperatur steam wand mesin espresso", shift: "PAGI", isActive: true },
-      { text: "Cek temperatur chiller susu (standar 2°C - 4°C) & ice maker", shift: "PAGI", isActive: true },
-      { text: "Cek fungsi tablet POS kasir, jaringan internet, & printer struk", shift: "PAGI", isActive: true },
+      { text: "Kalibrasi timbangan digital & dial-in espresso (rasio/ekstraksi)", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek tekanan pompa & temperatur steam wand mesin espresso", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek temperatur chiller susu (standar 2°C - 4°C) & ice maker", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek fungsi tablet POS kasir, jaringan internet, & printer struk", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
   {
     id: "bar-cat-3",
     category: "Bahan Baku & FIFO Gudang",
     items: [
-      { text: "Cek tanggal kedaluwarsa & rotasi stok susu segar (FIFO)", shift: "ALL", isActive: true },
-      { text: "Cek ketersediaan biji kopi (beans), sirup, sauce, & powder", shift: "ALL", isActive: true },
-      { text: "Restock paper cup, sedotan, tutup cup, sendok, & tissue", shift: "MIDDLE", isActive: true },
-      { text: "Catat bahan yang menipis untuk pengajuan restock", shift: "SORE", isActive: true },
+      { text: "Cek tanggal kedaluwarsa & rotasi stok susu segar (FIFO)", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Cek ketersediaan biji kopi (beans), sirup, sauce, & powder", shift: "ALL", targetRole: "ALL", isActive: true },
+      { text: "Restock paper cup, sedotan, tutup cup, sendok, & tissue", shift: "MIDDLE", targetRole: "STAFF", isActive: true },
+      { text: "Catat bahan yang menipis untuk pengajuan restock", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
   },
   {
     id: "bar-cat-4",
     category: "Kontroling Tim & Pelayanan",
     items: [
-      { text: "Briefing standar serving, keramahan kasir, & kebersihan seragam", shift: "PAGI", isActive: true },
-      { text: "Cek absensi staf bar dan kesiapan opening/closing shift", shift: "ALL", isActive: true },
+      { text: "Briefing standar serving, keramahan kasir, & kebersihan seragam", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek absensi staf bar dan kesiapan opening/closing shift", shift: "ALL", targetRole: "LEADER", isActive: true },
     ],
   },
 ];
@@ -59,38 +59,38 @@ export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
     id: "kitchen-cat-1",
     category: "Kebersihan Dapur & Stewarding",
     items: [
-      { text: "Bersihkan kompor, fryer, grill, & permukaan stainless steel", shift: "ALL", isActive: true },
-      { text: "Cuci grease trap & saringan saluran pembuangan air", shift: "SORE", isActive: true },
-      { text: "Sanitasi talenan, pisau, & wadah persiapan bahan (food-grade)", shift: "ALL", isActive: true },
-      { text: "Sapu & pel lantai dapur dengan cairan desinfektan", shift: "SORE", isActive: true },
-      { text: "Pastikan area cuci piring & rak pengering bersih dan tertata", shift: "SORE", isActive: true },
+      { text: "Bersihkan kompor, fryer, grill, & permukaan stainless steel", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Cuci grease trap & saringan saluran pembuangan air", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Sanitasi talenan, pisau, & wadah persiapan bahan (food-grade)", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Sapu & pel lantai dapur dengan cairan desinfektan", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Pastikan area cuci piring & rak pengering bersih dan tertata", shift: "SORE", targetRole: "STAFF", isActive: true },
     ],
   },
   {
     id: "kitchen-cat-2",
     category: "Pengecekan Alat & Pendingin",
     items: [
-      { text: "Cek temperatur chiller (1°C - 4°C) & deep freezer (-18°C)", shift: "PAGI", isActive: true },
-      { text: "Cek instalasi tabung gas, regulator, & cerobong exhaust hood", shift: "PAGI", isActive: true },
-      { text: "Cek kelayakan wajan, panci, fry basket, & penjepit makanan", shift: "ALL", isActive: true },
+      { text: "Cek temperatur chiller (1°C - 4°C) & deep freezer (-18°C)", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek instalasi tabung gas, regulator, & cerobong exhaust hood", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek kelayakan wajan, panci, fry basket, & penjepit makanan", shift: "ALL", targetRole: "ALL", isActive: true },
     ],
   },
   {
     id: "kitchen-cat-3",
     category: "Penyimpanan Bahan & Food Safety",
     items: [
-      { text: "Cek label tanggal (prep date) & masa simpan bahan marinasi (FIFO)", shift: "ALL", isActive: true },
-      { text: "Pastikan pemisahan bahan mentah (daging/ayam) dan bahan matang", shift: "ALL", isActive: true },
-      { text: "Cek kualitas sayuran segar & persediaan bumbu utama", shift: "PAGI", isActive: true },
+      { text: "Cek label tanggal (prep date) & masa simpan bahan marinasi (FIFO)", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Pastikan pemisahan bahan mentah (daging/ayam) dan bahan matang", shift: "ALL", targetRole: "ALL", isActive: true },
+      { text: "Cek kualitas sayuran segar & persediaan bumbu utama", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
   {
     id: "kitchen-cat-4",
     category: "Standar Porsi & Serving",
     items: [
-      { text: "Cek standar gramasi porsi & resep makanan sesuai SOP", shift: "ALL", isActive: true },
-      { text: "Cek waktu saji makanan (ticket time standar)", shift: "MIDDLE", isActive: true },
-      { text: "Evaluasi presentasi & kebersihan piring saji (plating)", shift: "ALL", isActive: true },
+      { text: "Cek standar gramasi porsi & resep makanan sesuai SOP", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Cek waktu saji makanan (ticket time standar)", shift: "MIDDLE", targetRole: "LEADER", isActive: true },
+      { text: "Evaluasi presentasi & kebersihan piring saji (plating)", shift: "ALL", targetRole: "LEADER", isActive: true },
     ],
   },
 ];
@@ -100,37 +100,37 @@ export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
     id: "baker-cat-1",
     category: "Kebersihan Area Pastry & Alat",
     items: [
-      { text: "Sanitasi meja kerja marmer/stainless untuk adonan", shift: "ALL", isActive: true },
-      { text: "Bersihkan loyang baking, rolling pin, scraper, & kuas pastry", shift: "SORE", isActive: true },
-      { text: "Bersihkan remah roti dan tetesan butter di area oven & proofer", shift: "ALL", isActive: true },
-      { text: "Pel lantai dan buang sisa plastik/bungkus bahan adonan", shift: "SORE", isActive: true },
+      { text: "Sanitasi meja kerja marmer/stainless untuk adonan", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Bersihkan loyang baking, rolling pin, scraper, & kuas pastry", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Bersihkan remah roti dan tetesan butter di area oven & proofer", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Pel lantai dan buang sisa plastik/bungkus bahan adonan", shift: "SORE", targetRole: "STAFF", isActive: true },
     ],
   },
   {
     id: "baker-cat-2",
     category: "Kontroling Alat Baking",
     items: [
-      { text: "Cek kalibrasi temperatur oven & fungsi timer pemanggang", shift: "PAGI", isActive: true },
-      { text: "Cek kebersihan bowl spiral mixer & hook pengaduk adonan", shift: "ALL", isActive: true },
-      { text: "Cek kelembapan dan kontrol temperatur lemari proofer adonan", shift: "PAGI", isActive: true },
+      { text: "Cek kalibrasi temperatur oven & fungsi timer pemanggang", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek kebersihan bowl spiral mixer & hook pengaduk adonan", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Cek kelembapan dan kontrol temperatur lemari proofer adonan", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
   {
     id: "baker-cat-3",
     category: "Kualitas Bahan Baku & Adonan",
     items: [
-      { text: "Cek keaktifan ragi (yeast), kualitas butter, & kelembapan tepung", shift: "PAGI", isActive: true },
-      { text: "Pastikan wadah bahan kering tertutup rapat & terlabel tanggal", shift: "ALL", isActive: true },
-      { text: "Cek persediaan topping, glaze, cokelat, dan filling pastry", shift: "MIDDLE", isActive: true },
+      { text: "Cek keaktifan ragi (yeast), kualitas butter, & kelembapan tepung", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Pastikan wadah bahan kering tertutup rapat & terlabel tanggal", shift: "ALL", targetRole: "ALL", isActive: true },
+      { text: "Cek persediaan topping, glaze, cokelat, dan filling pastry", shift: "MIDDLE", targetRole: "STAFF", isActive: true },
     ],
   },
   {
     id: "baker-cat-4",
     category: "Display & Kualitas Produk Jadi",
     items: [
-      { text: "Cek tekstur, kerapuhan (flakiness), & warna kematangan pastry", shift: "ALL", isActive: true },
-      { text: "Pastikan etalase display pastry bersih dan lampu display menyala", shift: "PAGI", isActive: true },
-      { text: "Pastikan label nama produk dan tag harga terpasang rapi", shift: "PAGI", isActive: true },
+      { text: "Cek tekstur, kerapuhan (flakiness), & warna kematangan pastry", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Pastikan etalase display pastry bersih dan lampu display menyala", shift: "PAGI", targetRole: "STAFF", isActive: true },
+      { text: "Pastikan label nama produk dan tag harga terpasang rapi", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
 ];
@@ -139,11 +139,12 @@ type Division = "BAR" | "KITCHEN" | "BAKER";
 
 // Helper to normalize task item to TaskItemDetail
 export const normalizeTaskItem = (item: any): TaskItemDetail => {
-  if (!item) return { text: "", shift: "ALL", isActive: true };
+  if (!item) return { text: "", shift: "ALL", targetRole: "ALL", isActive: true };
   if (typeof item === "string") {
     return {
       text: item,
       shift: "ALL",
+      targetRole: "ALL",
       isActive: true,
     };
   }
@@ -151,6 +152,7 @@ export const normalizeTaskItem = (item: any): TaskItemDetail => {
     id: item.id,
     text: item.text || "",
     shift: item.shift || "ALL",
+    targetRole: item.targetRole || "ALL",
     isActive: item.isActive !== false,
   };
 };
@@ -168,6 +170,17 @@ export const matchesShift = (
   if (!detail.isActive) return false;
   if (shift === "ALL") return true;
   return detail.shift === "ALL" || detail.shift === shift;
+};
+
+export const matchesRole = (
+  item: string | TaskItemDetail,
+  roleTarget: "LEADER" | "STAFF" | "ALL"
+): boolean => {
+  const detail = normalizeTaskItem(item);
+  if (!detail.isActive) return false;
+  if (roleTarget === "ALL") return true;
+  if (!detail.targetRole || detail.targetRole === "ALL") return true;
+  return detail.targetRole === roleTarget;
 };
 
 // Helper parser to support TaskCategoryGroup[] and convert legacy string[]
@@ -262,6 +275,8 @@ export const LeaderChecklist: React.FC = () => {
 
   // Active division filter in supervisor detail view
   const [inspectedDivision, setInspectedDivision] = useState<Division>("BAR");
+  // Role filter in supervisor monitoring (Leader vs Staff vs All)
+  const [monitoringRoleFilter, setMonitoringRoleFilter] = useState<"ALL" | "LEADER" | "STAFF">("ALL");
 
   // Setting template state for supervisor
   const [editingDivision, setEditingDivision] = useState<Division>("BAR");
@@ -576,6 +591,16 @@ export const LeaderChecklist: React.FC = () => {
     setCurrentEditingCategories(updated);
   };
 
+  const handleUpdateSubTaskRole = (catIdx: number, itemIdx: number, targetRole: "STAFF" | "LEADER" | "ALL") => {
+    const updated = [...currentEditingCategories];
+    const cat = updated[catIdx];
+    const items = [...cat.items];
+    const norm = normalizeTaskItem(items[itemIdx]);
+    items[itemIdx] = { ...norm, targetRole };
+    cat.items = items;
+    setCurrentEditingCategories(updated);
+  };
+
   const handleToggleSubTaskActive = (catIdx: number, itemIdx: number) => {
     const updated = [...currentEditingCategories];
     const cat = updated[catIdx];
@@ -818,8 +843,43 @@ export const LeaderChecklist: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="bg-slate-100 px-3.5 py-1.5 rounded-xl text-sm font-bold text-slate-700">
-                  Total Terlaksana: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
+                {/* Filter Kurasi Laporan: Semua vs Leader vs Staf */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      onClick={() => setMonitoringRoleFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        monitoringRoleFilter === "ALL"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Semua Tugas
+                    </button>
+                    <button
+                      onClick={() => setMonitoringRoleFilter("LEADER")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        monitoringRoleFilter === "LEADER"
+                          ? "bg-amber-500 text-white shadow-xs"
+                          : "text-amber-700 hover:text-amber-900"
+                      }`}
+                    >
+                      👑 Khusus Leader (QC)
+                    </button>
+                    <button
+                      onClick={() => setMonitoringRoleFilter("STAFF")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        monitoringRoleFilter === "STAFF"
+                          ? "bg-sky-600 text-white shadow-xs"
+                          : "text-sky-700 hover:text-sky-900"
+                      }`}
+                    >
+                      🧑‍🍳 Khusus Staf
+                    </button>
+                  </div>
+                  <div className="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hidden lg:block">
+                    Total: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
+                  </div>
                 </div>
               </div>
 
@@ -866,6 +926,17 @@ export const LeaderChecklist: React.FC = () => {
                       <div className="space-y-2 pt-2">
                         {cat.items.map((item, itemIdx) => {
                           const itemDetail = normalizeTaskItem(item);
+                          
+                          // Kurasi Filter Leader vs Staf
+                          if (
+                            monitoringRoleFilter !== "ALL" &&
+                            itemDetail.targetRole &&
+                            itemDetail.targetRole !== "ALL" &&
+                            itemDetail.targetRole !== monitoringRoleFilter
+                          ) {
+                            return null;
+                          }
+
                           const isDone = isTaskChecked(
                             selectedDivisionStat.checklist?.leaderTasks || [],
                             cat.category,
@@ -888,6 +959,19 @@ export const LeaderChecklist: React.FC = () => {
                                   <XCircle className="w-4 h-4 text-slate-300 shrink-0" />
                                 )}
                                 <span className="truncate">{itemDetail.text}</span>
+
+                                {/* Role Badge */}
+                                {itemDetail.targetRole === "LEADER" ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                                    👑 Leader
+                                  </span>
+                                ) : itemDetail.targetRole === "STAFF" ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
+                                    🧑‍🍳 Staf
+                                  </span>
+                                ) : null}
+
+                                {/* Shift Badge */}
                                 {itemDetail.shift && itemDetail.shift !== "ALL" && (
                                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
                                     {itemDetail.shift}
@@ -1050,7 +1134,7 @@ export const LeaderChecklist: React.FC = () => {
                             <select
                               value={itemDetail.shift || "ALL"}
                               onChange={(e) => handleUpdateSubTaskShift(catIdx, itemIdx, e.target.value as any)}
-                              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                              className={`text-[11px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
                                 itemDetail.shift === "PAGI"
                                   ? "bg-amber-50 border-amber-300 text-amber-900"
                                   : itemDetail.shift === "MIDDLE"
@@ -1059,11 +1143,30 @@ export const LeaderChecklist: React.FC = () => {
                                   ? "bg-purple-50 border-purple-300 text-purple-900"
                                   : "bg-blue-50 border-blue-300 text-blue-900"
                               }`}
+                              title="Tentukan jadwal shift untuk sub-tugas ini"
                             >
                               <option value="ALL">🌐 Semua Shift</option>
-                              <option value="PAGI">☀️ Shift Pagi (Opening)</option>
-                              <option value="MIDDLE">⛅ Shift Middle (Transisi)</option>
-                              <option value="SORE">🌙 Shift Sore (Closing)</option>
+                              <option value="PAGI">☀️ Pagi</option>
+                              <option value="MIDDLE">⛅ Middle</option>
+                              <option value="SORE">🌙 Sore</option>
+                            </select>
+
+                            {/* Pilihan Peruntukan Role: Leader vs Staf */}
+                            <select
+                              value={itemDetail.targetRole || "ALL"}
+                              onChange={(e) => handleUpdateSubTaskRole(catIdx, itemIdx, e.target.value as any)}
+                              className={`text-[11px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                                itemDetail.targetRole === "LEADER"
+                                  ? "bg-amber-100 border-amber-300 text-amber-900"
+                                  : itemDetail.targetRole === "STAFF"
+                                  ? "bg-sky-100 border-sky-300 text-sky-900"
+                                  : "bg-slate-100 border-slate-300 text-slate-700"
+                              }`}
+                              title="Tentukan apakah tugas ini untuk Leader (Supervisi) atau Staf (Pelaksana)"
+                            >
+                              <option value="ALL">👥 Semua (Staf & Leader)</option>
+                              <option value="LEADER">👑 Khusus Leader (QC)</option>
+                              <option value="STAFF">🧑‍🍳 Khusus Staf</option>
                             </select>
 
                             {/* Tombol Toggle Aktif / Nonaktif */}
@@ -1326,21 +1429,35 @@ export const LeaderChecklist: React.FC = () => {
                           </p>
                         </div>
 
-                        {/* Shift Badge on Item */}
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          itemDetail.shift === "PAGI"
-                            ? "bg-amber-100 text-amber-800 border border-amber-200"
-                            : itemDetail.shift === "MIDDLE"
-                            ? "bg-orange-100 text-orange-800 border border-orange-200"
-                            : itemDetail.shift === "SORE"
-                            ? "bg-purple-100 text-purple-800 border border-purple-200"
-                            : "bg-slate-100 text-slate-600 border border-slate-200"
-                        }`}>
-                          {itemDetail.shift === "PAGI" && "☀️ Opening"}
-                          {itemDetail.shift === "MIDDLE" && "⛅ Middle"}
-                          {itemDetail.shift === "SORE" && "🌙 Closing"}
-                          {(!itemDetail.shift || itemDetail.shift === "ALL") && "Semua Shift"}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Role Badge on Item */}
+                          {itemDetail.targetRole === "LEADER" && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                              👑 Leader QC
+                            </span>
+                          )}
+                          {itemDetail.targetRole === "STAFF" && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
+                              🧑‍🍳 Staf
+                            </span>
+                          )}
+
+                          {/* Shift Badge on Item */}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                            itemDetail.shift === "PAGI"
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : itemDetail.shift === "MIDDLE"
+                              ? "bg-orange-100 text-orange-800 border border-orange-200"
+                              : itemDetail.shift === "SORE"
+                              ? "bg-purple-100 text-purple-800 border border-purple-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200"
+                          }`}>
+                            {itemDetail.shift === "PAGI" && "☀️ Opening"}
+                            {itemDetail.shift === "MIDDLE" && "⛅ Middle"}
+                            {itemDetail.shift === "SORE" && "🌙 Closing"}
+                            {(!itemDetail.shift || itemDetail.shift === "ALL") && "Semua Shift"}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}

@@ -28,6 +28,9 @@ import {
   ShieldCheck,
   Clock,
   CheckCircle2,
+  CheckCheck,
+  CheckSquare,
+  Square,
   RotateCcw,
   Filter,
   Copy,
@@ -65,6 +68,7 @@ export function HRManagement() {
     contracts,
     attendances,
     dailyAttendances,
+    setDailyAttendances,
     employeeShifts,
     setEmployeeShifts,
     updateDailyAttendance,
@@ -156,8 +160,45 @@ export function HRManagement() {
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [attendanceDateFilter, setAttendanceDateFilter] = useState<string>("");
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
+  const [attendanceApprovalFilter, setAttendanceApprovalFilter] = useState<string>("ALL");
+  const [selectedAttIds, setSelectedAttIds] = useState<string[]>([]);
   const [isKpiModalOpen, setIsKpiModalOpen] = useState(false);
   const [editingKpi, setEditingKpi] = useState<any | null>(null);
+
+  const handleBulkApprove = (targetIds?: string[]) => {
+    const ids = targetIds && targetIds.length > 0 ? targetIds : selectedAttIds;
+    if (!ids || ids.length === 0) {
+      alert("Pilih minimal satu absensi untuk disetujui.");
+      return;
+    }
+    if (!confirm(`Sahkan / Setujui ${ids.length} catatan kehadiran yang dipilih?`)) {
+      return;
+    }
+    const idSet = new Set(ids);
+    const updated = dailyAttendances.map(a => 
+      idSet.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
+    );
+    setDailyAttendances(updated);
+    setSelectedAttIds([]);
+    alert(`Berhasil menyetujui ${ids.length} catatan kehadiran!`);
+  };
+
+  const handleApproveAllPending = (pendingList: any[]) => {
+    if (!pendingList || pendingList.length === 0) {
+      alert("Tidak ada absensi yang menunggu persetujuan.");
+      return;
+    }
+    if (!confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingList.length} absensi yang berstatus 'Menunggu Verifikasi'?`)) {
+      return;
+    }
+    const pendingIds = new Set(pendingList.map(a => a.id));
+    const updated = dailyAttendances.map(a => 
+      pendingIds.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
+    );
+    setDailyAttendances(updated);
+    setSelectedAttIds([]);
+    alert(`Berhasil menyetujui seluruh ${pendingList.length} catatan kehadiran secara massal!`);
+  };
 
   const [attendanceForm, setAttendanceForm] = useState({ employeeId: "", period: "", presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
   const [kpiForm, setKpiForm] = useState({ employeeId: "", period: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), totalScore: 0, evaluatorNotes: "", kpiBonus: 0, targets: [{ id: "1", description: "", weight: 100, score: 0 }] });
@@ -1862,6 +1903,17 @@ export function HRManagement() {
                       ))}
                     </select>
 
+                    <select
+                      value={attendanceApprovalFilter}
+                      onChange={(e) => setAttendanceApprovalFilter(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 outline-none"
+                    >
+                      <option value="ALL">Semua Verifikasi</option>
+                      <option value="PENDING">⏳ Menunggu Verifikasi</option>
+                      <option value="APPROVED">✓ Disahkan (Approved)</option>
+                      <option value="REJECTED">✕ Ditolak (Rejected)</option>
+                    </select>
+
                     <button
                       onClick={() => setAttendanceDateFilter(new Date().toISOString().substring(0, 10))}
                       className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors"
@@ -1871,18 +1923,107 @@ export function HRManagement() {
                   </div>
                 </div>
 
+                {/* Bulk Actions Bar if items selected */}
+                {selectedAttIds.length > 0 && canEditHR && (
+                  <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <span className="font-semibold text-indigo-900 flex items-center gap-2">
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                      <strong>{selectedAttIds.length}</strong> catatan kehadiran dipilih
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleBulkApprove()}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                      >
+                        <CheckCheck className="w-4 h-4" />
+                        Sahkan Terpilih ({selectedAttIds.length})
+                      </button>
+                      <button
+                        onClick={() => setSelectedAttIds([])}
+                        className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto rounded-xl border border-slate-100">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                        {canEditHR && (
+                          <th className="py-3 px-3 text-center w-10">
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              title="Pilih Semua yang Ditampilkan"
+                              onChange={(e) => {
+                                const currentFiltered = [...dailyAttendances].filter((d) => {
+                                  if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
+                                  if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                  if (attendanceApprovalFilter !== "ALL") {
+                                    const appStatus = d.approvalStatus || "PENDING";
+                                    if (appStatus !== attendanceApprovalFilter) return false;
+                                  }
+                                  return true;
+                                });
+                                if (e.target.checked) {
+                                  setSelectedAttIds(currentFiltered.map((d) => d.id));
+                                } else {
+                                  setSelectedAttIds([]);
+                                }
+                              }}
+                              checked={
+                                selectedAttIds.length > 0 &&
+                                [...dailyAttendances]
+                                  .filter((d) => {
+                                    if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
+                                    if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                    if (attendanceApprovalFilter !== "ALL") {
+                                      const appStatus = d.approvalStatus || "PENDING";
+                                      if (appStatus !== attendanceApprovalFilter) return false;
+                                    }
+                                    return true;
+                                  })
+                                  .every((d) => selectedAttIds.includes(d.id))
+                              }
+                            />
+                          </th>
+                        )}
                         <th className="py-3 px-4 font-bold">Tanggal</th>
                         <th className="py-3 px-4 font-bold">Karyawan</th>
-                        <th className="py-3 px-4 font-bold">Status</th>
+                        <th className="py-3 px-4 font-bold">Status & Verifikasi</th>
                         <th className="py-3 px-4 font-bold">Foto Selfie (In / Out)</th>
                         <th className="py-3 px-4 font-bold">Lokasi GPS</th>
                         <th className="py-3 px-4 font-bold">Jam In / Out</th>
                         <th className="py-3 px-4 font-bold">Durasi</th>
-                        <th className="py-3 px-4 font-bold text-right">Verifikasi Manager</th>
+                        <th className="py-3 px-4 font-bold text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <span>Verifikasi Manager</span>
+                            {canEditHR && (() => {
+                              const pendingItems = [...dailyAttendances].filter((d) => {
+                                if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
+                                if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                const appStatus = d.approvalStatus || "PENDING";
+                                return appStatus === "PENDING" && d.status !== "ALPHA";
+                              });
+                              if (pendingItems.length > 0) {
+                                return (
+                                  <button
+                                    onClick={() => handleApproveAllPending(pendingItems)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-xs flex items-center gap-1 transition-all"
+                                    title="Setujui sekaligus semua absensi pending yang tampil"
+                                  >
+                                    <CheckCheck className="w-3.5 h-3.5" />
+                                    <span>Setujui Semua ({pendingItems.length})</span>
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1891,6 +2032,10 @@ export function HRManagement() {
                           .filter((d) => {
                             if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
                             if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                            if (attendanceApprovalFilter !== "ALL") {
+                              const appStatus = d.approvalStatus || "PENDING";
+                              if (appStatus !== attendanceApprovalFilter) return false;
+                            }
                             return true;
                           })
                           .sort((a, b) => b.date.localeCompare(a.date) || (b.clockInTime || "").localeCompare(a.clockInTime || ""));
@@ -1898,7 +2043,7 @@ export function HRManagement() {
                         if (filtered.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={8} className="py-12 text-center text-slate-400 italic text-sm">
+                              <td colSpan={canEditHR ? 9 : 8} className="py-12 text-center text-slate-400 italic text-sm">
                                 Tidak ada catatan kehadiran sesuai filter yang dipilih.
                               </td>
                             </tr>
@@ -1907,8 +2052,27 @@ export function HRManagement() {
 
                         return filtered.map((d) => {
                           const emp = employees.find((e) => e.id === d.employeeId);
+                          const isSelected = selectedAttIds.includes(d.id);
+                          const currentApproval = d.approvalStatus || "PENDING";
+
                           return (
-                            <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
+                            <tr key={d.id} className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs ${isSelected ? "bg-indigo-50/40" : ""}`}>
+                              {canEditHR && (
+                                <td className="py-3 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedAttIds([...selectedAttIds, d.id]);
+                                      } else {
+                                        setSelectedAttIds(selectedAttIds.filter((id) => id !== d.id));
+                                      }
+                                    }}
+                                  />
+                                </td>
+                              )}
                               <td className="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">
                                 {d.date}
                               </td>
@@ -1928,15 +2092,30 @@ export function HRManagement() {
                                 </div>
                               </td>
                               <td className="py-3 px-4 whitespace-nowrap">
-                                <span className={`px-2.5 py-1 text-[11px] font-bold rounded-lg ${
-                                  d.status === "HADIR" ? "bg-emerald-100 text-emerald-800" :
-                                  d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-800" :
-                                  d.status === "IZIN" ? "bg-blue-100 text-blue-800" :
-                                  d.status === "SAKIT" ? "bg-rose-100 text-rose-800" :
-                                  "bg-slate-200 text-slate-700"
-                                }`}>
-                                  {d.status}
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-md ${
+                                    d.status === "HADIR" ? "bg-emerald-100 text-emerald-800" :
+                                    d.status === "TERLAMBAT" ? "bg-amber-100 text-amber-800" :
+                                    d.status === "IZIN" ? "bg-blue-100 text-blue-800" :
+                                    d.status === "SAKIT" ? "bg-rose-100 text-rose-800" :
+                                    "bg-slate-200 text-slate-700"
+                                  }`}>
+                                    {d.status}
+                                  </span>
+                                  {currentApproval === "APPROVED" ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Disahkan
+                                    </span>
+                                  ) : currentApproval === "REJECTED" ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200/70 px-2 py-0.5 rounded-full">
+                                      <X className="w-3 h-3 text-rose-600" /> Ditolak
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded-full">
+                                      <Clock className="w-3 h-3 text-amber-600" /> Menunggu
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               {/* Foto Bukti In & Out */}
                               <td className="py-3 px-4 whitespace-nowrap">
@@ -2032,7 +2211,20 @@ export function HRManagement() {
                               </td>
                               {/* Aksi & Verifikasi */}
                               <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-2">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {canEditHR && currentApproval !== "APPROVED" && d.status !== "ALPHA" && (
+                                    <button
+                                      onClick={() => {
+                                        updateDailyAttendance({ ...d, approvalStatus: "APPROVED" });
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-bold text-xs transition-colors shadow-2xs"
+                                      title="Langsung sahkan / setujui kehadiran ini dengan 1 klik"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>Sahkan</span>
+                                    </button>
+                                  )}
+
                                   <button
                                     onClick={() => {
                                       setVerifyingAttendance(d);

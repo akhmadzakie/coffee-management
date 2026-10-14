@@ -1,0 +1,28 @@
+:root {
+  --background: #FAF6F0;
+  --surface: #FFFFFF;
+  --foreground: #2B1D14;
+  --muted: #7A6A5E;
+  --border: #E6DCCF;
+
+  --primary: #6F4E37;
+  --primary-foreground: #FFFFFF;
+  --accent: #A85F26;
+
+  --success: #2F7D4F;
+  --warning: #B7791F;
+  --danger: #B3382C;
+
+  --radius: 12px;
+}
+
+.dark {
+  --background: #1C1410;
+  --surface: #261C16;
+  --foreground: #F3EAE0;
+  --muted: #B3A296;
+  --border: #3A2C23;
+  --primary: #C9A27E;
+  --primary-foreground: #1C1410;
+  --accent: #E0914F;
+}

@@ -22,7 +22,8 @@ export const KPI: React.FC = () => {
     updateSettings,
     salesTransactions,
     contracts,
-    dailyChecklists
+    dailyChecklists,
+    users
   } = useStore() as any;
 
   const [activeSubTab, setActiveSubTab] = useState<"guide" | "target" | "tasks" | "rules">("guide");
@@ -59,6 +60,47 @@ export const KPI: React.FC = () => {
   const activeEmployees = useMemo(() => {
     return (employees || []).filter((e: any) => e.status !== "INACTIVE");
   }, [employees]);
+
+  // Rekapitulasi Capaian KPI Jobdesk Seluruh Karyawan (Leader vs Staf)
+  const employeeKpiSummary = useMemo(() => {
+    return activeEmployees.map((emp: any) => {
+      const userObj = (users || []).find((u: any) => u.id === emp.id || u.username === emp.username);
+      const isLeader = emp.position?.toUpperCase().includes("LEADER") || 
+                       emp.position?.toUpperCase().includes("HEAD") ||
+                       userObj?.role === "LEADER";
+
+      const deptStr = (emp.department || emp.position || "").toUpperCase();
+      let divKey: "BAR" | "KITCHEN" | "BAKER" = "BAR";
+      if (deptStr.includes("KITCHEN")) divKey = "KITCHEN";
+      else if (deptStr.includes("BAKE") || deptStr.includes("PASTRY")) divKey = "BAKER";
+      else divKey = "BAR";
+
+      const contract = (contracts || []).find((c: any) => c.employeeId === emp.id && c.status === "ACTIVE") ||
+                       (contracts || []).find((c: any) => c.employeeId === emp.id);
+
+      const plafonBonus = contract?.kpiBonusTarget || settings?.divisionKpiBonusTarget?.[divKey] || settings?.targetBonusAmount || 250000;
+
+      // Checklists count this month
+      const empChecklists = (dailyChecklists || []).filter(
+        (c: any) => (c.employeeId === emp.id || (userObj && c.employeeId === userObj.id)) && c.date.startsWith(currentPeriod)
+      );
+
+      const checklistDays = empChecklists.length;
+      const score = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 100;
+      const estimatedBonus = Math.round((score / 100) * plafonBonus);
+
+      return {
+        emp,
+        userObj,
+        isLeader,
+        divKey,
+        plafonBonus,
+        checklistDays,
+        score,
+        estimatedBonus,
+      };
+    });
+  }, [activeEmployees, users, settings, contracts, dailyChecklists, currentPeriod]);
 
   const monthlyTarget = settings?.monthlyRevenueTarget || 150000000;
   const targetBonusAmount = settings?.targetBonusAmount || 0;
@@ -259,55 +301,55 @@ export const KPI: React.FC = () => {
             {/* 4 Cards Alur */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Card 1: Leader Jobdesk */}
-              <div className="p-5 rounded-2xl border border-indigo-100 bg-white hover:border-indigo-200 hover:shadow-sm transition-all space-y-3">
+              <div className="p-5 rounded-2xl border border-amber-200 bg-white hover:border-amber-300 hover:shadow-sm transition-all space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Untuk Leader / Supervisor
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    <Award className="w-3.5 h-3.5 text-amber-600" /> Khusus Leader (Supervisi & QC)
                   </span>
-                  <span className="text-[11px] font-semibold text-slate-400">Otomatisasi Harian</span>
+                  <span className="text-[11px] font-semibold text-slate-400">Head Bar, Kitchen, Baker</span>
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">
-                  1. Tunjangan Jabatan & Bonus Jobdesk Leader
+                  1. Jobdesk Leader: Kontrol Kualitas, SOP & Mesin
                 </h4>
                 <div className="space-y-2 text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <p>
-                    <strong>Sumber Angka:</strong> Diatur di menu <em>Kontrak Kerja Karyawan</em> pada kolom <code>Tunjangan Jabatan</code> dan <code>Target Bonus KPI</code>.
+                    <strong>Tugas Utama:</strong> Kalibrasi grinder & espresso, cek suhu chiller susu/freezer, briefing shift, kontrol absensi tim, rotasi FIFO bahan, dan pelaporan kendala shift ke Manager.
                   </p>
                   <p>
-                    <strong>Cara Kerja:</strong> Leader wajib mengisi checklist tugas harian (opening/closing bar & kasir) di menu <em>Leader Checklist</em>.
+                    <strong>Sumber Plafon Bonus:</strong> Diatur oleh Manager di tab <em>Kelola Jobdesk Divisi</em> (default Rp 250.000 / divisi atau sesuai kontrak).
                   </p>
-                  <div className="p-2 bg-indigo-50/70 rounded-lg font-mono text-[11px] text-indigo-900 border border-indigo-100">
-                    Bonus = (Hari Checklist Diisi ÷ Hari Kerja) × Plafon Target
+                  <div className="p-2 bg-amber-50/80 rounded-lg font-mono text-[11px] text-amber-950 border border-amber-200">
+                    Bonus Leader = (% Capaian Tugas Supervisi) × Plafon Bonus Divisi
                   </div>
                   <p className="text-slate-500 text-[11px]">
-                    *Jika hadir 25 hari dan mengisi checklist 25 hari penuh, bonus cair 100%.
+                    *Laporan terpisah di menu Checklist Jobdesk agar Manager mudah mengkurasi pengawasan Leader.
                   </p>
                 </div>
               </div>
 
-              {/* Card 2: Staff KPI & Disiplin */}
+              {/* Card 2: Staff KPI & Jobdesk */}
               <div className="p-5 rounded-2xl border border-sky-100 bg-white hover:border-sky-200 hover:shadow-sm transition-all space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200">
-                    <Users className="w-3.5 h-3.5" /> Untuk Barista & Kasir
+                    <Users className="w-3.5 h-3.5" /> Khusus Staf Pelaksana Shift
                   </span>
-                  <span className="text-[11px] font-semibold text-slate-400">Evaluasi & Presensi</span>
+                  <span className="text-[11px] font-semibold text-slate-400">Barista, Cook, Kasir</span>
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">
-                  2. Bonus Capaian KPI & Kedisiplinan Staf
+                  2. Jobdesk Staf: Eksekusi Operasional Sesuai Shift
                 </h4>
                 <div className="space-y-2 text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <p>
-                    <strong>Sumber Angka:</strong> Diatur di menu <em>Kontrak Kerja Karyawan</em> pada kolom <code>Target Bonus KPI</code>.
+                    <strong>Tugas Utama:</strong> Pembuatan pesanan, pelayanan kasir, kebersihan station kerja, sanitasi alat/meja, dan prep bahan baku harian (disesuaikan shift Pagi/Middle/Sore).
                   </p>
                   <p>
-                    <strong>Cara Kerja:</strong> Dinilai oleh Manager lewat skor bulanan di tab <em>Task KPI</em> atau dihitung dari <strong>Rasio Disiplin Presensi</strong> (bebas keterlambatan & mangkir).
+                    <strong>Perlindungan Shift Libur (OFF):</strong> Saat jadwal shift libur (OFF), staf bebas tugas checklist dan KPI tidak dipotong (aman 100%).
                   </p>
                   <div className="p-2 bg-sky-50/70 rounded-lg font-mono text-[11px] text-sky-900 border border-sky-100">
-                    Bonus = (Skor Evaluasi % atau Rasio Disiplin) × Plafon Target
+                    Bonus Staf = (% Tugas Shift Selesai) × Plafon Target Bonus
                   </div>
                   <p className="text-slate-500 text-[11px]">
-                    *Keterlambatan mengurangi 5% dan mangkir (alpha) memotong 10% dari rasio disiplin.
+                    *Staf tidak dibebani tugas kalibrasi mesin atau inspeksi yang menjadi wewenang Leader.
                   </p>
                 </div>
               </div>
@@ -544,21 +586,103 @@ export const KPI: React.FC = () => {
 
         {/* ─── TAB 3: DAFTAR TASK KPI KARYAWAN ─── */}
         {activeSubTab === "tasks" && (
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Daftar Task & Indikator KPI Karyawan</h3>
-                <p className="text-xs text-slate-500">Catat target bulanan spesifik per staf untuk dinilai realisasinya.</p>
+          <div className="space-y-6">
+            {/* Live Rekap Capaian KPI Jobdesk Karyawan */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Target className="w-4 h-4 text-indigo-600" />
+                    Capaian KPI & Estimasi Bonus Jobdesk Bulan Ini ({currentPeriod})
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Otomatis dihitung dari persentase penyelesaian checklist shift per divisi & peran (% KPI × Plafon Target).
+                  </p>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-600">
+                  {employeeKpiSummary.length} Karyawan Aktif
+                </span>
               </div>
-              {canEditHR && (
-                <button 
-                  onClick={() => { setEditingTaskId(""); setTaskForm({ period: currentPeriod }); }}
-                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
-                >
-                  <Plus className="w-4 h-4" /> Tambah Task Baru
-                </button>
-              )}
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <th className="py-3 px-4 font-semibold">Karyawan</th>
+                      <th className="py-3 px-4 font-semibold">Jabatan & Divisi</th>
+                      <th className="py-3 px-4 font-semibold text-center">Peran Jobdesk</th>
+                      <th className="py-3 px-4 font-semibold text-right">Plafon Bonus Divisi</th>
+                      <th className="py-3 px-4 font-semibold text-center">Hari Checklist</th>
+                      <th className="py-3 px-4 font-semibold text-center">Skor KPI</th>
+                      <th className="py-3 px-4 font-semibold text-right">Est. Bonus KPI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeKpiSummary.map((item: any) => (
+                      <tr key={item.emp.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-800">
+                          {item.emp.name}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {item.emp.position || "Staff"} ({item.divKey === "BAR" ? "Bar & Kasir" : item.divKey === "KITCHEN" ? "Kitchen" : "Baker"})
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {item.isLeader ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              👑 Leader QC
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                              🧑‍🍳 Staf Pelaksana
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-medium text-slate-700">
+                          {formatCurrency(item.plafonBonus)}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-slate-600">
+                          {item.checklistDays} hari
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full font-bold font-mono text-[11px] ${
+                            item.score >= 90 ? "bg-emerald-100 text-emerald-800" : item.score >= 75 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {item.score}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">
+                          {formatCurrency(item.estimatedBonus)}
+                        </td>
+                      </tr>
+                    ))}
+                    {employeeKpiSummary.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 italic">
+                          Belum ada data staf aktif.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* Target Tambahan / Indikator Tertulis Khusus */}
+            <div className="pt-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Catatan Indikator KPI Tambahan (Opsional)</h3>
+                  <p className="text-xs text-slate-500">Form target angka manual jika manajemen memiliki indikator khusus di luar checklist jobdesk.</p>
+                </div>
+                {canEditHR && (
+                  <button 
+                    onClick={() => { setEditingTaskId(""); setTaskForm({ period: currentPeriod }); }}
+                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" /> Tambah Task Manual
+                  </button>
+                )}
+              </div>
             
             {editingTaskId !== null && (
               <div className="bg-indigo-50/70 p-5 rounded-2xl mb-6 border border-indigo-100">
@@ -678,7 +802,8 @@ export const KPI: React.FC = () => {
               </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* ─── TAB 4: ATURAN BONUS BERTINGKAT (TIERED) ─── */}
         {activeSubTab === "rules" && (

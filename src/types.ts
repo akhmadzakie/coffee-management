@@ -288,6 +288,7 @@ export interface TaskItemDetail {
   id?: string;
   text: string;
   shift?: "PAGI" | "MIDDLE" | "SORE" | "ALL";
+  targetRole?: "STAFF" | "LEADER" | "ALL";
   isActive?: boolean;
 }
 

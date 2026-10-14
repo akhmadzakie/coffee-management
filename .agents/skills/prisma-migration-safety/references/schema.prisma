@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enum ----------
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+  BARISTA
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+}
+
+enum OrderStatus {
+  DRAFT
+  PLACED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+  CARD
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  WASTE
+  ADJUSTMENT
+  VOID_RETURN
+}
+
+// ---------- Outlet & User ----------
+model Outlet {
+  id               String   @id @default(cuid())
+  name             String
+  timezone         String   @default("Asia/Jakarta")
+  taxBps           Int      @default(0)
+  serviceChargeBps Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users          User[]
+  categories     Category[]
+  products       Product[]
+  modifierGroups ModifierGroup[]
+  ingredients    Ingredient[]
+  shifts         Shift[]
+  orders         Order[]
+  auditLogs      AuditLog[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  outletId     String
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean   @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  outlet         Outlet          @relation(fields: [outletId], references: [id])
+  shifts         Shift[]
+  orders         Order[]
+  stockMovements StockMovement[]
+  auditLogs      AuditLog[]
+
+  @@index([outletId])
+}
+
+// ---------- Menu ----------
+model Category {
+  id        String    @id @default(cuid())
+  outletId  String
+  name      String
+  sortOrder Int       @default(0)
+  deletedAt DateTime?
+
+  outlet   Outlet    @relation(fields: [outletId], references: [id])
+  products Product[]
+
+  @@index([outletId])
+}
+
+model Product {
+  id         String    @id @default(cuid())
+  outletId   String
+  categoryId String
+  name       String
+  isActive   Boolean   @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  outlet         Outlet                 @relation(fields: [outletId], references: [id])
+  category       Category               @relation(fields: [categoryId], references: [id])
+  variants       Variant[]
+  modifierGroups ProductModifierGroup[]
+
+  @@index([outletId, categoryId])
+}
+
+model Variant {
+  id        String    @id @default(cuid())
+  productId String
+  name      String
+  price     Int
+  deletedAt DateTime?
+
+  product     Product      @relation(fields: [productId], references: [id])
+  recipeItems RecipeItem[]
+  orderItems  OrderItem[]
+
+  @@index([productId])
+}
+
+model ModifierGroup {
+  id        String    @id @default(cuid())
+  outletId  String
+  name      String
+  minSelect Int       @default(0)
+  maxSelect Int       @default(1)
+  deletedAt DateTime?
+
+  outlet    Outlet                 @relation(fields: [outletId], references: [id])
+  modifiers Modifier[]
+  products  ProductModifierGroup[]
+
+  @@index([outletId])
+}
+
+model Modifier {
+  id         String    @id @default(cuid())
+  groupId    String
+  name       String
+  priceDelta Int       @default(0)
+  deletedAt  DateTime?
+
+  group       ModifierGroup        @relation(fields: [groupId], references: [id])
+  ingredients ModifierIngredient[]
+  orderItems  OrderItemModifier[]
+
+  @@index([groupId])
+}
+
+model ProductModifierGroup {
+  productId String
+  groupId   String
+
+  product Product       @relation(fields: [productId], references: [id])
+  group   ModifierGroup @relation(fields: [groupId], references: [id])
+
+  @@id([productId, groupId])
+}
+
+// ---------- Inventori ----------
+model Ingredient {
+  id          String    @id @default(cuid())
+  outletId    String
+  name        String
+  unit        String
+  stockQty    Int       @default(0)
+  minStock    Int       @default(0)
+  costPerUnit Int       @default(0)
+  deletedAt   DateTime?
+
+  outlet              Outlet               @relation(fields: [outletId], references: [id])
+  recipeItems         RecipeItem[]
+  modifierIngredients ModifierIngredient[]
+  movements           StockMovement[]
+
+  @@index([outletId])
+}
+
+model RecipeItem {
+  id           String @id @default(cuid())
+  variantId    String
+  ingredientId String
+  quantity     Int
+
+  variant    Variant    @relation(fields: [variantId], references: [id])
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([variantId, ingredientId])
+}
+
+model ModifierIngredient {
+  id           String @id @default(cuid())
+  modifierId   String
+  ingredientId String
+  quantity     Int
+
+  modifier   Modifier   @relation(fields: [modifierId], references: [id])
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([modifierId, ingredientId])
+}
+
+model StockMovement {
+  id           String            @id @default(cuid())
+  ingredientId String
+  type         StockMovementType
+  quantity     Int
+  reason       String?
+  orderId      String?
+  userId       String
+  createdAt    DateTime          @default(now())
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+  order      Order?     @relation(fields: [orderId], references: [id])
+
+  @@index([ingredientId, createdAt])
+}
+
+// ---------- Shift ----------
+model Shift {
+  id                String    @id @default(cuid())
+  outletId          String
+  userId            String
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+  openingCash       Int
+  expectedCash      Int?
+  closingCashActual Int?
+
+  outlet Outlet  @relation(fields: [outletId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+  orders Order[]
+
+  @@index([outletId, openedAt])
+}
+
+// ---------- Order ----------
+model Order {
+  id            String      @id @default(cuid())
+  outletId      String
+  number        String
+  type          OrderType   @default(DINE_IN)
+  status        OrderStatus @default(DRAFT)
+  cashierId     String
+  shiftId       String?
+  subtotal      Int         @default(0)
+  discount      Int         @default(0)
+  serviceCharge Int         @default(0)
+  tax           Int         @default(0)
+  rounding      Int         @default(0)
+  total         Int         @default(0)
+  note          String?
+  createdAt     DateTime    @default(now())
+  completedAt   DateTime?
+
+  outlet         Outlet          @relation(fields: [outletId], references: [id])
+  cashier        User            @relation(fields: [cashierId], references: [id])
+  shift          Shift?          @relation(fields: [shiftId], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  stockMovements StockMovement[]
+
+  @@unique([outletId, number])
+  @@index([outletId, completedAt])
+  @@index([outletId, status])
+}
+
+model OrderItem {
+  id          String @id @default(cuid())
+  orderId     String
+  variantId   String
+  productName String
+  variantName String
+  unitPrice   Int
+  quantity    Int
+  lineTotal   Int
+  note        String?
+
+  order     Order               @relation(fields: [orderId], references: [id])
+  variant   Variant             @relation(fields: [variantId], references: [id])
+  modifiers OrderItemModifier[]
+
+  @@index([orderId])
+}
+
+model OrderItemModifier {
+  id          String @id @default(cuid())
+  orderItemId String
+  modifierId  String
+  name        String
+  priceDelta  Int
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+  modifier  Modifier  @relation(fields: [modifierId], references: [id])
+
+  @@index([orderItemId])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  orderId        String
+  method         PaymentMethod
+  amount         Int
+  tendered       Int?
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+// ---------- Audit ----------
+model AuditLog {
+  id        String   @id @default(cuid())
+  outletId  String
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  outlet Outlet @relation(fields: [outletId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([outletId, createdAt])
+}
