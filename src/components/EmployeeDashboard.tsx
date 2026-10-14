@@ -252,14 +252,21 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
       .filter((e) => getEmployeeDivision(e) === leaderDivision && e.status === "AKTIF")
       .map((e) => {
         const att = dailyAttendances.find((a) => a.employeeId === e.id && a.date === todayStr);
+        const userObj = users?.find((u) => u.id === e.id || u.username === e.username);
+        const chk = dailyChecklists.find(
+          (c) => (c.employeeId === e.id || (userObj && c.employeeId === userObj.id)) && c.date === todayStr
+        );
+        const taskCount = chk?.leaderTasks?.length || 0;
         return {
           employee: e,
           attendance: att,
           isClockedIn: !!att?.clockInTime,
           isClockedOut: !!att?.clockOutTime,
+          hasChecklist: !!chk,
+          checklistCount: taskCount,
         };
       });
-  }, [isLeader, employees, leaderDivision, dailyAttendances, todayStr]);
+  }, [isLeader, employees, leaderDivision, dailyAttendances, dailyChecklists, users, todayStr]);
 
   // 8. Active Contract & Target KPI Bonus
   const activeContract = useMemo(() => {
@@ -646,7 +653,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5">
                         <span className="font-mono text-slate-600 text-[11px]">
                           {member.attendance?.clockInTime
                             ? new Date(member.attendance.clockInTime).toLocaleTimeString("id-ID", {
@@ -666,6 +673,17 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                         >
                           {member.isClockedOut ? "Pulang" : member.isClockedIn ? "Hadir" : "Belum Masuk"}
                         </span>
+                        {member.isClockedIn && (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              member.hasChecklist
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            }`}
+                          >
+                            {member.hasChecklist ? `✓ ${member.checklistCount} Task` : "Belum Checklist"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
