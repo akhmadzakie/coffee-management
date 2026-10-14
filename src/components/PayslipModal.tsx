@@ -92,34 +92,30 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
       (k) => k.employeeId === payroll.employeeId && k.period === payroll.period
     );
 
-    if (isLeader) {
-      const empChecklists = (dailyChecklists || []).filter(
-        (c) =>
-          (c.employeeId === payroll.employeeId ||
-            c.notes?.includes(`[${employee.department}]`)) &&
-          c.date.startsWith(payroll.period)
-      );
-      const checklistDays = empChecklists.length;
-      const expectedDays = Math.max(1, attendanceBreakdown.presentDays || 25);
-      const ratio = Math.min(100, Math.round((checklistDays / expectedDays) * 100));
+    const empChecklists = (dailyChecklists || []).filter(
+      (c) =>
+        (c.employeeId === payroll.employeeId ||
+          c.notes?.includes(`[${employee.department}]`)) &&
+        c.date.startsWith(payroll.period)
+    );
+    const checklistDays = empChecklists.length;
+    const expectedDays = Math.max(1, attendanceBreakdown.presentDays || 22);
+    const ratio = checklistDays > 0 
+      ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
+      : (kpi ? kpi.totalScore : Math.min(100, Math.round(((attendanceBreakdown.presentDays - attendanceBreakdown.lateDays) / expectedDays) * 100)));
 
-      return {
-        label: `Capaian Jobdesk Checklist (${ratio}% - ${checklistDays}/${expectedDays} Hari)`,
-        isLeader: true,
-      };
-    } else if (kpi) {
-      return {
-        label: `Skor Evaluasi KPI (${kpi.totalScore}/100)`,
-        isLeader: false,
-      };
-    } else {
-      const onTimeDays = Math.max(0, attendanceBreakdown.presentDays - attendanceBreakdown.lateDays);
-      return {
-        label: `Kedisiplinan Kehadiran (${onTimeDays} Hari Tepat Waktu)`,
-        isLeader: false,
-      };
-    }
-  }, [employee, kpiRecords, dailyChecklists, payroll.employeeId, payroll.period, attendanceBreakdown]);
+    return {
+      ratio,
+      checklistDays,
+      expectedDays,
+      kpiScore: kpi?.totalScore || ratio,
+      kpiBonus: payroll.kpiBonus || 0,
+      label: isLeader 
+        ? `Supervisi & Jobdesk Leader (${ratio}% - ${checklistDays}/${expectedDays} Shift)`
+        : `Checklist Jobdesk Shift (${ratio}% - ${checklistDays}/${expectedDays} Shift)`,
+      isLeader,
+    };
+  }, [employee, kpiRecords, dailyChecklists, payroll.employeeId, payroll.period, payroll.kpiBonus, attendanceBreakdown]);
 
   // 4. Formatted Period String (e.g. Oktober 2026)
   const periodFormatted = useMemo(() => {
@@ -309,46 +305,84 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
               </div>
             </div>
 
-            {/* Rincian Absensi & Rekap Kehadiran (Best Practice Addition) */}
-            <div className="mb-5 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-blue-50/30 p-3.5 rounded-xl border border-indigo-100/70">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                  Rekap Kehadiran Bulan Ini
-                </span>
-                <span className="text-[10px] font-semibold text-slate-400">
-                  Total {attendanceBreakdown.totalWorkingDays} Hari Kerja
-                </span>
+            {/* Grid 2 Kartu: Rincian Kehadiran & Capaian Jobdesk / KPI */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              {/* Kartu 1: Rekap Kehadiran */}
+              <div className="bg-gradient-to-r from-slate-50 via-indigo-50/20 to-blue-50/20 p-3.5 rounded-xl border border-indigo-100/70">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                    Kehadiran Bulan Ini
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400">
+                    {attendanceBreakdown.totalWorkingDays} Hari Kerja
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5 text-center">
+                  <div className="p-1.5 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] text-slate-500 font-medium block">Hadir</span>
+                    <span className="text-xs font-black text-emerald-700 font-mono">
+                      {attendanceBreakdown.presentDays}
+                    </span>
+                    <span className="text-[8px] text-slate-400 block">Hari</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] text-slate-500 font-medium block">Telat</span>
+                    <span className="text-xs font-black text-amber-600 font-mono">
+                      {attendanceBreakdown.lateDays}
+                    </span>
+                    <span className="text-[8px] text-slate-400 block">Kali</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] text-slate-500 font-medium block">Izin</span>
+                    <span className="text-xs font-black text-blue-600 font-mono">
+                      {attendanceBreakdown.sickOrLeaveDays}
+                    </span>
+                    <span className="text-[8px] text-slate-400 block">Hari</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] text-slate-500 font-medium block">Alpha</span>
+                    <span className="text-xs font-black text-rose-600 font-mono">
+                      {attendanceBreakdown.alphaDays}
+                    </span>
+                    <span className="text-[8px] text-slate-400 block">Hari</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
-                  <span className="text-[10px] text-slate-500 font-medium block">Hadir</span>
-                  <span className="text-sm font-black text-emerald-700 font-mono">
-                    {attendanceBreakdown.presentDays}
-                  </span>
-                  <span className="text-[9px] text-slate-400 block">Hari</span>
+              {/* Kartu 2: Capaian Jobdesk & KPI */}
+              <div className="bg-gradient-to-r from-slate-50 via-emerald-50/20 to-teal-50/20 p-3.5 rounded-xl border border-emerald-100/70 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-emerald-600" />
+                      Capaian Jobdesk & KPI
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+                      {kpiDetails.ratio}% Capaian
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 font-medium line-clamp-1 mb-2">
+                    {kpiDetails.label}
+                  </p>
                 </div>
-                <div className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
-                  <span className="text-[10px] text-slate-500 font-medium block">Terlambat</span>
-                  <span className="text-sm font-black text-amber-600 font-mono">
-                    {attendanceBreakdown.lateDays}
-                  </span>
-                  <span className="text-[9px] text-slate-400 block">Kali</span>
-                </div>
-                <div className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
-                  <span className="text-[10px] text-slate-500 font-medium block">Izin/Sakit</span>
-                  <span className="text-sm font-black text-blue-600 font-mono">
-                    {attendanceBreakdown.sickOrLeaveDays}
-                  </span>
-                  <span className="text-[9px] text-slate-400 block">Hari</span>
-                </div>
-                <div className="p-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
-                  <span className="text-[10px] text-slate-500 font-medium block">Alpha</span>
-                  <span className="text-sm font-black text-rose-600 font-mono">
-                    {attendanceBreakdown.alphaDays}
-                  </span>
-                  <span className="text-[9px] text-slate-400 block">Hari</span>
+
+                <div className="space-y-1.5">
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        kpiDetails.ratio >= 90 ? "bg-emerald-500" :
+                        kpiDetails.ratio >= 70 ? "bg-indigo-500" : "bg-amber-500"
+                      }`}
+                      style={{ width: `${kpiDetails.ratio}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-slate-500 pt-0.5">
+                    <span>Bonus KPI: <strong className="text-emerald-700 font-mono">+{formatCurrency(payroll.kpiBonus)}</strong></span>
+                    <span className="font-mono">{kpiDetails.checklistDays} / {kpiDetails.expectedDays} Shift</span>
+                  </div>
                 </div>
               </div>
             </div>

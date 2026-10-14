@@ -15,7 +15,11 @@ import {
   X,
   Target,
   Award,
-  Sparkles
+  Sparkles,
+  CheckSquare,
+  TrendingUp,
+  Calendar,
+  UserCheck
 } from "lucide-react";
 import { PayslipModal } from "./PayslipModal";
 
@@ -167,6 +171,10 @@ export function Payroll() {
         const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay;
         const netPay = grossPay - alphaDeduction - otherDeductions;
 
+        const completionPercentage = checklistDays > 0 
+          ? Math.min(100, Math.round((checklistDays / Math.max(1, presentDays || 22)) * 100))
+          : (kpi ? kpi.totalScore : Math.round(Math.max(0, 1 - (lateDays * 0.05) - (alphaDays * 0.10)) * 100));
+
         const existingRecord = (payrollRecords || []).find(
           (r: PayrollRecord) => r.employeeId === emp.id && r.period === period
         );
@@ -174,6 +182,15 @@ export function Payroll() {
         return {
           emp,
           existingRecord,
+          performanceSummary: {
+            presentDays,
+            lateDays,
+            alphaDays,
+            checklistDays,
+            expectedDays: Math.max(1, presentDays || 22),
+            completionPercentage,
+            targetKpiBonus,
+          },
           calculation: {
             employeeId: emp.id,
             period,
@@ -193,6 +210,37 @@ export function Payroll() {
         };
       });
   }, [employees, contracts, attendances, kpiRecords, period, payrollRecords, dailyAttendances, dailyChecklists, users, kpiTasks, kpiBonusRules, targetBonusPerEmployee]);
+
+  const getEmpPerformanceSummary = (employeeId: string) => {
+    const dailyLogs = (dailyAttendances || []).filter(
+      (a: any) => a.employeeId === employeeId && a.date.startsWith(period)
+    );
+    const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+    const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
+    const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA").length;
+    const sickOrLeaveDays = dailyLogs.filter((a: any) => ["IZIN", "SAKIT"].includes(a.status)).length;
+
+    const empObj = employees.find((e: any) => e.id === employeeId);
+    const userObj = (users || []).find(
+      (u: any) => u.id === employeeId || (empObj && u.username === empObj.username)
+    );
+    const empChecklists = (dailyChecklists || []).filter(
+      (c: any) => (c.employeeId === employeeId || (userObj && c.employeeId === userObj.id)) && c.date.startsWith(period)
+    );
+    const checklistDays = empChecklists.length;
+    const expectedDays = Math.max(1, presentDays || 22);
+    const completionPercentage = Math.min(100, Math.round((checklistDays / expectedDays) * 100));
+
+    return {
+      presentDays,
+      lateDays,
+      alphaDays,
+      sickOrLeaveDays,
+      checklistDays,
+      expectedDays,
+      completionPercentage,
+    };
+  };
 
   const handleGenerateAll = () => {
     if (closedPeriods.some((p: any) => p.period === period)) {
@@ -320,18 +368,62 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Total (Harian)</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Kehadiran (Shift)</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Jobdesk & KPI</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Tunjangan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI & Target</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI & Omzet</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Potongan Alpha</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-slate-100">
-                {generatedCalculations.map(({ emp, calculation, existingRecord }) => (
+                {generatedCalculations.map(({ emp, calculation, existingRecord, performanceSummary }) => (
                   <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 font-medium text-slate-800">{emp.name}</td>
+                    <td className="p-4">
+                      <div className="font-bold text-slate-800">{emp.name}</div>
+                      <div className="text-[11px] text-slate-400">{emp.position || "Staff"} • {emp.department || "Main"}</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col gap-1 text-xs">
+                        <span className="font-bold text-slate-800 flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          {performanceSummary.presentDays} Hari Hadir
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          {performanceSummary.lateDays > 0 ? (
+                            <span className="text-amber-700 font-medium">({performanceSummary.lateDays} Terlambat)</span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">(Tepat Waktu)</span>
+                          )}
+                          {performanceSummary.alphaDays > 0 && (
+                            <span className="text-rose-700 font-bold bg-rose-50 px-1 rounded border border-rose-200">
+                              {performanceSummary.alphaDays} Alpha
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col gap-1 w-32">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-indigo-700">{performanceSummary.completionPercentage}%</span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {performanceSummary.checklistDays}/{performanceSummary.expectedDays} Shift
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              performanceSummary.completionPercentage >= 90 ? "bg-emerald-500" :
+                              performanceSummary.completionPercentage >= 70 ? "bg-indigo-500" : "bg-amber-500"
+                            }`}
+                            style={{ width: `${performanceSummary.completionPercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
                     <td className="p-4 text-right">{formatCurrency(calculation.basicSalary)}</td>
                     <td className="p-4 text-right">{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</td>
                     <td className="p-4 text-right text-emerald-600">
@@ -377,7 +469,9 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Total (Harian)</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Kehadiran (Bulan Ini)</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Capaian Jobdesk & KPI</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Aksi</th>
@@ -386,7 +480,7 @@ export function Payroll() {
               <tbody className="text-sm divide-y divide-slate-100">
                 {currentPeriodRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
                       <Calculator className="w-12 h-12 mx-auto text-slate-300 mb-3" />
                       <p>Belum ada data penggajian untuk periode ini.</p>
                       {isHRD && (
@@ -400,10 +494,54 @@ export function Payroll() {
                     </td>
                   </tr>
                 ) : currentPeriodRecords.map((record: PayrollRecord) => {
-                  const empName = employees.find((e: any) => e.id === record.employeeId)?.name || users.find((u: any) => u.id === record.employeeId)?.name || "Unknown";
+                  const empObj = employees.find((e: any) => e.id === record.employeeId) || users.find((u: any) => u.id === record.employeeId);
+                  const empName = empObj?.name || "Unknown";
+                  const perf = getEmpPerformanceSummary(record.employeeId);
                   return (
                     <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 font-medium text-slate-800">{empName}</td>
+                      <td className="p-4">
+                        <div className="font-medium text-slate-800">{empName}</div>
+                        <div className="text-[11px] text-slate-400">{empObj?.position || "Staff"} • {empObj?.department || "Main"}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col gap-1 text-xs">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            {perf.presentDays} Hari Hadir
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {perf.lateDays > 0 ? (
+                              <span className="text-amber-700 font-medium">({perf.lateDays} Terlambat)</span>
+                            ) : (
+                              <span className="text-emerald-700 font-medium">(Tepat Waktu)</span>
+                            )}
+                            {perf.alphaDays > 0 && (
+                              <span className="text-rose-700 font-bold bg-rose-50 px-1 rounded border border-rose-200">
+                                {perf.alphaDays} Alpha
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col gap-1 w-32">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-indigo-700">{perf.completionPercentage}%</span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {perf.checklistDays}/{perf.expectedDays} Shift
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                perf.completionPercentage >= 90 ? "bg-emerald-500" :
+                                perf.completionPercentage >= 70 ? "bg-indigo-500" : "bg-amber-500"
+                              }`}
+                              style={{ width: `${perf.completionPercentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
                       <td className="p-4 text-right">{formatCurrency(record.basicSalary)}</td>
                       <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(record.netPay)}</td>
                       <td className="p-4">
