@@ -420,6 +420,10 @@ export interface PurchaseOrder {
   id: string;
   poNumber: string;
   supplierId: string;
+  supplierName?: string;
+  purchaseType?: "DISTRIBUTOR" | "MARKET";
+  cashAccountId?: string;
+  notes?: string;
   date: string; // ISO string
   items: PurchaseOrderItem[];
   totalAmount: number;

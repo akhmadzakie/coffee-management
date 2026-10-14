@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import {
@@ -14,6 +14,11 @@ import {
   Package,
   AlertTriangle,
   Clock,
+  Store,
+  Building2,
+  Coins,
+  Receipt,
+  Sparkles,
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
 import { exportToCSV } from "../utils/export";
@@ -23,7 +28,10 @@ export const Purchases = () => {
     ingredients,
     suppliers,
     purchaseOrders,
-    addPurchaseOrder, payPurchaseOrder, cashAccounts,
+    addPurchaseOrder,
+    addDirectMarketPurchase,
+    payPurchaseOrder,
+    cashAccounts,
     updatePOStatus,
     markPOAsReceived,
     deletePurchaseOrder,
@@ -35,6 +43,12 @@ export const Purchases = () => {
   const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
 
   const [activeTab, setActiveTab] = useState<"new_po" | "history">("new_po");
+
+  // Purchase Mode: Formal Distributor PO vs Direct Market/Cash Purchase
+  const [purchaseMode, setPurchaseMode] = useState<"DISTRIBUTOR" | "MARKET">("DISTRIBUTOR");
+  const [marketName, setMarketName] = useState("Pasar Tradisional");
+  const [marketNotes, setMarketNotes] = useState("");
+  const [selectedCashAccountId, setSelectedCashAccountId] = useState<string>("");
 
   // PO State
   const [selectedSupplier, setSelectedSupplier] = useState("");
@@ -56,6 +70,19 @@ export const Purchases = () => {
   const [poToReceive, setPoToReceive] = useState<any>(null);
 
   const isIndo = settings.language === "id";
+
+  useEffect(() => {
+    if (cashAccounts.length > 0 && !selectedCashAccountId) {
+      const defaultAcc =
+        cashAccounts.find(
+          (a) =>
+            a.name.toLowerCase().includes("kasir") ||
+            a.name.toLowerCase().includes("drawer") ||
+            a.name.toLowerCase().includes("petty"),
+        ) || cashAccounts[0];
+      if (defaultAcc) setSelectedCashAccountId(defaultAcc.id);
+    }
+  }, [cashAccounts, selectedCashAccountId]);
 
   // Categories
   const categories = [
@@ -127,19 +154,44 @@ export const Purchases = () => {
   const totalAmount = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
   const handleCheckout = (status: "PAID" | "UNPAID") => {
-    if (!selectedSupplier || cart.length === 0) return;
+    if (cart.length === 0) return;
+
+    // Mode Belanja Pasar / Eceran (Langsung Lunas & Masuk Stok)
+    if (purchaseMode === "MARKET") {
+      const newPO = addDirectMarketPurchase({
+        marketName: marketName.trim() || "Pasar Tradisional / Belanja Harian",
+        items: cart,
+        totalAmount,
+        cashAccountId: selectedCashAccountId || cashAccounts[0]?.id,
+        notes: marketNotes.trim() || undefined,
+      });
+
+      setCurrentInvoiceData(newPO);
+      setIsInvoiceModalOpen(true);
+      setCart([]);
+      setMarketNotes("");
+      return;
+    }
+
+    // Mode PO Distributor Formal
+    if (!selectedSupplier) return;
+    const isPaid = status === "PAID";
+    const poNumber = `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newPO = {
-      poNumber: `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`,
+      poNumber,
       supplierId: selectedSupplier,
+      supplierName: suppliers.find((s) => s.id === selectedSupplier)?.name,
+      purchaseType: "DISTRIBUTOR" as const,
       date: new Date().toISOString(),
       items: cart,
       totalAmount,
-      status: "UNPAID",
+      status: isPaid ? ("PAID" as const) : ("UNPAID" as const),
       deliveryStatus: deliveryOption,
-      paymentMethod: "TEMPO",
-      dueDate: dueDate,
-      amountPaid: 0,
+      paymentMethod: isPaid ? ("CASH" as const) : ("TEMPO" as const),
+      dueDate: isPaid ? undefined : dueDate,
+      amountPaid: isPaid ? totalAmount : 0,
+      cashAccountId: isPaid ? (selectedCashAccountId || cashAccounts[0]?.id) : undefined,
     };
 
     addPurchaseOrder(newPO);
@@ -308,64 +360,173 @@ export const Purchases = () => {
               </span>
             </div>
 
-            {/* Supplier Selector */}
-            <div className="p-3.5 border-b border-slate-200 bg-slate-50/50 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isIndo ? "Pilih Supplier" : "Select Supplier"}{" "}
-                  <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-1.5 outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm bg-white"
-                  value={selectedSupplier}
-                  onChange={(e) => setSelectedSupplier(e.target.value)}
+            {/* Mode Switcher: Distributor vs Belanja Pasar */}
+            <div className="p-2.5 border-b border-slate-200 bg-slate-100/80">
+              <div className="grid grid-cols-2 p-1 bg-slate-200/80 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPurchaseMode("DISTRIBUTOR")}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    purchaseMode === "DISTRIBUTOR"
+                      ? "bg-white text-blue-700 shadow-xs ring-1 ring-slate-200"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
                 >
-                  <option value="">
-                    {isIndo ? "-- Pilih Supplier --" : "-- Choose Supplier --"}
-                  </option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.picName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Delivery Option */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isIndo ? "Status Penerimaan Barang" : "Delivery Reception"}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryOption("RECEIVED")}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
-                      deliveryOption === "RECEIVED"
-                        ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-bold"
-                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <PackageCheck className="w-3.5 h-3.5" />
-                    {isIndo
-                      ? "Langsung Diterima (Masuk Stok)"
-                      : "Received (In Stock)"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryOption("PENDING")}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
-                      deliveryOption === "PENDING"
-                        ? "bg-slate-100 border-slate-400 text-slate-800 font-bold"
-                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    {isIndo ? "Menunggu Pengiriman" : "Pending Delivery"}
-                  </button>
-                </div>
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>PO Distributor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurchaseMode("MARKET")}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    purchaseMode === "MARKET"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>Belanja Pasar / Eceran</span>
+                </button>
               </div>
             </div>
+
+            {/* Mode Details Form */}
+            {purchaseMode === "MARKET" ? (
+              <div className="p-3.5 border-b border-slate-200 bg-emerald-50/40 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Store className="w-3.5 h-3.5 text-emerald-600" />
+                    Nama Toko / Pasar / Warung
+                  </label>
+                  <input
+                    type="text"
+                    value={marketName}
+                    onChange={(e) => setMarketName(e.target.value)}
+                    placeholder="Misal: Pasar Pagi, Toko Plastik, Indomaret..."
+                    className="w-full border border-emerald-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                  {/* Quick Chips */}
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {[
+                      "Pasar Tradisional",
+                      "Warung Terdekat",
+                      "Minimarket / Indomaret",
+                      "Toko Plastik",
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setMarketName(chip)}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors ${
+                          marketName === chip
+                            ? "bg-emerald-600 text-white border-emerald-600 font-bold"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Coins className="w-3.5 h-3.5 text-amber-600" />
+                    Sumber Kas Pembayaran Tunai
+                  </label>
+                  <select
+                    value={selectedCashAccountId}
+                    onChange={(e) => setSelectedCashAccountId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    {cashAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({formatCurrency(acc.balance || 0)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Catatan Belanja (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={marketNotes}
+                    onChange={(e) => setMarketNotes(e.target.value)}
+                    placeholder="Misal: Beli lemon segar & susu darurat..."
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-emerald-100/70 border border-emerald-200 text-[11px] text-emerald-950 leading-tight">
+                  <div className="font-bold flex items-center gap-1 mb-0.5 text-emerald-900">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    Otomatis Masuk Stok & Kas Terpotong:
+                  </div>
+                  Bahan yang dibeli langsung masuk stok aktif dan saldo kas kasir otomatis terpotong saat disimpan.
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 border-b border-slate-200 bg-slate-50/50 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {isIndo ? "Pilih Supplier" : "Select Supplier"}{" "}
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm bg-white"
+                    value={selectedSupplier}
+                    onChange={(e) => setSelectedSupplier(e.target.value)}
+                  >
+                    <option value="">
+                      {isIndo ? "-- Pilih Supplier --" : "-- Choose Supplier --"}
+                    </option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.picName})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Delivery Option */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {isIndo ? "Status Penerimaan Barang" : "Delivery Reception"}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryOption("RECEIVED")}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
+                        deliveryOption === "RECEIVED"
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-bold"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <PackageCheck className="w-3.5 h-3.5" />
+                      {isIndo
+                        ? "Langsung Diterima (Masuk Stok)"
+                        : "Received (In Stock)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryOption("PENDING")}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
+                        deliveryOption === "PENDING"
+                          ? "bg-slate-100 border-slate-400 text-slate-800 font-bold"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      {isIndo ? "Menunggu Pengiriman" : "Pending Delivery"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Cart Item Rows */}
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-slate-50/30">
@@ -459,24 +620,36 @@ export const Purchases = () => {
                   {formatCurrency(totalAmount)}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              {purchaseMode === "MARKET" ? (
                 <button
                   type="button"
-                  disabled={!selectedSupplier || cart.length === 0}
-                  onClick={() => handleCheckout("UNPAID")}
-                  className="py-2 px-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-                >
-                  {isIndo ? "Simpan Belum Lunas" : "Save as Unpaid"}
-                </button>
-                <button
-                  type="button"
-                  disabled={!selectedSupplier || cart.length === 0}
+                  disabled={cart.length === 0}
                   onClick={() => handleCheckout("PAID")}
-                  className="py-2 px-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-sm"
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {isIndo ? "Bayar Sekarang (Lunas)" : "Pay Now"}
+                  <Store className="w-4 h-4" />
+                  <span>Simpan Belanja & Potong Kas Tunai</span>
                 </button>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!selectedSupplier || cart.length === 0}
+                    onClick={() => handleCheckout("UNPAID")}
+                    className="py-2 px-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
+                  >
+                    {isIndo ? "Simpan Belum Lunas" : "Save as Unpaid"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedSupplier || cart.length === 0}
+                    onClick={() => handleCheckout("PAID")}
+                    className="py-2 px-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs cursor-pointer"
+                  >
+                    {isIndo ? "Bayar Sekarang (Lunas)" : "Pay Now"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -534,14 +707,46 @@ export const Purchases = () => {
                     );
                     return (
                       <tr key={po.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
-                          {po.poNumber}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                          <div className="flex items-center gap-1.5">
+                            {po.purchaseType === "MARKET" ? (
+                              <span
+                                className="p-1 rounded-md bg-emerald-100 text-emerald-700"
+                                title="Belanja Pasar / Eceran Langsung"
+                              >
+                                <Store className="w-3.5 h-3.5" />
+                              </span>
+                            ) : (
+                              <span
+                                className="p-1 rounded-md bg-blue-100 text-blue-700"
+                                title="PO Distributor Resmi"
+                              >
+                                <Building2 className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                            <span
+                              className={
+                                po.purchaseType === "MARKET"
+                                  ? "text-emerald-700"
+                                  : "text-blue-600"
+                              }
+                            >
+                              {po.poNumber}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                           {new Date(po.date).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
-                          {supplier?.name || "Unknown Supplier"}
+                          {po.purchaseType === "MARKET" ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-xs">
+                              <Store className="w-3 h-3 text-emerald-600" />
+                              {po.supplierName || "Pasar Tradisional"}
+                            </span>
+                          ) : (
+                            <span>{supplier?.name || po.supplierName || "Unknown Supplier"}</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -694,24 +899,31 @@ export const Purchases = () => {
             <div className="p-8">
               <div className="flex justify-between items-start mb-8 border-b border-slate-200 pb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-1">
-                    PURCHASE ORDER
+                  <h2 className="text-2xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                    {currentInvoiceData.purchaseType === "MARKET" ? (
+                      <>
+                        <Store className="w-6 h-6 text-emerald-600" />
+                        <span>BUKTI BELANJA PASAR / ECERAN</span>
+                      </>
+                    ) : (
+                      <span>PURCHASE ORDER</span>
+                    )}
                   </h2>
                   <p className="text-slate-500 text-sm font-medium">
                     {currentInvoiceData.poNumber}
                   </p>
                   <div className="flex gap-2 mt-2">
                     <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.status === "PAID" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.status === "PAID" ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-700"}`}
                     >
-                      {currentInvoiceData.status}
+                      {currentInvoiceData.status === "PAID" ? "LUNAS (CASH)" : currentInvoiceData.status}
                     </span>
                     <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.deliveryStatus === "RECEIVED" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700"}`}
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.deliveryStatus === "RECEIVED" ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-700"}`}
                     >
                       {currentInvoiceData.deliveryStatus === "RECEIVED"
-                        ? "RECEIVED"
-                        : "PENDING DELIVERY"}
+                        ? "MASUK STOK (RECEIVED)"
+                        : "MENUNGGU PENGIRIMAN"}
                     </span>
                   </div>
                 </div>
@@ -737,26 +949,40 @@ export const Purchases = () => {
 
               <div className="mb-8">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Order To
+                  {currentInvoiceData.purchaseType === "MARKET"
+                    ? "Tempat Belanja / Toko"
+                    : "Order To (Supplier)"}
                 </p>
                 <h4 className="font-bold text-slate-800 text-lg">
-                  {suppliers.find((s) => s.id === currentInvoiceData.supplierId)
-                    ?.name || "Unknown Supplier"}
+                  {currentInvoiceData.purchaseType === "MARKET"
+                    ? currentInvoiceData.supplierName || "Pasar Tradisional / Belanja Harian"
+                    : suppliers.find((s) => s.id === currentInvoiceData.supplierId)?.name ||
+                      currentInvoiceData.supplierName ||
+                      "Unknown Supplier"}
                 </h4>
-                <p className="text-slate-600 text-sm mt-1">
-                  {
-                    suppliers.find(
-                      (s) => s.id === currentInvoiceData.supplierId,
-                    )?.picName
-                  }
-                </p>
-                <p className="text-slate-600 text-sm">
-                  {
-                    suppliers.find(
-                      (s) => s.id === currentInvoiceData.supplierId,
-                    )?.address
-                  }
-                </p>
+                {currentInvoiceData.notes && (
+                  <p className="text-slate-600 text-sm mt-1 italic">
+                    Catatan: {currentInvoiceData.notes}
+                  </p>
+                )}
+                {currentInvoiceData.purchaseType !== "MARKET" && (
+                  <>
+                    <p className="text-slate-600 text-sm mt-1">
+                      {
+                        suppliers.find(
+                          (s) => s.id === currentInvoiceData.supplierId,
+                        )?.picName
+                      }
+                    </p>
+                    <p className="text-slate-600 text-sm">
+                      {
+                        suppliers.find(
+                          (s) => s.id === currentInvoiceData.supplierId,
+                        )?.address
+                      }
+                    </p>
+                  </>
+                )}
               </div>
 
               <table className="w-full mb-8">

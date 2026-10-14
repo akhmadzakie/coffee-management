@@ -147,6 +147,13 @@ interface StoreContextType {
   deleteSupplier: (id: string) => void;
 
   addPurchaseOrder: (po: Omit<PurchaseOrder, "id">) => void;
+  addDirectMarketPurchase: (data: {
+    marketName: string;
+    items: PurchaseOrderItem[];
+    totalAmount: number;
+    cashAccountId?: string;
+    notes?: string;
+  }) => PurchaseOrder;
   updatePOStatus: (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => void;
   payPurchaseOrder: (id: string, amount: number, cashAccountId: string) => void;
   markPOAsReceived: (id: string) => void;
@@ -1180,9 +1187,145 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addPurchaseOrder = (po: Omit<PurchaseOrder, "id">) => {
     const id = generateId();
-    setPurchaseOrders((prev) => [...prev, { ...po, id }]);
+    const newPO: PurchaseOrder = { ...po, id };
+    setPurchaseOrders((prev) => [...prev, newPO]);
     writeAuditLog("CREATE", "purchase_orders", id);
+
+    // Auto tambah stok jika deliveryStatus === "RECEIVED"
+    if (newPO.deliveryStatus === "RECEIVED") {
+      newPO.items.forEach((item) => {
+        const mvId = generateId();
+        setStockMovements((prev) => [
+          ...prev,
+          {
+            id: mvId,
+            ingredientId: item.productId,
+            type: "IN",
+            quantity: item.quantity,
+            date: newPO.date || new Date().toISOString(),
+            note: `PO Masuk Stok: ${newPO.poNumber}`,
+            createdBy: currentUser?.name || "System",
+          },
+        ]);
+        setIngredients((prev) =>
+          prev.map((ing) => {
+            if (ing.id === item.productId) {
+              return {
+                ...ing,
+                currentStock: ing.currentStock + item.quantity,
+                costPerUnit: item.unitPrice > 0 ? item.unitPrice : ing.costPerUnit,
+              };
+            }
+            return ing;
+          }),
+        );
+        writeAuditLog("CREATE", "stock_movements", mvId);
+      });
+    }
+
+    // Auto potong kas jika status PAID dan ada cashAccountId
+    if (newPO.status === "PAID" && newPO.cashAccountId && newPO.totalAmount > 0) {
+      const cashTrxId = generateId();
+      setCashTransactions((prev) => [
+        ...prev,
+        {
+          id: cashTrxId,
+          accountId: newPO.cashAccountId!,
+          date: newPO.date || new Date().toISOString(),
+          type: "CASH_OUT",
+          amount: newPO.totalAmount,
+          category: "Pembelian Bahan",
+          description: `Pembelian PO: ${newPO.poNumber} (${newPO.supplierName || "Supplier"})`,
+        },
+      ]);
+      writeAuditLog("CREATE", "cash_transactions", cashTrxId);
+    }
+
     markChanged();
+  };
+
+  const addDirectMarketPurchase = (data: {
+    marketName: string;
+    items: PurchaseOrderItem[];
+    totalAmount: number;
+    cashAccountId?: string;
+    notes?: string;
+  }): PurchaseOrder => {
+    const id = generateId();
+    const poNumber = `MKT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const nowISO = new Date().toISOString();
+
+    const newPO: PurchaseOrder = {
+      id,
+      poNumber,
+      supplierId: "MARKET_DIRECT",
+      supplierName: data.marketName || "Pasar Tradisional / Belanja Harian",
+      purchaseType: "MARKET",
+      cashAccountId: data.cashAccountId,
+      notes: data.notes,
+      date: nowISO,
+      items: data.items,
+      totalAmount: data.totalAmount,
+      status: "PAID",
+      amountPaid: data.totalAmount,
+      paymentMethod: "CASH",
+      deliveryStatus: "RECEIVED",
+    };
+
+    setPurchaseOrders((prev) => [...prev, newPO]);
+    writeAuditLog("CREATE", "purchase_orders", id);
+
+    // Auto tambahkan mutasi stok IN dan perbarui stok bahan
+    data.items.forEach((item) => {
+      const mvId = generateId();
+      setStockMovements((prev) => [
+        ...prev,
+        {
+          id: mvId,
+          ingredientId: item.productId,
+          type: "IN",
+          quantity: item.quantity,
+          date: nowISO,
+          note: `Belanja Pasar: ${poNumber} (${data.marketName || "Eceran"})`,
+          createdBy: currentUser?.name || "Kasir/Barista",
+        },
+      ]);
+
+      setIngredients((prev) =>
+        prev.map((ing) => {
+          if (ing.id === item.productId) {
+            return {
+              ...ing,
+              currentStock: ing.currentStock + item.quantity,
+              costPerUnit: item.unitPrice > 0 ? item.unitPrice : ing.costPerUnit,
+            };
+          }
+          return ing;
+        }),
+      );
+      writeAuditLog("CREATE", "stock_movements", mvId);
+    });
+
+    // Auto catat kas keluar pada akun kas yang dipilih
+    if (data.cashAccountId && data.totalAmount > 0) {
+      const cashTrxId = generateId();
+      setCashTransactions((prev) => [
+        ...prev,
+        {
+          id: cashTrxId,
+          accountId: data.cashAccountId!,
+          date: nowISO,
+          type: "CASH_OUT",
+          amount: data.totalAmount,
+          category: "Pembelian Bahan",
+          description: `Belanja Pasar (${data.marketName || "Eceran"}): ${data.items.length} item bahan [${poNumber}]`,
+        },
+      ]);
+      writeAuditLog("CREATE", "cash_transactions", cashTrxId);
+    }
+
+    markChanged();
+    return newPO;
   };
 
   const updatePOStatus = (id: string, status: "PAID" | "UNPAID") => {
@@ -1392,6 +1535,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         updateSupplier,
         deleteSupplier,
         addPurchaseOrder,
+        addDirectMarketPurchase,
         updatePOStatus,
         payPurchaseOrder,
         markPOAsReceived,
