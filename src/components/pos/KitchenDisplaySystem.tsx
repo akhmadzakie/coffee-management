@@ -187,31 +187,31 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-slate-950 text-slate-100 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 select-none">
+    <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-slate-100 text-slate-900 rounded-2xl overflow-hidden shadow-xl border border-slate-200 select-none">
       {/* ── Top Bar KDS ─────────────────────────────────────────────────── */}
-      <div className="h-14 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400">
+      <div className="h-16 px-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-700 shadow-xs">
             <UtensilsCrossed className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white flex items-center gap-2">
+            <h1 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               Kitchen & Bar Display System (KDS)
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold border border-amber-200">
                 {tickets.length} Antrean Aktif
               </span>
             </h1>
-            <p className="text-[11px] text-slate-400 flex items-center gap-2">
-              <span>Stasiun: <strong className="text-orange-400">{stationFilter}</strong></span>
+            <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+              <span>Stasiun: <strong className="text-amber-800 font-bold">{stationFilter}</strong></span>
               <span>•</span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 font-medium">
                 {isOnline ? (
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <Wifi className="w-3 h-3" /> Live Terhubung
+                  <span className="text-emerald-700 flex items-center gap-1 font-semibold">
+                    <Wifi className="w-3.5 h-3.5 text-emerald-600" /> Live Terhubung
                   </span>
                 ) : (
-                  <span className="text-rose-400 flex items-center gap-1">
-                    <WifiOff className="w-3 h-3" /> Offline / Terputus
+                  <span className="text-rose-600 flex items-center gap-1 font-semibold">
+                    <WifiOff className="w-3.5 h-3.5 text-rose-500" /> Offline / Terputus
                   </span>
                 )}
               </span>
@@ -220,9 +220,9 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
         </div>
 
         {/* Station Filters & Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Station Pills */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
             {[
               { id: "ALL", label: "Semua Stasiun", icon: Sparkles },
               { id: "BAR", label: "Bar Minuman", icon: Coffee },
@@ -234,13 +234,13 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                 <button
                   key={st.id}
                   onClick={() => handleSelectStation(st.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition ${
                     stationFilter === st.id
-                      ? "bg-amber-500 text-slate-950 font-bold shadow"
-                      : "text-slate-400 hover:text-white hover:bg-slate-900"
+                      ? "bg-white text-slate-950 font-black shadow-xs border border-slate-200"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
-                  <IconComp className="w-3.5 h-3.5" />
+                  <IconComp className="w-3.5 h-3.5 text-amber-700" />
                   <span>{st.label}</span>
                 </button>
               );
@@ -250,20 +250,20 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {/* Sound Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2 rounded-xl border transition ${
+            className={`p-2.5 rounded-xl border transition ${
               soundEnabled
-                ? "bg-slate-800 text-amber-400 border-slate-700"
-                : "bg-slate-900 text-slate-600 border-slate-800"
+                ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs"
+                : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
             }`}
             title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-700" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
           {/* Refresh button */}
           <button
             onClick={fetchTickets}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700"
+            className="p-2.5 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition"
             title="Refresh Tiket"
           >
             <RotateCcw className="w-4 h-4" />
@@ -272,7 +272,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {onNavigateBack ? (
             <button
               onClick={onNavigateBack}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700 transition"
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs transition"
               title="Kembali ke Dashboard Manajemen"
             >
               Kembali ke Web
@@ -281,7 +281,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             <button
               onClick={logout}
               title="Keluar dari akun barista/kitchen"
-              className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Keluar</span>
@@ -291,22 +291,24 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
       </div>
 
       {/* ── Main KDS Cards Grid ───────────────────────────────────────────── */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto p-4 bg-slate-950">
+      <div className="flex-1 overflow-x-auto overflow-y-auto p-4 bg-slate-100/80">
         {isLoading ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2">
-            <RotateCcw className="w-8 h-8 animate-spin text-orange-500" />
-            <p className="text-xs">Memuat antrean dapur & bar...</p>
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+            <RotateCcw className="w-8 h-8 animate-spin text-amber-600" />
+            <p className="text-xs font-medium text-slate-600">Memuat antrean dapur & bar...</p>
           </div>
         ) : tickets.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2">
-            <CheckCircle2 className="w-12 h-12 stroke-1 text-emerald-500" />
-            <h3 className="text-base font-bold text-white">Semua Pesanan Sudah Selesai!</h3>
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            <h3 className="text-lg font-extrabold text-slate-800">Semua Pesanan Sudah Siap!</h3>
             <p className="text-xs text-slate-500 text-center max-w-sm">
               Tidak ada antrean pesanan yang menunggu untuk dibuat di stasiun {stationFilter}.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
             {tickets.map((ticket) => {
               const minutes = getElapsedMinutes(ticket.createdAt);
               // Pewarnaan indikator waktu tunggu
@@ -319,44 +321,44 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
               return (
                 <div
                   key={ticket.id}
-                  className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-xl transition select-none ${
+                  className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-sm transition select-none bg-white ${
                     isUrgent
-                      ? "bg-slate-900 border-rose-500/80 ring-1 ring-rose-500/50"
+                      ? "border-rose-400 ring-2 ring-rose-400/30"
                       : isWarning
-                      ? "bg-slate-900 border-amber-500/60"
-                      : "bg-slate-900 border-slate-800"
+                      ? "border-amber-400 ring-2 ring-amber-400/20"
+                      : "border-slate-200 hover:border-slate-300"
                   }`}
                 >
                   {/* Card Header: Table, Type, Order No, and Timer */}
                   <div
-                    className={`p-3 border-b flex items-start justify-between ${
+                    className={`p-3.5 border-b flex items-start justify-between ${
                       isUrgent
-                        ? "bg-rose-500/10 border-rose-500/30"
+                        ? "bg-rose-50/70 border-rose-200"
                         : isWarning
-                        ? "bg-amber-500/10 border-amber-500/30"
-                        : "bg-slate-950/80 border-slate-800"
+                        ? "bg-amber-50/70 border-amber-200"
+                        : "bg-slate-50/80 border-slate-200"
                     }`}
                   >
                     <div>
                       {/* Big Table / Takeaway display */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-base font-black text-white">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-black text-slate-900 tracking-tight">
                           {ticket.orderType === "DINE_IN"
                             ? ticket.tableNumber || "Meja -"
-                            : "TAKE AWAY"}
+                            : "BUNGKUS / TAKEAWAY"}
                         </span>
                         <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold ${
+                          className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-extrabold ${
                             ticket.orderType === "DINE_IN"
-                              ? "bg-amber-500/20 text-amber-300"
-                              : "bg-sky-500/20 text-sky-300"
+                              ? "bg-amber-100 text-amber-900 border border-amber-200"
+                              : "bg-sky-100 text-sky-900 border border-sky-200"
                           }`}
                         >
-                          {ticket.orderType === "DINE_IN" ? "Dine In" : "Bungkus"}
+                          {ticket.orderType === "DINE_IN" ? "Dine In" : "Takeaway"}
                         </span>
                       </div>
 
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">
                         #{ticket.receiptNo} {ticket.customerName ? `• ${ticket.customerName}` : ""}
                       </p>
                     </div>
@@ -364,19 +366,19 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                     {/* Timer Badge */}
                     <div className="text-right">
                       <span
-                        className={`text-xs font-bold px-2 py-1 rounded-xl flex items-center gap-1 ${
+                        className={`text-xs font-black px-2.5 py-1 rounded-xl flex items-center gap-1 shadow-2xs ${
                           isUrgent
-                            ? "bg-rose-500 text-white animate-pulse"
+                            ? "bg-rose-600 text-white animate-pulse"
                             : isWarning
-                            ? "bg-amber-500 text-slate-950 font-black"
-                            : "bg-slate-800 text-slate-300"
+                            ? "bg-amber-500 text-slate-950"
+                            : "bg-white text-slate-700 border border-slate-200"
                         }`}
                       >
-                        <Clock className="w-3 h-3" />
+                        <Clock className="w-3.5 h-3.5" />
                         {minutes} mnt
                       </span>
                       {isUrgent && (
-                        <p className="text-[9px] text-rose-400 font-bold mt-0.5">
+                        <p className="text-[10px] text-rose-600 font-black mt-0.5 tracking-wider">
                           TERLAMBAT
                         </p>
                       )}
@@ -384,7 +386,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                   </div>
 
                   {/* Order Items List */}
-                  <div className="p-3 space-y-2 flex-1">
+                  <div className="p-3.5 space-y-2 flex-1">
                     {ticket.items.map((item) => {
                       const isItemReady = item.itemStatus === "READY";
                       const isItemPreparing = item.itemStatus === "PREPARING";
@@ -402,20 +404,20 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                                 : "SERVED";
                             handleUpdateItemStatus(item.id, next);
                           }}
-                          className={`p-2.5 rounded-xl border transition cursor-pointer flex items-start justify-between gap-2 ${
+                          className={`p-3 rounded-xl border transition cursor-pointer flex items-start justify-between gap-2.5 ${
                             isItemReady
-                              ? "bg-emerald-950/20 border-emerald-500/50 line-through text-slate-400"
+                              ? "bg-emerald-50/60 border-emerald-300 text-slate-400 line-through"
                               : isItemPreparing
-                              ? "bg-amber-950/20 border-amber-500/50 text-white"
-                              : "bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-700"
+                              ? "bg-amber-50/70 border-amber-300 text-slate-900 ring-1 ring-amber-300/40"
+                              : "bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-100/60"
                           }`}
                         >
                           <div className="flex-1">
                             <div className="flex items-baseline gap-2">
-                              <span className="text-sm font-black text-amber-400 min-w-[20px]">
+                              <span className="text-base font-black text-amber-700 min-w-[24px]">
                                 {item.quantity}x
                               </span>
-                              <span className="text-xs font-bold leading-tight text-white">
+                              <span className="text-sm font-bold leading-tight text-slate-900">
                                 {item.menuName}{" "}
                                 {item.variantName ? `(${item.variantName})` : ""}
                               </span>
@@ -423,17 +425,17 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
 
                             {/* Modifiers & Notes (Bold & Highlighted) */}
                             {item.notes && (
-                              <p className="text-[11px] font-bold text-amber-300 mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 inline-block">
+                              <p className="text-xs font-bold text-amber-900 mt-1 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 inline-block">
                                 Catatan: {item.notes}
                               </p>
                             )}
 
                             {item.modifiers && item.modifiers.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
+                              <div className="flex flex-wrap gap-1 mt-1.5">
                                 {item.modifiers.map((m, mIdx) => (
                                   <span
                                     key={mIdx}
-                                    className="text-[9px] font-bold bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded"
+                                    className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded"
                                   >
                                     +{m.name}
                                   </span>
@@ -444,12 +446,12 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
 
                           {/* Item status pill */}
                           <span
-                            className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
+                            className={`text-[9px] font-extrabold px-2 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
                               isItemReady
-                                ? "bg-emerald-500 text-slate-950"
+                                ? "bg-emerald-600 text-white"
                                 : isItemPreparing
-                                ? "bg-amber-500 text-slate-950 animate-pulse"
-                                : "bg-slate-800 text-slate-400"
+                                ? "bg-amber-500 text-slate-950 font-black animate-pulse"
+                                : "bg-slate-200 text-slate-600"
                             }`}
                           >
                             {item.itemStatus}
@@ -460,34 +462,34 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                   </div>
 
                   {/* Card Bottom: Fast Action Buttons */}
-                  <div className="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
+                  <div className="p-3 bg-slate-50 border-t border-slate-200 flex gap-2">
                     {ticket.kitchenStatus !== "READY" ? (
                       <>
                         <button
                           onClick={() => handleUpdateOrderStatus(ticket.id, "PREPARING")}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition border ${
                             isOrderPreparing
-                              ? "bg-amber-500 text-slate-950"
-                              : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                              ? "bg-amber-500 text-slate-950 border-amber-600 font-black shadow-2xs"
+                              : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
                           }`}
                         >
                           Mulai Buat
                         </button>
                         <button
                           onClick={() => handleUpdateOrderStatus(ticket.id, "READY")}
-                          className="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-1"
+                          className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <CheckCircle2 className="w-4 h-4" />
                           <span>Siap Saji</span>
                         </button>
                       </>
                     ) : (
                       <button
                         onClick={() => handleUpdateOrderStatus(ticket.id, "SERVED")}
-                        className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center justify-center gap-2"
+                        className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Selesai / Sudah Diantar (Selesaikan)</span>
+                        <span>Selesai / Sudah Diantar (Tutup)</span>
                       </button>
                     )}
                   </div>
