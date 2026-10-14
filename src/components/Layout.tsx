@@ -44,6 +44,7 @@ import {
   KeyRound,
   PanelLeftClose,
   PanelLeft,
+  UtensilsCrossed,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -153,6 +154,12 @@ export const Layout: React.FC<LayoutProps> = ({
       name: "Terminal POS Kasir",
       view: "pos_cashier" as ViewState,
       icon: Store,
+    },
+    { 
+      group: "Operasi",
+      name: "Layar Dapur & Bar (KDS)",
+      view: "kitchen_display" as ViewState,
+      icon: UtensilsCrossed,
     },
     { 
       group: "Operasi",
@@ -274,6 +281,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "finance_reports",
       "hpp_calculator",
       "pos_cashier",
+      "kitchen_display",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -290,6 +298,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "audit_log",
       "hpp_calculator",
       "pos_cashier",
+      "kitchen_display",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -305,6 +314,7 @@ export const Layout: React.FC<LayoutProps> = ({
     ],
     KASIR: [
       "pos_cashier",
+      "kitchen_display",
       "dashboard_employee",
       "shifts",
       "leader_checklist",
@@ -312,6 +322,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "attendance_clock",
     ],
     LEADER: [
+      "kitchen_display",
       "dashboard_employee",
       "hr",
       "leader_checklist",
@@ -322,9 +333,9 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "attendance_clock",
     ],
-    BAR: ["dashboard_employee", "attendance_clock", "leader_checklist"],
-    KITCHEN: ["dashboard_employee", "attendance_clock", "leader_checklist"],
-    BAKER: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
   };
 
   const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];

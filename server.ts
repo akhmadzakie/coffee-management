@@ -284,7 +284,9 @@ async function ensureTables() {
         paper_width TEXT NOT NULL DEFAULT '80mm',
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TEXT NOT NULL
-      )`
+      )`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'QUEUED'`,
+    `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`
   ];
 
   for (const q of queries) {
@@ -2825,6 +2827,124 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       res.json({ success: true, message: "Printer configuration saved" });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to save printer" });
+    }
+  });
+
+  // ─── Kitchen Display System (KDS) API ──────────────────────────────────────
+
+  // 1. Get Active Kitchen & Bar Tickets
+  app.get("/api/kds/tickets", async (req, res) => {
+    try {
+      const station = (req.query.station as string) || "ALL";
+
+      const activeOrders = await db
+        .select()
+        .from(schema.orders)
+        .where(
+          and(
+            or(eq(schema.orders.status, "PAID"), eq(schema.orders.status, "OPEN")),
+            not(eq(schema.orders.kitchenStatus, "SERVED")),
+            not(eq(schema.orders.status, "VOID")),
+            not(eq(schema.orders.status, "CANCELLED"))
+          )
+        )
+        .orderBy(schema.orders.createdAt);
+
+      const tickets = await Promise.all(
+        activeOrders.map(async (ord) => {
+          let items = await db
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, ord.id));
+
+          if (station !== "ALL") {
+            items = items.filter((it) => it.printDestination === station);
+          }
+
+          return {
+            id: ord.id,
+            receiptNo: ord.receiptNo,
+            orderType: ord.orderType,
+            tableNumber: ord.tableNumber,
+            customerName: ord.customerName,
+            status: ord.status,
+            kitchenStatus: ord.kitchenStatus,
+            createdAt: ord.createdAt,
+            notes: ord.notes,
+            items,
+          };
+        })
+      );
+
+      const validTickets = tickets.filter((t) => t.items.length > 0);
+      res.json(validTickets);
+    } catch (e: any) {
+      console.error("Fetch KDS tickets error:", e);
+      res.status(500).json({ error: e?.message || "Failed to fetch KDS tickets" });
+    }
+  });
+
+  // 2. Update Single Order Item Status (QUEUED -> PREPARING -> READY -> SERVED)
+  app.post("/api/kds/items/:id/status", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const { status } = req.body;
+
+      if (!status) {
+        return res.status(400).json({ error: "Status wajib diisi" });
+      }
+
+      await db
+        .update(schema.orderItems)
+        .set({ itemStatus: status })
+        .where(eq(schema.orderItems.id, itemId));
+
+      const item = (await db.select().from(schema.orderItems).where(eq(schema.orderItems.id, itemId)).limit(1))[0];
+      if (item) {
+        const siblingItems = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, item.orderId));
+        const allReady = siblingItems.every((si) => si.itemStatus === "READY" || si.itemStatus === "SERVED");
+        const allServed = siblingItems.every((si) => si.itemStatus === "SERVED");
+
+        if (allServed) {
+          await db.update(schema.orders).set({ kitchenStatus: "SERVED" }).where(eq(schema.orders.id, item.orderId));
+        } else if (allReady) {
+          await db.update(schema.orders).set({ kitchenStatus: "READY" }).where(eq(schema.orders.id, item.orderId));
+        } else if (status === "PREPARING") {
+          await db.update(schema.orders).set({ kitchenStatus: "PREPARING" }).where(eq(schema.orders.id, item.orderId));
+        }
+      }
+
+      res.json({ success: true, message: "Status item berhasil diperbarui" });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to update item status" });
+    }
+  });
+
+  // 3. Update Entire Order Kitchen Status
+  app.post("/api/kds/orders/:id/status", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { status } = req.body;
+
+      if (!status) {
+        return res.status(400).json({ error: "Status wajib diisi" });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(schema.orders)
+          .set({ kitchenStatus: status })
+          .where(eq(schema.orders.id, orderId));
+
+        await tx
+          .update(schema.orderItems)
+          .set({ itemStatus: status })
+          .where(eq(schema.orderItems.orderId, orderId));
+      });
+
+      res.json({ success: true, message: `Status tiket diubah menjadi ${status}` });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to update order status" });
     }
   });
 

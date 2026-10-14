@@ -40,6 +40,7 @@ import { PosManagerPinModal } from "./PosManagerPinModal";
 import { PosReceiptModal } from "./PosReceiptModal";
 import { PosPrinterSettingsModal } from "./PosPrinterSettingsModal";
 import { PosTodayOrdersModal } from "./PosTodayOrdersModal";
+import { PosShiftModal } from "./PosShiftModal";
 
 interface MenuItem {
   id: string;
@@ -98,6 +99,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
   const [isTodayOrdersOpen, setIsTodayOrdersOpen] = useState(false);
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
 
   // Active open bills count
   const [activeBillsCount, setActiveBillsCount] = useState<number>(0);
@@ -408,13 +410,23 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             <p className="text-[11px] text-slate-400">
               Kasir: <span className="text-slate-200 font-semibold">{currentUser?.name || "Staff"}</span>
               {activeShift ? (
-                <span className="ml-2 text-emerald-400 inline-flex items-center gap-1">
-                  ● Shift Aktif
-                </span>
+                <button
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className="ml-2 px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1 transition"
+                  title="Klik untuk melihat ringkasan shift atau tutup shift"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Shift Aktif • Tutup Shift</span>
+                </button>
               ) : (
-                <span className="ml-2 text-rose-400 inline-flex items-center gap-1">
-                  ● Shift Belum Dibuka
-                </span>
+                <button
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className="ml-2 px-2 py-0.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1 transition animate-bounce"
+                  title="Klik untuk membuka modal awal laci kasir"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                  <span className="font-bold">Buka Shift Kasir</span>
+                </button>
               )}
             </p>
           </div>
@@ -1009,6 +1021,13 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           </div>
         </div>
       )}
+
+      {/* Modal Shift Kasir (Buka/Tutup & Rekonsiliasi Z-Report) */}
+      <PosShiftModal
+        isOpen={isShiftModalOpen}
+        onClose={() => setIsShiftModalOpen(false)}
+        activeShift={activeShift}
+      />
     </div>
   );
 };

@@ -44,7 +44,8 @@ export type ViewState =
   | "attendance_clock"
   | "dashboard_employee"
   | "hpp_calculator"
-  | "pos_cashier";
+  | "pos_cashier"
+  | "kitchen_display";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
@@ -467,6 +468,8 @@ export type OrderStatus = "OPEN" | "PAID" | "CANCELLED" | "VOID" | "REFUNDED";
 export type PaymentMethod = "CASH" | "QRIS" | "DEBIT" | "CREDIT";
 export type PrintDestination = "RECEIPT" | "BAR" | "KITCHEN" | "BAKERY" | "NONE";
 
+export type KitchenStatus = "QUEUED" | "PREPARING" | "READY" | "SERVED";
+
 export interface OrderModifier {
   name: string;
   price: number;
@@ -486,6 +489,7 @@ export interface OrderItem {
   notes?: string | null;
   printDestination: PrintDestination;
   isPrinted: boolean;
+  itemStatus?: KitchenStatus;
   createdAt: string;
 }
 
@@ -511,6 +515,7 @@ export interface Order {
   tableNumber?: string | null;
   customerName?: string | null;
   status: OrderStatus;
+  kitchenStatus?: KitchenStatus;
   subtotal: number;
   discountPercent: number;
   discountAmount: number;

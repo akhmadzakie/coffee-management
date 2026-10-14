@@ -404,6 +404,7 @@ export const orders = pgTable("orders", {
   paidAt: text("paid_at"),
   voidReason: text("void_reason"),
   voidApprovedBy: varchar("void_approved_by", { length: 255 }),
+  kitchenStatus: varchar("kitchen_status", { length: 50 }).default("QUEUED").notNull(), // 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED'
 });
 
 export const orderItems = pgTable("order_items", {
@@ -419,6 +420,7 @@ export const orderItems = pgTable("order_items", {
   notes: text("notes"), // catatan per item (less sugar, dll)
   printDestination: varchar("print_destination", { length: 50 }).default("BAR").notNull(), // 'BAR' | 'KITCHEN' | 'BAKERY' | 'NONE'
   isPrinted: boolean("is_printed").default(false).notNull(),
+  itemStatus: varchar("item_status", { length: 50 }).default("QUEUED").notNull(), // 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED'
   createdAt: text("created_at").notNull(),
 });
 

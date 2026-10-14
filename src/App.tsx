@@ -82,6 +82,9 @@ const EmployeeDashboard = React.lazy(() =>
 const PosTerminal = React.lazy(() =>
   import("./components/pos/PosTerminal").then((m) => ({ default: m.PosTerminal })),
 );
+const KitchenDisplaySystem = React.lazy(() =>
+  import("./components/pos/KitchenDisplaySystem").then((m) => ({ default: m.KitchenDisplaySystem })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -123,10 +126,10 @@ function AppContent() {
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
     KASIR:       "pos_cashier",
-    LEADER:      "dashboard_employee",
-    BAR:         "dashboard_employee",
-    KITCHEN:     "dashboard_employee",
-    BAKER:       "dashboard_employee",
+    LEADER:      "kitchen_display",
+    BAR:         "kitchen_display",
+    KITCHEN:     "kitchen_display",
+    BAKER:       "kitchen_display",
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
@@ -138,7 +141,7 @@ function AppContent() {
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
-    "attendance_clock", "hpp_calculator", "pos_cashier"
+    "attendance_clock", "hpp_calculator", "pos_cashier", "kitchen_display"
   ];
 
   const roleAllowedViews: Record<string, ViewState[]> = {
@@ -151,6 +154,7 @@ function AppContent() {
       "finance_reports",
       "hpp_calculator",
       "pos_cashier",
+      "kitchen_display",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -163,6 +167,7 @@ function AppContent() {
       "audit_log",
       "hpp_calculator",
       "pos_cashier",
+      "kitchen_display",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -174,12 +179,14 @@ function AppContent() {
     ],
     KASIR: [
       "pos_cashier",
+      "kitchen_display",
       "dashboard_employee",
       "shifts", "leader_checklist",
       "import_sales",
       "attendance_clock"
     ],
     LEADER: [
+      "kitchen_display",
       "dashboard_employee",
       "leader_checklist",
       "dashboard_inventory",
@@ -188,9 +195,9 @@ function AppContent() {
       "suppliers", "purchases",
       "attendance_clock"
     ],
-    BAR: ["dashboard_employee", "attendance_clock", "leader_checklist"],
-    KITCHEN: ["dashboard_employee", "attendance_clock", "leader_checklist"],
-    BAKER: ["dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
   };
 
   React.useEffect(() => {
@@ -259,6 +266,8 @@ function AppContent() {
         return <HppCalculator onNavigate={setCurrentView} />;
       case "pos_cashier":
         return <PosTerminal onNavigateBack={() => setCurrentView("dashboard_employee")} />;
+      case "kitchen_display":
+        return <KitchenDisplaySystem onNavigateBack={() => setCurrentView("dashboard_employee")} />;
       default:
         return <Dashboard view="FINANCE" />;
     }
