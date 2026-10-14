@@ -31,6 +31,7 @@ import {
   X,
   FileText,
   Lock,
+  History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PosPaymentModal } from "./PosPaymentModal";
@@ -38,6 +39,7 @@ import { PosOpenBillsModal } from "./PosOpenBillsModal";
 import { PosManagerPinModal } from "./PosManagerPinModal";
 import { PosReceiptModal } from "./PosReceiptModal";
 import { PosPrinterSettingsModal } from "./PosPrinterSettingsModal";
+import { PosTodayOrdersModal } from "./PosTodayOrdersModal";
 
 interface MenuItem {
   id: string;
@@ -95,6 +97,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [isTodayOrdersOpen, setIsTodayOrdersOpen] = useState(false);
 
   // Active open bills count
   const [activeBillsCount, setActiveBillsCount] = useState<number>(0);
@@ -419,6 +422,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
         {/* Action Buttons Top Bar */}
         <div className="flex items-center gap-2">
+          {/* Riwayat Transaksi Hari Ini */}
+          <button
+            onClick={() => setIsTodayOrdersOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
+            title="Riwayat Transaksi Hari Ini & Cetak Ulang"
+          >
+            <History className="w-4 h-4 text-emerald-400" />
+            <span>Riwayat Hari Ini</span>
+          </button>
+
           <button
             onClick={() => setIsOpenBillsModalOpen(true)}
             className="relative px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition flex items-center gap-2"
@@ -883,6 +896,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
       {isPrinterSettingsOpen && (
         <PosPrinterSettingsModal onClose={() => setIsPrinterSettingsOpen(false)} />
+      )}
+
+      {isTodayOrdersOpen && (
+        <PosTodayOrdersModal onClose={() => setIsTodayOrdersOpen(false)} />
       )}
 
       {isDiscountModalOpen && (

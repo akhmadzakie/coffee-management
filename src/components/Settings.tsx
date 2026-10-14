@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Percent,
+  Store,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 
@@ -30,6 +32,10 @@ export const SettingsComponent = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [language, setLanguage] = useState(settings.language || "id");
+  const [taxEnabled, setTaxEnabled] = useState(settings.taxEnabled ?? false);
+  const [taxRate, setTaxRate] = useState(settings.taxRate ?? 10);
+  const [taxMode, setTaxMode] = useState<"INCLUSIVE" | "EXCLUSIVE">(settings.taxMode ?? "EXCLUSIVE");
+  const [maxCashierDiscount, setMaxCashierDiscount] = useState(settings.maxCashierDiscount ?? 10);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,6 +60,10 @@ export const SettingsComponent = () => {
       footerMessage,
       language,
       geminiApiKey,
+      taxEnabled,
+      taxRate: Number(taxRate) || 0,
+      taxMode,
+      maxCashierDiscount: Number(maxCashierDiscount) || 0,
     });
     setSaveStatus("Settings saved successfully!");
     setTimeout(() => setSaveStatus(null), 3000);
@@ -347,6 +357,94 @@ export const SettingsComponent = () => {
             <p className="text-[11px] text-stone-500 leading-relaxed">
               Kunci API ini digunakan untuk mengaktifkan AI Copilot (konsultasi bisnis, resep, strategi margin) dan pembacaan otomatis dokumen nota/faktur PDF & foto secara cerdas.
             </p>
+          </div>
+
+          {/* POS Kasir & Pajak Resto Configuration Card */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <Store className="w-4 h-4 text-blue-600" />
+                <span>Pengaturan POS Kasir & Pajak Restoran (PB1)</span>
+              </label>
+            </div>
+
+            {/* Pajak Toggle & Details */}
+            <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">
+                    Aktifkan Pajak Restoran (PB1)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Otomatis tambahkan atau hitung pajak PB1 di kasir POS tablet.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={taxEnabled}
+                    onChange={(e) => setTaxEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {taxEnabled && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 mb-1 block">
+                      Tarif Pajak Resto (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={taxRate}
+                      onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 mb-1 block">
+                      Model Perhitungan Pajak
+                    </label>
+                    <select
+                      value={taxMode}
+                      onChange={(e) => setTaxMode(e.target.value as "INCLUSIVE" | "EXCLUSIVE")}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    >
+                      <option value="EXCLUSIVE">
+                        Eksklusif (Subtotal + Pajak = Total Tagihan)
+                      </option>
+                      <option value="INCLUSIVE">
+                        Inklusif (Harga menu sudah termasuk pajak)
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Plafon Diskon Kasir */}
+            <div className="bg-white p-3.5 rounded-lg border border-slate-200">
+              <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
+                <span>Batas Plafon Diskon Mandiri Kasir (%)</span>
+                <span className="text-[11px] text-blue-600 font-semibold">{maxCashierDiscount}%</span>
+              </label>
+              <p className="text-[11px] text-slate-500 mb-2">
+                Kasir di tablet hanya bisa memberikan diskon maksimal sampai persentase ini. Diskon di atas nilai ini wajib memasukkan PIN otorisasi Manager/Owner.
+              </p>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={maxCashierDiscount}
+                onChange={(e) => setMaxCashierDiscount(Number(e.target.value) || 0)}
+                className="w-full max-w-xs px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="10"
+              />
+            </div>
           </div>
 
           <div>
