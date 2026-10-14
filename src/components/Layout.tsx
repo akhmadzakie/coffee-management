@@ -150,6 +150,12 @@ export const Layout: React.FC<LayoutProps> = ({
     // ─── Operations & POS Group ──────────────────────────────────
     { 
       group: "Operasi",
+      name: "Terminal POS Kasir",
+      view: "pos_cashier" as ViewState,
+      icon: Store,
+    },
+    { 
+      group: "Operasi",
       name: t("shifts") || "Shift & Kasir",
       view: "shifts" as ViewState,
       icon: Coffee,
@@ -267,6 +273,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "cash_flow",
       "finance_reports",
       "hpp_calculator",
+      "pos_cashier",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -282,6 +289,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "users",
       "audit_log",
       "hpp_calculator",
+      "pos_cashier",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -293,8 +301,10 @@ export const Layout: React.FC<LayoutProps> = ({
       "payroll",
       "purchases",
       "audit_log",
+      "pos_cashier",
     ],
     KASIR: [
+      "pos_cashier",
       "dashboard_employee",
       "shifts",
       "leader_checklist",

@@ -79,6 +79,9 @@ const ClockIn = React.lazy(() =>
 const EmployeeDashboard = React.lazy(() =>
   import("./components/EmployeeDashboard").then((m) => ({ default: m.EmployeeDashboard })),
 );
+const PosTerminal = React.lazy(() =>
+  import("./components/pos/PosTerminal").then((m) => ({ default: m.PosTerminal })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -119,7 +122,7 @@ function AppContent() {
     OWNER:       "dashboard_owner",
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
-    KASIR:       "dashboard_employee",
+    KASIR:       "pos_cashier",
     LEADER:      "dashboard_employee",
     BAR:         "dashboard_employee",
     KITCHEN:     "dashboard_employee",
@@ -135,7 +138,7 @@ function AppContent() {
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
-    "attendance_clock", "hpp_calculator"
+    "attendance_clock", "hpp_calculator", "pos_cashier"
   ];
 
   const roleAllowedViews: Record<string, ViewState[]> = {
@@ -147,6 +150,7 @@ function AppContent() {
       "cash_flow",
       "finance_reports",
       "hpp_calculator",
+      "pos_cashier",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -158,6 +162,7 @@ function AppContent() {
       "users",
       "audit_log",
       "hpp_calculator",
+      "pos_cashier",
     ],
     FINANCE: [
       "dashboard_finance",
@@ -165,8 +170,10 @@ function AppContent() {
       "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
       "payroll", "purchases",
       "audit_log",
+      "pos_cashier",
     ],
     KASIR: [
+      "pos_cashier",
       "dashboard_employee",
       "shifts", "leader_checklist",
       "import_sales",
@@ -250,6 +257,8 @@ function AppContent() {
         return <EmployeeDashboard onNavigate={setCurrentView} />;
       case "hpp_calculator":
         return <HppCalculator onNavigate={setCurrentView} />;
+      case "pos_cashier":
+        return <PosTerminal onNavigateBack={() => setCurrentView("dashboard_employee")} />;
       default:
         return <Dashboard view="FINANCE" />;
     }

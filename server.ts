@@ -7,7 +7,7 @@ import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq, not } from "drizzle-orm";
+import { eq, not, desc, like, and, or } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const initialSettings = {
@@ -214,7 +214,77 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_kitchen_tasks JSONB`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_baker_tasks JSONB`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS manager_tasks JSONB`,
-    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT`
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS tax_enabled BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS tax_rate NUMERIC DEFAULT 10`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS tax_mode TEXT DEFAULT 'EXCLUSIVE'`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS max_cashier_discount NUMERIC DEFAULT 10`,
+    `CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        receipt_no TEXT NOT NULL,
+        shift_id TEXT,
+        outlet_id TEXT NOT NULL DEFAULT 'OUTLET-MAIN',
+        order_type TEXT NOT NULL,
+        table_number TEXT,
+        customer_name TEXT,
+        status TEXT NOT NULL,
+        subtotal NUMERIC NOT NULL DEFAULT 0,
+        discount_percent NUMERIC NOT NULL DEFAULT 0,
+        discount_amount NUMERIC NOT NULL DEFAULT 0,
+        discount_reason TEXT,
+        tax_percent NUMERIC NOT NULL DEFAULT 0,
+        tax_amount NUMERIC NOT NULL DEFAULT 0,
+        tax_mode TEXT NOT NULL DEFAULT 'EXCLUSIVE',
+        total_amount NUMERIC NOT NULL DEFAULT 0,
+        notes TEXT,
+        idempotency_key TEXT,
+        cashier_id TEXT,
+        cashier_name TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        paid_at TEXT,
+        void_reason TEXT,
+        void_approved_by TEXT
+      )`,
+    `CREATE TABLE IF NOT EXISTS order_items (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        menu_name TEXT NOT NULL,
+        recipe_id TEXT,
+        variant_name TEXT,
+        quantity NUMERIC NOT NULL,
+        unit_price NUMERIC NOT NULL,
+        subtotal NUMERIC NOT NULL,
+        modifiers JSONB DEFAULT '[]'::jsonb,
+        notes TEXT,
+        print_destination TEXT NOT NULL DEFAULT 'BAR',
+        is_printed BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TEXT NOT NULL
+      )`,
+    `CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        shift_id TEXT,
+        payment_method TEXT NOT NULL,
+        amount NUMERIC NOT NULL,
+        cash_received NUMERIC,
+        change_amount NUMERIC,
+        reference_no TEXT,
+        cash_account_id TEXT,
+        created_at TEXT NOT NULL
+      )`,
+    `CREATE TABLE IF NOT EXISTS pos_printers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        connection_type TEXT NOT NULL,
+        target_station TEXT NOT NULL,
+        ip_address TEXT,
+        port INTEGER NOT NULL DEFAULT 9100,
+        mac_address TEXT,
+        paper_width TEXT NOT NULL DEFAULT '80mm',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TEXT NOT NULL
+      )`
   ];
 
   for (const q of queries) {
@@ -226,7 +296,7 @@ async function ensureTables() {
       }
     }
   }
-  console.log("✅ Schema ensured: Fase 1-4 tables ready.");
+  console.log("✅ Schema ensured: Fase 1-4 & POS tables ready.");
 }
 
 async function startServer() {
@@ -302,6 +372,15 @@ async function startServer() {
         return schema.employeeShifts;
       case "kpi_records":
         return schema.kpiRecords;
+      // POS & Kasir
+      case "orders":
+        return schema.orders;
+      case "order_items":
+        return schema.orderItems;
+      case "payments":
+        return schema.payments;
+      case "pos_printers":
+        return schema.posPrinters;
 
       default:
         return null;
@@ -2015,6 +2094,737 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     } catch (e: any) {
       console.error("AI Advisor error:", e);
       res.status(500).json({ error: e?.message || "Failed to process advisor query" });
+    }
+  });
+
+  // ─── POS & Kasir Tablet API ────────────────────────────────────────────────
+
+  // 1. Get POS Menu & Live Stock Availability
+  app.get("/api/pos/menu", async (req, res) => {
+    try {
+      const allRecipes = await db.select().from(schema.recipes);
+      const allIngredients = await db.select().from(schema.ingredients);
+      const settings = (await db.select().from(schema.settings).limit(1))[0];
+
+      const ingredientMap = new Map(allIngredients.map((ing) => [ing.id, ing]));
+
+      const menuList = allRecipes.map((r) => {
+        let recipeItems: { ingredientId: string; quantity: number }[] = [];
+        try {
+          recipeItems = typeof r.ingredients === "string" ? JSON.parse(r.ingredients) : r.ingredients;
+        } catch {
+          recipeItems = [];
+        }
+
+        let maxPortions = 9999;
+        let hppCost = 0;
+
+        for (const item of recipeItems) {
+          const ing = ingredientMap.get(item.ingredientId);
+          if (ing) {
+            hppCost += (ing.costPerUnit || 0) * item.quantity;
+            if (item.quantity > 0) {
+              const possible = Math.floor((ing.currentStock || 0) / item.quantity);
+              if (possible < maxPortions) {
+                maxPortions = Math.max(0, possible);
+              }
+            }
+          }
+        }
+
+        if (recipeItems.length === 0) {
+          maxPortions = 999;
+        }
+
+        const lowerName = r.menuName.toLowerCase();
+        let guessedCategory = "COFFEE";
+        let defaultStation = "BAR";
+
+        if (lowerName.includes("croissant") || lowerName.includes("pastry") || lowerName.includes("bread") || lowerName.includes("roti") || lowerName.includes("cake")) {
+          guessedCategory = "BAKERY";
+          defaultStation = "BAKERY";
+        } else if (lowerName.includes("rice") || lowerName.includes("nasi") || lowerName.includes("pasta") || lowerName.includes("spaghetti") || lowerName.includes("burger") || lowerName.includes("fries") || lowerName.includes("snack")) {
+          guessedCategory = "FOOD";
+          defaultStation = "KITCHEN";
+        } else if (lowerName.includes("tea") || lowerName.includes("juice") || lowerName.includes("matcha") || lowerName.includes("chocolate") || lowerName.includes("mocktail") || lowerName.includes("soda")) {
+          guessedCategory = "NON-COFFEE";
+          defaultStation = "BAR";
+        }
+
+        return {
+          id: r.id,
+          name: r.menuName,
+          category: guessedCategory,
+          defaultStation,
+          recipe: recipeItems,
+          estimatedHpp: Math.round(hppCost),
+          maxPortions,
+          isAvailable: maxPortions > 0,
+        };
+      });
+
+      res.json({
+        menu: menuList,
+        tax: {
+          enabled: settings?.taxEnabled ?? false,
+          rate: settings?.taxRate ?? 10,
+          mode: settings?.taxMode ?? "EXCLUSIVE",
+        },
+        maxCashierDiscount: settings?.maxCashierDiscount ?? 10,
+      });
+    } catch (e: any) {
+      console.error("POS menu fetch error:", e);
+      res.status(500).json({ error: e?.message || "Failed to fetch POS menu" });
+    }
+  });
+
+  // 2. Create Order (Open Bill or Paid Pay-First)
+  app.post("/api/pos/orders", async (req, res) => {
+    try {
+      const {
+        idempotencyKey,
+        orderType = "DINE_IN",
+        tableNumber,
+        customerName,
+        items = [],
+        subtotal = 0,
+        discountPercent = 0,
+        discountAmount = 0,
+        discountReason,
+        taxPercent = 0,
+        taxAmount = 0,
+        taxMode = "EXCLUSIVE",
+        totalAmount = 0,
+        notes,
+        cashierId,
+        cashierName,
+        shiftId,
+        status = "OPEN",
+        payment,
+      } = req.body;
+
+      // Idempotency check: prevent duplicate orders
+      if (idempotencyKey) {
+        const existing = await db
+          .select()
+          .from(schema.orders)
+          .where(eq(schema.orders.idempotencyKey, idempotencyKey))
+          .limit(1);
+        if (existing.length > 0) {
+          const existingItems = await db
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, existing[0].id));
+          const existingPayments = await db
+            .select()
+            .from(schema.payments)
+            .where(eq(schema.payments.orderId, existing[0].id));
+          return res.json({
+            order: existing[0],
+            items: existingItems,
+            payments: existingPayments,
+            isDuplicate: true,
+          });
+        }
+      }
+
+      // Generate receipt number: ORD-YYYYMMDD-XXXX
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const receiptNo = `ORD-${dateStr}-${randomSuffix}`;
+      const orderId = crypto.randomUUID();
+      const nowIso = new Date().toISOString();
+
+      await db.transaction(async (tx) => {
+        // Insert order
+        await tx.insert(schema.orders).values({
+          id: orderId,
+          receiptNo,
+          shiftId: shiftId || null,
+          outletId: "OUTLET-MAIN",
+          orderType,
+          tableNumber: tableNumber || null,
+          customerName: customerName || null,
+          status,
+          subtotal: Number(subtotal),
+          discountPercent: Number(discountPercent),
+          discountAmount: Number(discountAmount),
+          discountReason: discountReason || null,
+          taxPercent: Number(taxPercent),
+          taxAmount: Number(taxAmount),
+          taxMode: taxMode || "EXCLUSIVE",
+          totalAmount: Number(totalAmount),
+          notes: notes || null,
+          idempotencyKey: idempotencyKey || null,
+          cashierId: cashierId || null,
+          cashierName: cashierName || null,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          paidAt: status === "PAID" ? nowIso : null,
+        });
+
+        // Insert items
+        for (const item of items) {
+          await tx.insert(schema.orderItems).values({
+            id: crypto.randomUUID(),
+            orderId,
+            menuName: item.menuName,
+            recipeId: item.recipeId || null,
+            variantName: item.variantName || null,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            subtotal: Number(item.subtotal) || 0,
+            modifiers: item.modifiers || [],
+            notes: item.notes || null,
+            printDestination: item.printDestination || "BAR",
+            isPrinted: false,
+            createdAt: nowIso,
+          });
+        }
+
+        // If PAID immediately (Pay-first): process payment, stock, cash in, sales transaction
+        if (status === "PAID" && payment) {
+          const paymentId = crypto.randomUUID();
+          await tx.insert(schema.payments).values({
+            id: paymentId,
+            orderId,
+            shiftId: shiftId || null,
+            paymentMethod: payment.paymentMethod || "CASH",
+            amount: Number(payment.amount) || Number(totalAmount),
+            cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : null,
+            changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : null,
+            referenceNo: payment.referenceNo || null,
+            cashAccountId: payment.cashAccountId || null,
+            createdAt: nowIso,
+          });
+
+          // Record cash transaction (if cash drawer / account is set)
+          if (payment.cashAccountId) {
+            await tx.insert(schema.cashTransactions).values({
+              id: crypto.randomUUID(),
+              accountId: payment.cashAccountId,
+              type: "CASH_IN",
+              date: nowIso,
+              amount: Number(totalAmount),
+              description: `Penjualan POS #${receiptNo} (${payment.paymentMethod})`,
+              category: "PENDAPATAN",
+              referenceId: orderId,
+            });
+          }
+
+          // Stock deductions via recipes & record sales transactions
+          for (const item of items) {
+            await tx.insert(schema.salesTransactions).values({
+              id: crypto.randomUUID(),
+              date: nowIso,
+              menuName: item.menuName,
+              quantitySold: Number(item.quantity) || 1,
+              totalPrice: Number(item.subtotal) || 0,
+              importLogId: `POS-${receiptNo}`,
+            });
+
+            if (item.recipeId) {
+              const rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.id, item.recipeId))
+                .limit(1);
+              if (rec.length > 0) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+                } catch {}
+
+                for (const rIng of recIngredients) {
+                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (usedQty > 0) {
+                    await tx.insert(schema.stockMovements).values({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "USAGE",
+                      quantity: usedQty,
+                      date: nowIso,
+                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
+                      createdBy: cashierName || "Kasir",
+                      referenceId: orderId,
+                    });
+
+                    const currentIng = await tx
+                      .select()
+                      .from(schema.ingredients)
+                      .where(eq(schema.ingredients.id, rIng.ingredientId))
+                      .limit(1);
+                    if (currentIng.length > 0) {
+                      const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                      await tx
+                        .update(schema.ingredients)
+                        .set({ currentStock: newStock })
+                        .where(eq(schema.ingredients.id, rIng.ingredientId));
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const createdOrder = (
+        await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1)
+      )[0];
+      const createdItems = await db
+        .select()
+        .from(schema.orderItems)
+        .where(eq(schema.orderItems.orderId, orderId));
+      const createdPayments = await db
+        .select()
+        .from(schema.payments)
+        .where(eq(schema.payments.orderId, orderId));
+
+      res.status(201).json({
+        order: createdOrder,
+        items: createdItems,
+        payments: createdPayments,
+      });
+    } catch (e: any) {
+      console.error("Create order error:", e);
+      res.status(500).json({ error: e?.message || "Failed to create order" });
+    }
+  });
+
+  // 3. Settle / Pay Open Bill
+  app.post("/api/pos/orders/:id/pay", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const {
+        paymentMethod = "CASH",
+        amount,
+        cashReceived,
+        changeAmount,
+        referenceNo,
+        cashAccountId,
+        shiftId,
+        cashierName,
+      } = req.body;
+
+      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
+      if (orderList.length === 0) {
+        return res.status(404).json({ error: "Order tidak ditemukan" });
+      }
+      const currentOrder = orderList[0];
+      if (currentOrder.status === "PAID") {
+        return res.status(400).json({ error: "Order sudah lunas" });
+      }
+      if (currentOrder.status === "CANCELLED" || currentOrder.status === "VOID") {
+        return res.status(400).json({ error: `Order dalam status ${currentOrder.status}` });
+      }
+
+      const nowIso = new Date().toISOString();
+      const finalAmount = Number(amount) || currentOrder.totalAmount;
+
+      await db.transaction(async (tx) => {
+        // 1. Update order status
+        await tx
+          .update(schema.orders)
+          .set({
+            status: "PAID",
+            paidAt: nowIso,
+            updatedAt: nowIso,
+          })
+          .where(eq(schema.orders.id, orderId));
+
+        // 2. Insert payment
+        await tx.insert(schema.payments).values({
+          id: crypto.randomUUID(),
+          orderId,
+          shiftId: shiftId || currentOrder.shiftId || null,
+          paymentMethod,
+          amount: finalAmount,
+          cashReceived: cashReceived != null ? Number(cashReceived) : null,
+          changeAmount: changeAmount != null ? Number(changeAmount) : null,
+          referenceNo: referenceNo || null,
+          cashAccountId: cashAccountId || null,
+          createdAt: nowIso,
+        });
+
+        // 3. Cash in transaction
+        if (cashAccountId) {
+          await tx.insert(schema.cashTransactions).values({
+            id: crypto.randomUUID(),
+            accountId: cashAccountId,
+            type: "CASH_IN",
+            date: nowIso,
+            amount: finalAmount,
+            description: `Pelunasan POS #${currentOrder.receiptNo} (${paymentMethod})`,
+            category: "PENDAPATAN",
+            referenceId: orderId,
+          });
+        }
+
+        // 4. Stock deductions and sales transactions
+        const items = await tx
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, orderId));
+
+        for (const item of items) {
+          await tx.insert(schema.salesTransactions).values({
+            id: crypto.randomUUID(),
+            date: nowIso,
+            menuName: item.menuName,
+            quantitySold: Number(item.quantity) || 1,
+            totalPrice: Number(item.subtotal) || 0,
+            importLogId: `POS-${currentOrder.receiptNo}`,
+          });
+
+          if (item.recipeId) {
+            const rec = await tx
+              .select()
+              .from(schema.recipes)
+              .where(eq(schema.recipes.id, item.recipeId))
+              .limit(1);
+            if (rec.length > 0) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+              } catch {}
+
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (usedQty > 0) {
+                  await tx.insert(schema.stockMovements).values({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
+                    createdBy: cashierName || currentOrder.cashierName || "Kasir",
+                    referenceId: orderId,
+                  });
+
+                  const currentIng = await tx
+                    .select()
+                    .from(schema.ingredients)
+                    .where(eq(schema.ingredients.id, rIng.ingredientId))
+                    .limit(1);
+                  if (currentIng.length > 0) {
+                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                    await tx
+                      .update(schema.ingredients)
+                      .set({ currentStock: newStock })
+                      .where(eq(schema.ingredients.id, rIng.ingredientId));
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const updatedOrder = (
+        await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1)
+      )[0];
+      const updatedPayments = await db
+        .select()
+        .from(schema.payments)
+        .where(eq(schema.payments.orderId, orderId));
+
+      res.json({
+        order: updatedOrder,
+        payments: updatedPayments,
+        message: "Order berhasil dilunasi",
+      });
+    } catch (e: any) {
+      console.error("Pay order error:", e);
+      res.status(500).json({ error: e?.message || "Failed to settle order" });
+    }
+  });
+
+  // 4. Void / Cancel Order with Manager PIN Approval
+  app.post("/api/pos/orders/:id/void", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { managerPin, voidReason } = req.body;
+
+      if (!managerPin) {
+        return res.status(400).json({ error: "PIN Manager / Owner wajib diisi." });
+      }
+
+      // Verify PIN against MANAGER or OWNER
+      const authUsers = await db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.pin, String(managerPin)),
+            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "OWNER"), eq(schema.users.role, "SUPER_ADMIN"))
+          )
+        )
+        .limit(1);
+
+      if (authUsers.length === 0) {
+        return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+      }
+
+      const approver = authUsers[0];
+      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
+      if (orderList.length === 0) {
+        return res.status(404).json({ error: "Order tidak ditemukan" });
+      }
+      const targetOrder = orderList[0];
+
+      if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED") {
+        return res.status(400).json({ error: `Order sudah dalam status ${targetOrder.status}` });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      await db.transaction(async (tx) => {
+        // If order was already PAID: restore stock & record cash refund
+        if (targetOrder.status === "PAID") {
+          const items = await tx
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, orderId));
+
+          for (const item of items) {
+            if (item.recipeId) {
+              const rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.id, item.recipeId))
+                .limit(1);
+              if (rec.length > 0) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+                } catch {}
+
+                for (const rIng of recIngredients) {
+                  const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (returnQty > 0) {
+                    await tx.insert(schema.stockMovements).values({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "RETURN",
+                      quantity: returnQty,
+                      date: nowIso,
+                      note: `VOID Order #${targetOrder.receiptNo}: ${voidReason || "Pembatalan"}`,
+                      createdBy: approver.name,
+                      referenceId: orderId,
+                    });
+
+                    const currentIng = await tx
+                      .select()
+                      .from(schema.ingredients)
+                      .where(eq(schema.ingredients.id, rIng.ingredientId))
+                      .limit(1);
+                    if (currentIng.length > 0) {
+                      const newStock = (currentIng[0].currentStock || 0) + returnQty;
+                      await tx
+                        .update(schema.ingredients)
+                        .set({ currentStock: newStock })
+                        .where(eq(schema.ingredients.id, rIng.ingredientId));
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          const existingPayments = await tx
+            .select()
+            .from(schema.payments)
+            .where(eq(schema.payments.orderId, orderId));
+
+          for (const pay of existingPayments) {
+            if (pay.cashAccountId) {
+              await tx.insert(schema.cashTransactions).values({
+                id: crypto.randomUUID(),
+                accountId: pay.cashAccountId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: pay.amount,
+                description: `VOID/Refund POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
+                category: "PENGELUARAN",
+                referenceId: orderId,
+              });
+            }
+          }
+
+          await tx
+            .update(schema.orders)
+            .set({
+              status: "VOID",
+              voidReason: voidReason || "Void oleh manager",
+              voidApprovedBy: approver.name,
+              updatedAt: nowIso,
+            })
+            .where(eq(schema.orders.id, orderId));
+        } else {
+          await tx
+            .update(schema.orders)
+            .set({
+              status: "CANCELLED",
+              voidReason: voidReason || "Dibatalkan kasir/manager",
+              voidApprovedBy: approver.name,
+              updatedAt: nowIso,
+            })
+            .where(eq(schema.orders.id, orderId));
+        }
+      });
+
+      res.json({
+        success: true,
+        message: `Order #${targetOrder.receiptNo} berhasil ${targetOrder.status === "PAID" ? "di-VOID dan stok dikembalikan" : "dibatalkan"}`,
+        approvedBy: approver.name,
+      });
+    } catch (e: any) {
+      console.error("Void order error:", e);
+      res.status(500).json({ error: e?.message || "Failed to void order" });
+    }
+  });
+
+  // 5. Get Active Open Bills
+  app.get("/api/pos/orders/active", async (req, res) => {
+    try {
+      const activeOrders = await db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.status, "OPEN"))
+        .orderBy(desc(schema.orders.createdAt));
+
+      const ordersWithItems = await Promise.all(
+        activeOrders.map(async (ord) => {
+          const items = await db
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, ord.id));
+          return { ...ord, items };
+        })
+      );
+
+      res.json(ordersWithItems);
+    } catch (e: any) {
+      console.error("Fetch active orders error:", e);
+      res.status(500).json({ error: e?.message || "Failed to fetch active orders" });
+    }
+  });
+
+  // 6. Get Order Details by ID (for receipt reprint or detail view)
+  app.get("/api/pos/orders/:id", async (req, res) => {
+    try {
+      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, req.params.id)).limit(1);
+      if (orderList.length === 0) {
+        return res.status(404).json({ error: "Order tidak ditemukan" });
+      }
+      const items = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, req.params.id));
+      const payments = await db.select().from(schema.payments).where(eq(schema.payments.orderId, req.params.id));
+      res.json({ order: orderList[0], items, payments });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to fetch order details" });
+    }
+  });
+
+  // 7. Get POS Orders Today / History Summary
+  app.get("/api/pos/orders/today", async (req, res) => {
+    try {
+      const todayPrefix = new Date().toISOString().slice(0, 10);
+      const todayOrders = await db
+        .select()
+        .from(schema.orders)
+        .where(like(schema.orders.createdAt, `${todayPrefix}%`))
+        .orderBy(desc(schema.orders.createdAt));
+
+      let totalRevenue = 0;
+      let paidCount = 0;
+      let openCount = 0;
+      let voidCount = 0;
+
+      for (const ord of todayOrders) {
+        if (ord.status === "PAID") {
+          totalRevenue += ord.totalAmount;
+          paidCount++;
+        } else if (ord.status === "OPEN") {
+          openCount++;
+        } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
+          voidCount++;
+        }
+      }
+
+      res.json({
+        date: todayPrefix,
+        totalRevenue,
+        paidCount,
+        openCount,
+        voidCount,
+        orders: todayOrders,
+      });
+    } catch (e: any) {
+      console.error("Fetch today orders error:", e);
+      res.status(500).json({ error: e?.message || "Failed to fetch today orders" });
+    }
+  });
+
+  // 8. POS Printers Configuration API
+  app.get("/api/pos/printers", async (req, res) => {
+    try {
+      const printers = await db.select().from(schema.posPrinters);
+      res.json(printers);
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to fetch printers" });
+    }
+  });
+
+  app.post("/api/pos/printers", async (req, res) => {
+    try {
+      const {
+        id = crypto.randomUUID(),
+        name,
+        connectionType = "LAN",
+        targetStation = "BAR",
+        ipAddress,
+        port = 9100,
+        macAddress,
+        paperWidth = "80mm",
+        isActive = true,
+      } = req.body;
+
+      const existing = await db.select().from(schema.posPrinters).where(eq(schema.posPrinters.id, id)).limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(schema.posPrinters)
+          .set({
+            name,
+            connectionType,
+            targetStation,
+            ipAddress: ipAddress || null,
+            port: Number(port) || 9100,
+            macAddress: macAddress || null,
+            paperWidth,
+            isActive: Boolean(isActive),
+          })
+          .where(eq(schema.posPrinters.id, id));
+      } else {
+        await db.insert(schema.posPrinters).values({
+          id,
+          name,
+          connectionType,
+          targetStation,
+          ipAddress: ipAddress || null,
+          port: Number(port) || 9100,
+          macAddress: macAddress || null,
+          paperWidth,
+          isActive: Boolean(isActive),
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      res.json({ success: true, message: "Printer configuration saved" });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to save printer" });
     }
   });
 

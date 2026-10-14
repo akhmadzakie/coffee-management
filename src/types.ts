@@ -43,7 +43,8 @@ export type ViewState =
   | "bank_reconciliation"
   | "attendance_clock"
   | "dashboard_employee"
-  | "hpp_calculator";
+  | "hpp_calculator"
+  | "pos_cashier";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
@@ -316,6 +317,10 @@ export interface Settings {
   targetBonusAmount?: number; // Bonus per karyawan jika omzet tembus target
   divisionKpiBonusTarget?: Record<string, number>; // Plafon Target Bonus KPI per divisi yang diatur Manager
   scheduleApprovals?: Record<string, { status: "DRAFT" | "APPROVED"; approvedBy?: string; approvedAt?: string }>;
+  taxEnabled?: boolean;
+  taxRate?: number;
+  taxMode?: "INCLUSIVE" | "EXCLUSIVE";
+  maxCashierDiscount?: number;
 }
 
 export interface CashAccount {
@@ -453,4 +458,89 @@ export interface ClosedPeriod {
   closedAt: string;
   closedBy: string;
   notes?: string;
+}
+
+// ─── POS & Transaksi Kasir ──────────────────────────────────────────────────
+
+export type OrderType = "DINE_IN" | "TAKE_AWAY";
+export type OrderStatus = "OPEN" | "PAID" | "CANCELLED" | "VOID" | "REFUNDED";
+export type PaymentMethod = "CASH" | "QRIS" | "DEBIT" | "CREDIT";
+export type PrintDestination = "RECEIPT" | "BAR" | "KITCHEN" | "BAKERY" | "NONE";
+
+export interface OrderModifier {
+  name: string;
+  price: number;
+  quantity?: number;
+}
+
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  menuName: string;
+  recipeId?: string | null;
+  variantName?: string | null;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  modifiers?: OrderModifier[];
+  notes?: string | null;
+  printDestination: PrintDestination;
+  isPrinted: boolean;
+  createdAt: string;
+}
+
+export interface Payment {
+  id: string;
+  orderId: string;
+  shiftId?: string | null;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  cashReceived?: number | null;
+  changeAmount?: number | null;
+  referenceNo?: string | null;
+  cashAccountId?: string | null;
+  createdAt: string;
+}
+
+export interface Order {
+  id: string;
+  receiptNo: string;
+  shiftId?: string | null;
+  outletId: string;
+  orderType: OrderType;
+  tableNumber?: string | null;
+  customerName?: string | null;
+  status: OrderStatus;
+  subtotal: number;
+  discountPercent: number;
+  discountAmount: number;
+  discountReason?: string | null;
+  taxPercent: number;
+  taxAmount: number;
+  taxMode: "INCLUSIVE" | "EXCLUSIVE";
+  totalAmount: number;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  cashierId?: string | null;
+  cashierName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  paidAt?: string | null;
+  voidReason?: string | null;
+  voidApprovedBy?: string | null;
+  items?: OrderItem[];
+  payments?: Payment[];
+}
+
+export interface PosPrinter {
+  id: string;
+  name: string;
+  connectionType: "LAN" | "BLUETOOTH" | "USB";
+  targetStation: PrintDestination;
+  ipAddress?: string | null;
+  port: number;
+  macAddress?: string | null;
+  paperWidth: "58mm" | "80mm";
+  isActive: boolean;
+  createdAt: string;
 }

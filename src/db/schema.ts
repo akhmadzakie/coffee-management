@@ -142,6 +142,10 @@ export const settings = pgTable("settings", {
   leaderBakerTasks: text("leader_baker_tasks").default("[]"),
   managerTasks: text("manager_tasks").default("[]"),
   gemini_api_key: text("gemini_api_key"),
+  taxEnabled: boolean("tax_enabled").default(false).notNull(),
+  taxRate: real("tax_rate").default(10).notNull(),
+  taxMode: varchar("tax_mode", { length: 20 }).default("EXCLUSIVE").notNull(),
+  maxCashierDiscount: real("max_cashier_discount").default(10).notNull(),
 });
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),
@@ -369,5 +373,77 @@ export const closedPeriods = pgTable("closed_periods", {
   period: text("period").notNull(), // format YYYY-MM
   closedAt: text("closed_at").notNull(),
   closedBy: varchar("closed_by", { length: 255 }).notNull(),
-  notes: text("notes")
+  notes: text("notes"),
+});
+
+// ─── POS & Transaksi Kasir ──────────────────────────────────────────────────
+
+export const orders = pgTable("orders", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  receiptNo: varchar("receipt_no", { length: 100 }).notNull(), // e.g. ORD-20261014-0001
+  shiftId: varchar("shift_id", { length: 255 }), // link ke tabel shifts
+  outletId: varchar("outlet_id", { length: 100 }).default("OUTLET-MAIN").notNull(),
+  orderType: varchar("order_type", { length: 50 }).notNull(), // 'DINE_IN' | 'TAKE_AWAY'
+  tableNumber: varchar("table_number", { length: 50 }), // Nomor meja untuk open bill
+  customerName: varchar("customer_name", { length: 100 }),
+  status: varchar("status", { length: 50 }).notNull(), // 'OPEN' | 'PAID' | 'CANCELLED' | 'VOID' | 'REFUNDED'
+  subtotal: real("subtotal").notNull().default(0),
+  discountPercent: real("discount_percent").default(0).notNull(),
+  discountAmount: real("discount_amount").default(0).notNull(),
+  discountReason: text("discount_reason"),
+  taxPercent: real("tax_percent").default(0).notNull(),
+  taxAmount: real("tax_amount").default(0).notNull(),
+  taxMode: varchar("tax_mode", { length: 20 }).default("EXCLUSIVE").notNull(),
+  totalAmount: real("total_amount").notNull().default(0),
+  notes: text("notes"),
+  idempotencyKey: varchar("idempotency_key", { length: 255 }),
+  cashierId: varchar("cashier_id", { length: 255 }),
+  cashierName: varchar("cashier_name", { length: 100 }),
+  createdAt: text("created_at").notNull(), // ISO String
+  updatedAt: text("updated_at"),
+  paidAt: text("paid_at"),
+  voidReason: text("void_reason"),
+  voidApprovedBy: varchar("void_approved_by", { length: 255 }),
+});
+
+export const orderItems = pgTable("order_items", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  menuName: text("menu_name").notNull(),
+  recipeId: varchar("recipe_id", { length: 255 }),
+  variantName: text("variant_name"), // e.g. "Iced", "Large", "Hot"
+  quantity: real("quantity").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  subtotal: real("subtotal").notNull(),
+  modifiers: jsonb("modifiers").default([]), // [{ name, price, quantity }]
+  notes: text("notes"), // catatan per item (less sugar, dll)
+  printDestination: varchar("print_destination", { length: 50 }).default("BAR").notNull(), // 'BAR' | 'KITCHEN' | 'BAKERY' | 'NONE'
+  isPrinted: boolean("is_printed").default(false).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const payments = pgTable("payments", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  shiftId: varchar("shift_id", { length: 255 }),
+  paymentMethod: varchar("payment_method", { length: 50 }).notNull(), // 'CASH' | 'QRIS' | 'DEBIT' | 'CREDIT'
+  amount: real("amount").notNull(),
+  cashReceived: real("cash_received"),
+  changeAmount: real("change_amount"),
+  referenceNo: text("reference_no"), // Kode approval EDC / nomor referensi QRIS
+  cashAccountId: varchar("cash_account_id", { length: 255 }),
+  createdAt: text("created_at").notNull(),
+});
+
+export const posPrinters = pgTable("pos_printers", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  name: text("name").notNull(), // e.g. "Printer Bar Depan", "Printer Kitchen"
+  connectionType: varchar("connection_type", { length: 50 }).notNull(), // 'LAN' | 'BLUETOOTH' | 'USB'
+  targetStation: varchar("target_station", { length: 50 }).notNull(), // 'RECEIPT' | 'BAR' | 'KITCHEN' | 'BAKERY'
+  ipAddress: text("ip_address"), // e.g. "192.168.1.200"
+  port: integer("port").default(9100).notNull(),
+  macAddress: text("mac_address"),
+  paperWidth: varchar("paper_width", { length: 20 }).default("80mm").notNull(), // '58mm' | '80mm'
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: text("created_at").notNull(),
 });
