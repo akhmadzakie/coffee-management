@@ -116,7 +116,16 @@ const ComingSoon = ({ title }: { title: string }) => (
 );
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewState>("dashboard_finance");
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get("view") as ViewState;
+      if (viewParam && ["pos_cashier", "kitchen_display"].includes(viewParam)) {
+        return viewParam;
+      }
+    } catch {}
+    return "dashboard_finance";
+  });
   const { currentUser } = useStore();
 
   // Halaman default saat pertama login atau saat view tidak diizinkan
@@ -272,6 +281,41 @@ function AppContent() {
         return <Dashboard view="FINANCE" />;
     }
   };
+
+  // Jika Terminal Kasir POS atau Layar KDS Dapur: Render STANDALONE FULLSCREEN tanpa Sidebar Web Manajemen
+  if (currentView === "pos_cashier") {
+    const isKasirOnly = currentUser.role === "KASIR";
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <PosTerminal
+            onNavigateBack={
+              isKasirOnly
+                ? undefined
+                : () => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")
+            }
+          />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
+
+  if (currentView === "kitchen_display") {
+    const isStationWorker = ["BAR", "KITCHEN", "BAKER"].includes(currentUser.role);
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+          <KitchenDisplaySystem
+            onNavigateBack={
+              isStationWorker
+                ? undefined
+                : () => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")
+            }
+          />
+        </ErrorBoundary>
+      </Suspense>
+    );
+  }
 
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView}>

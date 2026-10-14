@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Wifi,
   WifiOff,
+  LogOut,
 } from "lucide-react";
 
 interface KdsTicket {
@@ -45,7 +46,7 @@ interface KdsTicket {
 export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = ({
   onNavigateBack,
 }) => {
-  const { currentUser } = useStore();
+  const { currentUser, logout } = useStore();
   const [stationFilter, setStationFilter] = useState<string>("ALL");
   const [tickets, setTickets] = useState<KdsTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -233,12 +234,22 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             <RotateCcw className="w-4 h-4" />
           </button>
 
-          {onNavigateBack && (
+          {onNavigateBack ? (
             <button
               onClick={onNavigateBack}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700 transition"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700 transition"
+              title="Kembali ke Dashboard Manajemen"
             >
-              Kembali
+              Kembali ke Web
+            </button>
+          ) : (
+            <button
+              onClick={logout}
+              title="Keluar dari akun barista/kitchen"
+              className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition flex items-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Keluar</span>
             </button>
           )}
         </div>
