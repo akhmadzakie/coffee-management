@@ -192,6 +192,28 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           },
         };
 
+        // Offline Cash Payment handling
+        if (!navigator.onLine) {
+          if (paymentMethod !== "CASH") {
+            throw new Error("Pembayaran non-tunai (QRIS / Kartu) memerlukan koneksi internet. Gunakan pembayaran Tunai (Cash) saat offline.");
+          }
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          const receiptNo = `ORD-OFFLINE-${dateStr}-${randomSuffix}`;
+          const offlineOrder = { ...payload, id: crypto.randomUUID(), receiptNo, createdAt: new Date().toISOString() };
+          try {
+            const saved = JSON.parse(localStorage.getItem("coffee_pos_offline_orders") || "[]");
+            saved.push(offlineOrder);
+            localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(saved));
+          } catch {}
+          onSuccess({
+            ...offlineOrder,
+            items: cart,
+            payments: [payload.payment],
+          });
+          return;
+        }
+
         const res = await fetch("/api/pos/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -297,8 +319,9 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
             <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               {/* Presets uang pas & pecahan */}
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">
-                  Pilihan Cepat Nominal Uang
+                <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Pilihan Cepat Nominal</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Satu ketukan sesuai uang pelanggan</span>
                 </label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {quickCashPresets.map((val) => (
@@ -317,6 +340,37 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                 </div>
               </div>
 
+              {/* Tombol tambah lembaran uang (+10k, +20k, +50k, +100k) */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Tambah Lembaran Uang Kertas</span>
+                  <button
+                    type="button"
+                    onClick={() => setCashReceived(0)}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Reset (0)
+                  </button>
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "+10.000", val: 10000 },
+                    { label: "+20.000", val: 20000 },
+                    { label: "+50.000", val: 50000 },
+                    { label: "+100.000", val: 100000 },
+                  ].map((btn) => (
+                    <button
+                      key={btn.label}
+                      type="button"
+                      onClick={() => setCashReceived((prev) => (prev || 0) + btn.val)}
+                      className="py-1.5 rounded-xl bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 border border-slate-200 hover:border-amber-300 text-xs font-bold transition shadow-2xs"
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Input nominal uang diterima */}
               <div>
                 <label className="text-xs font-bold text-slate-700 mb-1 block">
@@ -326,12 +380,13 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   type="number"
                   value={cashReceived || ""}
                   onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  placeholder="Ketik jumlah uang..."
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition shadow-inner"
                 />
               </div>
 
               {/* Kembalian Display */}
-              <div className="pt-3 border-t border-slate-200 flex justify-between items-center bg-white p-3 rounded-xl">
+              <div className="pt-3 border-t border-slate-200 flex justify-between items-center bg-white p-3.5 rounded-xl shadow-2xs">
                 <div>
                   <p className="text-xs font-semibold text-slate-500">Kembalian Pelanggan</p>
                   <p
@@ -349,39 +404,95 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   </p>
                 </div>
                 {isCashSufficient && changeAmount === 0 && (
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                     Uang Pas
                   </span>
                 )}
               </div>
             </div>
           ) : paymentMethod === "QRIS" ? (
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col items-center text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shadow-xs">
-                <QrCode className="w-8 h-8" />
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col items-center text-center space-y-4">
+              {/* QRIS Badge & QR Code */}
+              <div className="bg-white p-4 rounded-2xl border-2 border-slate-200 shadow-md flex flex-col items-center max-w-[240px]">
+                <div className="w-full bg-slate-900 text-white py-1 px-3 rounded-lg text-center font-black tracking-widest text-[11px] mb-2 flex items-center justify-center gap-1.5">
+                  <span className="text-red-500">QR</span>
+                  <span className="text-white">IS</span>
+                  <span className="text-[9px] font-normal text-slate-300">INDONESIA</span>
+                </div>
+
+                {/* Simulated QR Code SVG pattern */}
+                <div className="w-44 h-44 bg-white p-2 border border-slate-200 rounded-xl flex items-center justify-center shadow-inner">
+                  <svg className="w-full h-full text-slate-900" viewBox="0 0 100 100" fill="currentColor">
+                    {/* Corner Squares */}
+                    <rect x="5" y="5" width="28" height="28" rx="2" fill="none" stroke="currentColor" strokeWidth="6" />
+                    <rect x="12" y="12" width="14" height="14" rx="1" fill="currentColor" />
+                    <rect x="67" y="5" width="28" height="28" rx="2" fill="none" stroke="currentColor" strokeWidth="6" />
+                    <rect x="74" y="12" width="14" height="14" rx="1" fill="currentColor" />
+                    <rect x="5" y="67" width="28" height="28" rx="2" fill="none" stroke="currentColor" strokeWidth="6" />
+                    <rect x="12" y="74" width="14" height="14" rx="1" fill="currentColor" />
+                    {/* Pattern Matrix */}
+                    <rect x="38" y="10" width="6" height="6" />
+                    <rect x="48" y="10" width="6" height="6" />
+                    <rect x="40" y="24" width="8" height="6" />
+                    <rect x="52" y="20" width="6" height="10" />
+                    <rect x="10" y="42" width="8" height="6" />
+                    <rect x="24" y="44" width="6" height="8" />
+                    <rect x="36" y="38" width="12" height="12" rx="2" fill="currentColor" />
+                    <rect x="54" y="38" width="8" height="8" />
+                    <rect x="68" y="42" width="10" height="6" />
+                    <rect x="82" y="40" width="8" height="10" />
+                    <rect x="40" y="56" width="6" height="8" />
+                    <rect x="52" y="54" width="10" height="6" />
+                    <rect x="68" y="56" width="6" height="8" />
+                    <rect x="80" y="58" width="10" height="6" />
+                    <rect x="38" y="70" width="8" height="8" />
+                    <rect x="52" y="68" width="6" height="10" />
+                    <rect x="64" y="72" width="8" height="6" />
+                    <rect x="78" y="74" width="12" height="12" />
+                    <rect x="42" y="84" width="14" height="6" />
+                    <rect x="62" y="86" width="8" height="6" />
+                  </svg>
+                </div>
+
+                <div className="mt-2 text-center">
+                  <p className="text-[10px] text-slate-500 font-semibold">Total Tagihan QRIS</p>
+                  <p className="text-sm font-black text-amber-700">{formatCurrency(totalAmount)}</p>
+                </div>
               </div>
+
               <div>
-                <h4 className="text-sm font-bold text-slate-900">QRIS Dinamis / Statis</h4>
-                <p className="text-xs text-slate-500 max-w-xs mt-0.5">
-                  Arahkan pelanggan scan kode QR pada mesin EDC bank atau akrilik QRIS meja kasir.
+                <h4 className="text-xs font-bold text-slate-900">Scan QRIS dari Semua Pembayaran</h4>
+                <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
+                  BCA, Mandiri, BRI, BNI, GoPay, OVO, DANA, ShopeePay & LinkAja.
                 </p>
               </div>
 
-              <div className="w-full text-left">
-                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
-                  Nomor Referensi / Approval QRIS (Opsional)
-                </label>
+              {/* Tombol isi nomor referensi otomatis / konfirmasi cepat */}
+              <div className="w-full flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. RRN-99201928"
+                  placeholder="No. Referensi / RRN (Opsional)"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const randomRrn = `RRN-${Math.floor(10000000 + Math.random() * 90000000)}`;
+                    setReferenceNo(randomRrn);
+                  }}
+                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition shrink-0"
+                >
+                  Generate RRN
+                </button>
               </div>
             </div>
           ) : (
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <label className="text-xs font-bold text-slate-700 block">
+                Pilih Bank Mesin EDC
+              </label>
               <div className="grid grid-cols-4 gap-2">
                 {["BCA", "Mandiri", "BRI", "BNI"].map((b) => (
                   <button
@@ -389,8 +500,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     onClick={() => setSelectedBank(b)}
                     className={`py-2 rounded-xl text-xs font-bold border transition ${
                       selectedBank === b
-                        ? "bg-sky-600 border-sky-600 text-white shadow-xs"
-                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                        ? "bg-amber-600 border-amber-600 text-white shadow-xs"
+                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
                     {b}

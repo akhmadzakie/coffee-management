@@ -33,6 +33,8 @@ import {
   Lock,
   History,
   LogOut,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PosPaymentModal } from "./PosPaymentModal";
@@ -119,7 +121,67 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const taxMode = settings?.taxMode ?? "EXCLUSIVE";
   const maxCashierDiscount = settings?.maxCashierDiscount ?? 10;
 
-  // Fetch live menu with stock portions
+  // Offline PWA state & queue
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [offlineQueue, setOfflineQueue] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("coffee_pos_offline_orders");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync offline orders to server when back online
+  const syncOfflineOrders = async () => {
+    if (offlineQueue.length === 0 || !navigator.onLine || isSyncing) return;
+    setIsSyncing(true);
+    let successCount = 0;
+    const remainingQueue: any[] = [];
+
+    for (const offlineOrder of offlineQueue) {
+      try {
+        const res = await fetch("/api/pos/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(offlineOrder),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          remainingQueue.push(offlineOrder);
+        }
+      } catch {
+        remainingQueue.push(offlineOrder);
+      }
+    }
+
+    setOfflineQueue(remainingQueue);
+    localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(remainingQueue));
+    setIsSyncing(false);
+    if (successCount > 0) {
+      alert(`Berhasil menyinkronkan ${successCount} pesanan offline ke server database!`);
+      fetchActiveBillsCount();
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineOrders();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [offlineQueue]);
+
+  // Fetch live menu with stock portions (with localStorage fallback)
   const fetchMenu = async () => {
     setIsLoadingMenu(true);
     try {
@@ -133,9 +195,19 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           return { ...m, price: estimatedPrice };
         });
         setMenuList(itemsWithPrices);
+        // Simpan ke cache lokal untuk mode offline
+        localStorage.setItem("coffee_pos_cached_menu", JSON.stringify(itemsWithPrices));
+      } else {
+        throw new Error("Gagal mengambil menu dari server");
       }
     } catch (e) {
-      console.error("Gagal mengambil menu POS:", e);
+      console.warn("Menggunakan cache menu lokal POS (Mode Offline):", e);
+      const cached = localStorage.getItem("coffee_pos_cached_menu");
+      if (cached) {
+        try {
+          setMenuList(JSON.parse(cached));
+        } catch {}
+      }
     } finally {
       setIsLoadingMenu(false);
     }
@@ -143,6 +215,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   // Fetch active open bills count
   const fetchActiveBillsCount = async () => {
+    if (!navigator.onLine) return;
     try {
       const res = await fetch("/api/pos/orders/active");
       if (res.ok) {
@@ -361,6 +434,22 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         status: "OPEN",
       };
 
+      // Offline fallback check
+      if (!navigator.onLine) {
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        const receiptNo = `ORD-OFFLINE-${dateStr}-${randomSuffix}`;
+        const offlineOrder = { ...payload, id: crypto.randomUUID(), receiptNo, createdAt: new Date().toISOString() };
+        const updated = [...offlineQueue, offlineOrder];
+        setOfflineQueue(updated);
+        localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(updated));
+        alert(`Mode Offline: Open Bill disimpan di memori tablet!\nNomor Pesanan: ${receiptNo} (${tableNumber || "Meja"})\nPesanan otomatis tersinkron saat internet online.`);
+        setCart([]);
+        setTableNumber("");
+        setCustomerName("");
+        return;
+      }
+
       const res = await fetch("/api/pos/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -457,6 +546,33 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
         {/* Action Buttons Top Bar */}
         <div className="flex items-center gap-2">
+          {/* Status Koneksi Online / Offline & Sync Queue */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition shadow-2xs bg-slate-50 border-slate-200">
+            {isOnline ? (
+              <span className="flex items-center gap-1.5 text-emerald-700">
+                <Wifi className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-[11px]">Online</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-amber-800">
+                <WifiOff className="w-3.5 h-3.5 text-amber-600" />
+                <span className="text-[11px]">Offline</span>
+              </span>
+            )}
+
+            {offlineQueue.length > 0 && (
+              <button
+                onClick={syncOfflineOrders}
+                disabled={!isOnline || isSyncing}
+                className="ml-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-[10px] shadow-xs flex items-center gap-1 transition animate-pulse"
+                title="Klik untuk menyinkronkan antrean pesanan offline ke server"
+              >
+                <RotateCcw className={`w-3 h-3 ${isSyncing ? "animate-spin" : ""}`} />
+                <span>Sync {offlineQueue.length} Order</span>
+              </button>
+            )}
+          </div>
+
           {/* Riwayat Transaksi Hari Ini */}
           <button
             onClick={() => setIsTodayOrdersOpen(true)}

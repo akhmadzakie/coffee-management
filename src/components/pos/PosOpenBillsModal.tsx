@@ -11,6 +11,10 @@ import {
   FileText,
   AlertCircle,
   Utensils,
+  GitFork,
+  Check,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { PosManagerPinModal } from "./PosManagerPinModal";
 
@@ -29,6 +33,12 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVoidOrder, setSelectedVoidOrder] = useState<any | null>(null);
+
+  // State Split Bill
+  const [selectedSplitOrder, setSelectedSplitOrder] = useState<any | null>(null);
+  const [splitMode, setSplitMode] = useState<"ITEMS" | "EVENLY">("ITEMS");
+  const [splitItemQuantities, setSplitItemQuantities] = useState<Record<string, number>>({});
+  const [splitPersonsCount, setSplitPersonsCount] = useState<number>(2);
 
   const fetchActiveOrders = async () => {
     setIsLoading(true);
@@ -204,6 +214,23 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
 
                       <div className="flex items-center gap-1.5">
                         <button
+                          onClick={() => {
+                            setSelectedSplitOrder(bill);
+                            setSplitMode("ITEMS");
+                            // Default: inisialisasi split quantities = 0
+                            const initialQty: Record<string, number> = {};
+                            (bill.items || []).forEach((it: any) => {
+                              initialQty[it.id] = 0;
+                            });
+                            setSplitItemQuantities(initialQty);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="Pecah Tagihan (Split Bill)"
+                        >
+                          <GitFork className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Split Bill</span>
+                        </button>
+                        <button
                           onClick={() => setSelectedVoidOrder(bill)}
                           className="p-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 transition"
                           title="Batalkan / Void Bill"
@@ -246,6 +273,226 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
           onClose={() => setSelectedVoidOrder(null)}
           onSuccess={(manager, reason) => handleConfirmVoid(manager, reason || "")}
         />
+      )}
+
+      {/* ─── Modal Split Bill (Pecah Tagihan) ────────────────────────────── */}
+      {selectedSplitOrder && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header Split Bill */}
+            <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+                  <GitFork className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Pecah Tagihan (Split Bill)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    #{selectedSplitOrder.receiptNo} • {selectedSplitOrder.tableNumber || "Meja"} ({selectedSplitOrder.customerName || "Tamu"})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedSplitOrder(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mode Switcher: By Item vs By Person */}
+            <div className="p-3 bg-slate-100/70 border-b border-slate-200 flex gap-2">
+              <button
+                onClick={() => setSplitMode("ITEMS")}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
+                  splitMode === "ITEMS"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Pilih Menu Tertentu (Per Item)
+              </button>
+              <button
+                onClick={() => setSplitMode("EVENLY")}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
+                  splitMode === "EVENLY"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Bagi Rata (Per Orang)
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="p-5 overflow-y-auto max-h-[55vh] space-y-4">
+              {splitMode === "ITEMS" ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Pilih menu dan tentukan jumlah yang ingin dibayar pada bagian pembayaran ini:
+                  </p>
+                  {(selectedSplitOrder.items || []).map((it: any) => {
+                    const currentSplitQty = splitItemQuantities[it.id] || 0;
+                    const maxQty = Number(it.quantity) || 1;
+
+                    return (
+                      <div
+                        key={it.id}
+                        className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                          currentSplitQty > 0
+                            ? "bg-amber-50/60 border-amber-300 shadow-2xs"
+                            : "bg-slate-50 border-slate-200"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {it.menuName}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {formatCurrency(it.unitPrice)} • Total dipesan: {maxQty} porsi
+                          </p>
+                        </div>
+
+                        {/* Stepper qty split */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSplitItemQuantities((prev) => ({
+                                ...prev,
+                                [it.id]: Math.max(0, (prev[it.id] || 0) - 1),
+                              }));
+                            }}
+                            disabled={currentSplitQty <= 0}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-6 text-center text-sm font-black text-amber-800">
+                            {currentSplitQty}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setSplitItemQuantities((prev) => ({
+                                ...prev,
+                                [it.id]: Math.min(maxQty, (prev[it.id] || 0) + 1),
+                              }));
+                            }}
+                            disabled={currentSplitQty >= maxQty}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-4 text-center py-2">
+                  <p className="text-xs text-slate-500">
+                    Bagi total tagihan secara proporsional sesuai jumlah orang:
+                  </p>
+                  <div className="flex justify-center gap-2">
+                    {[2, 3, 4, 5, 6].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => setSplitPersonsCount(num)}
+                        className={`w-12 h-12 rounded-2xl text-sm font-bold border transition ${
+                          splitPersonsCount === num
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs font-black"
+                            : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {num}x
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 mt-3 text-center">
+                    <p className="text-xs font-semibold text-slate-600">Tagihan per Orang</p>
+                    <p className="text-2xl font-black text-amber-700 mt-1">
+                      {formatCurrency(Math.round(selectedSplitOrder.totalAmount / splitPersonsCount))}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Total: {formatCurrency(selectedSplitOrder.totalAmount)} dibagi {splitPersonsCount} orang
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Split Action */}
+            <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-slate-500">Nominal Bagian Ini</p>
+                <p className="text-base font-black text-amber-700">
+                  {splitMode === "ITEMS"
+                    ? formatCurrency(
+                        (selectedSplitOrder.items || []).reduce((sum: number, it: any) => {
+                          const qty = splitItemQuantities[it.id] || 0;
+                          return sum + (it.unitPrice || 0) * qty;
+                        }, 0)
+                      )
+                    : formatCurrency(Math.round(selectedSplitOrder.totalAmount / splitPersonsCount))}
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedSplitOrder(null)}
+                  className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={() => {
+                    if (splitMode === "ITEMS") {
+                      const selectedItemsToPay = (selectedSplitOrder.items || [])
+                        .filter((it: any) => (splitItemQuantities[it.id] || 0) > 0)
+                        .map((it: any) => ({
+                          ...it,
+                          quantity: splitItemQuantities[it.id],
+                          subtotal: it.unitPrice * splitItemQuantities[it.id],
+                        }));
+
+                      if (selectedItemsToPay.length === 0) {
+                        alert("Pilih minimal 1 porsi menu untuk dibayar!");
+                        return;
+                      }
+
+                      const splitSubtotal = selectedItemsToPay.reduce((s: number, i: any) => s + i.subtotal, 0);
+                      const splitOrder = {
+                        ...selectedSplitOrder,
+                        customerName: `${selectedSplitOrder.customerName || "Tamu"} (Split)`,
+                        items: selectedItemsToPay,
+                        totalAmount: splitSubtotal,
+                        subtotal: splitSubtotal,
+                      };
+
+                      onSelectOrder(splitOrder);
+                    } else {
+                      const amountPerPerson = Math.round(selectedSplitOrder.totalAmount / splitPersonsCount);
+                      const splitOrder = {
+                        ...selectedSplitOrder,
+                        customerName: `${selectedSplitOrder.customerName || "Tamu"} (1/${splitPersonsCount})`,
+                        totalAmount: amountPerPerson,
+                        subtotal: amountPerPerson,
+                      };
+                      onSelectOrder(splitOrder);
+                    }
+                    setSelectedSplitOrder(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+                >
+                  <span>Bayar Bagian Ini</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

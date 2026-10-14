@@ -221,7 +221,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
             </div>
           </div>
 
-          {formData.connectionType === "LAN" && (
+          {formData.connectionType === "LAN" ? (
             <div className="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               <div className="col-span-2">
                 <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
@@ -247,6 +247,57 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono transition"
                 />
               </div>
+            </div>
+          ) : formData.connectionType === "BLUETOOTH" ? (
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 mb-1 block">
+                  Status Perangkat Bluetooth
+                </label>
+                <input
+                  type="text"
+                  placeholder="Belum ada printer Bluetooth terhubung"
+                  value={formData.ipAddress}
+                  readOnly
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!("bluetooth" in navigator)) {
+                    alert("Browser tablet ini belum mengizinkan Web Bluetooth. Gunakan Google Chrome pada Android/Windows.");
+                    return;
+                  }
+                  try {
+                    const device = await (navigator as any).bluetooth.requestDevice({
+                      acceptAllDevices: true,
+                    });
+                    if (device) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        name: device.name || "Printer Bluetooth",
+                        ipAddress: `BT-${device.name || device.id}`,
+                      }));
+                      alert(`Printer Bluetooth terhubung: ${device.name || device.id}`);
+                    }
+                  } catch (e: any) {
+                    if (e.name !== "NotFoundError") {
+                      alert(`Gagal menghubungkan Bluetooth: ${e.message}`);
+                    }
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold transition flex items-center justify-center gap-2"
+              >
+                <Bluetooth className="w-4 h-4 text-sky-600" />
+                <span>Pindai & Pasangkan Printer Bluetooth</span>
+              </button>
+            </div>
+          ) : (
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center">
+              <p className="text-xs text-slate-600">
+                Hubungkan printer thermal kasir via kabel USB OTG ke tablet kasir.
+              </p>
             </div>
           )}
 
