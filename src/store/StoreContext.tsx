@@ -235,6 +235,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       scheduleApprovals: {},
       leaderJobdeskAllowanceRules: DEFAULT_LEADER_ALLOWANCE_RULES,
       shiftDefinitions: DEFAULT_SHIFT_DEFINITIONS,
+      enableStoreSalesBonus: true,
+      enableLeaderAllowanceBonus: true,
+      enableKpiScoreBonus: true,
     };
     try {
       const cached = localStorage.getItem("app_settings_cache");
@@ -480,6 +483,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             leaderBakerTasks: parseArr(s.leaderBakerTasks),
             managerTasks: parseArr(s.managerTasks),
             shiftDefinitions: parseArr(s.shiftDefinitions).length > 0 ? parseArr(s.shiftDefinitions) : DEFAULT_SHIFT_DEFINITIONS,
+            enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
+            enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
+            enableKpiScoreBonus: s.enableKpiScoreBonus !== false,
           };
           setSettings(newSettings);
           try {

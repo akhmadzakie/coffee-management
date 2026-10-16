@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { 
   Plus, Edit2, Trash2, Save, X, BookOpen, Target, Award, Sparkles, 
   CheckCircle2, TrendingUp, Info, HelpCircle, Users, Check, AlertCircle,
-  Calendar, DollarSign
+  Calendar, DollarSign, Sliders
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -117,13 +117,16 @@ export const KPI: React.FC = () => {
         ? activeLeaderRules.find((r: any) => score >= r.minScore && score <= r.maxScore)
         : null;
 
+      const isLeaderAllowanceActive = settings?.enableLeaderAllowanceBonus !== false;
       const payoutPct = matchedLeaderTier ? matchedLeaderTier.payoutPercentage : (isLeader ? (score > 0 ? score : 0) : 100);
-      const estimatedAllowance = isLeader ? Math.round((rawPositionAllowance * payoutPct) / 100) : 0;
+      const estimatedAllowance = isLeader && isLeaderAllowanceActive ? Math.round((rawPositionAllowance * payoutPct) / 100) : 0;
 
       const tierBadge = isLeader
-        ? (checklistDays === 0
-            ? "Belum Ada Supervisi" 
-            : (matchedLeaderTier ? `${matchedLeaderTier.grade} (${matchedLeaderTier.payoutPercentage}%)` : `${score}%`))
+        ? (!isLeaderAllowanceActive
+            ? "Tunjangan Dinonaktifkan"
+            : (checklistDays === 0
+                ? "Belum Ada Supervisi" 
+                : (matchedLeaderTier ? `${matchedLeaderTier.grade} (${matchedLeaderTier.payoutPercentage}%)` : `${score}%`)))
         : "Operasional Shift (Bebas Checklist)";
 
       return {
@@ -193,6 +196,15 @@ export const KPI: React.FC = () => {
     updateKpiBonusRule(rule.id, {
       ...rule,
       isActive: !rule.isActive,
+    });
+  };
+
+  const handleToggleBonusPolicy = (key: "enableStoreSalesBonus" | "enableLeaderAllowanceBonus" | "enableKpiScoreBonus") => {
+    if (!canEditHR) return;
+    const currentVal = settings?.[key] !== false;
+    updateSettings({
+      ...settings,
+      [key]: !currentVal,
     });
   };
 
@@ -324,6 +336,120 @@ export const KPI: React.FC = () => {
       </div>
 
       <div className="p-6">
+        {/* ─── MASTER SWITCH: KEBIJAKAN AKTIF / NONAKTIFKAN BONUS ─── */}
+        <div className="mb-6 p-4 rounded-2xl border bg-slate-50/80 border-slate-200/80 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-600 text-white">
+                <Sliders className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Saklar Kebijakan Pencairan Bonus Sistem</h3>
+                <p className="text-[11px] text-slate-500">
+                  Atur aktif atau nonaktifnya pencairan bonus pada slip gaji & penggajian bulan ini sesuai kebijakan Manajer/Owner.
+                </p>
+              </div>
+            </div>
+            {!canEditHR && (
+              <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-semibold self-start sm:self-auto">
+                Hanya Manajer / Owner
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* 1. Bonus Omzet Toko */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              settings?.enableStoreSalesBonus !== false
+                ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                : "bg-white border-slate-200 text-slate-500 opacity-80"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span>🎯</span> Bonus Omzet Toko
+                </span>
+                <button
+                  type="button"
+                  disabled={!canEditHR}
+                  onClick={() => handleToggleBonusPolicy("enableStoreSalesBonus")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                    settings?.enableStoreSalesBonus !== false
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  } ${!canEditHR ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  {settings?.enableStoreSalesBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
+                </button>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                {settings?.enableStoreSalesBonus !== false
+                  ? `Bonus ${formatCurrency(targetBonusAmount)}/staf otomatis dicairkan jika omzet tembus target.`
+                  : "Dinonaktifkan: Bonus omzet tidak akan dicairkan ke slip gaji meskipun target omzet tercapai."}
+              </p>
+            </div>
+
+            {/* 2. Tunjangan Jabatan Leader (Grade A-D) */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              settings?.enableLeaderAllowanceBonus !== false
+                ? "bg-indigo-50/70 border-indigo-200 text-indigo-950"
+                : "bg-white border-slate-200 text-slate-500 opacity-80"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span>👑</span> Tunjangan Leader (A–D)
+                </span>
+                <button
+                  type="button"
+                  disabled={!canEditHR}
+                  onClick={() => handleToggleBonusPolicy("enableLeaderAllowanceBonus")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                    settings?.enableLeaderAllowanceBonus !== false
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  } ${!canEditHR ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  {settings?.enableLeaderAllowanceBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
+                </button>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                {settings?.enableLeaderAllowanceBonus !== false
+                  ? "Tunjangan evaluasi checklist Leader (25% - 100%) aktif dicairkan pada payroll."
+                  : "Dinonaktifkan: Tunjangan evaluasi Leader ditangguhkan dan bernilai Rp 0 pada penggajian."}
+              </p>
+            </div>
+
+            {/* 3. Aturan Skor Bonus KPI Tambahan */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              settings?.enableKpiScoreBonus !== false
+                ? "bg-amber-50/70 border-amber-200 text-amber-950"
+                : "bg-white border-slate-200 text-slate-500 opacity-80"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span>📊</span> Bonus Skor KPI Tiered
+                </span>
+                <button
+                  type="button"
+                  disabled={!canEditHR}
+                  onClick={() => handleToggleBonusPolicy("enableKpiScoreBonus")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                    settings?.enableKpiScoreBonus !== false
+                      ? "bg-amber-600 text-white hover:bg-amber-700 shadow-xs"
+                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  } ${!canEditHR ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  {settings?.enableKpiScoreBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
+                </button>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                {settings?.enableKpiScoreBonus !== false
+                  ? "Aturan bonus tambahan berdasarkan rentang skor KPI (Tabel Tiered) diizinkan cair."
+                  : "Dinonaktifkan: Bonus skor tambahan tidak akan dihitung ke slip gaji."}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* ─── TAB 1: PANDUAN LENGKAP CARA KERJA BONUS OTOMATIS ─── */}
         {activeSubTab === "guide" && (
           <div className="space-y-6">
@@ -713,13 +839,17 @@ export const KPI: React.FC = () => {
                                 {item.tierBadge}
                               </p>
                               <span className="text-[10px] text-slate-500 font-medium">
-                                Tunj. Jabatan: {formatCurrency(item.estimatedAllowance)} ({item.payoutPct}%)
+                                {settings?.enableLeaderAllowanceBonus === false
+                                  ? "Tunj. Jabatan: Rp 0 (Dinonaktifkan)"
+                                  : `Tunj. Jabatan: ${formatCurrency(item.estimatedAllowance)} (${item.payoutPct}%)`}
                               </span>
                             </div>
                           ) : (
                             <div>
                               <p className="font-bold text-slate-800 text-[11px]">
-                                {isTargetAchieved ? (
+                                {settings?.enableStoreSalesBonus === false ? (
+                                  <span className="text-slate-400 font-semibold italic">Dinonaktifkan</span>
+                                ) : isTargetAchieved ? (
                                   <span className="text-emerald-700 font-bold">🎉 Siap Cair: +{formatCurrency(targetBonusAmount)}</span>
                                 ) : (
                                   <span className="text-slate-500">Menunggu Target Toko</span>

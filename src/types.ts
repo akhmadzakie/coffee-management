@@ -373,6 +373,9 @@ export interface Settings {
   maxCashierDiscount?: number;
   leaderJobdeskAllowanceRules?: LeaderAllowanceRule[];
   shiftDefinitions?: ShiftDefinition[];
+  enableStoreSalesBonus?: boolean;
+  enableLeaderAllowanceBonus?: boolean;
+  enableKpiScoreBonus?: boolean;
 }
 
 export interface CashAccount {

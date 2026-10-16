@@ -45,6 +45,7 @@ export function Payroll() {
     kpiBonusRules,
     closedPeriods,
     settings,
+    updateSettings,
     salesTransactions,
   } = (useStore() as any);
 
@@ -84,7 +85,8 @@ export function Payroll() {
 
   const monthlyTarget = settings?.monthlyRevenueTarget || 0;
   const isTargetAchieved = monthlyTarget > 0 && periodSales >= monthlyTarget;
-  const targetBonusPerEmployee = isTargetAchieved ? (settings?.targetBonusAmount || 0) : 0;
+  const isStoreBonusActive = settings?.enableStoreSalesBonus !== false;
+  const targetBonusPerEmployee = (isTargetAchieved && isStoreBonusActive) ? (settings?.targetBonusAmount || 0) : 0;
   const achievementRate = monthlyTarget > 0 ? (periodSales / monthlyTarget) * 100 : 0;
 
   // Generate calculations for employees
@@ -183,8 +185,13 @@ export function Payroll() {
           matchedLeaderTier = activeLeaderRules.find(
             (r) => leaderJobdeskScore >= r.minScore && leaderJobdeskScore <= r.maxScore
           );
-          const payoutPct = matchedLeaderTier ? matchedLeaderTier.payoutPercentage : leaderJobdeskScore;
-          positionAllowance = Math.round((rawPositionAllowance * payoutPct) / 100);
+          const isLeaderAllowanceActive = settings?.enableLeaderAllowanceBonus !== false;
+          if (!isLeaderAllowanceActive) {
+            positionAllowance = 0;
+          } else {
+            const payoutPct = matchedLeaderTier ? matchedLeaderTier.payoutPercentage : leaderJobdeskScore;
+            positionAllowance = Math.round((rawPositionAllowance * payoutPct) / 100);
+          }
         }
 
         // ─── Skor KPI Otomatis: Leader dari Checklist Shift, Staf dari Presensi & Disiplin ───
@@ -197,12 +204,13 @@ export function Payroll() {
               : 0);
 
         // ─── Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis ───
+        const isKpiScoreBonusActive = settings?.enableKpiScoreBonus !== false;
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
         const applicableRule = autoScore > 0 ? activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore) : undefined;
 
         // Jika ada aturan tiered yang aktif dan skor karyawan masuk rentang, gunakan nominal tiered otomatis!
         // Jika tidak, gunakan perhitungan proporsional dari plafon kontrak/divisi (% skor × target)
-        const kpiBonus = autoScore === 0
+        const kpiBonus = (!isKpiScoreBonusActive || autoScore === 0)
           ? 0
           : (applicableRule 
               ? applicableRule.bonusAmount 
@@ -404,18 +412,70 @@ export function Payroll() {
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {isTargetAchieved 
-                      ? `🎉 TEMBUS TARGET! Seluruh staf otomatis menerima bonus omzet +${formatCurrency(targetBonusPerEmployee)}.` 
-                      : `Belum tembus target. Kurang ${formatCurrency(Math.max(0, monthlyTarget - periodSales))} lagi untuk mencairkan bonus omzet.`}
+                    {!isStoreBonusActive 
+                      ? "⚠️ Pencairan Bonus Omzet Toko saat ini DINONAKTIFKAN oleh kebijakan Manajer (tidak akan masuk ke slip gaji)."
+                      : isTargetAchieved 
+                        ? `🎉 TEMBUS TARGET! Seluruh staf otomatis menerima bonus omzet +${formatCurrency(targetBonusPerEmployee)}.` 
+                        : `Belum tembus target. Kurang ${formatCurrency(Math.max(0, monthlyTarget - periodSales))} lagi untuk mencairkan bonus omzet.`}
                   </p>
                 </div>
               </div>
 
-              {isTargetAchieved && targetBonusPerEmployee > 0 && (
-                <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-300 shadow-xs font-mono text-emerald-800 font-bold shrink-0">
-                  +{formatCurrency(targetBonusPerEmployee)} / Staf
+              <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                {/* Quick Toggle for Store Bonus */}
+                <div className="flex items-center gap-1.5 bg-white/95 px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[11px] font-semibold text-slate-600">Bonus Omzet:</span>
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => {
+                      if (!canEdit) return;
+                      updateSettings({
+                        ...settings,
+                        enableStoreSalesBonus: settings?.enableStoreSalesBonus === false,
+                      });
+                    }}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black transition-all cursor-pointer ${
+                      settings?.enableStoreSalesBonus !== false
+                        ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300"
+                        : "bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-300"
+                    } ${!canEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                    title="Klik untuk aktifkan / nonaktifkan pencairan bonus omzet toko"
+                  >
+                    {settings?.enableStoreSalesBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
+                  </button>
                 </div>
-              )}
+
+                {/* Quick Toggle for Leader Allowance */}
+                <div className="flex items-center gap-1.5 bg-white/95 px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <span className="text-[11px] font-semibold text-slate-600">Tunj. Leader:</span>
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => {
+                      if (!canEdit) return;
+                      updateSettings({
+                        ...settings,
+                        enableLeaderAllowanceBonus: settings?.enableLeaderAllowanceBonus === false,
+                      });
+                    }}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black transition-all cursor-pointer ${
+                      settings?.enableLeaderAllowanceBonus !== false
+                        ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-300"
+                        : "bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-300"
+                    } ${!canEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                    title="Klik untuk aktifkan / nonaktifkan pencairan tunjangan jabatan leader"
+                  >
+                    {settings?.enableLeaderAllowanceBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
+                  </button>
+                </div>
+
+                {isTargetAchieved && targetBonusPerEmployee > 0 && (
+                  <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-300 shadow-xs font-mono text-emerald-800 font-bold shrink-0 text-xs">
+                    +{formatCurrency(targetBonusPerEmployee)} / Staf
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
