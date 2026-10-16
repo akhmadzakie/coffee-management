@@ -122,16 +122,34 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       const startDateStr = w.key;
       const endDateStr = getLocalDateString(endSunday);
 
-      const weekShifts = employeeShifts.filter(
-        (s) => s.date >= startDateStr && s.date <= endDateStr && s.shiftType !== "OFF"
-      );
+      const weekShifts = employeeShifts.filter((s) => {
+        if (s.date < startDateStr || s.date > endDateStr || s.shiftType === "OFF") return false;
+        const emp = employees.find((e) => e.id === s.employeeId);
+        if (!emp) return false;
+        const pos = (emp.position || "").toUpperCase();
+        const dept = (emp.department || "").toUpperCase();
+        const isOffice =
+          pos.includes("MANAGER") || pos.includes("MANAJER") ||
+          dept.includes("MANAGEMENT") || dept.includes("MANAJEMEN") ||
+          pos.includes("OWNER") || pos.includes("FINANCE") ||
+          dept.includes("FINANCE") || pos.includes("KEUANGAN") ||
+          pos.includes("ACCOUNTING") || pos.includes("ADMIN") ||
+          pos.includes("HR");
+        return !isOffice;
+      });
 
       if (weekShifts.length > 0 && !isApproved) {
         const divSet = new Set<string>();
         weekShifts.forEach((s) => {
           const emp = employees.find((e) => e.id === s.employeeId);
           if (emp) {
-            const div = emp.department || (emp.position?.toUpperCase().includes("KITCHEN") ? "KITCHEN" : emp.position?.toUpperCase().includes("BAKER") ? "BAKER" : "BAR");
+            const pos = (emp.position || "").toUpperCase();
+            const dept = (emp.department || "").toUpperCase();
+            const div = (dept.includes("KITCHEN") || pos.includes("KITCHEN") || pos.includes("COOK"))
+              ? "KITCHEN"
+              : (dept.includes("BAKER") || pos.includes("BAKER") || pos.includes("PASTRY"))
+              ? "BAKER"
+              : "BAR & KASIR";
             divSet.add(div);
           }
         });

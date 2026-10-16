@@ -34,6 +34,7 @@ import {
   RotateCcw,
   Filter,
   Copy,
+  Info,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -97,13 +98,41 @@ export function HRManagement() {
       e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
   );
 
+  // Klasifikasi staf: hanya staf operasional (Bar, Kasir, Kitchen, Baker) yang masuk jadwal shift mingguan
+  const isOperationalStaff = (emp: { department?: string | null; position?: string | null }): boolean => {
+    const dept = (emp.department || "").toUpperCase();
+    const pos = (emp.position || "").toUpperCase();
+
+    // Posisi atau departemen eksekutif, manajerial & back-office bukan pekerja shift
+    if (
+      pos.includes("MANAGER") || pos.includes("MANAJER") ||
+      dept.includes("MANAGEMENT") || dept.includes("MANAJEMEN") ||
+      pos.includes("OWNER") || dept.includes("OWNER") ||
+      pos.includes("FINANCE") || dept.includes("FINANCE") ||
+      pos.includes("KEUANGAN") || dept.includes("KEUANGAN") ||
+      pos.includes("ACCOUNTING") || dept.includes("ACCOUNTING") ||
+      pos.includes("AKUNTAN") || dept.includes("AKUNTAN") ||
+      pos.includes("ADMIN") || dept.includes("ADMIN") ||
+      pos.includes("HRD") || dept.includes("HRD") ||
+      pos.includes("HR")
+    ) {
+      return false;
+    }
+    return true;
+  };
+
   // Aturan pembagian divisi standar:
   // - KITCHEN: Kitchen, Dapur, Cook
   // - BAKER: Baker, Pastry, Roti
   // - BAR: Barista, Kasir, Beverage, Main (Kasir digabung ke Divisi Bar)
-  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" => {
+  // - OFFICE: Manager, Finance, Accounting, Admin, HRD (Non-shift / jam reguler)
+  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" | "OFFICE" => {
     const dept = (emp.department || "").toUpperCase();
     const pos = (emp.position || "").toUpperCase();
+
+    if (!isOperationalStaff(emp)) {
+      return "OFFICE";
+    }
 
     if (dept.includes("KITCHEN") || pos.includes("KITCHEN") || pos.includes("DAPUR") || pos.includes("COOK")) {
       return "KITCHEN";
@@ -123,7 +152,8 @@ export function HRManagement() {
       if (d.includes("BAR") || d.includes("KASIR") || d.includes("BEVERAGE")) return "BAR";
     }
     if (leaderEmp) {
-      return getEmployeeDivision(leaderEmp);
+      const div = getEmployeeDivision(leaderEmp);
+      if (div !== "OFFICE") return div;
     }
     const nameOrUser = `${currentUser?.name || ""} ${currentUser?.username || ""}`.toUpperCase();
     if (nameOrUser.includes("KITCHEN") || nameOrUser.includes("DAPUR") || nameOrUser.includes("COOK")) return "KITCHEN";
@@ -580,21 +610,20 @@ export function HRManagement() {
 
   const canEditShiftForEmployee = (emp: any) => {
     if (isReadOnly) return false;
-    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua divisi
+    if (!isOperationalStaff(emp)) return false;
+    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua staf operasional
     if (isLeader) {
       // Leader dapat menyusun dan mengedit jadwal staf di divisinya sendiri (Kasir ikut ke Bar)
       const empDiv = getEmployeeDivision(emp);
-      const posUpper = (emp.position || "").toUpperCase();
-      const isExecutive = posUpper.includes("MANAGER") || posUpper.includes("MANAJER") || posUpper.includes("OWNER");
-      return empDiv === leaderDivision && !isExecutive;
+      return empDiv === leaderDivision;
     }
     return false;
   };
 
   const filteredScheduleEmployees = useMemo(() => {
-    const activeList = employees.filter(isEmpActive);
-    if (scheduleDivisionFilter === "ALL") return activeList;
-    return activeList.filter(e => getEmployeeDivision(e) === scheduleDivisionFilter);
+    const operationalList = employees.filter(e => isEmpActive(e) && isOperationalStaff(e));
+    if (scheduleDivisionFilter === "ALL") return operationalList;
+    return operationalList.filter(e => getEmployeeDivision(e) === scheduleDivisionFilter);
   }, [employees, scheduleDivisionFilter]);
 
   const handleCopyLastWeekSchedule = () => {
@@ -645,8 +674,8 @@ export function HRManagement() {
     
     // 1. Clopen Check (Shift Sore jam 15-23 lalu besoknya Shift Pagi jam 07-15)
     const activeEmps = isLeader && leaderDivision 
-      ? employees.filter(e => isEmpActive(e) && getEmployeeDivision(e) === leaderDivision)
-      : employees.filter(isEmpActive);
+      ? employees.filter(e => isEmpActive(e) && isOperationalStaff(e) && getEmployeeDivision(e) === leaderDivision)
+      : employees.filter(e => isEmpActive(e) && isOperationalStaff(e));
 
     activeEmps.forEach(emp => {
       for (let i = 0; i < 6; i++) {
@@ -690,7 +719,7 @@ export function HRManagement() {
       const dayName = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
       
       divisionsToCheck.forEach(div => {
-        const divEmps = employees.filter(e => isEmpActive(e) && getEmployeeDivision(e) === div);
+        const divEmps = employees.filter(e => isEmpActive(e) && isOperationalStaff(e) && getEmployeeDivision(e) === div);
         if (divEmps.length >= 2) {
           const morningCount = divEmps.filter(e => {
             const s = employeeShifts.find(sh => sh.employeeId === e.id && sh.date === dStr)?.shiftType;
@@ -1534,6 +1563,14 @@ export function HRManagement() {
                     </button>
                   ))
                 )}
+              </div>
+
+              {/* Scope Notice */}
+              <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5">
+                <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span>
+                  Jadwal shift mingguan berlaku untuk tim operasional (<strong>Bar, Kasir, Kitchen, Baker</strong>). Staf manajemen dan kantor (Manager, Finance, HRD, Admin) bertugas dengan jam kantor reguler.
+                </span>
               </div>
 
               {/* ─── SMART COLLISION DETECTION PANEL ─── */}
