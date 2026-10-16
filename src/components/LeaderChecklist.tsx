@@ -18,11 +18,11 @@ export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
     id: "bar-cat-1",
     category: "Kebersihan & Sanitasi Area",
     items: [
-      { text: "Lap dan sanitasi seluruh meja bar & undercounter", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Backflush mesin espresso dengan chemical & cuci portafilter", shift: "SORE", targetRole: "STAFF", isActive: true },
-      { text: "Bersihkan hopper grinder & meja kasir/bar", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Sapu & pel lantai area bar serta buang ampas kopi (knockbox)", shift: "SORE", targetRole: "STAFF", isActive: true },
-      { text: "Bersihkan sink bar, drain tray, dan kosongkan tempat sampah", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Inspeksi kebersihan & sanitasi seluruh meja bar serta undercounter", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Verifikasi backflush mesin espresso & sanitasi portafilter", shift: "SORE", targetRole: "LEADER", isActive: true },
+      { text: "Inspeksi kebersihan hopper grinder kopi & area POS kasir", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Pemeriksaan kebersihan lantai bar & ampas kopi di knockbox", shift: "SORE", targetRole: "LEADER", isActive: true },
+      { text: "Cek kebersihan sink bar, drain tray, & pembuangan sampah", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
   },
   {
@@ -40,8 +40,8 @@ export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
     category: "Bahan Baku & FIFO Gudang",
     items: [
       { text: "Cek tanggal kedaluwarsa & rotasi stok susu segar (FIFO)", shift: "ALL", targetRole: "LEADER", isActive: true },
-      { text: "Cek ketersediaan biji kopi (beans), sirup, sauce, & powder", shift: "ALL", targetRole: "ALL", isActive: true },
-      { text: "Restock paper cup, sedotan, tutup cup, sendok, & tissue", shift: "MIDDLE", targetRole: "STAFF", isActive: true },
+      { text: "Cek ketersediaan biji kopi (beans), sirup, sauce, & powder", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Supervisi stok paper cup, sedotan, tutup cup, sendok, & tissue", shift: "MIDDLE", targetRole: "LEADER", isActive: true },
       { text: "Catat bahan yang menipis untuk pengajuan restock", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
   },
@@ -60,11 +60,11 @@ export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
     id: "kitchen-cat-1",
     category: "Kebersihan Dapur & Stewarding",
     items: [
-      { text: "Bersihkan kompor, fryer, grill, & permukaan stainless steel", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Cuci grease trap & saringan saluran pembuangan air", shift: "SORE", targetRole: "STAFF", isActive: true },
-      { text: "Sanitasi talenan, pisau, & wadah persiapan bahan (food-grade)", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Sapu & pel lantai dapur dengan cairan desinfektan", shift: "SORE", targetRole: "STAFF", isActive: true },
-      { text: "Pastikan area cuci piring & rak pengering bersih dan tertata", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Inspeksi kebersihan kompor, fryer, grill, & permukaan stainless steel", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Verifikasi pembersihan grease trap & saringan saluran air", shift: "SORE", targetRole: "LEADER", isActive: true },
+      { text: "Kontrol sanitasi talenan, pisau, & wadah persiapan (food-grade)", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Inspeksi kebersihan & sanitasi lantai dapur", shift: "SORE", targetRole: "LEADER", isActive: true },
+      { text: "Supervisi area cuci piring (stewarding) & kerapian rak pengering", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
   },
   {
@@ -73,7 +73,7 @@ export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
     items: [
       { text: "Cek temperatur chiller (1°C - 4°C) & deep freezer (-18°C)", shift: "PAGI", targetRole: "LEADER", isActive: true },
       { text: "Cek instalasi tabung gas, regulator, & cerobong exhaust hood", shift: "PAGI", targetRole: "LEADER", isActive: true },
-      { text: "Cek kelayakan wajan, panci, fry basket, & penjepit makanan", shift: "ALL", targetRole: "ALL", isActive: true },
+      { text: "Cek kelayakan wajan, panci, fry basket, & penjepit makanan", shift: "ALL", targetRole: "LEADER", isActive: true },
     ],
   },
   {
@@ -81,7 +81,7 @@ export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
     category: "Penyimpanan Bahan & Food Safety",
     items: [
       { text: "Cek label tanggal (prep date) & masa simpan bahan marinasi (FIFO)", shift: "ALL", targetRole: "LEADER", isActive: true },
-      { text: "Pastikan pemisahan bahan mentah (daging/ayam) dan bahan matang", shift: "ALL", targetRole: "ALL", isActive: true },
+      { text: "Pastikan pemisahan bahan mentah (daging/ayam) dan bahan matang", shift: "ALL", targetRole: "LEADER", isActive: true },
       { text: "Cek kualitas sayuran segar & persediaan bumbu utama", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
@@ -90,7 +90,7 @@ export const DEFAULT_KITCHEN_CATEGORIES: TaskCategoryGroup[] = [
     category: "Standar Porsi & Serving",
     items: [
       { text: "Cek standar gramasi porsi & resep makanan sesuai SOP", shift: "ALL", targetRole: "LEADER", isActive: true },
-      { text: "Cek waktu saji makanan (ticket time standar)", shift: "MIDDLE", targetRole: "LEADER", isActive: true },
+      { text: "Cek waktu saji makanan (ticket time standar dapur)", shift: "MIDDLE", targetRole: "LEADER", isActive: true },
       { text: "Evaluasi presentasi & kebersihan piring saji (plating)", shift: "ALL", targetRole: "LEADER", isActive: true },
     ],
   },
@@ -101,10 +101,10 @@ export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
     id: "baker-cat-1",
     category: "Kebersihan Area Pastry & Alat",
     items: [
-      { text: "Sanitasi meja kerja marmer/stainless untuk adonan", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Bersihkan loyang baking, rolling pin, scraper, & kuas pastry", shift: "SORE", targetRole: "STAFF", isActive: true },
-      { text: "Bersihkan remah roti dan tetesan butter di area oven & proofer", shift: "ALL", targetRole: "STAFF", isActive: true },
-      { text: "Pel lantai dan buang sisa plastik/bungkus bahan adonan", shift: "SORE", targetRole: "STAFF", isActive: true },
+      { text: "Supervisi sanitasi meja kerja adonan & kebersihan loyang baking", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Verifikasi sanitasi rolling pin, scraper, & kuas pastry", shift: "SORE", targetRole: "LEADER", isActive: true },
+      { text: "Inspeksi kebersihan oven, proofer, & area pemanggangan", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Cek kebersihan lantai pastry & pembuangan sisa bahan adonan", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
   },
   {
@@ -112,7 +112,7 @@ export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
     category: "Kontroling Alat Baking",
     items: [
       { text: "Cek kalibrasi temperatur oven & fungsi timer pemanggang", shift: "PAGI", targetRole: "LEADER", isActive: true },
-      { text: "Cek kebersihan bowl spiral mixer & hook pengaduk adonan", shift: "ALL", targetRole: "STAFF", isActive: true },
+      { text: "Inspeksi kebersihan bowl spiral mixer & hook pengaduk adonan", shift: "ALL", targetRole: "LEADER", isActive: true },
       { text: "Cek kelembapan dan kontrol temperatur lemari proofer adonan", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
@@ -121,8 +121,8 @@ export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
     category: "Kualitas Bahan Baku & Adonan",
     items: [
       { text: "Cek keaktifan ragi (yeast), kualitas butter, & kelembapan tepung", shift: "PAGI", targetRole: "LEADER", isActive: true },
-      { text: "Pastikan wadah bahan kering tertutup rapat & terlabel tanggal", shift: "ALL", targetRole: "ALL", isActive: true },
-      { text: "Cek persediaan topping, glaze, cokelat, dan filling pastry", shift: "MIDDLE", targetRole: "STAFF", isActive: true },
+      { text: "Pastikan wadah bahan kering tertutup rapat & terlabel tanggal", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Supervisi persediaan topping, glaze, cokelat, dan filling pastry", shift: "MIDDLE", targetRole: "LEADER", isActive: true },
     ],
   },
   {
@@ -130,7 +130,7 @@ export const DEFAULT_BAKER_CATEGORIES: TaskCategoryGroup[] = [
     category: "Display & Kualitas Produk Jadi",
     items: [
       { text: "Cek tekstur, kerapuhan (flakiness), & warna kematangan pastry", shift: "ALL", targetRole: "LEADER", isActive: true },
-      { text: "Pastikan etalase display pastry bersih dan lampu display menyala", shift: "PAGI", targetRole: "STAFF", isActive: true },
+      { text: "Inspeksi kebersihan etalase display pastry & lampu display", shift: "PAGI", targetRole: "LEADER", isActive: true },
       { text: "Pastikan label nama produk dan tag harga terpasang rapi", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
@@ -276,12 +276,8 @@ export const LeaderChecklist: React.FC = () => {
 
   // Active division filter in supervisor detail view
   const [inspectedDivision, setInspectedDivision] = useState<Division>("BAR");
-  // Role filter in supervisor monitoring (Leader vs Staff vs All)
-  const [monitoringRoleFilter, setMonitoringRoleFilter] = useState<"ALL" | "LEADER" | "STAFF">("ALL");
-
   // Setting template state for supervisor
   const [editingDivision, setEditingDivision] = useState<Division>("BAR");
-  const [settingsRoleFilter, setSettingsRoleFilter] = useState<"ALL" | "STAFF" | "LEADER">("ALL");
   const [barCategories, setBarCategories] = useState<TaskCategoryGroup[]>(() =>
     ensureCategoryArray(settings?.leaderBarTasks, DEFAULT_BAR_CATEGORIES)
   );
@@ -618,7 +614,7 @@ export const LeaderChecklist: React.FC = () => {
            activeRules[activeRules.length - 1];
   }, [allowanceRules, leaderPercentage]);
 
-  // ─── SUPERVISOR MONITORING COMPUTATION ────────────────────────────────────
+  // ─── SUPERVISOR MONITORING COMPUTATION (FOKUS 100% LEADER & QC) ──────────
   const divisionStats = useMemo(() => {
     const targetDateChecklists = dailyChecklists.filter((c) => c.date.startsWith(selectedDate));
     
@@ -632,13 +628,19 @@ export const LeaderChecklist: React.FC = () => {
       const categories = getCategoriesForDivision(div.key);
       const activeCategories = categories.map((cat) => ({
         ...cat,
-        items: (cat.items || []).filter((it) => normalizeTaskItem(it).isActive),
-      }));
+        items: (cat.items || []).filter((it) => {
+          const norm = normalizeTaskItem(it);
+          if (!norm.isActive) return false;
+          // Sembunyikan jobdesk staf di role manager agar 100% fokus ke pengawasan leader
+          if (norm.targetRole === "STAFF") return false;
+          return true;
+        }),
+      })).filter((cat) => cat.items.length > 0);
+
       const totalTasks = activeCategories.reduce((acc, cat) => acc + cat.items.length, 0);
-      
       const divChecklists = targetDateChecklists.filter((c) => getDivisionForChecklist(c) === div.key);
 
-      // Separate Leader checklist and Staff checklists
+      // Cari checklist khusus Leader divisi ini
       const leaderChecklist = divChecklists.find((c) => {
         const u = users.find((user) => user.id === c.employeeId);
         const emp = employees.find((e) => e.id === c.employeeId || e.username === u?.username);
@@ -646,38 +648,15 @@ export const LeaderChecklist: React.FC = () => {
         return u?.role === "LEADER" || pos.includes("LEADER") || pos.includes("HEAD") || pos.includes("SPV");
       }) || divChecklists[0];
 
-      // Union of all completed tasks in this division today
-      const allCompletedInDiv = Array.from(new Set(divChecklists.flatMap((c) => c.leaderTasks || [])));
+      // Daftar tugas yang dicentang oleh Leader
+      const leaderCheckedTasks = leaderChecklist?.leaderTasks || [];
 
-      // Leader QC stats vs Staff operational stats
-      let leaderTotal = 0;
-      let leaderDone = 0;
-      let staffTotal = 0;
-      let staffDone = 0;
-
-      activeCategories.forEach((cat) => {
-        cat.items.forEach((item) => {
-          const detail = normalizeTaskItem(item);
-          const isDone = isTaskChecked(allCompletedInDiv, cat.category, item);
-          if (detail.targetRole === "LEADER") {
-            leaderTotal++;
-            if (isDone) leaderDone++;
-          } else {
-            staffTotal++;
-            if (isDone) staffDone++;
-          }
-        });
-      });
-
-      const leaderPct = leaderTotal > 0 ? Math.round((leaderDone / leaderTotal) * 100) : 0;
-      const staffPct = staffTotal > 0 ? Math.round((staffDone / staffTotal) * 100) : 0;
-
-      // Category breakdown calculation
+      // Category breakdown calculation khusus tugas supervisi & QC Leader
       const categoryBreakdown = activeCategories.map((cat) => {
         const catTotal = cat.items.length;
         let catCompleted = 0;
         cat.items.forEach((item) => {
-          if (isTaskChecked(allCompletedInDiv, cat.category, item)) {
+          if (isTaskChecked(leaderCheckedTasks, cat.category, item)) {
             catCompleted++;
           }
         });
@@ -694,9 +673,15 @@ export const LeaderChecklist: React.FC = () => {
       const percentage = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
       
       const leaderUser = leaderChecklist ? users.find((u) => u.id === leaderChecklist.employeeId) : null;
-      const leaderName = leaderUser ? leaderUser.name : leaderChecklist ? "Leader Terdaftar" : null;
+      const leaderEmp = leaderChecklist ? employees.find((e) => e.id === leaderChecklist.employeeId || e.username === leaderUser?.username) : null;
+      const leaderName = leaderUser ? leaderUser.name : leaderEmp ? leaderEmp.name : leaderChecklist ? "Leader Divisi" : null;
       const cleanNotes = leaderChecklist?.notes?.replace(/^\[(BAR|KITCHEN|BAKER)\]\s*/, "") || "";
-      const submittersCount = divChecklists.length;
+
+      // Tier tunjangan jabatan berdasarkan capaian persentase tugas pengawasan
+      const activeRules = allowanceRules.filter((r) => r.isActive !== false);
+      const matchedGrade = activeRules.find((r) => percentage >= r.minScore && percentage <= r.maxScore) || 
+                           activeRules[activeRules.length - 1] || 
+                           { grade: "Grade D", payoutPercentage: 0, label: "Hangus" };
 
       return {
         ...div,
@@ -704,21 +689,15 @@ export const LeaderChecklist: React.FC = () => {
         totalTasks,
         completedCount,
         percentage,
-        leaderTotal,
-        leaderDone,
-        leaderPct,
-        staffTotal,
-        staffDone,
-        staffPct,
-        isSubmitted: divChecklists.length > 0,
+        isSubmitted: !!leaderChecklist,
         leaderName,
         checklist: leaderChecklist,
         cleanNotes,
-        submittersCount,
-        allCompletedInDiv,
+        matchedGrade,
+        leaderCheckedTasks,
       };
     });
-  }, [dailyChecklists, selectedDate, barCategories, kitchenCategories, bakerCategories, users, employees]);
+  }, [dailyChecklists, selectedDate, barCategories, kitchenCategories, bakerCategories, users, employees, allowanceRules]);
 
   // Overall average percentage for today
   const overallPercentage = useMemo(() => {
@@ -737,32 +716,28 @@ export const LeaderChecklist: React.FC = () => {
     else setBakerCategories(newCats);
   };
 
-  // Breakdown statistik tugas per role untuk divisi yang sedang diedit
+  // Breakdown statistik tugas supervisi Leader untuk divisi yang sedang diedit
   const statsEditingDivision = useMemo(() => {
     let totalCount = 0;
-    let staffCount = 0;
-    let leaderCount = 0;
-    let sharedCount = 0;
+    let activeCount = 0;
 
     currentEditingCategories.forEach((cat) => {
       (cat.items || []).forEach((item) => {
         const norm = normalizeTaskItem(item);
+        if (norm.targetRole === "STAFF") return; // abaikan staf
         totalCount++;
-        if (norm.targetRole === "LEADER") leaderCount++;
-        else if (norm.targetRole === "STAFF") staffCount++;
-        else sharedCount++;
+        if (norm.isActive) activeCount++;
       });
     });
 
-    return { totalCount, staffCount, leaderCount, sharedCount };
+    return { totalCount, activeCount };
   }, [currentEditingCategories]);
 
   const handleAddCategory = () => {
-    const defaultRole = settingsRoleFilter === "LEADER" ? "LEADER" : settingsRoleFilter === "STAFF" ? "STAFF" : "ALL";
     const newCat: TaskCategoryGroup = {
       id: `cat-${Date.now()}`,
-      category: "Kategori Baru",
-      items: [{ text: "Rincian tugas baru", shift: "ALL", targetRole: defaultRole, isActive: true }],
+      category: "Kategori Pengawasan Baru",
+      items: [{ text: "Inspeksi / supervisi stasiun kerja baru", shift: "ALL", targetRole: "LEADER", isActive: true }],
     };
     setCurrentEditingCategories([...currentEditingCategories, newCat]);
   };
@@ -778,22 +753,17 @@ export const LeaderChecklist: React.FC = () => {
     setCurrentEditingCategories(updated);
   };
 
-  const handleAddSubTask = (catIdx: number, defaultRole: "STAFF" | "LEADER" | "ALL" = "ALL") => {
+  const handleAddSubTask = (catIdx: number, defaultRole: "LEADER" = "LEADER") => {
     const updated = [...currentEditingCategories];
     const cat = updated[catIdx];
-    const defaultText = 
-      defaultRole === "LEADER" 
-        ? "Tugas supervisi / QC baru (Leader)" 
-        : defaultRole === "STAFF" 
-        ? "Rincian tugas operasional baru (Staf)" 
-        : "Sub-tugas baru";
+    const defaultText = "Tugas supervisi / inspeksi stasiun kerja (Leader)";
 
     cat.items = [
       ...(cat.items || []), 
       { 
         text: defaultText, 
         shift: "ALL", 
-        targetRole: defaultRole,
+        targetRole: "LEADER",
         isActive: true 
       }
     ];
@@ -1035,35 +1005,27 @@ export const LeaderChecklist: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Split Progres: Leader QC vs Staf Pelaksana */}
-                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100">
-                        <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/60">
-                          <div className="flex justify-between items-center text-[10px] mb-1">
-                            <span className="font-bold text-amber-900 flex items-center gap-1">
-                              👑 Leader QC
+                      {/* Status Capaian & Tunjangan Jabatan Leader */}
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/70 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+                              👑 Capaian Jobdesk Leader
                             </span>
-                            <span className="font-black text-amber-800">{div.leaderPct}%</span>
+                            <p className="text-xs font-bold text-amber-950">
+                              {div.matchedGrade.grade} • Cair {div.matchedGrade.payoutPercentage}%
+                            </p>
                           </div>
-                          <div className="w-full bg-amber-200/50 rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${div.leaderPct}%` }} />
-                          </div>
-                          <span className="text-[10px] text-amber-700 mt-1 block">
-                            {div.leaderDone}/{div.leaderTotal} Selesai
-                          </span>
-                        </div>
-
-                        <div className="bg-sky-50/70 p-2.5 rounded-xl border border-sky-200/60">
-                          <div className="flex justify-between items-center text-[10px] mb-1">
-                            <span className="font-bold text-sky-900 flex items-center gap-1">
-                              🧑‍🍳 Staf Pelaksana
-                            </span>
-                            <span className="font-black text-sky-800">{div.staffPct}%</span>
-                          </div>
-                          <div className="w-full bg-sky-200/50 rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full bg-sky-500 rounded-full transition-all" style={{ width: `${div.staffPct}%` }} />
-                          </div>
-                          <span className="text-[10px] text-sky-700 mt-1 block">
-                            {div.staffDone}/{div.staffTotal} Selesai
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${
+                            div.percentage >= 90
+                              ? "bg-emerald-500 text-white"
+                              : div.percentage >= 80
+                              ? "bg-amber-500 text-white"
+                              : div.percentage >= 70
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-400 text-white"
+                          }`}>
+                            {div.percentage}% Selesai
                           </span>
                         </div>
                       </div>
@@ -1102,49 +1064,20 @@ export const LeaderChecklist: React.FC = () => {
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                     <ClipboardList className="w-5 h-5 text-blue-600" />
-                    Rincian Kategori Tugas: {selectedDivisionStat.label}
+                    Rincian Tugas Pengawasan: {selectedDivisionStat.label}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Ceklis detail tugas harian per kategori per tanggal {selectedDate}
+                    Daftar tugas pengawasan & kontrol kualitas (QC) per tanggal {selectedDate}
                   </p>
                 </div>
 
-                {/* Filter Kurasi Laporan: Semua vs Leader vs Staf */}
+                {/* Status Fokus Leader */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-                    <button
-                      onClick={() => setMonitoringRoleFilter("ALL")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        monitoringRoleFilter === "ALL"
-                          ? "bg-white text-slate-900 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Semua Tugas ({selectedDivisionStat.totalTasks})
-                    </button>
-                    <button
-                      onClick={() => setMonitoringRoleFilter("LEADER")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        monitoringRoleFilter === "LEADER"
-                          ? "bg-amber-500 text-white shadow-xs"
-                          : "text-amber-800 hover:text-amber-950"
-                      }`}
-                    >
-                      👑 Khusus Leader (QC) ({selectedDivisionStat.leaderTotal})
-                    </button>
-                    <button
-                      onClick={() => setMonitoringRoleFilter("STAFF")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        monitoringRoleFilter === "STAFF"
-                          ? "bg-sky-600 text-white shadow-xs"
-                          : "text-sky-700 hover:text-sky-900"
-                      }`}
-                    >
-                      🧑‍🍳 Khusus Staf ({selectedDivisionStat.staffTotal})
-                    </button>
+                  <div className="bg-amber-50 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-900 flex items-center gap-1.5 shadow-2xs">
+                    👑 Khusus Pengawasan Leader ({selectedDivisionStat.totalTasks} Tugas)
                   </div>
                   <div className="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hidden lg:block">
-                    Total: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
+                    Capaian: {selectedDivisionStat.completedCount} / {selectedDivisionStat.totalTasks} ({selectedDivisionStat.percentage}%)
                   </div>
                 </div>
               </div>
@@ -1192,17 +1125,10 @@ export const LeaderChecklist: React.FC = () => {
                       <div className="space-y-2 pt-2">
                         {cat.items.map((item, itemIdx) => {
                           const itemDetail = normalizeTaskItem(item);
-                          
-                          // Kurasi Filter Leader vs Staf
-                          if (monitoringRoleFilter === "LEADER" && itemDetail.targetRole !== "LEADER") {
-                            return null;
-                          }
-                          if (monitoringRoleFilter === "STAFF" && itemDetail.targetRole === "LEADER") {
-                            return null;
-                          }
+                          if (itemDetail.targetRole === "STAFF") return null;
 
                           const isDone = isTaskChecked(
-                            selectedDivisionStat.allCompletedInDiv || selectedDivisionStat.checklist?.leaderTasks || [],
+                            selectedDivisionStat.leaderCheckedTasks || [],
                             cat.category,
                             item
                           );
@@ -1225,15 +1151,9 @@ export const LeaderChecklist: React.FC = () => {
                                 <span className="truncate">{itemDetail.text}</span>
 
                                 {/* Role Badge */}
-                                {itemDetail.targetRole === "LEADER" ? (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                                    👑 Leader
-                                  </span>
-                                ) : itemDetail.targetRole === "STAFF" ? (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
-                                    🧑‍🍳 Staf
-                                  </span>
-                                ) : null}
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                                  👑 Leader QC
+                                </span>
 
                                 {/* Shift Badge */}
                                 {itemDetail.shift && itemDetail.shift !== "ALL" && (
@@ -1485,60 +1405,24 @@ export const LeaderChecklist: React.FC = () => {
               </div>
             </div>
 
-            {/* Filter Sub-Tab Peran Jobdesk: Memisahkan Staf vs Leader agar Manager Tidak Pusing */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-slate-700 mr-1">Tampilkan Jobdesk:</span>
-                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                  <button
-                    onClick={() => setSettingsRoleFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      settingsRoleFilter === "ALL"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    🌐 Semua Tugas ({statsEditingDivision.totalCount})
-                  </button>
-                  <button
-                    onClick={() => setSettingsRoleFilter("STAFF")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      settingsRoleFilter === "STAFF"
-                        ? "bg-sky-600 text-white shadow-xs"
-                        : "text-sky-700 hover:text-sky-900"
-                    }`}
-                  >
-                    🧑‍🍳 Tugas Staf Pelaksana ({statsEditingDivision.staffCount})
-                  </button>
-                  <button
-                    onClick={() => setSettingsRoleFilter("LEADER")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      settingsRoleFilter === "LEADER"
-                        ? "bg-amber-500 text-white shadow-xs"
-                        : "text-amber-800 hover:text-amber-950"
-                    }`}
-                  >
-                    👑 Tugas Leader (Supervisi & QC) ({statsEditingDivision.leaderCount})
-                  </button>
+            {/* Header Pengawasan Jobdesk Leader */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-xs shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-950">
+                    Master Jobdesk & SOP Leader ({editingDivision === "BAR" ? "Head Bar & Kasir" : editingDivision === "KITCHEN" ? "Head Kitchen" : "Head Baker"})
+                  </h4>
+                  <p className="text-xs text-amber-800">
+                    Tugas dan sub-tugas supervisi, inspeksi stasiun kerja, dan kontrol kualitas (QC) agar Leader mengawasi operasional divisinya secara maksimal.
+                  </p>
                 </div>
               </div>
 
-              {/* Rangkuman Pembagian Tugas */}
-              <div className="text-xs text-slate-500 flex items-center gap-3">
-                <span className="inline-flex items-center gap-1 text-sky-700 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-sky-500" />
-                  {statsEditingDivision.staffCount} Staf
-                </span>
-                <span className="inline-flex items-center gap-1 text-amber-800 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  {statsEditingDivision.leaderCount} Leader QC
-                </span>
-                {statsEditingDivision.sharedCount > 0 && (
-                  <span className="inline-flex items-center gap-1 text-slate-600 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-slate-400" />
-                    {statsEditingDivision.sharedCount} Umum
-                  </span>
-                )}
+              <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 shadow-2xs">
+                👑 Total {statsEditingDivision.totalCount} Tugas Supervisi Leader
               </div>
             </div>
 
@@ -1576,7 +1460,7 @@ export const LeaderChecklist: React.FC = () => {
             {/* List Kategori Groups */}
             <div className="space-y-6">
               {currentEditingCategories.map((cat, catIdx) => {
-                // Saring item berdasarkan filter peran yang dipilih Manager
+                // Saring item: sembunyikan tugas staf agar fokus penuh ke tugas supervisi Leader
                 const visibleItemsWithIndex = cat.items
                   .map((item, originalIdx) => ({
                     item,
@@ -1584,12 +1468,7 @@ export const LeaderChecklist: React.FC = () => {
                     detail: normalizeTaskItem(item),
                   }))
                   .filter(({ detail }) => {
-                    if (settingsRoleFilter === "STAFF") {
-                      return detail.targetRole === "STAFF" || detail.targetRole === "ALL" || !detail.targetRole;
-                    }
-                    if (settingsRoleFilter === "LEADER") {
-                      return detail.targetRole === "LEADER";
-                    }
+                    if (detail.targetRole === "STAFF") return false;
                     return true;
                   });
 
@@ -1623,41 +1502,26 @@ export const LeaderChecklist: React.FC = () => {
                     <div className="space-y-2.5 pl-0 sm:pl-9">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-semibold text-slate-500">
-                          Rincian Sub-Tugas Checklist, Jadwal Shift & Peruntukan Role:
+                          Rincian Sub-Tugas Checklist Supervisi & Jadwal Shift:
                         </p>
                         <span className="text-[11px] text-slate-400">
-                          Menampilkan {visibleItemsWithIndex.length} dari {cat.items.length} tugas
+                          Menampilkan {visibleItemsWithIndex.length} tugas pengawasan
                         </span>
                       </div>
 
                       {visibleItemsWithIndex.length === 0 ? (
                         <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center bg-white/60 text-xs text-slate-500">
-                          Belum ada tugas{" "}
-                          <span className="font-bold">
-                            {settingsRoleFilter === "STAFF" 
-                              ? "Tugas Staf Pelaksana" 
-                              : settingsRoleFilter === "LEADER" 
-                              ? "Tugas Leader (Supervisi & QC)" 
-                              : ""}
-                          </span>{" "}
-                          di kategori ini. Klik tombol tambah di bawah untuk membuat tugas baru.
+                          Belum ada tugas supervisi di kategori ini. Klik tombol tambah di bawah untuk membuat tugas pengawasan baru.
                         </div>
                       ) : (
                         visibleItemsWithIndex.map(({ originalIdx, detail }, displayIdx) => {
-                          const isLeaderTask = detail.targetRole === "LEADER";
-                          const isStaffTask = detail.targetRole === "STAFF";
-
                           return (
                             <div 
                               key={originalIdx} 
                               className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 rounded-xl border transition-all ${
                                 !detail.isActive
                                   ? "bg-slate-100 border-slate-200/80 opacity-60"
-                                  : isLeaderTask
-                                  ? "bg-amber-50/50 border-amber-200 shadow-2xs"
-                                  : isStaffTask
-                                  ? "bg-sky-50/40 border-sky-200 shadow-2xs"
-                                  : "bg-white border-slate-200"
+                                  : "bg-amber-50/50 border-amber-200 shadow-2xs"
                               }`}
                             >
                               <span className="text-xs text-slate-400 font-bold w-5 text-right hidden sm:block">
@@ -1669,7 +1533,7 @@ export const LeaderChecklist: React.FC = () => {
                                 value={detail.text}
                                 onChange={(e) => handleUpdateSubTaskText(catIdx, originalIdx, e.target.value)}
                                 className="flex-1 px-3 py-1.5 bg-transparent border-0 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-lg"
-                                placeholder="Rincian sub-tugas yang perlu diselesaikan..."
+                                placeholder="Rincian sub-tugas supervisi yang perlu diawasi Leader..."
                               />
 
                               <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -1689,28 +1553,15 @@ export const LeaderChecklist: React.FC = () => {
                                   title="Tentukan jadwal shift untuk sub-tugas ini"
                                 >
                                   <option value="ALL">🌐 Semua Shift</option>
-                                  <option value="PAGI">☀️ Pagi</option>
+                                  <option value="PAGI">☀️ Pagi (Opening)</option>
                                   <option value="MIDDLE">⛅ Middle</option>
-                                  <option value="SORE">🌙 Sore</option>
+                                  <option value="SORE">🌙 Sore (Closing)</option>
                                 </select>
 
-                                {/* Pilihan Peruntukan Role: Leader vs Staf dengan Warna Jelas */}
-                                <select
-                                  value={detail.targetRole || "ALL"}
-                                  onChange={(e) => handleUpdateSubTaskRole(catIdx, originalIdx, e.target.value as any)}
-                                  className={`text-[11px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
-                                    isLeaderTask
-                                      ? "bg-amber-100 border-amber-300 text-amber-950 font-black"
-                                      : isStaffTask
-                                      ? "bg-sky-100 border-sky-300 text-sky-950 font-black"
-                                      : "bg-slate-100 border-slate-300 text-slate-700"
-                                  }`}
-                                  title="Tentukan apakah tugas ini untuk Leader (Supervisi/QC) atau Staf (Pelaksana)"
-                                >
-                                  <option value="ALL">👥 Semua (Staf & Leader)</option>
-                                  <option value="LEADER">👑 Khusus Leader (QC)</option>
-                                  <option value="STAFF">🧑‍🍳 Khusus Staf</option>
-                                </select>
+                                {/* Badge Peran Khusus Leader */}
+                                <span className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border bg-amber-100 border-amber-300 text-amber-950 shrink-0 flex items-center gap-1">
+                                  👑 Leader QC
+                                </span>
 
                                 {/* Tombol Toggle Aktif / Nonaktif */}
                                 <button
@@ -1741,31 +1592,15 @@ export const LeaderChecklist: React.FC = () => {
                         })
                       )}
 
-                      {/* Tombol Cepat Tambah Sub-Tugas per Peran */}
-                      <div className="flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-slate-200/60">
-                        <button
-                          type="button"
-                          onClick={() => handleAddSubTask(catIdx, "STAFF")}
-                          className="text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 flex items-center gap-1.5 py-1.5 px-3 rounded-lg transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          + Tambah Tugas Staf Pelaksana
-                        </button>
+                      {/* Tombol Tambah Sub-Tugas Supervisi Leader */}
+                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-200/60">
                         <button
                           type="button"
                           onClick={() => handleAddSubTask(catIdx, "LEADER")}
                           className="text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1.5 py-1.5 px-3 rounded-lg transition-colors"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          + Tambah Tugas Leader (QC)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAddSubTask(catIdx, "ALL")}
-                          className="text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 flex items-center gap-1 py-1.5 px-2.5 rounded-lg transition-colors"
-                        >
-                          <Plus className="w-3 h-3" />
-                          + Tugas Umum (Keduanya)
+                          + Tambah Sub-Tugas Supervisi / QC (Leader)
                         </button>
                       </div>
                     </div>

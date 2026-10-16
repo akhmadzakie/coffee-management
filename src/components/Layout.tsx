@@ -200,7 +200,9 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     { 
       group: "SDM",
-      name: "Checklist Jobdesk",
+      name: (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER")
+        ? "Jobdesk Leader"
+        : "Checklist Supervisi",
       view: "leader_checklist" as ViewState,
       icon: ClipboardCheck,
     },
