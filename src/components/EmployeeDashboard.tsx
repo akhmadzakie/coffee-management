@@ -399,13 +399,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <Camera className="w-4 h-4" />
               <span>{isClockedIn && !isClockedOut ? "Absen Pulang (Clock Out)" : "Absen Masuk (Clock In)"}</span>
             </button>
-            <button
-              onClick={() => onNavigate("leader_checklist")}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0"
-            >
-              <CheckSquare className="w-4 h-4 text-emerald-400" />
-              <span>Checklist Jobdesk</span>
-            </button>
+            {isLeader && (
+              <button
+                onClick={() => onNavigate("leader_checklist")}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0"
+              >
+                <CheckSquare className="w-4 h-4 text-emerald-400" />
+                <span>Checklist Supervisi Leader</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -701,88 +703,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
         </div>
       )}
 
-      {/* ─── 3B. UNTUK STAF: JOBDESK CHECKLIST SHIFT HARI INI ─── */}
-      {!isLeader && checklistProgress && (
-        <div className="bg-gradient-to-br from-amber-50/80 via-white to-orange-50/50 rounded-2xl p-6 border border-amber-200/90 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-500/20">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-900">
-                    Jobdesk Shift Hari Ini
-                  </h3>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                    checklistProgress.scheduledShift === "PAGI"
-                      ? "bg-amber-100 text-amber-800 border border-amber-200"
-                      : checklistProgress.scheduledShift === "MIDDLE"
-                      ? "bg-orange-100 text-orange-800 border border-orange-200"
-                      : checklistProgress.scheduledShift === "SORE"
-                      ? "bg-purple-100 text-purple-800 border border-purple-200"
-                      : "bg-slate-200 text-slate-700"
-                  }`}>
-                    {checklistProgress.scheduledShift === "OFF" ? "🏖️ Hari Ini Libur (OFF)" : `Shift ${checklistProgress.scheduledShift}`}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Checklist tugas otomatis mengikuti shift Anda. Selesaikan tugas untuk meraih KPI 100% dan bonus bulanan penuh.
-                </p>
-              </div>
-            </div>
 
-            <button
-              onClick={() => onNavigate("leader_checklist")}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 self-start sm:self-auto shrink-0"
-            >
-              <CheckSquare className="w-4 h-4" />
-              <span>Buka Checklist Tugas →</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-amber-100/90">
-            <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-800 flex items-center justify-center font-black text-2xl font-mono shrink-0">
-                {checklistProgress.percentage}%
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  {checklistProgress.isOff ? "Status: Libur (OFF)" : `${checklistProgress.completedCount} dari ${checklistProgress.totalTasks} Selesai`}
-                </span>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {checklistProgress.percentage === 100 ? "Lengkap 100%" : "Sedang Berjalan"}
-                </p>
-              </div>
-            </div>
-
-            <div className="md:col-span-2 flex flex-col justify-center">
-              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200/60 mb-2">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    checklistProgress.percentage === 100 ? "bg-emerald-500" : checklistProgress.percentage > 0 ? "bg-amber-500" : "bg-slate-300"
-                  }`}
-                  style={{ width: `${checklistProgress.percentage}%` }}
-                />
-              </div>
-              <div className="flex flex-wrap justify-between items-center text-[11px] text-slate-500 gap-2">
-                <span>
-                  {checklistProgress.isOff 
-                    ? "🏖️ Anda tidak dibebani checklist hari ini (aman dari pengurangan KPI)."
-                    : checklistProgress.percentage === 100 
-                    ? "🎉 Seluruh checklist shift hari ini telah tuntas dikerjakan!" 
-                    : "Lengkapi tugas shift Anda sebelum waktu operasional berakhir."}
-                </span>
-                {livePerformance.targetBonus > 0 && (
-                  <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    Plafon Bonus: {formatCurrency(livePerformance.targetBonus)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ─── 4. STATISTIK BULAN BERJALAN & KPI ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

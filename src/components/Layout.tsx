@@ -305,7 +305,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "kitchen_display",
       "dashboard_employee",
       "shifts",
-      "leader_checklist",
       "import_sales",
       "attendance_clock",
     ],
@@ -321,12 +320,26 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "attendance_clock",
     ],
-    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
-    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
-    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock"],
   };
 
-  const allowedViews = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];
+  const isEmployeeLeader = Boolean(
+    currentUser &&
+      (currentUser.role === "LEADER" ||
+        employees?.some(
+          (e: any) =>
+            (e.username === currentUser.username || e.id === currentUser.employeeId) &&
+            ((e.position || "").toUpperCase().includes("LEADER") ||
+              (e.position || "").toUpperCase().includes("HEAD"))
+        ))
+  );
+
+  const baseAllowed = currentUser ? (roleAccess[currentUser.role] || ALL_VIEWS) : [];
+  const allowedViews = isEmployeeLeader && !baseAllowed.includes("leader_checklist")
+    ? [...baseAllowed, "leader_checklist" as ViewState]
+    : baseAllowed;
   const navigation = allNavigation.filter((nav) => allowedViews.includes(nav.view));
   const canAccessBusinessReports = Boolean(
     currentUser &&

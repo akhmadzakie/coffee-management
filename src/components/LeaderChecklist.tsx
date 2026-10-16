@@ -561,7 +561,7 @@ export const LeaderChecklist: React.FC = () => {
     setTimeout(() => setLeaderSaved(false), 3000);
   };
 
-  // Filter categories displayed based on shiftFilter & roleFilter
+  // Filter categories displayed based on shiftFilter & roleFilter (STAFF tasks hidden)
   const displayCategories = useMemo(() => {
     return activeLeaderCategories.map((cat) => {
       const filteredItems = (cat.items || []).filter((item) => {
@@ -573,21 +573,8 @@ export const LeaderChecklist: React.FC = () => {
           return false;
         }
 
-        // Role filter
-        if (!isLeaderRole) {
-          // Regular staff should ONLY see STAFF and ALL tasks (never leader QC tasks)
-          if (norm.targetRole === "LEADER") return false;
-        } else {
-          // Leader role view based on operationalRoleFilter
-          if (operationalRoleFilter === "LEADER") {
-            // Leader QC tasks + shared general tasks
-            if (norm.targetRole === "STAFF") return false;
-          } else if (operationalRoleFilter === "STAFF") {
-            // Staff operational tasks (for inspection/supervision)
-            if (norm.targetRole === "LEADER") return false;
-          }
-          // If "ALL", show everything
-        }
+        // Jobdesk staf dikunci dan disembunyikan agar tidak rancu (hanya tugas Leader/QC yang tampil)
+        if (norm.targetRole === "STAFF") return false;
 
         return true;
       });
@@ -596,7 +583,7 @@ export const LeaderChecklist: React.FC = () => {
         items: filteredItems,
       };
     }).filter((cat) => cat.items.length > 0);
-  }, [activeLeaderCategories, shiftFilter, userScheduledShift, isLeaderRole, operationalRoleFilter]);
+  }, [activeLeaderCategories, shiftFilter, userScheduledShift]);
 
   // Calculate counts based on displayCategories
   const totalSubTasksLeader = useMemo(() => {
@@ -1946,20 +1933,33 @@ export const LeaderChecklist: React.FC = () => {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 2. RENDER UNTUK LEADER & STAF (HEAD BAR, KASIR, KITCHEN, BAKER)
+  // 2. RENDER UNTUK LEADER (HEAD BAR, KASIR, KITCHEN, BAKER)
   // ─────────────────────────────────────────────────────────────────────────
+  if (!isSupervisor && !isLeaderRole) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-2xl border border-slate-200 shadow-sm text-center space-y-4">
+        <div className="w-16 h-16 mx-auto bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center text-amber-600">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-800">Checklist Jobdesk Khusus Leader</h3>
+        <p className="text-sm text-slate-500 leading-relaxed">
+          Fitur checklist harian saat ini dikhususkan sebagai instrumen supervisi, kontrol kualitas (QC), dan penentuan tunjangan jabatan Leader.
+        </p>
+        <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 border border-slate-100">
+          Staf operasional berfokus penuh pada pelayanan pelanggan dan kelancaran operasional station.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header Pengisian Tugas Harian & Status Shift */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              isLeaderRole 
-                ? "bg-amber-100 text-amber-900 border border-amber-200" 
-                : "bg-sky-100 text-sky-900 border border-sky-200"
-            }`}>
-              {isLeaderRole ? "👑 Leader Divisi (Supervisor)" : "🧑‍🍳 Staf Pelaksana"}
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+              👑 Leader Divisi (Supervisor & QC)
             </span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${
               userScheduledShift === "PAGI"
@@ -1977,16 +1977,10 @@ export const LeaderChecklist: React.FC = () => {
             </span>
           </div>
           <h2 className="text-xl font-bold text-slate-800 mt-2">
-            {isLeaderRole 
-              ? `Checklist Supervisi & QC Divisi ${leaderActiveDivision === "BAR" ? "Bar & Kasir" : leaderActiveDivision === "KITCHEN" ? "Kitchen" : "Baker"}`
-              : `Checklist Jobdesk Operasional Staf ${leaderActiveDivision === "BAR" ? "Bar & Kasir" : leaderActiveDivision === "KITCHEN" ? "Kitchen" : "Baker"}`
-            }
+            Checklist Supervisi & QC Divisi {leaderActiveDivision === "BAR" ? "Bar & Kasir" : leaderActiveDivision === "KITCHEN" ? "Kitchen" : "Baker"}
           </h2>
           <p className="text-slate-500 text-sm mt-0.5">
-            {isLeaderRole 
-              ? "Kelola tugas supervisi mandiri atau pantau pelaksanaan SOP staf tim Anda."
-              : "Tugas operasional shift yang harus Anda selesaikan hari ini untuk pencapaian bonus KPI."
-            }
+            Kelola tugas supervisi mandiri, kontrol kalibrasi & standar kualitas station harian Anda.
           </p>
         </div>
 
@@ -2018,70 +2012,6 @@ export const LeaderChecklist: React.FC = () => {
         </div>
       </div>
 
-      {/* Kontrol Peran Khusus Leader: Memisahkan Supervisi Saya vs Verifikasi Staf */}
-      {isLeaderRole && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-amber-800 font-bold text-xs uppercase tracking-wider">
-                Mode Tampilan Leader:
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-0.5">
-              {operationalRoleFilter === "LEADER" && "Menampilkan tugas supervisi, kontrol kalibrasi & QC harian Anda."}
-              {operationalRoleFilter === "STAFF" && "Menampilkan daftar tugas operasional staf tim untuk Anda inspeksi / verifikasi."}
-              {operationalRoleFilter === "ALL" && "Menampilkan seluruh tugas divisi (Supervisi Leader & Tugas Staf Tim)."}
-            </p>
-          </div>
-
-          <div className="flex bg-white p-1 rounded-xl border border-amber-200 shadow-2xs shrink-0">
-            <button
-              onClick={() => setOperationalRoleFilter("LEADER")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                operationalRoleFilter === "LEADER"
-                  ? "bg-amber-500 text-white shadow-xs"
-                  : "text-amber-800 hover:text-amber-950"
-              }`}
-            >
-              👑 Tugas Supervisi Saya (Leader QC)
-            </button>
-            <button
-              onClick={() => setOperationalRoleFilter("STAFF")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                operationalRoleFilter === "STAFF"
-                  ? "bg-sky-600 text-white shadow-xs"
-                  : "text-sky-800 hover:text-sky-950"
-              }`}
-            >
-              🧑‍🍳 Verifikasi Tugas Tim (Staf)
-            </button>
-            <button
-              onClick={() => setOperationalRoleFilter("ALL")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                operationalRoleFilter === "ALL"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              🌐 Semua Tugas
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Banner Khusus untuk Staf Pelaksana */}
-      {!isLeaderRole && (
-        <div className="bg-sky-50 border border-sky-200 p-3.5 rounded-2xl flex items-center gap-3 shadow-2xs">
-          <span className="text-xl">🧑‍🍳</span>
-          <div className="text-xs text-sky-950">
-            <p className="font-bold">Fokus Tugas Operasional Staf</p>
-            <p className="text-sky-800 mt-0.5">
-              Tugas supervisi dan QC khusus Leader dipisahkan secara otomatis. Anda hanya perlu menyelesaikan checklist operasional di bawah ini untuk mencapai skor KPI 100%.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Banner Khusus jika Hari Ini Libur (OFF) */}
       {userScheduledShift === "OFF" && (
         <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex items-center gap-3">
@@ -2103,11 +2033,9 @@ export const LeaderChecklist: React.FC = () => {
               {shiftFilter === "MY_SHIFT" 
                 ? `Tugas Khusus Shift ${userScheduledShift}`
                 : "Seluruh SOP Operasional Divisi"}
-              {isLeaderRole && (
-                <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                  {operationalRoleFilter === "LEADER" ? "Supervisi Leader" : operationalRoleFilter === "STAFF" ? "Tugas Tim Staf" : "Semua Peran"}
+                <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                  Supervisi Leader & QC
                 </span>
-              )}
             </h3>
             <span className="text-xs text-slate-500">
               {new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}

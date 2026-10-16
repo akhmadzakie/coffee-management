@@ -160,10 +160,14 @@ export function Payroll() {
           positionAllowance = Math.round((rawPositionAllowance * payoutPct) / 100);
         }
 
-        // ─── Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100) ───
-        const autoScore = checklistDays > 0 
-          ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (lateDays * 5) - (alphaDays * 10)))
-          : 0;
+        // ─── Skor KPI Otomatis: Leader dari Checklist Shift, Staf dari Presensi & Disiplin ───
+        const autoScore = isLeader
+          ? (checklistDays > 0 
+              ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (lateDays * 5) - (alphaDays * 10)))
+              : 0)
+          : (presentDays > 0
+              ? Math.max(0, 100 - (lateDays * 5) - (alphaDays * 10))
+              : 0);
 
         // ─── Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis ───
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
@@ -171,7 +175,7 @@ export function Payroll() {
 
         // Jika ada aturan tiered yang aktif dan skor karyawan masuk rentang, gunakan nominal tiered otomatis!
         // Jika tidak, gunakan perhitungan proporsional dari plafon kontrak/divisi (% skor × target)
-        const kpiBonus = (autoScore === 0 || checklistDays === 0)
+        const kpiBonus = autoScore === 0
           ? 0
           : (applicableRule 
               ? applicableRule.bonusAmount 
@@ -197,10 +201,11 @@ export function Payroll() {
             presentDays,
             lateDays,
             alphaDays,
-            checklistDays,
+            checklistDays: isLeader ? checklistDays : presentDays,
             expectedDays: Math.max(1, presentDays || 22),
             completionPercentage,
             targetKpiBonus,
+            isLeader,
           },
           calculation: {
             employeeId: emp.id,
@@ -243,16 +248,23 @@ export function Payroll() {
     );
     const checklistDays = empChecklists.length;
     const expectedDays = Math.max(1, presentDays || 22);
-    const completionPercentage = Math.min(100, Math.round((checklistDays / expectedDays) * 100));
+
+    const pos = (empObj?.position || "").toUpperCase();
+    const isLeader = pos.includes("LEADER") || pos.includes("HEAD") || userObj?.role === "LEADER";
+
+    const completionPercentage = isLeader
+      ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
+      : (presentDays > 0 ? Math.max(0, 100 - (lateDays * 5) - (alphaDays * 10)) : 0);
 
     return {
       presentDays,
       lateDays,
       alphaDays,
       sickOrLeaveDays,
-      checklistDays,
+      checklistDays: isLeader ? checklistDays : presentDays,
       expectedDays,
       completionPercentage,
+      isLeader,
     };
   };
 
@@ -431,7 +443,9 @@ export function Payroll() {
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-bold text-indigo-700">{performanceSummary.completionPercentage}%</span>
                           <span className="text-[10px] text-slate-500 font-mono">
-                            {performanceSummary.checklistDays}/{performanceSummary.expectedDays} Shift
+                            {performanceSummary.isLeader 
+                              ? `${performanceSummary.checklistDays}/${performanceSummary.expectedDays} Shift` 
+                              : `${performanceSummary.presentDays}/${performanceSummary.expectedDays} Hadir`}
                           </span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -563,7 +577,9 @@ export function Payroll() {
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-indigo-700">{perf.completionPercentage}%</span>
                             <span className="text-[10px] text-slate-500 font-mono">
-                              {perf.checklistDays}/{perf.expectedDays} Shift
+                              {perf.isLeader 
+                                ? `${perf.checklistDays}/${perf.expectedDays} Shift` 
+                                : `${perf.presentDays}/${perf.expectedDays} Hadir`}
                             </span>
                           </div>
                           <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">

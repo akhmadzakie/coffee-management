@@ -100,19 +100,19 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
     );
     const checklistDays = empChecklists.length;
     const expectedDays = Math.max(1, attendanceBreakdown.presentDays || 22);
-    const ratio = checklistDays > 0 
-      ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
-      : (kpi ? kpi.totalScore : Math.min(100, Math.round(((attendanceBreakdown.presentDays - attendanceBreakdown.lateDays) / expectedDays) * 100)));
+    const ratio = isLeader
+      ? (checklistDays > 0 ? Math.min(100, Math.round((checklistDays / expectedDays) * 100)) : 0)
+      : Math.min(100, Math.round(((attendanceBreakdown.presentDays - attendanceBreakdown.lateDays) / expectedDays) * 100));
 
     return {
       ratio,
-      checklistDays,
+      checklistDays: isLeader ? checklistDays : attendanceBreakdown.presentDays,
       expectedDays,
       kpiScore: kpi?.totalScore || ratio,
       kpiBonus: payroll.kpiBonus || 0,
       label: isLeader 
         ? `Supervisi & Jobdesk Leader (${ratio}% - ${checklistDays}/${expectedDays} Shift)`
-        : `Checklist Jobdesk Shift (${ratio}% - ${checklistDays}/${expectedDays} Shift)`,
+        : `Kedisiplinan Presensi Kerja (${ratio}% - ${attendanceBreakdown.presentDays}/${expectedDays} Hari)`,
       isLeader,
     };
   }, [employee, kpiRecords, dailyChecklists, payroll.employeeId, payroll.period, payroll.kpiBonus, attendanceBreakdown]);
@@ -381,7 +381,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-slate-500 pt-0.5">
                     <span>Bonus KPI: <strong className="text-emerald-700 font-mono">+{formatCurrency(payroll.kpiBonus)}</strong></span>
-                    <span className="font-mono">{kpiDetails.checklistDays} / {kpiDetails.expectedDays} Shift</span>
+                    <span className="font-mono">{kpiDetails.checklistDays} / {kpiDetails.expectedDays} {kpiDetails.isLeader ? "Shift" : "Hari"}</span>
                   </div>
                 </div>
               </div>

@@ -103,23 +103,27 @@ export const KPI: React.FC = () => {
       );
 
       const checklistDays = empChecklists.length;
-      const score = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 0;
+      const score = isLeader 
+        ? (checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 0)
+        : 100; // Staf operasional tidak dibebani checklist, KPI otomatis penuh standar kehadiran
 
       // Cek apakah ada Aturan Tiered yang aktif dan cocok dengan skor
       const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
       const applicableRule = score > 0 ? activeRules.find((r: any) => score >= r.minScore && score <= r.maxScore) : undefined;
 
-      const estimatedBonus = (score === 0 || checklistDays === 0)
+      const estimatedBonus = (isLeader && (score === 0 || checklistDays === 0))
         ? 0
         : (applicableRule 
             ? applicableRule.bonusAmount 
             : Math.round((score / 100) * plafonBonus));
 
-      const tierBadge = score === 0 
-        ? "Belum Ada Checklist" 
-        : (applicableRule 
-            ? `Tier: ${applicableRule.minScore}–${applicableRule.maxScore}` 
-            : "Proporsional");
+      const tierBadge = isLeader
+        ? (score === 0 
+            ? "Belum Ada Checklist" 
+            : (applicableRule 
+                ? `Tier: ${applicableRule.minScore}–${applicableRule.maxScore}` 
+                : "Proporsional"))
+        : "Standar Staf (100%)";
 
       return {
         emp,

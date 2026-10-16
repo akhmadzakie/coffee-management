@@ -154,7 +154,7 @@ function AppContent() {
     if (isKdsDedicatedRoute) return "kitchen_display";
     return "dashboard_finance";
   });
-  const { currentUser } = useStore();
+  const { currentUser, employees } = useStore();
 
   // Halaman default saat pertama login atau saat view tidak diizinkan
   const roleDefaultView: Record<string, ViewState> = {
@@ -218,7 +218,7 @@ function AppContent() {
       "pos_cashier",
       "kitchen_display",
       "dashboard_employee",
-      "shifts", "leader_checklist",
+      "shifts",
       "import_sales",
       "attendance_clock"
     ],
@@ -233,9 +233,9 @@ function AppContent() {
       "suppliers", "purchases",
       "attendance_clock"
     ],
-    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
-    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
-    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock", "leader_checklist"],
+    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock"],
   };
 
   React.useEffect(() => {
@@ -245,11 +245,23 @@ function AppContent() {
       }
       return;
     }
-    const allowed = roleAllowedViews[currentUser.role] || ALL_VIEWS;
+    const userEmp = (employees || []).find(
+      (e: any) => e.username === currentUser.username || e.id === currentUser.employeeId
+    );
+    const isEmpLeader = Boolean(
+      currentUser.role === "LEADER" ||
+      ((userEmp?.position || "").toUpperCase().includes("LEADER") || (userEmp?.position || "").toUpperCase().includes("HEAD"))
+    );
+
+    const baseAllowed = roleAllowedViews[currentUser.role] || ALL_VIEWS;
+    const allowed = isEmpLeader && !baseAllowed.includes("leader_checklist")
+      ? [...baseAllowed, "leader_checklist"]
+      : baseAllowed;
+
     if (!allowed.includes(currentView)) {
       setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
     }
-  }, [currentUser?.role, isPosDedicatedRoute, isKdsDedicatedRoute]);
+  }, [currentUser?.role, currentUser?.username, employees, isPosDedicatedRoute, isKdsDedicatedRoute]);
 
   // ─── 1. DEDICATED ROUTE: /pos (POS KASIR TERISOLASI) ──────────────────────────
   if (isPosDedicatedRoute) {
