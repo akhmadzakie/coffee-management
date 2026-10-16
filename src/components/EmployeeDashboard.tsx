@@ -180,7 +180,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   const todayShiftRecord = (employeeShifts || []).find(
     (s: any) => s.employeeId === activeEmployeeId && s.date === todayStr
   );
-  const scheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || "PAGI";
+  const currentHour = new Date().getHours();
+  const defaultShiftByTime: "PAGI" | "MIDDLE" | "SORE" = 
+    currentHour >= 15 ? "SORE" : currentHour >= 11 ? "MIDDLE" : "PAGI";
+  const scheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || defaultShiftByTime;
 
   // Checklist progress today for this employee
   const checklistProgress = useMemo(() => {

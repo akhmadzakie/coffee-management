@@ -369,7 +369,11 @@ export const LeaderChecklist: React.FC = () => {
   const todayShiftRecord = (employeeShifts || []).find(
     (s: any) => s.employeeId === userEmpId && s.date === today
   );
-  const userScheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || "PAGI";
+  // Auto-detect based on current time if employee is not explicitly scheduled in roster
+  const currentHour = new Date().getHours();
+  const defaultShiftByTime: "PAGI" | "MIDDLE" | "SORE" = 
+    currentHour >= 15 ? "SORE" : currentHour >= 11 ? "MIDDLE" : "PAGI";
+  const userScheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || defaultShiftByTime;
 
   const [shiftFilter, setShiftFilter] = useState<"MY_SHIFT" | "ALL">(
     userScheduledShift === "OFF" ? "ALL" : "MY_SHIFT"
@@ -501,7 +505,8 @@ export const LeaderChecklist: React.FC = () => {
 
   // Target bonus plafon for active division
   const effectiveDivisionBonus = settings?.divisionKpiBonusTarget?.[leaderActiveDivision] ?? (settings?.targetBonusAmount || 250000);
-  const projectedBonusToday = Math.round(effectiveDivisionBonus * (leaderPercentage / 100));
+  const dailyProratedBonus = Math.round(effectiveDivisionBonus / 22);
+  const projectedBonusToday = Math.round(dailyProratedBonus * (leaderPercentage / 100));
 
   // ─── SUPERVISOR MONITORING COMPUTATION ────────────────────────────────────
   const divisionStats = useMemo(() => {
@@ -1697,12 +1702,30 @@ export const LeaderChecklist: React.FC = () => {
             </div>
             {effectiveDivisionBonus > 0 && (
               <div className="text-right pl-4 border-l border-slate-200 hidden sm:block">
-                <span className="text-sm font-black text-emerald-600 font-mono">
-                  {formatCurrency(projectedBonusToday)}
-                </span>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Est. Bonus Hari Ini
+                <div className="flex items-baseline justify-end gap-1">
+                  <span className="text-sm font-black text-emerald-600 font-mono">
+                    {formatCurrency(effectiveDivisionBonus)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold">/bln</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Plafon KPI Bulanan
                 </p>
+                <div className="mt-1 flex items-center justify-end gap-1">
+                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                    leaderPercentage === 100 
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-300" 
+                      : completedSubTasksLeader > 0 
+                      ? "text-amber-700 bg-amber-50 border-amber-300"
+                      : "text-slate-500 bg-slate-50 border-slate-200"
+                  }`}>
+                    {leaderPercentage === 100 
+                      ? "✓ 100% Hari Ini On Track" 
+                      : completedSubTasksLeader > 0 
+                      ? `${leaderPercentage}% Hari Ini`
+                      : "Belum Selesai"}
+                  </span>
+                </div>
               </div>
             )}
           </div>
