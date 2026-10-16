@@ -5,11 +5,12 @@ import {
   CheckCircle2, Clock, XCircle, Plus, Trash2, RotateCcw, 
   Coffee, Utensils, Croissant, Users, ClipboardList, 
   Sliders, TrendingUp, Check, Layers, ChevronDown, ChevronUp,
-  Sun, Moon, Sunset, DollarSign, Award, Sparkles, Filter
+  Sun, Moon, Sunset, DollarSign, Award, Sparkles, Filter,
+  Lock, Edit2, ShieldCheck
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { getLocalDateString } from "../utils/dateUtils";
-import { TaskCategoryGroup, TaskItemDetail } from "../types";
+import { TaskCategoryGroup, TaskItemDetail, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import { formatCurrency } from "../utils/format";
 
 export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
@@ -295,6 +296,121 @@ export const LeaderChecklist: React.FC = () => {
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
+  // Sub-tab di pengaturan Manager: Tasks vs Allowance Rules
+  const [settingsSubTab, setSettingsSubTab] = useState<"TASKS" | "ALLOWANCE_RULES">("TASKS");
+
+  // Allowance Rules state
+  const [allowanceRules, setAllowanceRules] = useState<LeaderAllowanceRule[]>(() => {
+    return settings?.leaderJobdeskAllowanceRules && settings.leaderJobdeskAllowanceRules.length > 0
+      ? settings.leaderJobdeskAllowanceRules
+      : DEFAULT_LEADER_ALLOWANCE_RULES;
+  });
+  const [editingRule, setEditingRule] = useState<LeaderAllowanceRule | null>(null);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [ruleForm, setRuleForm] = useState<{
+    id?: string;
+    grade: string;
+    minScore: number;
+    maxScore: number;
+    payoutPercentage: number;
+    label: string;
+  }>({
+    grade: "Grade A",
+    minScore: 90,
+    maxScore: 100,
+    payoutPercentage: 100,
+    label: "Sangat Baik (Cair Penuh 100%)",
+  });
+
+  const handleSaveAllowanceRules = (newRules: LeaderAllowanceRule[]) => {
+    setAllowanceRules(newRules);
+    updateSettings({
+      ...settings,
+      leaderJobdeskAllowanceRules: newRules,
+    });
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  const handleToggleRuleStatus = (ruleId: string) => {
+    const updated = allowanceRules.map((r) =>
+      r.id === ruleId ? { ...r, isActive: r.isActive === false ? true : false } : r
+    );
+    handleSaveAllowanceRules(updated);
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    if (!window.confirm("Hapus aturan rentang grade ini?")) return;
+    const updated = allowanceRules.filter((r) => r.id !== ruleId);
+    handleSaveAllowanceRules(updated);
+  };
+
+  const handleResetRulesToDefault = () => {
+    if (!window.confirm("Kembalikan aturan batas persenan ke standar sistem (Grade A/B/C/D)?")) return;
+    handleSaveAllowanceRules(DEFAULT_LEADER_ALLOWANCE_RULES);
+  };
+
+  const handleOpenAddRule = () => {
+    setEditingRule(null);
+    setRuleForm({
+      grade: "Grade Baru",
+      minScore: 60,
+      maxScore: 69,
+      payoutPercentage: 30,
+      label: "Cair 30%",
+    });
+    setIsRuleModalOpen(true);
+  };
+
+  const handleOpenEditRule = (rule: LeaderAllowanceRule) => {
+    setEditingRule(rule);
+    setRuleForm({
+      id: rule.id,
+      grade: rule.grade,
+      minScore: rule.minScore,
+      maxScore: rule.maxScore,
+      payoutPercentage: rule.payoutPercentage,
+      label: rule.label,
+    });
+    setIsRuleModalOpen(true);
+  };
+
+  const handleSaveRuleForm = () => {
+    if (Number(ruleForm.minScore) > Number(ruleForm.maxScore)) {
+      alert("Skor minimal tidak boleh lebih besar dari skor maksimal!");
+      return;
+    }
+    let updated: LeaderAllowanceRule[];
+    if (editingRule) {
+      updated = allowanceRules.map((r) =>
+        r.id === editingRule.id
+          ? {
+              ...r,
+              grade: ruleForm.grade,
+              minScore: Number(ruleForm.minScore),
+              maxScore: Number(ruleForm.maxScore),
+              payoutPercentage: Number(ruleForm.payoutPercentage),
+              label: ruleForm.label,
+            }
+          : r
+      );
+    } else {
+      const newRule: LeaderAllowanceRule = {
+        id: "lar_" + Date.now().toString(36),
+        grade: ruleForm.grade,
+        minScore: Number(ruleForm.minScore),
+        maxScore: Number(ruleForm.maxScore),
+        payoutPercentage: Number(ruleForm.payoutPercentage),
+        label: ruleForm.label,
+        isActive: true,
+      };
+      updated = [...allowanceRules, newRule];
+    }
+    updated.sort((a, b) => b.minScore - a.minScore);
+    handleSaveAllowanceRules(updated);
+    setIsRuleModalOpen(false);
+  };
+
   // Deteksi divisi spesifik & status Leader vs Staf
   const userEmployee = employees?.find(
     (e) => e.id === currentUser?.employeeId || e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
@@ -507,6 +623,13 @@ export const LeaderChecklist: React.FC = () => {
   const effectiveDivisionBonus = settings?.divisionKpiBonusTarget?.[leaderActiveDivision] ?? (settings?.targetBonusAmount || 250000);
   const dailyProratedBonus = Math.round(effectiveDivisionBonus / 22);
   const projectedBonusToday = Math.round(dailyProratedBonus * (leaderPercentage / 100));
+
+  // Tier tunjangan jabatan hari ini untuk leader
+  const matchedTodayTier = useMemo(() => {
+    const activeRules = allowanceRules.filter((r) => r.isActive !== false);
+    return activeRules.find((r) => leaderPercentage >= r.minScore && leaderPercentage <= r.maxScore) || 
+           activeRules[activeRules.length - 1];
+  }, [allowanceRules, leaderPercentage]);
 
   // ─── SUPERVISOR MONITORING COMPUTATION ────────────────────────────────────
   const divisionStats = useMemo(() => {
@@ -1150,18 +1273,198 @@ export const LeaderChecklist: React.FC = () => {
         {/* TAB 2: PENGATURAN KATEGORI, RINCIAN TUGAS & TARGET BONUS JOBDESK */}
         {activeTab === "settings" && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Kelola SOP, Rincian Jobdesk & Target Bonus Divisi
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Atur pembagian tugas Staf Pelaksana vs Leader (Supervisi & QC), jadwal shift, dan plafon bonus KPI.
-                </p>
-              </div>
+            {/* Sub-Navigasi Pengaturan Manager: SOP Tugas vs Aturan Tunjangan Jabatan */}
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start">
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab("TASKS")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  settingsSubTab === "TASKS"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <ClipboardList className="w-4 h-4 text-amber-600" />
+                📋 Master SOP & Tugas Jobdesk
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab("ALLOWANCE_RULES")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  settingsSubTab === "ALLOWANCE_RULES"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Award className="w-4 h-4 text-emerald-600" />
+                🎯 Batas Persenan Tunjangan Jabatan ({allowanceRules.length})
+              </button>
+            </div>
 
-              {/* Pilihan Divisi */}
-              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            {settingsSubTab === "ALLOWANCE_RULES" ? (
+              <div className="space-y-6">
+                {/* Penjelasan Sistem Batas Persenan */}
+                <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 p-5 rounded-2xl">
+                  <div className="flex items-start gap-3.5">
+                    <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-950">
+                        Penetapan Batas Persenan Tunjangan Jabatan Leader (Berdasarkan Capaian Jobdesk)
+                      </h4>
+                      <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                        Leader (Head Bar, Head Kitchen, Head Baker, Supervisor) memegang tanggung jawab supervisi operasional dan kontrol kualitas (QC). Tunjangan Jabatan di kontrak kerja Leader akan dicairkan di modul <strong>Payroll (Penggajian)</strong> secara bertingkat berdasarkan persentase kepatuhan checklist harian yang mereka selesaikan selama bulan berjalan.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-emerald-900">
+                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                          Contoh Tunjangan di Kontrak: Rp 500.000
+                        </span>
+                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                          Grade A (90–100%) ➔ Cair 100% (Rp 500.000)
+                        </span>
+                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                          Grade B (80–89%) ➔ Cair 80% (Rp 400.000)
+                        </span>
+                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                          Grade D (&lt;70%) ➔ 0% (Hangus)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Toolbar Aksi Aturan */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Daftar Grade & Batas Persenan Pencairan</h4>
+                    <p className="text-xs text-slate-500">
+                      Ubah batas skor minimal, maksimal, serta persentase tunjangan yang dicairkan.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResetRulesToDefault}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5"
+                      title="Kembalikan ke standar sistem (Grade A/B/C/D)"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Standar (A/B/C/D)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddRule}
+                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Tambah Grade Baru</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tabel Aturan */}
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-xs">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4">Grade / Tingkat</th>
+                        <th className="py-3 px-4 text-center">Skor Min (%)</th>
+                        <th className="py-3 px-4 text-center">Skor Max (%)</th>
+                        <th className="py-3 px-4 text-center">Tunjangan Cair (%)</th>
+                        <th className="py-3 px-4">Keterangan</th>
+                        <th className="py-3 px-4 text-center">Status</th>
+                        <th className="py-3 px-4 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {allowanceRules.map((rule) => {
+                        const isGradeA = rule.minScore >= 90;
+                        const isGradeB = rule.minScore >= 80 && rule.minScore < 90;
+                        const isGradeC = rule.minScore >= 70 && rule.minScore < 80;
+
+                        return (
+                          <tr key={rule.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className={`font-black px-2.5 py-1 rounded-lg text-xs ${
+                                isGradeA
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : isGradeB
+                                  ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                  : isGradeC
+                                  ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                  : "bg-rose-100 text-rose-800 border border-rose-300"
+                              }`}>
+                                {rule.grade}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                              {rule.minScore}%
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                              {rule.maxScore}%
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono font-black text-emerald-700 text-sm">
+                              {rule.payoutPercentage}%
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">
+                              {rule.label}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleRuleStatus(rule.id)}
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                                  rule.isActive !== false
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200"
+                                }`}
+                              >
+                                {rule.isActive !== false ? "✓ Aktif" : "✕ Nonaktif"}
+                              </button>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditRule(rule)}
+                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  title="Edit aturan ini"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRule(rule.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  title="Hapus aturan"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">
+                      Kelola SOP, Rincian Jobdesk & Target Bonus Divisi
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Atur pembagian tugas Staf Pelaksana vs Leader (Supervisi & QC), jadwal shift, dan plafon bonus KPI.
+                    </p>
+                  </div>
+
+                  {/* Pilihan Divisi */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                 <button
                   onClick={() => setEditingDivision("BAR")}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -1518,8 +1821,126 @@ export const LeaderChecklist: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-        )}
+            </>
+          )}
+
+          {/* Modal Tambah / Edit Aturan Tunjangan */}
+          {isRuleModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in duration-150">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-5 h-5 text-emerald-600" />
+                    <h3 className="font-bold text-slate-900 text-base">
+                      {editingRule ? "Edit Aturan Grade Tunjangan" : "Tambah Grade Tunjangan Baru"}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setIsRuleModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      Nama Grade / Tingkat:
+                    </label>
+                    <input
+                      type="text"
+                      value={ruleForm.grade}
+                      onChange={(e) => setRuleForm({ ...ruleForm, grade: e.target.value })}
+                      placeholder="Contoh: Grade A, Grade B..."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Skor Minimal (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={ruleForm.minScore}
+                        onChange={(e) => setRuleForm({ ...ruleForm, minScore: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Skor Maksimal (%):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={ruleForm.maxScore}
+                        onChange={(e) => setRuleForm({ ...ruleForm, maxScore: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      Persentase Tunjangan Jabatan Cair (%):
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={ruleForm.payoutPercentage}
+                        onChange={(e) => setRuleForm({ ...ruleForm, payoutPercentage: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                      />
+                      <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Tunjangan Jabatan di kontrak kerja Leader akan dikalikan persentase ini saat payroll digenerate.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      Label / Keterangan:
+                    </label>
+                    <input
+                      type="text"
+                      value={ruleForm.label}
+                      onChange={(e) => setRuleForm({ ...ruleForm, label: e.target.value })}
+                      placeholder="Contoh: Sangat Baik (Cair Penuh 100%)"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsRuleModalOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveRuleForm}
+                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors"
+                  >
+                    Simpan Aturan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       </div>
     );
   }
@@ -1700,7 +2121,32 @@ export const LeaderChecklist: React.FC = () => {
                 {completedSubTasksLeader} dari {totalSubTasksLeader} Tugas Selesai
               </p>
             </div>
-            {effectiveDivisionBonus > 0 && (
+            {isLeaderRole ? (
+              <div className="text-right pl-4 border-l border-slate-200 hidden sm:block">
+                <div className="flex items-baseline justify-end gap-1">
+                  <span className="text-sm font-black text-amber-600 font-mono">
+                    {matchedTodayTier ? matchedTodayTier.grade : "Grade A"}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    ({matchedTodayTier ? matchedTodayTier.payoutPercentage : 100}% Tunjangan)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Capaian Tunjangan Jabatan
+                </p>
+                <div className="mt-1 flex items-center justify-end gap-1">
+                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    (matchedTodayTier?.payoutPercentage ?? 100) === 100 
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-300" 
+                      : (matchedTodayTier?.payoutPercentage ?? 0) > 0
+                      ? "text-amber-700 bg-amber-50 border-amber-300"
+                      : "text-rose-700 bg-rose-50 border-rose-300"
+                  }`}>
+                    {matchedTodayTier?.label || "100% Cair Penuh"}
+                  </span>
+                </div>
+              </div>
+            ) : effectiveDivisionBonus > 0 && (
               <div className="text-right pl-4 border-l border-slate-200 hidden sm:block">
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-sm font-black text-emerald-600 font-mono">
@@ -1777,30 +2223,54 @@ export const LeaderChecklist: React.FC = () => {
                   {cat.items.map((item, itemIdx) => {
                     const itemDetail = normalizeTaskItem(item);
                     const isChecked = isTaskChecked(leaderCompletedTasks, cat.category, item);
+                    const isShiftLocked = userScheduledShift !== "ALL" && 
+                                          itemDetail.shift !== "ALL" && 
+                                          itemDetail.shift !== userScheduledShift;
 
                     return (
                       <div
                         key={itemIdx}
-                        onClick={() => toggleLeaderTask(cat.category, item)}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all select-none ${
-                          isChecked
-                            ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 shadow-xs"
-                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                        onClick={() => {
+                          if (isShiftLocked) {
+                            alert(`🔒 Tugas ini khusus untuk Shift ${itemDetail.shift}. Anda dijadwalkan pada Shift ${userScheduledShift}, sehingga tugas ini terkunci.`);
+                            return;
+                          }
+                          toggleLeaderTask(cat.category, item);
+                        }}
+                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all select-none ${
+                          isShiftLocked
+                            ? "bg-slate-100/70 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed"
+                            : isChecked
+                            ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 shadow-xs cursor-pointer"
+                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-700 cursor-pointer"
                         }`}
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <div className="mt-0.5 shrink-0">
-                            {isChecked ? (
+                            {isShiftLocked ? (
+                              <Lock className="w-5 h-5 text-slate-400" />
+                            ) : isChecked ? (
                               <CheckSquare className="w-5 h-5 text-emerald-600" />
                             ) : (
                               <Square className="w-5 h-5 text-slate-400" />
                             )}
                           </div>
-                          <p className={`text-xs sm:text-sm font-semibold ${
-                            isChecked ? "text-emerald-900 line-through opacity-80" : "text-slate-800"
-                          }`}>
-                            {itemDetail.text}
-                          </p>
+                          <div className="flex-1">
+                            <p className={`text-xs sm:text-sm font-semibold ${
+                              isShiftLocked
+                                ? "text-slate-500"
+                                : isChecked
+                                ? "text-emerald-900 line-through opacity-80"
+                                : "text-slate-800"
+                            }`}>
+                              {itemDetail.text}
+                            </p>
+                            {isShiftLocked && (
+                              <p className="text-[10px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
+                                🔒 Terkunci: Khusus diselesaikan pada Shift {itemDetail.shift}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -1822,8 +2292,10 @@ export const LeaderChecklist: React.FC = () => {
                           )}
 
                           {/* Shift Badge on Item */}
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                            itemDetail.shift === "PAGI"
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${
+                            isShiftLocked
+                              ? "bg-slate-200 text-slate-600 border border-slate-300"
+                              : itemDetail.shift === "PAGI"
                               ? "bg-amber-100 text-amber-800 border border-amber-200"
                               : itemDetail.shift === "MIDDLE"
                               ? "bg-orange-100 text-orange-800 border border-orange-200"
@@ -1831,10 +2303,11 @@ export const LeaderChecklist: React.FC = () => {
                               ? "bg-purple-100 text-purple-800 border border-purple-200"
                               : "bg-slate-100 text-slate-600 border border-slate-200"
                           }`}>
+                            {isShiftLocked && <Lock className="w-2.5 h-2.5 text-slate-500" />}
                             {itemDetail.shift === "PAGI" && "☀️ Opening"}
                             {itemDetail.shift === "MIDDLE" && "⛅ Middle"}
                             {itemDetail.shift === "SORE" && "🌙 Closing"}
-                            {(!itemDetail.shift || itemDetail.shift === "ALL") && "Semua Shift"}
+                            {(!itemDetail.shift || itemDetail.shift === "ALL") && "🌐 Semua Shift"}
                           </span>
                         </div>
                       </div>

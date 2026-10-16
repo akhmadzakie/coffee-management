@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
-import { PayrollRecord } from "../types";
+import { PayrollRecord, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import {
   Calculator,
   CheckCircle,
@@ -106,7 +106,7 @@ export function Payroll() {
 
         const rawBasicSalary = contract?.basicSalary || contract?.baseSalary || 0;
         const dailyWage = Math.round(rawBasicSalary / 26);
-        const positionAllowance = contract?.positionAllowance || 0;
+        const rawPositionAllowance = contract?.positionAllowance || 0;
         const mealAllowanceRate = contract?.mealAllowance || 0;
         const transportAllowanceRate = contract?.transportAllowance || 0;
         const dailyBonusRate = contract?.dailyBonusRate || 0;
@@ -124,6 +124,8 @@ export function Payroll() {
         const userObj = (users || []).find((u: any) => u.id === emp.id || u.username === emp.username);
         const isLeader = emp.position?.toUpperCase().includes("LEADER") || 
                          emp.position?.toUpperCase().includes("HEAD") ||
+                         emp.position?.toUpperCase().includes("SPV") ||
+                         emp.position?.toUpperCase().includes("SUPERVISOR") ||
                          userObj?.role === "LEADER" || 
                          dailyChecklists.some((c: any) => c.employeeId === emp.id || c.employeeId === userObj?.id);
 
@@ -139,6 +141,24 @@ export function Payroll() {
         const targetKpiBonus = contract?.kpiBonusTarget || divisionBonusPlafon || 0;
         const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
         const expectedDays = Math.max(1, presentDays || 22);
+
+        // ─── Otomatisasi Tunjangan Jabatan Leader Berbasis Capaian Jobdesk ───
+        let positionAllowance = rawPositionAllowance;
+        let leaderJobdeskScore = 0;
+        let matchedLeaderTier: any = null;
+
+        if (rawPositionAllowance > 0 && isLeader) {
+          leaderJobdeskScore = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / expectedDays) * 100)) : 0;
+          const leaderRules: LeaderAllowanceRule[] = settings?.leaderJobdeskAllowanceRules && settings.leaderJobdeskAllowanceRules.length > 0
+            ? settings.leaderJobdeskAllowanceRules
+            : DEFAULT_LEADER_ALLOWANCE_RULES;
+          const activeLeaderRules = leaderRules.filter((r) => r.isActive !== false);
+          matchedLeaderTier = activeLeaderRules.find(
+            (r) => leaderJobdeskScore >= r.minScore && leaderJobdeskScore <= r.maxScore
+          );
+          const payoutPct = matchedLeaderTier ? matchedLeaderTier.payoutPercentage : leaderJobdeskScore;
+          positionAllowance = Math.round((rawPositionAllowance * payoutPct) / 100);
+        }
 
         // ─── Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100) ───
         const autoScore = checklistDays > 0 
@@ -188,6 +208,9 @@ export function Payroll() {
             basicSalary: totalBasicSalary, // Fix undefined variable basicSalary
             mealAllowance: totalMealAllowance,
             positionAllowance,
+            rawPositionAllowance,
+            leaderJobdeskScore,
+            matchedLeaderTier,
             transportAllowance: totalTransportAllowance,
             kpiBonus,
             targetBonus,
@@ -241,14 +264,21 @@ export function Payroll() {
 
     const newRecords = generatedCalculations
       .filter(item => !item.existingRecord)
-      .map(item => ({
-        id: `pay-${Date.now()}-${item.emp.id}`,
-        ...item.calculation,
-        notes: isTargetAchieved && targetBonusPerEmployee > 0 
-          ? `Termasuk Bonus Tembus Target Omzet (${formatCurrency(targetBonusPerEmployee)})` 
-          : null,
-        createdAt: new Date().toISOString()
-      }));
+      .map(item => {
+        const noteParts: string[] = [];
+        if (isTargetAchieved && targetBonusPerEmployee > 0) {
+          noteParts.push(`Termasuk Bonus Tembus Target Omzet (${formatCurrency(targetBonusPerEmployee)})`);
+        }
+        if (item.calculation.matchedLeaderTier && (item.calculation.rawPositionAllowance || 0) > 0) {
+          noteParts.push(`Tunj. Jabatan Leader: ${item.calculation.matchedLeaderTier.grade} (${item.calculation.matchedLeaderTier.payoutPercentage}%)`);
+        }
+        return {
+          id: `pay-${Date.now()}-${item.emp.id}`,
+          ...item.calculation,
+          notes: noteParts.length > 0 ? noteParts.join(" • ") : null,
+          createdAt: new Date().toISOString()
+        };
+      });
 
     if (newRecords.length > 0) {
       if (confirm(`Generate ${newRecords.length} slip gaji untuk periode ${period}?`)) {
@@ -416,7 +446,14 @@ export function Payroll() {
                       </div>
                     </td>
                     <td className="p-4 text-right">{formatCurrency(calculation.basicSalary)}</td>
-                    <td className="p-4 text-right">{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</td>
+                    <td className="p-4 text-right">
+                      <div>{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</div>
+                      {Boolean(calculation.rawPositionAllowance && calculation.rawPositionAllowance > 0 && calculation.matchedLeaderTier) && (
+                        <div className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          👑 {calculation.matchedLeaderTier?.grade} ({calculation.matchedLeaderTier?.payoutPercentage}%)
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 text-right text-emerald-600">
                       <div>+{formatCurrency(calculation.kpiBonus)}</div>
                       {(calculation.targetBonus || 0) > 0 && (
@@ -492,7 +529,14 @@ export function Payroll() {
                     <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4">
                         <div className="font-medium text-slate-800">{empName}</div>
-                        <div className="text-[11px] text-slate-400">{empObj?.position || "Staff"} • {empObj?.department || "Main"}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {empObj?.position || "Staff"} • {empObj?.department || "Main"}
+                          {record.matchedLeaderTier && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                              👑 {record.matchedLeaderTier.grade} ({record.matchedLeaderTier.payoutPercentage}%)
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4">
                         <div className="flex flex-col gap-1 text-xs">

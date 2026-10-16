@@ -39,6 +39,7 @@ import {
   StockOpnameItem,
   Recipe,
   ClosedPeriod,
+  DEFAULT_LEADER_ALLOWANCE_RULES,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -231,6 +232,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       targetBonusAmount: 0,
       divisionKpiBonusTarget: {},
       scheduleApprovals: {},
+      leaderJobdeskAllowanceRules: DEFAULT_LEADER_ALLOWANCE_RULES,
     };
     try {
       const cached = localStorage.getItem("app_settings_cache");

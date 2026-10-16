@@ -416,7 +416,13 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                       <div>
                         <span className="font-medium text-slate-700">Tunjangan Jabatan</span>
                         <span className="text-[10px] text-slate-400 block">
-                          Tunjangan tanggung jawab posisi
+                          {payroll.matchedLeaderTier ? (
+                            <span className="text-amber-700 font-medium">
+                              👑 Penyesuaian Jobdesk: {payroll.matchedLeaderTier.grade} ({payroll.matchedLeaderTier.payoutPercentage}%) dari normal {formatCurrency(payroll.rawPositionAllowance || payroll.positionAllowance)}
+                            </span>
+                          ) : (
+                            "Tunjangan tanggung jawab posisi"
+                          )}
                         </span>
                       </div>
                       <span className="font-mono font-bold text-slate-800 self-center">

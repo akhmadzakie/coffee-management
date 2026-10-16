@@ -93,6 +93,9 @@ export interface PayrollRecord {
   basicSalary: number;
   mealAllowance: number;
   positionAllowance: number;
+  rawPositionAllowance?: number;
+  leaderJobdeskScore?: number;
+  matchedLeaderTier?: LeaderAllowanceRule | null;
   kpiBonus: number;
   targetBonus?: number; // Bonus tembus target omzet toko
   transportAllowance: number;
@@ -300,6 +303,23 @@ export interface TaskCategoryGroup {
   items: (string | TaskItemDetail)[];
 }
 
+export interface LeaderAllowanceRule {
+  id: string;
+  grade: string;
+  minScore: number;
+  maxScore: number;
+  payoutPercentage: number;
+  label: string;
+  isActive?: boolean;
+}
+
+export const DEFAULT_LEADER_ALLOWANCE_RULES: LeaderAllowanceRule[] = [
+  { id: "lar-1", grade: "Grade A", minScore: 90, maxScore: 100, payoutPercentage: 100, label: "Sangat Baik (Cair Penuh 100%)", isActive: true },
+  { id: "lar-2", grade: "Grade B", minScore: 80, maxScore: 89, payoutPercentage: 80, label: "Baik (Cair 80%)", isActive: true },
+  { id: "lar-3", grade: "Grade C", minScore: 70, maxScore: 79, payoutPercentage: 50, label: "Cukup (Cair 50%)", isActive: true },
+  { id: "lar-4", grade: "Grade D", minScore: 0, maxScore: 69, payoutPercentage: 0, label: "Kurang / Tidak Memenuhi (Hangus 0%)", isActive: true },
+];
+
 export interface Settings {
   id?: string;
   logoDataUrl: string | null;
@@ -331,6 +351,7 @@ export interface Settings {
   taxRate?: number;
   taxMode?: "INCLUSIVE" | "EXCLUSIVE";
   maxCashierDiscount?: number;
+  leaderJobdeskAllowanceRules?: LeaderAllowanceRule[];
 }
 
 export interface CashAccount {

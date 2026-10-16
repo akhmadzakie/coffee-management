@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
-import { Role } from "../types";
+import { Role, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
@@ -814,7 +814,6 @@ export function HRManagement() {
 
         const basic = contract.basicSalary;
         const meal = contract.mealAllowance * att.presentDays;
-        const position = contract.positionAllowance;
         const dailyWage = Math.round(contract.basicSalary / 25);
         const alphaDeduction = ((contract.alphaDeductionPerDay !== undefined && contract.alphaDeductionPerDay !== 0) ? contract.alphaDeductionPerDay : dailyWage) * att.alphaDays;
 
@@ -827,6 +826,26 @@ export function HRManagement() {
         const autoScore = checklistDays > 0
           ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (att.alphaDays * 10)))
           : 0;
+
+        // Tunjangan Jabatan Leader Berbasis Capaian Jobdesk
+        const rawPosition = contract.positionAllowance || 0;
+        const isLeaderEmp = emp.position?.toUpperCase().includes("LEADER") || 
+                            emp.position?.toUpperCase().includes("HEAD") ||
+                            emp.position?.toUpperCase().includes("SPV") ||
+                            emp.position?.toUpperCase().includes("SUPERVISOR");
+        let position = rawPosition;
+        if (rawPosition > 0 && isLeaderEmp) {
+          const leaderJobdeskScore = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / expectedDays) * 100)) : 0;
+          const leaderRules = (settings as any)?.leaderJobdeskAllowanceRules && (settings as any).leaderJobdeskAllowanceRules.length > 0
+            ? (settings as any).leaderJobdeskAllowanceRules
+            : DEFAULT_LEADER_ALLOWANCE_RULES;
+          const activeLeaderRules = leaderRules.filter((r: any) => r.isActive !== false);
+          const matchedLeaderTier = activeLeaderRules.find(
+            (r: any) => leaderJobdeskScore >= r.minScore && leaderJobdeskScore <= r.maxScore
+          );
+          const payoutPct = matchedLeaderTier ? matchedLeaderTier.payoutPercentage : leaderJobdeskScore;
+          position = Math.round((rawPosition * payoutPct) / 100);
+        }
 
         // Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
@@ -2750,6 +2769,9 @@ export function HRManagement() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Jabatan</label>
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.positionAllowance || ""} onChange={e => setContractForm({...contractForm, positionAllowance: Number(e.target.value)})} />
+                  <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                    👑 Khusus Leader: Dicairkan otomatis bertingkat (Grade A-D) berbasis capaian jobdesk & supervisi shift.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Makan</label>
