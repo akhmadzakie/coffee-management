@@ -142,18 +142,20 @@ export function Payroll() {
 
         // ─── Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100) ───
         const autoScore = checklistDays > 0 
-          ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
-          : Math.max(0, Math.round((1 - (lateDays * 0.05) - (alphaDays * 0.10)) * 100));
+          ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (lateDays * 5) - (alphaDays * 10)))
+          : 0;
 
         // ─── Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis ───
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
-        const applicableRule = activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore);
+        const applicableRule = autoScore > 0 ? activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore) : undefined;
 
         // Jika ada aturan tiered yang aktif dan skor karyawan masuk rentang, gunakan nominal tiered otomatis!
         // Jika tidak, gunakan perhitungan proporsional dari plafon kontrak/divisi (% skor × target)
-        const kpiBonus = applicableRule 
-          ? applicableRule.bonusAmount 
-          : (targetKpiBonus > 0 ? Math.round(targetKpiBonus * (autoScore / 100)) : 0);
+        const kpiBonus = (autoScore === 0 || checklistDays === 0)
+          ? 0
+          : (applicableRule 
+              ? applicableRule.bonusAmount 
+              : (targetKpiBonus > 0 ? Math.round(targetKpiBonus * (autoScore / 100)) : 0));
 
         const targetBonus = targetBonusPerEmployee;
         const overtimePay = 0; // Default no overtime

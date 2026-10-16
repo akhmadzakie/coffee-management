@@ -825,19 +825,21 @@ export function HRManagement() {
         const checklistDays = empChecklists.length;
         const expectedDays = Math.max(1, att.presentDays || 22);
         const autoScore = checklistDays > 0
-          ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
-          : Math.max(0, Math.round((1 - (att.alphaDays * 0.10)) * 100));
+          ? Math.max(0, Math.min(100, Math.round((checklistDays / expectedDays) * 100) - (att.alphaDays * 10)))
+          : 0;
 
         // Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
-        const applicableRule = activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore);
+        const applicableRule = autoScore > 0 ? activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore) : undefined;
 
         const divisionBonusPlafon = (settings as any)?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
         const targetKpi = contract.kpiBonusTarget || divisionBonusPlafon || 0;
 
-        const kpiBonus = applicableRule
-          ? applicableRule.bonusAmount
-          : (targetKpi > 0 ? Math.round(targetKpi * (autoScore / 100)) : 0);
+        const kpiBonus = (autoScore === 0 || checklistDays === 0)
+          ? 0
+          : (applicableRule
+              ? applicableRule.bonusAmount
+              : (targetKpi > 0 ? Math.round(targetKpi * (autoScore / 100)) : 0));
 
         const total = basic + meal + position + kpiBonus - alphaDeduction;
 
@@ -860,13 +862,15 @@ export function HRManagement() {
   const currentPeriod = useMemo(() => new Date().toISOString().substring(0, 7), []);
   const avgKpiScore = useMemo(() => {
     if (!employees || employees.length === 0) return "0.0";
-    const scores = employees.map((emp) => {
+    const operational = employees.filter((e) => isEmpActive(e) && isOperationalStaff(e));
+    if (operational.length === 0) return "0.0";
+    const scores = operational.map((emp) => {
       const empChecklists = (dailyChecklists || []).filter(
         (c) => c.employeeId === emp.id && c.date.startsWith(currentPeriod)
       );
       return empChecklists.length > 0
         ? Math.min(100, Math.round((empChecklists.length / 22) * 100))
-        : 100;
+        : 0;
     });
     return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
   }, [employees, dailyChecklists, currentPeriod]);

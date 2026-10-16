@@ -57,8 +57,25 @@ export const KPI: React.FC = () => {
       .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
   }, [salesTransactions, currentPeriod]);
 
+  const isOperationalStaff = (emp: any): boolean => {
+    const dept = (emp.department || "").toUpperCase();
+    const pos = (emp.position || "").toUpperCase();
+    return !(
+      pos.includes("MANAGER") || pos.includes("MANAJER") ||
+      dept.includes("MANAGEMENT") || dept.includes("MANAJEMEN") ||
+      pos.includes("OWNER") || dept.includes("OWNER") ||
+      pos.includes("FINANCE") || dept.includes("FINANCE") ||
+      pos.includes("KEUANGAN") || dept.includes("KEUANGAN") ||
+      pos.includes("ACCOUNTING") || dept.includes("ACCOUNTING") ||
+      pos.includes("AKUNTAN") || dept.includes("AKUNTAN") ||
+      pos.includes("ADMIN") || dept.includes("ADMIN") ||
+      pos.includes("HRD") || dept.includes("HRD") ||
+      pos.includes("HR")
+    );
+  };
+
   const activeEmployees = useMemo(() => {
-    return (employees || []).filter((e: any) => e.status !== "INACTIVE");
+    return (employees || []).filter((e: any) => e.status !== "INACTIVE" && isOperationalStaff(e));
   }, [employees]);
 
   // Rekapitulasi Capaian KPI Jobdesk Seluruh Karyawan (Leader vs Staf)
@@ -86,19 +103,23 @@ export const KPI: React.FC = () => {
       );
 
       const checklistDays = empChecklists.length;
-      const score = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 100;
+      const score = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 0;
 
       // Cek apakah ada Aturan Tiered yang aktif dan cocok dengan skor
       const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
-      const applicableRule = activeRules.find((r: any) => score >= r.minScore && score <= r.maxScore);
+      const applicableRule = score > 0 ? activeRules.find((r: any) => score >= r.minScore && score <= r.maxScore) : undefined;
 
-      const estimatedBonus = applicableRule 
-        ? applicableRule.bonusAmount 
-        : Math.round((score / 100) * plafonBonus);
+      const estimatedBonus = (score === 0 || checklistDays === 0)
+        ? 0
+        : (applicableRule 
+            ? applicableRule.bonusAmount 
+            : Math.round((score / 100) * plafonBonus));
 
-      const tierBadge = applicableRule 
-        ? `Tier: ${applicableRule.minScore}–${applicableRule.maxScore}` 
-        : "Proporsional";
+      const tierBadge = score === 0 
+        ? "Belum Ada Checklist" 
+        : (applicableRule 
+            ? `Tier: ${applicableRule.minScore}–${applicableRule.maxScore}` 
+            : "Proporsional");
 
       return {
         emp,
@@ -109,7 +130,7 @@ export const KPI: React.FC = () => {
         checklistDays,
         score,
         tierBadge,
-        isTiered: !!applicableRule,
+        isTiered: score > 0 && !!applicableRule,
         estimatedBonus,
       };
     });
