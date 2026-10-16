@@ -87,7 +87,18 @@ export const KPI: React.FC = () => {
 
       const checklistDays = empChecklists.length;
       const score = checklistDays > 0 ? Math.min(100, Math.round((checklistDays / 22) * 100)) : 100;
-      const estimatedBonus = Math.round((score / 100) * plafonBonus);
+
+      // Cek apakah ada Aturan Tiered yang aktif dan cocok dengan skor
+      const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
+      const applicableRule = activeRules.find((r: any) => score >= r.minScore && score <= r.maxScore);
+
+      const estimatedBonus = applicableRule 
+        ? applicableRule.bonusAmount 
+        : Math.round((score / 100) * plafonBonus);
+
+      const tierBadge = applicableRule 
+        ? `Tier: ${applicableRule.minScore}–${applicableRule.maxScore}` 
+        : "Proporsional";
 
       return {
         emp,
@@ -97,10 +108,12 @@ export const KPI: React.FC = () => {
         plafonBonus,
         checklistDays,
         score,
+        tierBadge,
+        isTiered: !!applicableRule,
         estimatedBonus,
       };
     });
-  }, [activeEmployees, users, settings, contracts, dailyChecklists, currentPeriod]);
+  }, [activeEmployees, users, settings, contracts, dailyChecklists, kpiBonusRules, currentPeriod]);
 
   const monthlyTarget = settings?.monthlyRevenueTarget || 150000000;
   const targetBonusAmount = settings?.targetBonusAmount || 0;
@@ -655,8 +668,15 @@ export const KPI: React.FC = () => {
                             {item.score}%
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">
-                          {formatCurrency(item.estimatedBonus)}
+                        <td className="py-3 px-4 text-right">
+                          <p className="font-mono font-bold text-emerald-600">
+                            {formatCurrency(item.estimatedBonus)}
+                          </p>
+                          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 ${
+                            item.isTiered ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-slate-100 text-slate-500"
+                          }`}>
+                            {item.tierBadge}
+                          </span>
                         </td>
                       </tr>
                     ))}

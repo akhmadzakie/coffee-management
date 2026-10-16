@@ -76,7 +76,7 @@ export function HRManagement() {
     updateDailyAttendance,
     dailyChecklists,
     setDailyChecklists,
-    kpiRecords,
+    kpiBonusRules,
     addEmployee,
     updateEmployee,
     deleteEmployee,
@@ -84,8 +84,6 @@ export function HRManagement() {
     updateContract,
     addAttendance,
     updateAttendance,
-    addKPI,
-    updateKPI,
     addUser,
     updateUser,
     deleteUser,
@@ -202,8 +200,6 @@ export function HRManagement() {
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
   const [attendanceApprovalFilter, setAttendanceApprovalFilter] = useState<string>("ALL");
   const [selectedAttIds, setSelectedAttIds] = useState<string[]>([]);
-  const [isKpiModalOpen, setIsKpiModalOpen] = useState(false);
-  const [editingKpi, setEditingKpi] = useState<any | null>(null);
 
   const handleBulkApprove = (targetIds?: string[]) => {
     const ids = targetIds && targetIds.length > 0 ? targetIds : selectedAttIds;
@@ -241,7 +237,6 @@ export function HRManagement() {
   };
 
   const [attendanceForm, setAttendanceForm] = useState({ employeeId: "", period: "", presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
-  const [kpiForm, setKpiForm] = useState({ employeeId: "", period: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), totalScore: 0, evaluatorNotes: "", kpiBonus: 0, targets: [{ id: "1", description: "", weight: 100, score: 0 }] });
 
   const handleOpenAttendanceModal = (att?: any, employeeId?: string) => {
     if (att && att.id) {
@@ -264,46 +259,6 @@ export function HRManagement() {
     }
     setIsAttendanceModalOpen(false);
   };
-
-  const handleOpenKpiModal = (kpi?: any, employeeId?: string) => {
-    if (kpi && kpi.id) {
-      setEditingKpi(kpi);
-      setKpiForm({ ...kpi, targets: kpi.targets || [{ id: "1", description: "", weight: 100, score: 0 }] });
-    } else {
-      setEditingKpi(null);
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth() + 1;
-      setKpiForm({ employeeId: employeeId || "", period: `${currentYear}-${currentMonth.toString().padStart(2, '0')}`, month: currentMonth, year: currentYear, totalScore: 0, evaluatorNotes: "", kpiBonus: 0, targets: [{ id: "1", description: "Target 1", weight: 100, score: 0 }] });
-    }
-    setIsKpiModalOpen(true);
-  };
-
-  const handleSaveKpi = () => {
-    if (!kpiForm.employeeId) return alert("Pilih Karyawan");
-    
-    // Auto calculate bonus based on target from contract
-    const contract = contracts.find(c => c.employeeId === kpiForm.employeeId && c.status === "ACTIVE") || contracts.find(c => c.employeeId === kpiForm.employeeId);
-    const kpiBonusTarget = contract?.kpiBonusTarget || 0;
-    
-    // Calculate total score from targets
-    let calculatedScore = 0;
-    if (kpiForm.targets && kpiForm.targets.length > 0) {
-      calculatedScore = kpiForm.targets.reduce((sum: number, t: any) => sum + (t.score * (t.weight / 100)), 0);
-    } else {
-      calculatedScore = kpiForm.totalScore;
-    }
-    
-    const kpiBonus = (calculatedScore / 100) * kpiBonusTarget;
-    
-    const kpiToSave = { ...kpiForm, period: `${kpiForm.year}-${kpiForm.month.toString().padStart(2, '0')}`, totalScore: calculatedScore, kpiBonus };
-    if (editingKpi) {
-      updateKPI({ ...editingKpi, ...kpiToSave });
-    } else {
-      addKPI(kpiToSave);
-    }
-    setIsKpiModalOpen(false);
-  };
-
 
   const handleOpenEmployeeModal = (emp?: any) => {
     if (emp && emp.id) {
@@ -470,28 +425,6 @@ export function HRManagement() {
       }
     });
     if (imported > 0) alert(`Berhasil mengimport ${imported} absensi.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
-  };
-
-  const handleImportKPI = (data: any[]) => {
-    let imported = 0;
-    data.forEach(row => {
-      const empId = employees.find(e => e.username === row["Username"])?.id;
-      const quarter = Number(row["Kuartal (1-4)"]);
-      const year = Number(row["Tahun"]);
-      if (empId && quarter && year) {
-        addKPI({
-          employeeId: empId,
-          period: `Q${quarter}-${year}`,
-          quarter, year,
-          totalScore: Number(row["Total Skor"]) || 0,
-          kpiBonus: Number(row["Bonus KPI"]) || 0,
-          evaluatorNotes: row["Catatan Evaluator"] || ""
-        });
-        imported++;
-      }
-    });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} KPI.`);
     else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
   };
 
@@ -885,28 +818,26 @@ export function HRManagement() {
         const dailyWage = Math.round(contract.basicSalary / 25);
         const alphaDeduction = ((contract.alphaDeductionPerDay !== undefined && contract.alphaDeductionPerDay !== 0) ? contract.alphaDeductionPerDay : dailyWage) * att.alphaDays;
 
-        // Get KPI Bonus for this quarter if it falls in the attendance period
-        // (Simple approximation: if attendance period month matches quarter end)
-        const month = parseInt(att.period.split("-")[1]);
-        const quarter = Math.ceil(month / 3);
-        const year = parseInt(att.period.split("-")[0]);
-
-        const kpi = kpiRecords.find(
-          (k) =>
-            k.employeeId === emp.id && k.quarter === quarter && k.year === year,
-        );
-        const targetKpi = contract.kpiBonusTarget || 0;
+        // Hitung Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100)
         const empChecklists = (dailyChecklists || []).filter(
           (c) => c.employeeId === emp.id && c.date.startsWith(att.period)
         );
-        const isLeader = emp.position?.toUpperCase().includes("LEADER") || emp.position?.toUpperCase().includes("HEAD");
-        const kpiBonus = kpi 
-          ? kpi.kpiBonus 
-          : (targetKpi > 0 
-              ? (isLeader 
-                  ? Math.round(targetKpi * Math.min(1, empChecklists.length / Math.max(1, att.presentDays || 25))) 
-                  : targetKpi) 
-              : 0);
+        const checklistDays = empChecklists.length;
+        const expectedDays = Math.max(1, att.presentDays || 22);
+        const autoScore = checklistDays > 0
+          ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
+          : Math.max(0, Math.round((1 - (att.alphaDays * 0.10)) * 100));
+
+        // Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis
+        const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
+        const applicableRule = activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore);
+
+        const divisionBonusPlafon = (settings as any)?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
+        const targetKpi = contract.kpiBonusTarget || divisionBonusPlafon || 0;
+
+        const kpiBonus = applicableRule
+          ? applicableRule.bonusAmount
+          : (targetKpi > 0 ? Math.round(targetKpi * (autoScore / 100)) : 0);
 
         const total = basic + meal + position + kpiBonus - alphaDeduction;
 
@@ -924,7 +855,21 @@ export function HRManagement() {
         };
       })
       .filter(Boolean) as any[];
-  }, [attendances, employees, contracts, kpiRecords, dailyChecklists]);
+  }, [attendances, employees, contracts, kpiBonusRules, settings, dailyChecklists]);
+
+  const currentPeriod = useMemo(() => new Date().toISOString().substring(0, 7), []);
+  const avgKpiScore = useMemo(() => {
+    if (!employees || employees.length === 0) return "0.0";
+    const scores = employees.map((emp) => {
+      const empChecklists = (dailyChecklists || []).filter(
+        (c) => c.employeeId === emp.id && c.date.startsWith(currentPeriod)
+      );
+      return empChecklists.length > 0
+        ? Math.min(100, Math.round((empChecklists.length / 22) * 100))
+        : 100;
+    });
+    return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+  }, [employees, dailyChecklists, currentPeriod]);
 
   // ─── TABS ──────────────────────────────────────────────────────────
   const tabs = isLeader ? [
@@ -1035,15 +980,10 @@ export function HRManagement() {
                     </div>
                   </div>
                   <p className="text-3xl font-bold text-emerald-900">
-                    {kpiRecords.length > 0
-                      ? (
-                          kpiRecords.reduce((sum, k) => sum + k.score, 0) /
-                          kpiRecords.length
-                        ).toFixed(1)
-                      : "0.0"}
+                    {avgKpiScore}
                   </p>
                   <p className="text-sm text-emerald-600 mt-2">
-                    {isIndo ? "Dari skala 100" : "Out of 100"}
+                    {isIndo ? "Otomatis dari Shift (Skala 100)" : "Automated from Shifts (Out of 100)"}
                   </p>
                 </motion.div>
 
@@ -1809,112 +1749,10 @@ export function HRManagement() {
           )}
 
           {activeTab === "kpi" && (
-            <div className="space-y-8">
+            <div>
               <KPI />
-              <div className="pt-6 border-t border-slate-200">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    {isIndo ? "Riwayat Penilaian KPI (Kuartal)" : "KPI Assessment (Quarterly)"}
-                  </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportKPI}
-                      templateHeaders={["Username", "Kuartal (1-4)", "Tahun", "Total Skor", "Bonus KPI", "Catatan Evaluator"]}
-                      templateExampleRow={["EMP-001", "1", "2024", "85", "250000", "Kinerja sangat baik"]}
-                      templateFilename="template_kpi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                      templateDropdowns={{
-                        Username: employees.map(e => e.username).filter(Boolean),
-                        "Kuartal (1-4)": ["1", "2", "3", "4"],
-                      }}
-                      templateColumnTypes={{
-                        "Kuartal (1-4)": "integer",
-                        "Tahun": "integer",
-                        "Total Skor": "number",
-                        "Bonus KPI": "number",
-                      }}
-                      templateHints={{
-                        Username: "Pilih username karyawan",
-                        "Kuartal (1-4)": "Pilih 1, 2, 3, atau 4",
-                        "Total Skor": "Nilai 0–100",
-                      }}
-                    />
-                    <button onClick={() => handleOpenKpiModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah KPI" : "Add KPI"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">
-                        {isIndo ? "Karyawan" : "Employee"}
-                      </th>
-                      <th className="py-3 px-4 font-semibold">Qtr/Tahun</th>
-                      <th className="py-3 px-4 font-semibold">Skor Total</th>
-                      <th className="py-3 px-4 font-semibold">Bonus KPI</th>
-                      {canEditHR && (
-                        <th className="py-3 px-4 font-semibold text-right">
-                          Aksi
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kpiRecords.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="py-8 text-center text-slate-500 italic"
-                        >
-                          {isIndo ? "Belum ada data KPI." : "No KPI data yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      kpiRecords.map((k) => (
-                        <tr
-                          key={k.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
-                        >
-                          <td className="py-3 px-4 font-medium text-slate-800">
-                            {getEmployeeName(k.employeeId)}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            Q{k.quarter} {k.year}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-1 text-xs font-semibold rounded-full 
-                              ${k.totalScore >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
-                            >
-                              {k.totalScore.toFixed(1)} / 100
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-emerald-600 font-mono font-medium">
-                            {formatRupiah(k.kpiBonus)}
-                          </td>
-                          {canEditHR && (
-                            <td className="py-3 px-4 flex justify-end gap-2">
-                              <button 
-                                onClick={() => handleOpenKpiModal(k)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
-          </div>
-        )}
+          )}
 
           {activeTab === "attendance" && (
             <div>
@@ -3315,108 +3153,6 @@ export function HRManagement() {
         document.body
       )}
 
-      {/* KPI Modal */}
-      {isKpiModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-bold text-slate-800">
-                {editingKpi ? (isIndo ? "Edit KPI" : "Edit KPI") : (isIndo ? "Tambah KPI" : "Add KPI")}
-              </h3>
-              <button onClick={() => setIsKpiModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.employeeId} onChange={e => setKpiForm({...kpiForm, employeeId: e.target.value})}>
-                  <option value="">Pilih Karyawan</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Bulan</label>
-                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={kpiForm.month || 1} onChange={e => setKpiForm({...kpiForm, month: Number(e.target.value)})}>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                      <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('id-ID', { month: 'long' })}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Tahun</label>
-                  <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.year} onChange={e => setKpiForm({...kpiForm, year: Number(e.target.value)})} />
-                </div>
-              </div>
-              
-              <div className="border-t border-slate-100 pt-4 mt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-bold text-slate-700">Target KPI & Pencapaian</h4>
-                  <button type="button" onClick={() => setKpiForm({...kpiForm, targets: [...(kpiForm.targets || []), { id: Date.now().toString(), description: "", weight: 0, score: 0 }]})} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
-                    + Tambah Target
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {(kpiForm.targets || []).map((target: any, index: number) => (
-                    <div key={target.id || index} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
-                      <div className="flex-1">
-                        <input type="text" placeholder="Deskripsi Tugas/Target" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.description} onChange={e => {
-                          const newT = [...kpiForm.targets];
-                          newT[index].description = e.target.value;
-                          setKpiForm({...kpiForm, targets: newT});
-                        }} />
-                      </div>
-                      <div className="w-20">
-                        <input type="number" placeholder="Bobot %" title="Bobot %" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.weight} onChange={e => {
-                          const newT = [...kpiForm.targets];
-                          newT[index].weight = Number(e.target.value);
-                          setKpiForm({...kpiForm, targets: newT});
-                        }} />
-                      </div>
-                      <div className="w-20 flex items-center gap-1">
-                        <input type="number" placeholder="Skor" title="Skor (0-100)" max="100" className="w-full px-2 py-1 text-sm border border-slate-300 rounded" value={target.score} onChange={e => {
-                          const newT = [...kpiForm.targets];
-                          newT[index].score = Number(e.target.value);
-                          setKpiForm({...kpiForm, targets: newT});
-                        }} />
-                      </div>
-                      <button type="button" onClick={() => {
-                        const newT = kpiForm.targets.filter((_, i) => i !== index);
-                        setKpiForm({...kpiForm, targets: newT});
-                      }} className="text-red-500 p-1 hover:bg-red-50 rounded">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  {(!kpiForm.targets || kpiForm.targets.length === 0) && (
-                    <div className="text-sm text-slate-500 text-center py-2">Belum ada target. (Total skor akan diambil dari Skor Total manual jika kosong)</div>
-                  )}
-                  {(!kpiForm.targets || kpiForm.targets.length === 0) && (
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Skor Total (0-100)</label>
-                        <input type="number" step="0.1" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.totalScore || 0} onChange={e => setKpiForm({...kpiForm, totalScore: Number(e.target.value)})} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Catatan Evaluator</label>
-                <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={kpiForm.evaluatorNotes || ""} onChange={e => setKpiForm({...kpiForm, evaluatorNotes: e.target.value})} rows={2}></textarea>
-              </div>
-            </div>
-            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
-              <button onClick={() => setIsKpiModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
-              <button onClick={handleSaveKpi} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
 
     </div>

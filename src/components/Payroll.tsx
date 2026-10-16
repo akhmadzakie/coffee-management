@@ -138,31 +138,22 @@ export function Payroll() {
         const divisionBonusPlafon = settings?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
         const targetKpiBonus = contract?.kpiBonusTarget || divisionBonusPlafon || 0;
         const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
-        let calculatedKpiBonus = 0;
+        const expectedDays = Math.max(1, presentDays || 22);
 
-        if (targetKpiBonus > 0) {
-          const expectedDays = Math.max(1, presentDays || 22);
-          if (checklistDays > 0) {
-            // Dihitung proporsional dari % penyelesaian Daily Jobdesk Checklist shift bulan ini (% KPI × Plafon Bonus)
-            const completionRatio = Math.min(1, checklistDays / expectedDays);
-            calculatedKpiBonus = Math.round(targetKpiBonus * completionRatio);
-          } else {
-            // Fallback kedisiplinan (Ketepatan Waktu & Kehadiran) jika belum ada pengisian checklist
-            const disciplineRatio = Math.max(0, 1 - (lateDays * 0.05) - (alphaDays * 0.10));
-            const scoreMultiplier = kpi ? (kpi.totalScore / 100) : disciplineRatio;
-            calculatedKpiBonus = Math.round(targetKpiBonus * scoreMultiplier);
-          }
-        }
+        // ─── Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100) ───
+        const autoScore = checklistDays > 0 
+          ? Math.min(100, Math.round((checklistDays / expectedDays) * 100))
+          : Math.max(0, Math.round((1 - (lateDays * 0.05) - (alphaDays * 0.10)) * 100));
 
-        // KPI Bonus Logic (Tiered Rules / Override jika ada aturan skor spesifik)
-        const empKpiTasks = (kpiTasks || []).filter((t: any) => t.employeeId === emp.id && t.period === period);
-        const totalKpiScore = empKpiTasks.reduce((sum: number, task: any) => sum + (task.score || 0), 0);
+        // ─── Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis ───
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
-        const applicableRule = activeRules.find((r: any) => totalKpiScore >= r.minScore && totalKpiScore <= r.maxScore);
+        const applicableRule = activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore);
 
+        // Jika ada aturan tiered yang aktif dan skor karyawan masuk rentang, gunakan nominal tiered otomatis!
+        // Jika tidak, gunakan perhitungan proporsional dari plafon kontrak/divisi (% skor × target)
         const kpiBonus = applicableRule 
           ? applicableRule.bonusAmount 
-          : (calculatedKpiBonus > 0 ? calculatedKpiBonus : (kpi?.kpiBonus || kpi?.bonusAmount || 0));
+          : (targetKpiBonus > 0 ? Math.round(targetKpiBonus * (autoScore / 100)) : 0);
 
         const targetBonus = targetBonusPerEmployee;
         const overtimePay = 0; // Default no overtime
@@ -171,9 +162,7 @@ export function Payroll() {
         const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay;
         const netPay = grossPay - alphaDeduction - otherDeductions;
 
-        const completionPercentage = checklistDays > 0 
-          ? Math.min(100, Math.round((checklistDays / Math.max(1, presentDays || 22)) * 100))
-          : (kpi ? kpi.totalScore : Math.round(Math.max(0, 1 - (lateDays * 0.05) - (alphaDays * 0.10)) * 100));
+        const completionPercentage = autoScore;
 
         const existingRecord = (payrollRecords || []).find(
           (r: PayrollRecord) => r.employeeId === emp.id && r.period === period
