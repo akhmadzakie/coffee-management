@@ -40,6 +40,7 @@ import {
   Recipe,
   ClosedPeriod,
   DEFAULT_LEADER_ALLOWANCE_RULES,
+  DEFAULT_SHIFT_DEFINITIONS,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -233,6 +234,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       divisionKpiBonusTarget: {},
       scheduleApprovals: {},
       leaderJobdeskAllowanceRules: DEFAULT_LEADER_ALLOWANCE_RULES,
+      shiftDefinitions: DEFAULT_SHIFT_DEFINITIONS,
     };
     try {
       const cached = localStorage.getItem("app_settings_cache");
@@ -477,6 +479,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             leaderKitchenTasks: parseArr(s.leaderKitchenTasks),
             leaderBakerTasks: parseArr(s.leaderBakerTasks),
             managerTasks: parseArr(s.managerTasks),
+            shiftDefinitions: parseArr(s.shiftDefinitions).length > 0 ? parseArr(s.shiftDefinitions) : DEFAULT_SHIFT_DEFINITIONS,
           };
           setSettings(newSettings);
           try {

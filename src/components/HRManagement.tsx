@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
-import { Role, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
+import { Role, DEFAULT_LEADER_ALLOWANCE_RULES, DEFAULT_SHIFT_DEFINITIONS, ShiftDefinition } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
@@ -36,6 +36,7 @@ import {
   Copy,
   Info,
   Send,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -200,6 +201,71 @@ export function HRManagement() {
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
   const [attendanceApprovalFilter, setAttendanceApprovalFilter] = useState<string>("ALL");
   const [selectedAttIds, setSelectedAttIds] = useState<string[]>([]);
+
+  // --- Shift Configuration State & Handlers ---
+  const [showShiftConfigModal, setShowShiftConfigModal] = useState(false);
+  const [shiftDefsForm, setShiftDefsForm] = useState<ShiftDefinition[]>(() => {
+    return settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+      ? settings.shiftDefinitions
+      : DEFAULT_SHIFT_DEFINITIONS;
+  });
+
+  useEffect(() => {
+    if (settings?.shiftDefinitions && settings.shiftDefinitions.length > 0) {
+      setShiftDefsForm(settings.shiftDefinitions);
+    }
+  }, [settings?.shiftDefinitions]);
+
+  const activeShiftDefs = useMemo(() => {
+    const list = settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+      ? settings.shiftDefinitions
+      : DEFAULT_SHIFT_DEFINITIONS;
+    return list.filter((s) => s.isActive !== false);
+  }, [settings?.shiftDefinitions]);
+
+  const updateShiftField = (index: number, field: keyof ShiftDefinition, value: any) => {
+    const updated = [...shiftDefsForm];
+    updated[index] = { ...updated[index], [field]: value };
+    setShiftDefsForm(updated);
+  };
+
+  const handleSaveShiftDefinitions = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings({
+      ...settings,
+      shiftDefinitions: shiftDefsForm,
+    });
+    setShowShiftConfigModal(false);
+    alert("Pengaturan master shift dan jam operasional berhasil disimpan!");
+  };
+
+  const handleAddCustomShift = () => {
+    const count = shiftDefsForm.length + 1;
+    const newId = `SHIFT_${Date.now()}`;
+    const newShift: ShiftDefinition = {
+      id: newId,
+      name: `Shift Khusus ${count}`,
+      startTime: "09:00",
+      endTime: "17:00",
+      workHours: 8,
+      lateToleranceMinutes: 15,
+      color: "purple",
+      isActive: true,
+    };
+    setShiftDefsForm([...shiftDefsForm, newShift]);
+  };
+
+  const handleRemoveCustomShift = (id: string) => {
+    if (confirm("Hapus shift ini dari daftar konfigurasi?")) {
+      setShiftDefsForm(shiftDefsForm.filter((s) => s.id !== id));
+    }
+  };
+
+  const handleResetShiftDefinitions = () => {
+    if (confirm("Reset seluruh master shift ke default bawaan sistem (Pagi, Middle, Sore)?")) {
+      setShiftDefsForm(DEFAULT_SHIFT_DEFINITIONS);
+    }
+  };
 
   const handleBulkApprove = (targetIds?: string[]) => {
     const ids = targetIds && targetIds.length > 0 ? targetIds : selectedAttIds;
@@ -731,7 +797,7 @@ export function HRManagement() {
     return warnings;
   }, [employees, employeeShifts, weekDays, isLeader, leaderDivision]);
 
-  const handleShiftChange = (empId: string, dateStr: string, shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF") => {
+  const handleShiftChange = (empId: string, dateStr: string, shiftType: string) => {
     const emp = employees.find(e => e.id === empId);
     if (!emp || !canEditShiftForEmployee(emp)) return;
 
@@ -1474,6 +1540,27 @@ export function HRManagement() {
 
                   {/* Copy Schedule & Approval / Revision Action Buttons */}
                   <div className="flex items-center gap-2">
+                    {/* Master Shift Configuration Button for HRD / Manager */}
+                    {isHRD && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShiftDefsForm(
+                            settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+                              ? settings.shiftDefinitions
+                              : DEFAULT_SHIFT_DEFINITIONS
+                          );
+                          setShowShiftConfigModal(true);
+                        }}
+                        disabled={isReadOnly}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors shadow-2xs border border-indigo-200"
+                        title="Atur jam operasional, toleransi keterlambatan, dan daftar shift kedai"
+                      >
+                        <SettingsIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Atur Jam Shift</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={handleCopyLastWeekSchedule}
@@ -1660,18 +1747,24 @@ export function HRManagement() {
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 gap-3">
                 <div className="flex flex-wrap items-center gap-4">
                   <span className="font-bold text-slate-700">Keterangan Shift:</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-                    <strong>Pagi:</strong> 07:00 – 15:00
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                    <strong>Middle:</strong> 11:00 – 19:00
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-                    <strong>Sore:</strong> 15:00 – 23:00
-                  </span>
+                  {activeShiftDefs.map((def) => {
+                    const dotClass =
+                      def.color === "emerald"
+                        ? "bg-emerald-500"
+                        : def.color === "blue"
+                        ? "bg-blue-500"
+                        : def.color === "amber"
+                        ? "bg-amber-500"
+                        : def.color === "purple"
+                        ? "bg-purple-500"
+                        : "bg-indigo-500";
+                    return (
+                      <span key={def.id} className="flex items-center gap-1.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${dotClass} inline-block`} />
+                        <strong>{def.name}:</strong> {def.startTime} – {def.endTime}
+                      </span>
+                    );
+                  })}
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" />
                     <strong>OFF:</strong> Libur
@@ -1731,33 +1824,49 @@ export function HRManagement() {
                               const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
                               return (
                                 <td key={idx} className="p-2 border-l border-slate-100 text-center">
-                                  <select
-                                    disabled={!canEditThisEmp}
-                                    value={shift}
-                                    onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
-                                    title={
-                                      !canEditThisEmp
-                                        ? (isWeekApproved
-                                            ? "Jadwal telah disetujui Manajer (Terkunci). Klik 'Buka Kunci (Revisi)' untuk mengedit."
-                                            : isLeader
-                                              ? "Hanya dapat mengedit jadwal tim divisi Anda sendiri"
-                                              : "Hanya Baca")
-                                        : "Pilih shift kerja"
+                                  {(() => {
+                                    const activeDef = activeShiftDefs.find((d) => d.id === shift);
+                                    let badgeColor = "bg-slate-100 text-slate-500 border-slate-200";
+                                    if (activeDef) {
+                                      if (activeDef.color === "emerald" || shift === "PAGI") {
+                                        badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-300";
+                                      } else if (activeDef.color === "blue" || shift === "MIDDLE") {
+                                        badgeColor = "bg-blue-50 text-blue-800 border-blue-300";
+                                      } else if (activeDef.color === "amber" || shift === "SORE") {
+                                        badgeColor = "bg-amber-50 text-amber-800 border-amber-300";
+                                      } else if (activeDef.color === "purple") {
+                                        badgeColor = "bg-purple-50 text-purple-800 border-purple-300";
+                                      } else {
+                                        badgeColor = "bg-indigo-50 text-indigo-800 border-indigo-300";
+                                      }
                                     }
-                                    className={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border transition-all ${
-                                      !canEditThisEmp ? "cursor-not-allowed opacity-80 bg-slate-50" : "cursor-pointer"
-                                    } ${
-                                      shift === "PAGI" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
-                                      shift === "SORE" ? "bg-amber-50 text-amber-800 border-amber-300" :
-                                      shift === "MIDDLE" ? "bg-blue-50 text-blue-800 border-blue-300" :
-                                      "bg-slate-100 text-slate-500 border-slate-200"
-                                    }`}
-                                  >
-                                    <option value="OFF">OFF (Libur)</option>
-                                    <option value="PAGI">Pagi (07-15)</option>
-                                    <option value="MIDDLE">Middle (11-19)</option>
-                                    <option value="SORE">Sore (15-23)</option>
-                                  </select>
+                                    return (
+                                      <select
+                                        disabled={!canEditThisEmp}
+                                        value={shift}
+                                        onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value)}
+                                        title={
+                                          !canEditThisEmp
+                                            ? (isWeekApproved
+                                                ? "Jadwal telah disetujui Manajer (Terkunci). Klik 'Buka Kunci (Revisi)' untuk mengedit."
+                                                : isLeader
+                                                  ? "Hanya dapat mengedit jadwal tim divisi Anda sendiri"
+                                                  : "Hanya Baca")
+                                            : "Pilih shift kerja"
+                                        }
+                                        className={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border transition-all ${
+                                          !canEditThisEmp ? "cursor-not-allowed opacity-80 bg-slate-50" : "cursor-pointer"
+                                        } ${badgeColor}`}
+                                      >
+                                        <option value="OFF">OFF (Libur)</option>
+                                        {activeShiftDefs.map((def) => (
+                                          <option key={def.id} value={def.id}>
+                                            {def.name} ({def.startTime.slice(0, 5)} - {def.endTime.slice(0, 5)})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    );
+                                  })()}
                                 </td>
                               );
                             })}
@@ -3179,7 +3288,218 @@ export function HRManagement() {
         document.body
       )}
 
+      {/* Master Shift Configuration Modal */}
+      {showShiftConfigModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col my-auto border border-slate-100">
+            {/* Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight">Pengaturan Master Shift & Jam Operasional</h3>
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Sesuaikan jam mulai/selesai, toleransi keterlambatan, dan buat shift baru untuk kedai kopi Anda.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShiftConfigModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            {/* Body */}
+            <form onSubmit={handleSaveShiftDefinitions} className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Guidance Info Banner */}
+              <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-950 flex items-start gap-3">
+                <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-indigo-900">Petunjuk Konfigurasi Shift & Jam Kerja:</p>
+                  <p className="leading-relaxed text-indigo-800">
+                    • <strong>Jam Mulai & Selesai:</strong> Digunakan untuk acuan absensi (Clock-in/out) dan jadwal kerja tim operasional.
+                  </p>
+                  <p className="leading-relaxed text-indigo-800">
+                    • <strong>Toleransi Keterlambatan:</strong> Waktu toleransi (menit). Jika toleransi 15 menit pada shift 07:00, maka kehadiran di atas 07:15 akan otomatis ditandai terlambat.
+                  </p>
+                  <p className="leading-relaxed text-indigo-800">
+                    • <strong>Jam Kerja Flat (8 Jam):</strong> Standar kerja harian tanpa hitung lembur otomatis. Lembur diinput manual di slip gaji jika disetujui Manajer.
+                  </p>
+                </div>
+              </div>
+
+              {/* Shift List Cards */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Daftar Shift Kerja Aktif ({shiftDefsForm.length})
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResetShiftDefinitions}
+                      className="text-xs font-bold text-slate-500 hover:text-rose-600 transition-colors flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-slate-100"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Default</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddCustomShift}
+                      className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-xl shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Shift</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {shiftDefsForm.map((s, idx) => {
+                    const isCore = s.id === "PAGI" || s.id === "MIDDLE" || s.id === "SORE";
+                    return (
+                      <div
+                        key={s.id}
+                        className={`p-4 rounded-2xl border transition-all ${
+                          s.isActive !== false
+                            ? "bg-white border-slate-200 shadow-2xs hover:border-indigo-300"
+                            : "bg-slate-50/70 border-slate-200 opacity-60"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={s.isActive !== false}
+                                onChange={(e) => updateShiftField(idx, "isActive", e.target.checked)}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-xs font-bold text-slate-700">
+                                {s.isActive !== false ? "Aktif di Jadwal" : "Dinonaktifkan"}
+                              </span>
+                            </label>
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-slate-100 text-slate-600">
+                              ID: {s.id}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {/* Color Tag Selector */}
+                            <select
+                              value={s.color || "indigo"}
+                              onChange={(e) => updateShiftField(idx, "color", e.target.value)}
+                              className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 bg-white"
+                            >
+                              <option value="emerald">🟢 Emerald (Pagi)</option>
+                              <option value="blue">🔵 Biru (Middle)</option>
+                              <option value="amber">🟠 Amber (Sore)</option>
+                              <option value="purple">🟣 Ungu (Khusus)</option>
+                              <option value="indigo">🟦 Indigo (Malam)</option>
+                            </select>
+
+                            {!isCore && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCustomShift(s.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Hapus Shift Kustom"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Nama Label Shift
+                            </label>
+                            <input
+                              type="text"
+                              value={s.name}
+                              onChange={(e) => updateShiftField(idx, "name", e.target.value)}
+                              required
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                              placeholder="cth: Shift Pagi"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Jam Mulai
+                            </label>
+                            <input
+                              type="time"
+                              value={s.startTime}
+                              onChange={(e) => updateShiftField(idx, "startTime", e.target.value)}
+                              required
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Jam Selesai
+                            </label>
+                            <input
+                              type="time"
+                              value={s.endTime}
+                              onChange={(e) => updateShiftField(idx, "endTime", e.target.value)}
+                              required
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              Toleransi Telat (Menit)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="120"
+                              value={s.lateToleranceMinutes ?? 15}
+                              onChange={(e) => updateShiftField(idx, "lateToleranceMinutes", Math.max(0, parseInt(e.target.value) || 0))}
+                              required
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowShiftConfigModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-200 flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Simpan Pengaturan Shift</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

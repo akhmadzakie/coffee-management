@@ -101,6 +101,9 @@ export interface PayrollRecord {
   transportAllowance: number;
   overtimePay: number; // Lembur / Tambahan Manual
   alphaDeduction: number;
+  lateDeduction?: number; // Potongan Keterlambatan proporsional jam kerja
+  lateHours?: number; // Total jam keterlambatan
+  lateDays?: number; // Jumlah hari terlambat
   otherDeductions: number;
   grossPay: number;
   netPay: number;
@@ -223,7 +226,7 @@ export interface EmployeeShift {
   id: string;
   employeeId: string;
   date: string; // YYYY-MM-DD
-  shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF";
+  shiftType: "PAGI" | "SORE" | "MIDDLE" | "OFF" | string;
   notes?: string;
 }
 export interface DailyAttendance {
@@ -320,6 +323,23 @@ export const DEFAULT_LEADER_ALLOWANCE_RULES: LeaderAllowanceRule[] = [
   { id: "lar-4", grade: "Grade D", minScore: 0, maxScore: 69, payoutPercentage: 0, label: "Kurang / Tidak Memenuhi (Hangus 0%)", isActive: true },
 ];
 
+export interface ShiftDefinition {
+  id: string; // e.g. "PAGI", "MIDDLE", "SORE" or custom
+  name: string; // e.g. "Pagi (Opening)", "Middle", "Sore (Closing)"
+  startTime: string; // "07:00"
+  endTime: string; // "15:00"
+  workHours: number; // default 8 jam kerja
+  lateToleranceMinutes: number; // default 15 menit
+  color?: string; // "emerald" | "blue" | "amber" | "purple" | "indigo" | "rose"
+  isActive: boolean;
+}
+
+export const DEFAULT_SHIFT_DEFINITIONS: ShiftDefinition[] = [
+  { id: "PAGI", name: "Pagi (Opening)", startTime: "07:00", endTime: "15:00", workHours: 8, lateToleranceMinutes: 15, color: "emerald", isActive: true },
+  { id: "MIDDLE", name: "Middle", startTime: "11:00", endTime: "19:00", workHours: 8, lateToleranceMinutes: 15, color: "blue", isActive: true },
+  { id: "SORE", name: "Sore (Closing)", startTime: "15:00", endTime: "23:00", workHours: 8, lateToleranceMinutes: 15, color: "amber", isActive: true },
+];
+
 export interface Settings {
   id?: string;
   logoDataUrl: string | null;
@@ -352,6 +372,7 @@ export interface Settings {
   taxMode?: "INCLUSIVE" | "EXCLUSIVE";
   maxCashierDiscount?: number;
   leaderJobdeskAllowanceRules?: LeaderAllowanceRule[];
+  shiftDefinitions?: ShiftDefinition[];
 }
 
 export interface CashAccount {

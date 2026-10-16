@@ -16,11 +16,11 @@ import {
   Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { DailyAttendance } from "../types";
+import { DailyAttendance, DEFAULT_SHIFT_DEFINITIONS } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 
 export function ClockIn() {
-  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance, employeeShifts } = useStore();
+  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance, employeeShifts, settings } = useStore();
   
   const [activeMode, setActiveMode] = useState<"ATTENDANCE" | "LEAVE">("ATTENDANCE");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -184,14 +184,36 @@ export function ClockIn() {
     try {
       if (!isClockedIn) {
         // Clock In
+        const shiftDefs = settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+          ? settings.shiftDefinitions
+          : DEFAULT_SHIFT_DEFINITIONS;
+        const matchedShiftDef = shiftDefs.find((s: any) => s.id === scheduledShift);
+
         let status: "HADIR" | "TERLAMBAT" = "HADIR";
-        const nowDecimalHour = new Date().getHours() + new Date().getMinutes() / 60;
-        
-        // Toleransi 15 menit dari jam mulai shift
-        if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) status = "TERLAMBAT";
-        else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) status = "TERLAMBAT";
-        else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) status = "TERLAMBAT";
-        
+        let lateMinutes = 0;
+
+        if (matchedShiftDef) {
+          const [startH, startM] = (matchedShiftDef.startTime || "07:00").split(":").map(Number);
+          const shiftStartMin = startH * 60 + (startM || 0);
+          const nowObj = new Date();
+          const currentMin = nowObj.getHours() * 60 + nowObj.getMinutes();
+          const tolerance = matchedShiftDef.lateToleranceMinutes ?? 15;
+
+          if (currentMin > (shiftStartMin + tolerance)) {
+            status = "TERLAMBAT";
+            lateMinutes = currentMin - shiftStartMin;
+          }
+        } else {
+          // Fallback toleransi default
+          const nowDecimalHour = new Date().getHours() + new Date().getMinutes() / 60;
+          if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 7) * 60); }
+          else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 11) * 60); }
+          else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 15) * 60); }
+        }
+
+        const lateNote = lateMinutes > 0 ? `[Terlambat ${lateMinutes} menit]` : "";
+        const combinedNotes = [notes.trim(), lateNote].filter(Boolean).join(" • ");
+
         addDailyAttendance({
           employeeId: activeEmployeeId as string,
           date: todayStr,
@@ -203,7 +225,7 @@ export function ClockIn() {
           clockOutPhotoUrl: null,
           status,
           approvalStatus: "PENDING",
-          notes: notes.trim()
+          notes: combinedNotes
         });
         setFeedback({ type: "success", message: `Clock In berhasil dicatat untuk Shift ${scheduledShift}! Selamat bertugas.` });
       } else if (!isClockedOut && todayAttendance) {

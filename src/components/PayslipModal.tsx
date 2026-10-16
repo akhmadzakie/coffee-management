@@ -540,6 +540,22 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                     </span>
                   </div>
 
+                  {(payroll.lateDeduction || 0) > 0 && (
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <div>
+                        <span className="font-medium text-slate-700">Potongan Keterlambatan</span>
+                        <span className="text-[10px] text-slate-400 block">
+                          {payroll.lateHours
+                            ? `Akumulasi ${payroll.lateHours} jam terlambat (${payroll.lateDays || 0}x kejadian)`
+                            : `Terlambat ${payroll.lateDays || 0}x shift`}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-rose-600 self-center">
+                        -{formatCurrency(payroll.lateDeduction)}
+                      </span>
+                    </div>
+                  )}
+
                   {(payroll.otherDeductions || 0) > 0 && (
                     <div className="flex justify-between py-1 border-b border-slate-100">
                       <div>
@@ -557,7 +573,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                   <div className="flex justify-between py-1.5 pt-2 font-bold text-rose-700 border-t border-slate-200">
                     <span>Total Potongan</span>
                     <span className="font-mono">
-                      -{formatCurrency((payroll.alphaDeduction || 0) + (payroll.otherDeductions || 0))}
+                      -{formatCurrency((payroll.alphaDeduction || 0) + (payroll.lateDeduction || 0) + (payroll.otherDeductions || 0))}
                     </span>
                   </div>
                 </div>

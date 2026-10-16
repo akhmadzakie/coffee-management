@@ -137,9 +137,36 @@ export function Payroll() {
         
         const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage); // Penalty for alpha
         
+        // ─── Potongan Keterlambatan Proporsional Jam Kerja (Upah Harian / 8 Jam Kerja) ───
+        const lateLogs = dailyLogs.filter((a: any) => a.status === "TERLAMBAT" && a.approvalStatus !== "REJECTED");
+        const lateDays = lateLogs.length;
+        let totalLateHours = 0;
+        lateLogs.forEach((l: any) => {
+          const match = l.notes?.match(/Terlambat\s+(\d+)\s+menit/i);
+          if (match && match[1]) {
+            totalLateHours += parseFloat(match[1]) / 60;
+          } else if (l.clockInTime) {
+            try {
+              const clockIn = new Date(l.clockInTime);
+              const dec = clockIn.getHours() + clockIn.getMinutes() / 60;
+              let targetStart = 7;
+              if (dec > 13) targetStart = 15;
+              else if (dec > 9) targetStart = 11;
+              const diff = Math.max(0, dec - targetStart);
+              totalLateHours += diff > 0 ? diff : 0.5;
+            } catch {
+              totalLateHours += 0.5;
+            }
+          } else {
+            totalLateHours += 0.5;
+          }
+        });
+        const roundedLateHours = Math.round(totalLateHours * 10) / 10;
+        const hourlyWage = Math.round(dailyWage / 8);
+        const lateDeduction = Math.round(hourlyWage * roundedLateHours);
+
         const divisionBonusPlafon = settings?.divisionKpiBonusTarget?.[emp.department?.toUpperCase() || ""] || 0;
         const targetKpiBonus = contract?.kpiBonusTarget || divisionBonusPlafon || 0;
-        const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
         const expectedDays = Math.max(1, presentDays || 22);
 
         // ─── Otomatisasi Tunjangan Jabatan Leader Berbasis Capaian Jobdesk ───
@@ -186,7 +213,7 @@ export function Payroll() {
         const otherDeductions = 0;
         
         const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay;
-        const netPay = grossPay - alphaDeduction - otherDeductions;
+        const netPay = grossPay - alphaDeduction - lateDeduction - otherDeductions;
 
         const completionPercentage = autoScore;
 
@@ -200,6 +227,8 @@ export function Payroll() {
           performanceSummary: {
             presentDays,
             lateDays,
+            lateHours: roundedLateHours,
+            lateDeduction,
             alphaDays,
             checklistDays: isLeader ? checklistDays : presentDays,
             expectedDays: Math.max(1, presentDays || 22),
@@ -221,6 +250,9 @@ export function Payroll() {
             targetBonus,
             overtimePay,
             alphaDeduction,
+            lateDeduction,
+            lateHours: roundedLateHours,
+            lateDays,
             otherDeductions,
             grossPay,
             netPay: netPay > 0 ? netPay : 0,
@@ -476,7 +508,19 @@ export function Payroll() {
                         </span>
                       )}
                     </td>
-                    <td className="p-4 text-right text-rose-600">-{formatCurrency(calculation.alphaDeduction)}</td>
+                    <td className="p-4 text-right text-rose-600">
+                      <div>-{formatCurrency(calculation.alphaDeduction + (calculation.lateDeduction || 0))}</div>
+                      {(calculation.lateDeduction || 0) > 0 && (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 block mt-0.5">
+                          Telat: -{formatCurrency(calculation.lateDeduction || 0)} ({calculation.lateHours || 0}j)
+                        </span>
+                      )}
+                      {calculation.alphaDeduction > 0 && (
+                        <span className="text-[10px] text-rose-700 bg-rose-50 px-1 py-0.5 rounded border border-rose-200 block mt-0.5">
+                          Alpha: -{formatCurrency(calculation.alphaDeduction)}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(calculation.netPay)}</td>
                     <td className="p-4">
                       {existingRecord ? (
