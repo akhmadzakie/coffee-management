@@ -23,6 +23,15 @@ const initialSettings = {
   leaderKitchenTasks: "[]",
   leaderBakerTasks: "[]",
   managerTasks: "[]",
+  gemini_api_key: null,
+  taxEnabled: false,
+  taxRate: 10,
+  taxMode: "EXCLUSIVE",
+  maxCashierDiscount: 10,
+  monthlyRevenueTarget: 150000000,
+  targetBonusAmount: 0,
+  divisionKpiBonusTarget: "{}",
+  scheduleApprovals: "{}",
 };
 
 const initialUsers = [
@@ -219,6 +228,10 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS tax_rate NUMERIC DEFAULT 10`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS tax_mode TEXT DEFAULT 'EXCLUSIVE'`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS max_cashier_discount NUMERIC DEFAULT 10`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS monthly_revenue_target DOUBLE PRECISION DEFAULT 150000000`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS target_bonus_amount DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS division_kpi_bonus_target TEXT DEFAULT '{}'`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS schedule_approvals TEXT DEFAULT '{}'`,
     `CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         receipt_no TEXT NOT NULL,
@@ -565,6 +578,14 @@ async function startServer() {
     leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
     managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
     gemini_api_key: st?.gemini_api_key || st?.geminiApiKey || process.env.GEMINI_API_KEY || null,
+    taxEnabled: Boolean(st?.taxEnabled ?? false),
+    taxRate: Number(st?.taxRate ?? 10),
+    taxMode: String(st?.taxMode || "EXCLUSIVE"),
+    maxCashierDiscount: Number(st?.maxCashierDiscount ?? 10),
+    monthlyRevenueTarget: Number(st?.monthlyRevenueTarget !== undefined ? st.monthlyRevenueTarget : 150000000),
+    targetBonusAmount: Number(st?.targetBonusAmount !== undefined ? st.targetBonusAmount : 0),
+    divisionKpiBonusTarget: typeof st?.divisionKpiBonusTarget === "object" ? JSON.stringify(st.divisionKpiBonusTarget) : String(st?.divisionKpiBonusTarget || "{}"),
+    scheduleApprovals: typeof st?.scheduleApprovals === "object" ? JSON.stringify(st.scheduleApprovals) : String(st?.scheduleApprovals || "{}"),
   });
 
   const sanitizeUser = (u: any) => {
@@ -677,6 +698,7 @@ async function startServer() {
     clockInPhotoUrl: a.clockInPhotoUrl ? String(a.clockInPhotoUrl) : null,
     clockOutPhotoUrl: a.clockOutPhotoUrl ? String(a.clockOutPhotoUrl) : null,
     status: String(a.status || "HADIR"),
+    approvalStatus: a.approvalStatus ? String(a.approvalStatus) : "PENDING",
     notes: String(a.notes || ""),
   });
 
@@ -941,6 +963,16 @@ async function startServer() {
         rawSettings.geminiApiKey ||
         process.env.GEMINI_API_KEY ||
         "";
+      const parseObjSafe = (val: any) => {
+        if (!val) return {};
+        if (typeof val === "object") return val;
+        try {
+          return JSON.parse(val);
+        } catch {
+          return {};
+        }
+      };
+
       const formattedSettings = {
         ...rawSettings,
         geminiApiKey: effectiveApiKey,
@@ -949,6 +981,14 @@ async function startServer() {
         leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
         leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
         managerTasks: parseTasksJson(rawSettings.managerTasks),
+        monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
+        targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
+        divisionKpiBonusTarget: parseObjSafe(rawSettings.divisionKpiBonusTarget),
+        scheduleApprovals: parseObjSafe(rawSettings.scheduleApprovals),
+        taxEnabled: Boolean(rawSettings.taxEnabled ?? false),
+        taxRate: Number(rawSettings.taxRate ?? 10),
+        taxMode: String(rawSettings.taxMode || "EXCLUSIVE"),
+        maxCashierDiscount: Number(rawSettings.maxCashierDiscount ?? 10),
       };
 
       res.json({

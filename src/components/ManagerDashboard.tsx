@@ -26,6 +26,8 @@ import {
   Sparkles,
   Sliders,
   Calendar,
+  CheckCheck,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -212,6 +214,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
     return { hadir, terlambat, izinSakit, belumHadir, total: activeEmployees.length };
   }, [todayAttendances, activeEmployees]);
+
+  const pendingToday = useMemo(() => {
+    return todayAttendances.filter(
+      (a) => (a.approvalStatus || "PENDING") === "PENDING" && a.status !== "ALPHA"
+    );
+  }, [todayAttendances]);
 
   // Checklist Jobdesk Divisi Hari Ini
   const divisionChecklists = useMemo(() => {
@@ -586,14 +594,35 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         {/* Kehadiran Staf Hari Ini (Live Attendance) */}
         <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
                 <Users className="w-4 h-4 text-amber-700" />
                 Kehadiran Staf Hari Ini
               </h2>
-              <span className="text-xs font-semibold text-stone-500">
-                Total: {attendanceStats.total} Karyawan
-              </span>
+              <div className="flex items-center gap-2">
+                {pendingToday.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingToday.length} absensi yang menunggu verifikasi hari ini?`)) {
+                        pendingToday.forEach((att) => {
+                          updateDailyAttendance({
+                            ...att,
+                            approvalStatus: "APPROVED",
+                          });
+                        });
+                      }
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors shadow-2xs"
+                    title="Sahkan seluruh absensi yang masih berstatus menunggu verifikasi hari ini"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    <span>Sahkan Semua ({pendingToday.length})</span>
+                  </button>
+                )}
+                <span className="text-xs font-semibold text-stone-500">
+                  Total: {attendanceStats.total} Karyawan
+                </span>
+              </div>
             </div>
 
             {/* Metric Bars */}
@@ -616,25 +645,29 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               </div>
             </div>
 
-            {/* List Absensi Terbaru dengan Tombol Preview Foto Selfie */}
-            <div className="space-y-2 max-h-44 overflow-y-auto custom-scrollbar pr-1">
+            {/* List Absensi Terbaru dengan Tombol Preview Foto Selfie & Verifikasi */}
+            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
               {todayAttendances.map((att) => {
                 const emp = employees.find((e) => e.id === att.employeeId);
                 const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
-                const hasLocation = Boolean(att.clockInLocation);
+                const appStatus = att.approvalStatus || "PENDING";
 
                 return (
                   <div
                     key={att.id}
-                    className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs"
+                    className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 cursor-pointer"
+                      onClick={() => setSelectedAttendancePhoto(att)}
+                      title="Klik untuk membuka bukti foto & verifikasi"
+                    >
                       <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center shrink-0 text-xs">
                         {emp?.name.charAt(0) || "U"}
                       </div>
                       <div className="min-w-0">
                         <p className="font-bold text-stone-900 truncate">{emp?.name}</p>
-                        <p className="text-[10px] text-stone-500">
+                        <p className="text-[10px] text-stone-500 truncate">
                           {att.clockInTime
                             ? `Clock in: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`
                             : att.notes || "Tidak hadir"}
@@ -642,28 +675,63 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Badge Kehadiran */}
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           att.status === "HADIR"
                             ? "bg-emerald-100 text-emerald-800"
                             : att.status === "TERLAMBAT"
                               ? "bg-amber-100 text-amber-800"
-                              : "bg-stone-200 text-stone-700"
+                              : att.status === "ALPHA"
+                                ? "bg-rose-100 text-rose-800"
+                                : "bg-stone-200 text-stone-700"
                         }`}
                       >
                         {att.status}
                       </span>
 
-                      {hasPhoto && (
+                      {/* Badge Pengesahan Manager */}
+                      {appStatus === "APPROVED" ? (
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5" title="Telah Disahkan oleh Manager">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Sah</span>
+                        </span>
+                      ) : appStatus === "REJECTED" ? (
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-0.5" title="Ditolak oleh Manager (Set Alpha)">
+                          <XCircle className="w-3 h-3 text-rose-600" />
+                          <span>Ditolak</span>
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-0.5" title="Menunggu Verifikasi Manager">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>Review</span>
+                        </span>
+                      )}
+
+                      {/* Quick Sahkan Button if not yet approved and not alpha */}
+                      {appStatus !== "APPROVED" && att.status !== "ALPHA" && (
                         <button
-                          onClick={() => setSelectedAttendancePhoto(att)}
-                          title="Lihat Foto Selfie & GPS Staf"
-                          className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 shadow-2xs transition-colors"
+                          onClick={() => updateDailyAttendance({ ...att, approvalStatus: "APPROVED" })}
+                          title="Sahkan langsung dengan 1-klik"
+                          className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs transition-colors"
                         >
-                          <Camera className="w-3.5 h-3.5 text-amber-800" />
+                          <Check className="w-3.5 h-3.5" />
                         </button>
                       )}
+
+                      {/* Detail Button (Eye / Camera) */}
+                      <button
+                        onClick={() => setSelectedAttendancePhoto(att)}
+                        title="Lihat Bukti Foto, GPS, & Detail Verifikasi"
+                        className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 shadow-2xs transition-colors"
+                      >
+                        {hasPhoto ? (
+                          <Camera className="w-3.5 h-3.5 text-amber-800" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5 text-stone-600" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 );
@@ -888,42 +956,85 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               </div>
 
               <div className="p-5 space-y-4">
-                {/* Employee Details */}
-                <div className="flex items-center justify-between">
+                {/* Employee Details & Status */}
+                <div className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
                   <div>
-                    <p className="font-bold text-stone-900">
+                    <p className="font-bold text-stone-900 text-sm">
                       {employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.name}
                     </p>
-                    <p className="text-xs text-stone-500">
-                      Tanggal: {selectedAttendancePhoto.date} · Status:{" "}
-                      <span className="font-bold text-amber-800">{selectedAttendancePhoto.status}</span>
+                    <p className="text-[11px] text-stone-500">
+                      {employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.position || "Staff"} · Tanggal: {selectedAttendancePhoto.date}
                     </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                      {selectedAttendancePhoto.status}
+                    </span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      selectedAttendancePhoto.approvalStatus === "APPROVED"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : selectedAttendancePhoto.approvalStatus === "REJECTED"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-amber-100 text-amber-800"
+                    }`}>
+                      {selectedAttendancePhoto.approvalStatus === "APPROVED"
+                        ? "Disahkan"
+                        : selectedAttendancePhoto.approvalStatus === "REJECTED"
+                          ? "Ditolak (Alpha)"
+                          : "Menunggu Review"}
+                    </span>
                   </div>
                 </div>
 
-                {/* Selfie Photo Preview */}
-                <div className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-900 aspect-4/3 relative flex items-center justify-center">
-                  {selectedAttendancePhoto.clockInPhotoUrl ? (
-                    <img
-                      src={selectedAttendancePhoto.clockInPhotoUrl}
-                      alt="Selfie Kehadiran"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center p-4 text-stone-400 text-xs">
-                      <Camera className="w-8 h-8 mx-auto mb-1 opacity-50" />
-                      Tidak ada foto selfie tersimpan
-                    </div>
-                  )}
+                {/* Selfie Photo Preview (Clock In & Out) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-900 aspect-4/3 relative flex items-center justify-center">
+                    {selectedAttendancePhoto.clockInPhotoUrl ? (
+                      <>
+                        <img
+                          src={selectedAttendancePhoto.clockInPhotoUrl}
+                          alt="Selfie Clock In"
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-2 left-2 bg-emerald-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
+                          IN: {selectedAttendancePhoto.clockInTime ? new Date(selectedAttendancePhoto.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center p-3 text-stone-400 text-xs">
+                        <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                        Tanpa foto Masuk
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-900 aspect-4/3 relative flex items-center justify-center">
+                    {selectedAttendancePhoto.clockOutPhotoUrl ? (
+                      <>
+                        <img
+                          src={selectedAttendancePhoto.clockOutPhotoUrl}
+                          alt="Selfie Clock Out"
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-2 left-2 bg-rose-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
+                          OUT: {selectedAttendancePhoto.clockOutTime ? new Date(selectedAttendancePhoto.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center p-3 text-stone-400 text-xs">
+                        <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                        {selectedAttendancePhoto.clockOutTime ? "Tanpa foto Pulang" : "Belum Clock Out"}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* GPS Location & Coordinate Info */}
                 {selectedAttendancePhoto.clockInLocation ? (
-                  <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 text-xs flex items-center justify-between">
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs flex items-center justify-between">
                     <div className="flex items-center gap-2 text-stone-700">
                       <MapPin className="w-4 h-4 text-amber-700 shrink-0" />
                       <div>
-                        <p className="font-bold">Koordinat GPS:</p>
+                        <p className="font-bold">Koordinat GPS Masuk:</p>
                         <p className="font-mono text-[11px] text-stone-500">
                           {selectedAttendancePhoto.clockInLocation.lat.toFixed(6)},{" "}
                           {selectedAttendancePhoto.clockInLocation.lng.toFixed(6)}
@@ -940,9 +1051,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     </a>
                   </div>
                 ) : (
-                  <p className="text-xs text-stone-400 text-center italic">
+                  <p className="text-xs text-stone-400 text-center italic py-1">
                     Koordinat GPS tidak terekam pada sesi absensi ini.
                   </p>
+                )}
+
+                {/* Notes / Reason if any */}
+                {selectedAttendancePhoto.notes && (
+                  <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/70 text-xs">
+                    <p className="font-bold text-amber-900 mb-0.5">Catatan / Alasan:</p>
+                    <p className="text-stone-700 leading-relaxed">{selectedAttendancePhoto.notes}</p>
+                  </div>
                 )}
 
                 {/* Approval Action */}
@@ -955,21 +1074,27 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       });
                       setSelectedAttendancePhoto(null);
                     }}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-coffee-sm"
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-coffee-sm flex items-center justify-center gap-1.5"
                   >
-                    Verifikasi Hadir (Sah)
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Verifikasi Hadir (Sah)</span>
                   </button>
                   <button
                     onClick={() => {
-                      updateDailyAttendance({
-                        ...selectedAttendancePhoto,
-                        approvalStatus: "REJECTED",
-                      });
-                      setSelectedAttendancePhoto(null);
+                      const empName = employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.name || "karyawan ini";
+                      if (confirm(`Tolak kehadiran ${empName}? Status kehadiran akan diubah menjadi ALPHA (tidak mendapat tunjangan/gaji hari ini).`)) {
+                        updateDailyAttendance({
+                          ...selectedAttendancePhoto,
+                          status: "ALPHA",
+                          approvalStatus: "REJECTED",
+                        });
+                        setSelectedAttendancePhoto(null);
+                      }
                     }}
-                    className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl text-xs transition-colors border border-rose-200"
+                    className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl text-xs transition-colors border border-rose-200 flex items-center justify-center gap-1"
                   >
-                    Tolak
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <span>Tolak (Set Alpha)</span>
                   </button>
                 </div>
               </div>

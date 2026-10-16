@@ -67,22 +67,31 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const [period, setPeriod] = useState<"this_month" | "last_30_days" | "this_year" | "today">("this_month");
   
   // Target Omzet Bulanan (Tersimpan di database settings, hanya dapat diubah oleh Manager)
-  const monthlyTarget = settings.monthlyRevenueTarget || 150000000;
-  const canSetTarget = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
+  const monthlyTarget = Number(settings.monthlyRevenueTarget) || 150000000;
+  const userRole = currentUser?.role?.toUpperCase();
+  const canSetTarget = userRole === "MANAGER" || userRole === "SUPER_ADMIN";
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
+  const [saveTargetToast, setSaveTargetToast] = useState<string | null>(null);
 
   useEffect(() => {
-    setTargetInput((settings.monthlyRevenueTarget || 150000000).toString());
+    if (settings.monthlyRevenueTarget) {
+      setTargetInput(settings.monthlyRevenueTarget.toString());
+    }
   }, [settings.monthlyRevenueTarget]);
 
   const handleSaveTarget = () => {
-    const val = Math.max(0, parseInt(targetInput) || monthlyTarget);
+    const cleaned = String(targetInput).replace(/\D/g, "");
+    const parsed = parseInt(cleaned, 10);
+    const val = !isNaN(parsed) && parsed > 0 ? parsed : monthlyTarget;
     updateSettings({
       ...settings,
       monthlyRevenueTarget: val,
     });
+    setTargetInput(val.toString());
     setIsEditingTarget(false);
+    setSaveTargetToast(`Target omzet bulanan berhasil disimpan: ${formatCurrency(val)}`);
+    setTimeout(() => setSaveTargetToast(null), 3500);
   };
 
   const now = new Date();
@@ -159,12 +168,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   
   // Total Likuiditas Kas Bersih (Semua Bank & Kas Fisik)
   const totalCashLiquidity = useMemo(() => {
-    return cashAccounts.reduce((sum, a) => sum + a.balance, 0);
-  }, [cashAccounts]);
+    return cashTransactions.reduce((acc, t) => {
+      if (t.type === "IN") return acc + t.amount;
+      if (t.type === "OUT") return acc - t.amount;
+      return acc;
+    }, 0);
+  }, [cashTransactions]);
 
   // Cash Runway (Berapa bulan kas bisa bertahan berdasarkan rata-rata pengeluaran bulanan)
   const averageMonthlyBurn = Math.max(1, totalExpenses > 0 ? totalExpenses : 25000000);
-  const cashRunwayMonths = (totalCashLiquidity / averageMonthlyBurn).toFixed(1);
+  const rawMonths = totalCashLiquidity > 0 ? totalCashLiquidity / averageMonthlyBurn : 0;
+  const cashRunwayMonths = isNaN(rawMonths) ? "0.0" : rawMonths.toFixed(1);
 
   // ─── Unit Economics: 3 Rasio Emas Kafe ─────────────────────────────────────
   // 1. HPP / COGS Ratio (Bahan Baku / Omzet) - Target Sehat: 28% - 35%
@@ -418,17 +432,32 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                     Ditetapkan oleh Manajer
                   </span>
                 )}
+                {saveTargetToast && (
+                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full animate-fade-in">
+                    ✓ {saveTargetToast}
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline gap-2">
                 {isEditingTarget && canSetTarget ? (
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-xs text-slate-400">Rp</span>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       value={targetInput}
                       onChange={(e) => setTargetInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSaveTarget();
+                        } else if (e.key === "Escape") {
+                          setIsEditingTarget(false);
+                        }
+                      }}
                       placeholder="150000000"
                       className="px-2 py-0.5 text-sm font-bold border border-slate-300 rounded-md w-36 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      autoFocus
                     />
                     <button
                       onClick={handleSaveTarget}

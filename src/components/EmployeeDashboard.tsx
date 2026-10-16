@@ -108,12 +108,16 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     let alpha = 0;
 
     monthlyLogs.forEach((l) => {
-      if (l.status === "HADIR") present++;
-      else if (l.status === "TERLAMBAT") {
+      if (l.approvalStatus === "REJECTED" || l.status === "ALPHA" || l.status === "DITOLAK") {
+        alpha++;
+      } else if (l.status === "HADIR") {
+        present++;
+      } else if (l.status === "TERLAMBAT") {
         present++;
         late++;
-      } else if (l.status === "IZIN" || l.status === "SAKIT") sickLeave++;
-      else if (l.status === "ALPHA" || l.status === "DITOLAK") alpha++;
+      } else if (l.status === "IZIN" || l.status === "SAKIT") {
+        sickLeave++;
+      }
     });
 
     return { present, late, sickLeave, alpha, totalDays: monthlyLogs.length };

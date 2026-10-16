@@ -174,8 +174,13 @@ export const KPI: React.FC = () => {
 
   const handleSaveStoreTargetSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    const newTarget = Math.max(0, parseInt(targetInput) || monthlyTarget);
-    const newBonus = Math.max(0, parseInt(bonusInput) || 0);
+    const cleanTarget = String(targetInput).replace(/\D/g, "");
+    const parsedTarget = parseInt(cleanTarget, 10);
+    const newTarget = !isNaN(parsedTarget) && parsedTarget > 0 ? parsedTarget : monthlyTarget;
+
+    const cleanBonus = String(bonusInput).replace(/\D/g, "");
+    const parsedBonus = parseInt(cleanBonus, 10);
+    const newBonus = !isNaN(parsedBonus) && parsedBonus >= 0 ? parsedBonus : 0;
 
     updateSettings({
       ...settings,

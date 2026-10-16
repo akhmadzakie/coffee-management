@@ -202,6 +202,7 @@ export function ClockIn() {
           clockInPhotoUrl: photoDataUrl,
           clockOutPhotoUrl: null,
           status,
+          approvalStatus: "PENDING",
           notes: notes.trim()
         });
         setFeedback({ type: "success", message: `Clock In berhasil dicatat untuk Shift ${scheduledShift}! Selamat bertugas.` });
@@ -248,6 +249,7 @@ export function ClockIn() {
         clockInPhotoUrl: photoDataUrl || "",
         clockOutPhotoUrl: photoDataUrl || "",
         status: leaveStatus,
+        approvalStatus: "PENDING",
         notes: notes.trim()
       });
       setFeedback({ type: "success", message: `Pengajuan ${leaveStatus} berhasil dikirim ke Manager!` });

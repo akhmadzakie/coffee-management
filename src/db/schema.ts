@@ -7,6 +7,7 @@ import {
   jsonb,
   boolean,
   real,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 // ─── Expense Categories (Fase 1) ────────────────────────────────────────────
@@ -146,6 +147,10 @@ export const settings = pgTable("settings", {
   taxRate: real("tax_rate").default(10).notNull(),
   taxMode: varchar("tax_mode", { length: 20 }).default("EXCLUSIVE").notNull(),
   maxCashierDiscount: real("max_cashier_discount").default(10).notNull(),
+  monthlyRevenueTarget: doublePrecision("monthly_revenue_target").default(150000000),
+  targetBonusAmount: doublePrecision("target_bonus_amount").default(0),
+  divisionKpiBonusTarget: text("division_kpi_bonus_target").default("{}"),
+  scheduleApprovals: text("schedule_approvals").default("{}"),
 });
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),

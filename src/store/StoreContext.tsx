@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   User,
+  Role,
   DeviceSession,
   Settings,
   CashAccount,
@@ -19,6 +20,7 @@ import {
   AuditLog,
   Supplier,
   PurchaseOrder,
+  PurchaseOrderItem,
   ShiftSession,
   Employee,
   EmployeeContract,
@@ -215,15 +217,29 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<DeviceSession[]>([]);
-  const [settings, setSettings] = useState<Settings>({
-    id: "1",
-    logoDataUrl: null,
-    brandName: "Julia's Management System",
-    companyAddress: "",
-    bankDetails: "",
-    salesPerson: "",
-    footerMessage: "",
-    language: "id",
+  const [settings, setSettings] = useState<Settings>(() => {
+    const defaultSettings: Settings = {
+      id: "1",
+      logoDataUrl: null,
+      brandName: "Julia's Management System",
+      companyAddress: "",
+      bankDetails: "",
+      salesPerson: "",
+      footerMessage: "",
+      language: "id",
+      monthlyRevenueTarget: 150000000,
+      targetBonusAmount: 0,
+      divisionKpiBonusTarget: {},
+      scheduleApprovals: {},
+    };
+    try {
+      const cached = localStorage.getItem("app_settings_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return { ...defaultSettings, ...parsed };
+      }
+    } catch {}
+    return defaultSettings;
   });
 
   const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
@@ -439,13 +455,31 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             }
             return [];
           };
-          setSettings({
+          const parseObj = (v: any) => {
+            if (v && typeof v === "object" && !Array.isArray(v)) return v;
+            if (typeof v === "string") {
+              try {
+                const p = JSON.parse(v);
+                if (p && typeof p === "object") return p;
+              } catch {}
+            }
+            return {};
+          };
+          const newSettings: Settings = {
             ...s,
+            monthlyRevenueTarget: Number(s.monthlyRevenueTarget !== undefined ? s.monthlyRevenueTarget : 150000000),
+            targetBonusAmount: Number(s.targetBonusAmount !== undefined ? s.targetBonusAmount : 0),
+            divisionKpiBonusTarget: parseObj(s.divisionKpiBonusTarget),
+            scheduleApprovals: parseObj(s.scheduleApprovals),
             leaderBarTasks: parseArr(s.leaderBarTasks),
             leaderKitchenTasks: parseArr(s.leaderKitchenTasks),
             leaderBakerTasks: parseArr(s.leaderBakerTasks),
             managerTasks: parseArr(s.managerTasks),
-          });
+          };
+          setSettings(newSettings);
+          try {
+            localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
+          } catch {}
         }
         if (Array.isArray(data.users) && data.users.length > 0)
           setUsers(data.users);
@@ -751,6 +785,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     suppliers,
     purchaseOrders,
     shifts,
+    employees,
+    contracts,
+    attendances,
+    dailyAttendances,
+    dailyChecklists,
+    employeeShifts,
+    kpiRecords,
+    expenseCategories,
+    budgets,
+    bankReconciliations,
+    bankStatementLines,
+    stockOpnames,
+    stockOpnameItems,
+    payrollRecords,
+    closedPeriods,
   ]);
 
   const markChanged = () => {
@@ -761,6 +810,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSettings = (newSettings: Settings) => {
     setSettings(newSettings);
+    try {
+      localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
+    } catch {}
     markChanged();
   };
 
@@ -952,7 +1004,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
     const id = generateId();
-    const newAtt: DailyAttendance = { ...att, id };
+    const newAtt: DailyAttendance = {
+      approvalStatus: "PENDING",
+      ...att,
+      id,
+    };
     setDailyAttendances((prev) => [...prev, newAtt]);
     writeAuditLog("CREATE", "daily_attendances", id);
     markChanged();

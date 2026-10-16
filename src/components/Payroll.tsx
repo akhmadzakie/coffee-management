@@ -98,10 +98,10 @@ export function Payroll() {
         const emp = employees.find((e: any) => e.id === empId) || users.find((u: any) => u.id === empId) || { id: empId, name: "Unknown Karyawan" };
         const contract = contracts.find((c: any) => c.employeeId === empId && c.status === "ACTIVE");
         
-        // Auto-calculate from daily attendances
+        // Auto-calculate from daily attendances (Opsi B: dihitung hadir kecuali ditolak Manager atau berstatus Alpha)
         const dailyLogs = dailyAttendances.filter((a: any) => a.employeeId === emp.id && a.date.startsWith(period));
-        const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
-        const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA").length;
+        const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
+        const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA" || a.approvalStatus === "REJECTED").length;
         const kpi = kpiRecords.find((k: any) => k.employeeId === emp.id && k.period === period);
 
         const rawBasicSalary = contract?.basicSalary || contract?.baseSalary || 0;
@@ -215,10 +215,10 @@ export function Payroll() {
     const dailyLogs = (dailyAttendances || []).filter(
       (a: any) => a.employeeId === employeeId && a.date.startsWith(period)
     );
-    const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
-    const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT").length;
-    const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA").length;
-    const sickOrLeaveDays = dailyLogs.filter((a: any) => ["IZIN", "SAKIT"].includes(a.status)).length;
+    const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
+    const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT" && a.approvalStatus !== "REJECTED").length;
+    const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA" || a.approvalStatus === "REJECTED").length;
+    const sickOrLeaveDays = dailyLogs.filter((a: any) => ["IZIN", "SAKIT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
 
     const empObj = employees.find((e: any) => e.id === employeeId);
     const userObj = (users || []).find(

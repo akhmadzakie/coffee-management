@@ -1820,10 +1820,10 @@ export function HRManagement() {
                             id: empId,
                             employeeId: empId,
                             period: currentMonth,
-                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status)).length,
-                            sickDays: logs.filter(l => l.status === "SAKIT").length,
-                            permissionDays: logs.filter(l => l.status === "IZIN").length,
-                            alphaDays: logs.filter(l => l.status === "ALPHA").length,
+                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status) && l.approvalStatus !== "REJECTED").length,
+                            sickDays: logs.filter(l => l.status === "SAKIT" && l.approvalStatus !== "REJECTED").length,
+                            permissionDays: logs.filter(l => l.status === "IZIN" && l.approvalStatus !== "REJECTED").length,
+                            alphaDays: logs.filter(l => l.status === "ALPHA" || l.approvalStatus === "REJECTED").length,
                           };
                         }).filter(Boolean);
 
