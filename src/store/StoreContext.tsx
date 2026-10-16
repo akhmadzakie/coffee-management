@@ -547,7 +547,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               {
                 id: "admin-1",
                 username: "admin",
-                pin: "1234",
+                pin: "123456",
                 name: "Super Admin (Offline)",
                 role: "SUPER_ADMIN",
               },

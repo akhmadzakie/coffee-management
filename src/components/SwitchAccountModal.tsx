@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { User } from "../types";
@@ -10,6 +10,7 @@ import {
   ArrowRight,
   ShieldAlert,
   Loader2,
+  Keyboard,
 } from "lucide-react";
 
 interface SwitchAccountModalProps {
@@ -31,67 +32,98 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
 
   const targetPinLength = selectedUser?.pin?.length === 4 ? 4 : 6;
 
+  const pinRef = useRef(pin);
+  pinRef.current = pin;
+  const selectedUserRef = useRef(selectedUser);
+  selectedUserRef.current = selectedUser;
+  const isSubmittingRef = useRef(isSubmitting);
+  isSubmittingRef.current = isSubmitting;
+
   const handleSelectUser = (user: User) => {
     setSelectedUser(user);
+    pinRef.current = "";
     setPin("");
     setError("");
   };
 
   const handleKeypadPress = (num: string) => {
-    const maxLen = selectedUser?.pin?.length || 6;
-    if (pin.length < maxLen) {
-      const nextPin = pin + num;
+    if (isSubmittingRef.current) return;
+    const user = selectedUserRef.current;
+    if (!user) {
+      setError("Pilih operator yang ingin beralih.");
+      return;
+    }
+
+    const maxLen = user.pin?.length === 4 ? 4 : 6;
+    const currentPin = pinRef.current;
+    if (currentPin.length < maxLen) {
+      const nextPin = currentPin + num;
+      pinRef.current = nextPin;
       setPin(nextPin);
       setError("");
-      if (selectedUser?.pin && nextPin.length === selectedUser.pin.length) {
+
+      if (nextPin.length === maxLen) {
         setIsSubmitting(true);
-        login(selectedUser.username, nextPin).then((success) => {
+        login(user.username, nextPin).then((success) => {
           setIsSubmitting(false);
           if (success) {
             setError("");
+            pinRef.current = "";
             setPin("");
             setSelectedUser(null);
             onClose();
           } else {
             setError("PIN otorisasi tidak sesuai.");
+            pinRef.current = "";
             setPin("");
           }
+        }).catch(() => {
+          setIsSubmitting(false);
         });
       }
     }
   };
 
   const handleKeypadBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
+    if (isSubmittingRef.current) return;
+    const nextPin = pinRef.current.slice(0, -1);
+    pinRef.current = nextPin;
+    setPin(nextPin);
     setError("");
   };
 
   const handleKeypadClear = () => {
+    if (isSubmittingRef.current) return;
+    pinRef.current = "";
     setPin("");
     setError("");
   };
 
   const handleSwitchSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!selectedUser) {
+    const user = selectedUserRef.current;
+    const currentPin = pinRef.current;
+    if (!user) {
       setError("Pilih operator yang ingin beralih.");
       return;
     }
-    if (!pin) {
+    if (!currentPin) {
       setError("Masukkan PIN operator.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const success = await login(selectedUser.username, pin);
+      const success = await login(user.username, currentPin);
       if (success) {
         setError("");
+        pinRef.current = "";
         setPin("");
         setSelectedUser(null);
         onClose();
       } else {
         setError("PIN otorisasi tidak sesuai.");
+        pinRef.current = "";
         setPin("");
       }
     } catch (err: any) {
@@ -100,6 +132,41 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  // Listener keyboard fisik saat modal aktif
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable;
+
+      if (isInput) return;
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleKeypadPress(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleKeypadBackspace();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        if (pinRef.current) {
+          handleKeypadClear();
+        } else {
+          onClose();
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        handleSwitchSubmit();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
 
   const getRoleBadge = (role: string) => {
     switch (role?.toUpperCase()) {
@@ -235,20 +302,26 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
             )}
 
             {/* PIN Dots Display (Responsive 4 or 6 digit) */}
-            <div className="flex items-center justify-center gap-3 py-3 bg-stone-50 rounded-2xl border border-stone-200">
-              {Array.from({ length: targetPinLength }).map((_, idx) => {
-                const isFilled = pin.length > idx;
-                return (
-                  <div
-                    key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                      isFilled
-                        ? "bg-amber-500 shadow-sm shadow-amber-500/40 scale-110"
-                        : "bg-stone-200 border border-stone-300"
-                    }`}
-                  />
-                );
-              })}
+            <div className="flex flex-col items-center justify-center gap-1.5 py-2.5 bg-stone-50 rounded-2xl border border-stone-200">
+              <div className="flex items-center justify-center gap-3">
+                {Array.from({ length: targetPinLength }).map((_, idx) => {
+                  const isFilled = pin.length > idx;
+                  return (
+                    <div
+                      key={idx}
+                      className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
+                        isFilled
+                          ? "bg-amber-500 shadow-sm shadow-amber-500/40 scale-110"
+                          : "bg-stone-200 border border-stone-300"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-stone-400 font-medium">
+                <Keyboard className="w-3 h-3 text-stone-400" />
+                <span>Ketik di keyboard atau keypad layar</span>
+              </div>
             </div>
 
             {/* Compact Numeric Keypad */}

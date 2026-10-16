@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useStore } from "../../store/StoreContext";
 import {
   Coffee,
@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   AlertCircle,
   Store,
+  Keyboard,
 } from "lucide-react";
 
 interface PosCashierLoginProps {
@@ -29,6 +30,12 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
   const [error, setError] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  const pinRef = useRef(pin);
+  pinRef.current = pin;
+  const selectedUserRef = useRef(selectedUser);
+  selectedUserRef.current = selectedUser;
+  const isSubmittingRef = useRef(false);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -44,38 +51,80 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
   }, [cashierUsers, selectedUser]);
 
   const handleKeypadPress = async (num: string) => {
-    if (!selectedUser) {
+    const user = selectedUserRef.current;
+    if (!user) {
       setError("Silakan pilih kasir yang bertugas terlebih dahulu!");
       return;
     }
+    if (isSubmittingRef.current) return;
 
-    const maxLen = selectedUser.pin ? selectedUser.pin.length : 4;
-    if (pin.length < maxLen) {
-      const nextPin = pin + num;
+    const currentPin = pinRef.current;
+    const maxLen = user.pin ? user.pin.length : 6;
+    if (currentPin.length < maxLen) {
+      const nextPin = currentPin + num;
+      pinRef.current = nextPin;
       setPin(nextPin);
       setError("");
 
       if (nextPin.length === maxLen) {
-        const success = await login(selectedUser.username, nextPin);
-        if (success) {
-          onLoginSuccess?.();
-        } else {
-          setError("PIN salah. Silakan coba lagi!");
-          setPin("");
+        isSubmittingRef.current = true;
+        try {
+          const success = await login(user.username, nextPin);
+          if (success) {
+            onLoginSuccess?.();
+          } else {
+            setError("PIN otorisasi tidak sesuai. Silakan coba lagi!");
+            pinRef.current = "";
+            setPin("");
+          }
+        } finally {
+          isSubmittingRef.current = false;
         }
       }
     }
   };
 
   const handleBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
+    if (isSubmittingRef.current) return;
+    const nextPin = pinRef.current.slice(0, -1);
+    pinRef.current = nextPin;
+    setPin(nextPin);
     setError("");
   };
 
   const handleClear = () => {
+    if (isSubmittingRef.current) return;
+    pinRef.current = "";
     setPin("");
     setError("");
   };
+
+  // Listener input keyboard fisik (angka 0-9, backspace, escape)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleKeypadPress(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === "Escape" || e.key === "Delete") {
+        e.preventDefault();
+        handleClear();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between items-center relative overflow-hidden select-none font-sans p-4 sm:p-6 lg:p-8">
@@ -213,12 +262,10 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             </p>
           </div>
 
-          {/* PIN Indicator Dots */}
-          <div className="flex items-center gap-3 py-2 mb-3">
-            {[0, 1, 2, 3].map((idx) => {
-              const maxDots = selectedUser?.pin ? selectedUser.pin.length : 4;
-              if (idx >= maxDots) return null;
-              return (
+          {/* PIN Indicator Dots (Support 6 digit default) */}
+          <div className="flex flex-col items-center gap-1.5 mb-3">
+            <div className="flex items-center gap-3 py-1">
+              {Array.from({ length: selectedUser?.pin ? selectedUser.pin.length : 6 }).map((_, idx) => (
                 <div
                   key={idx}
                   className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
@@ -227,8 +274,12 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                       : "border-slate-300 bg-slate-100"
                   }`}
                 />
-              );
-            })}
+              ))}
+            </div>
+            <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+              <Keyboard className="w-3.5 h-3.5" />
+              <span>Ketik via keyboard fisik atau keypad layar</span>
+            </div>
           </div>
 
           {error && (

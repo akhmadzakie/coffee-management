@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useStore } from "../store/StoreContext";
 import { useTranslation } from "../utils/i18n";
 import {
@@ -18,6 +18,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Keyboard,
 } from "lucide-react";
 
 export const Login = () => {
@@ -47,58 +48,132 @@ export const Login = () => {
     }
   }, [users]);
 
+  const selectedUserObj = users?.find((u) => u.username === username);
+
+  const pinRef = useRef(pin);
+  pinRef.current = pin;
+  const usernameRef = useRef(username);
+  usernameRef.current = username;
+  const selectedUserObjRef = useRef(selectedUserObj);
+  selectedUserObjRef.current = selectedUserObj;
+  const useKeypadRef = useRef(useKeypad);
+  useKeypadRef.current = useKeypad;
+  const isSubmittingRef = useRef(false);
+
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!username.trim()) {
+    const currentUsername = usernameRef.current;
+    const currentPin = pinRef.current;
+    if (!currentUsername.trim()) {
       setError(isIndo ? "Pilih akun atau masukkan username operator!" : "Please select or enter username!");
       return;
     }
-    if (!pin) {
+    if (!currentPin) {
       setError(isIndo ? "Masukkan PIN otorisasi Anda!" : "Please enter your PIN / Password!");
       return;
     }
 
-    const success = await login(username, pin);
-    if (!success) {
-      setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
-      setPin("");
+    isSubmittingRef.current = true;
+    try {
+      const success = await login(currentUsername, currentPin);
+      if (!success) {
+        setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
+        pinRef.current = "";
+        setPin("");
+      }
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
   const handleSelectQuickUser = (selectedUsername: string) => {
     setUsername(selectedUsername);
+    pinRef.current = "";
     setPin("");
     setError("");
   };
 
   const handleKeypadPress = (num: string) => {
-    const maxLen = selectedUserObj?.pin?.length || 6;
-    if (pin.length < maxLen) {
-      const nextPin = pin + num;
+    if (isSubmittingRef.current) return;
+    const targetUser = selectedUserObjRef.current;
+    const currentUsername = usernameRef.current;
+    const maxLen = targetUser?.pin?.length || 6;
+    const currentPin = pinRef.current;
+
+    if (currentPin.length < maxLen) {
+      const nextPin = currentPin + num;
+      pinRef.current = nextPin;
       setPin(nextPin);
       setError("");
-      if (selectedUserObj?.pin && nextPin.length === selectedUserObj.pin.length) {
-        login(username, nextPin).then((success) => {
+
+      const targetExpectedLen = targetUser?.pin ? targetUser.pin.length : 6;
+      if (nextPin.length === targetExpectedLen) {
+        isSubmittingRef.current = true;
+        login(currentUsername, nextPin).then((success) => {
+          isSubmittingRef.current = false;
           if (!success) {
             setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
+            pinRef.current = "";
             setPin("");
           }
+        }).catch(() => {
+          isSubmittingRef.current = false;
         });
       }
     }
   };
 
   const handleKeypadBackspace = () => {
-    setPin((prev) => prev.slice(0, -1));
+    if (isSubmittingRef.current) return;
+    const nextPin = pinRef.current.slice(0, -1);
+    pinRef.current = nextPin;
+    setPin(nextPin);
     setError("");
   };
 
   const handleKeypadClear = () => {
+    if (isSubmittingRef.current) return;
+    pinRef.current = "";
     setPin("");
     setError("");
   };
 
-  const selectedUserObj = users?.find((u) => u.username === username);
+  // Listener keyboard fisik (angka 0-9, backspace, escape, enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable;
+
+      if (isInput) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleLogin();
+        }
+        return;
+      }
+
+      if (useKeypadRef.current) {
+        if (/^[0-9]$/.test(e.key)) {
+          e.preventDefault();
+          handleKeypadPress(e.key);
+        } else if (e.key === "Backspace") {
+          e.preventDefault();
+          handleKeypadBackspace();
+        } else if (e.key === "Escape" || e.key === "Delete") {
+          e.preventDefault();
+          handleKeypadClear();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          handleLogin();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const getRoleBadge = (role: string) => {
     switch (role?.toUpperCase()) {
@@ -286,16 +361,16 @@ export const Login = () => {
                 </h2>
                 <p className="text-xs text-stone-500 mt-1">
                   {useKeypad
-                    ? `Masukkan ${selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4)} Digit PIN Keamanan`
+                    ? `Masukkan ${selectedUserObj?.pin?.length || 6} Digit PIN Keamanan`
                     : "Masukkan password / PIN akun Anda"}
                 </p>
               </div>
 
-              {/* PIN Indicator Dots (Support 4 or 6 digit PIN) */}
+              {/* PIN Indicator Dots (Support 6 digit default) */}
               {useKeypad ? (
                 <div className="mb-6 flex flex-col items-center">
                   <div className="flex items-center gap-3.5 my-2">
-                    {Array.from({ length: selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4) }).map((_, idx) => {
+                    {Array.from({ length: selectedUserObj?.pin?.length || 6 }).map((_, idx) => {
                       const isFilled = pin.length > idx;
                       return (
                         <div
@@ -309,9 +384,10 @@ export const Login = () => {
                       );
                     })}
                   </div>
-                  <span className="text-[11px] text-stone-400 mt-1 font-mono">
-                    {pin.length} / {selectedUserObj?.pin?.length || (pin.length > 4 ? 6 : 4)} digit
-                  </span>
+                  <div className="flex items-center gap-1 text-[11px] text-stone-400 mt-1 font-mono">
+                    <Keyboard className="w-3 h-3 text-stone-400" />
+                    <span>{pin.length} / {selectedUserObj?.pin?.length || 6} digit • Bisa ketik keyboard</span>
+                  </div>
                 </div>
               ) : (
                 <div className="w-full mb-6">
@@ -432,38 +508,42 @@ export const Login = () => {
             <button
               onClick={() => {
                 setUsername("admin");
-                setPin("1234");
+                pinRef.current = "123456";
+                setPin("123456");
               }}
               className="px-3 py-1 rounded-lg bg-stone-50 hover:bg-amber-50 hover:text-amber-800 border border-stone-200 text-xs transition-colors font-medium"
             >
-              👑 Owner: <span className="font-mono text-stone-800">admin / 1234</span>
+              👑 Owner: <span className="font-mono text-stone-800">admin / 123456</span>
             </button>
             <button
               onClick={() => {
                 setUsername("manager");
-                setPin("1234");
+                pinRef.current = "123456";
+                setPin("123456");
               }}
               className="px-3 py-1 rounded-lg bg-stone-50 hover:bg-indigo-50 hover:text-indigo-800 border border-stone-200 text-xs transition-colors font-medium"
             >
-              💼 Manager: <span className="font-mono text-stone-800">manager / 1234</span>
+              💼 Manager: <span className="font-mono text-stone-800">manager / 123456</span>
             </button>
             <button
               onClick={() => {
                 setUsername("kasir");
-                setPin("1234");
+                pinRef.current = "123456";
+                setPin("123456");
               }}
               className="px-3 py-1 rounded-lg bg-stone-50 hover:bg-emerald-50 hover:text-emerald-800 border border-stone-200 text-xs transition-colors font-medium"
             >
-              💳 Kasir: <span className="font-mono text-stone-800">kasir / 1234</span>
+              💳 Kasir: <span className="font-mono text-stone-800">kasir / 123456</span>
             </button>
             <button
               onClick={() => {
                 setUsername("barista");
-                setPin("1234");
+                pinRef.current = "123456";
+                setPin("123456");
               }}
               className="px-3 py-1 rounded-lg bg-stone-50 hover:bg-orange-50 hover:text-orange-800 border border-stone-200 text-xs transition-colors font-medium"
             >
-              ☕ Leader: <span className="font-mono text-stone-800">barista / 1234</span>
+              ☕ Leader: <span className="font-mono text-stone-800">barista / 123456</span>
             </button>
           </div>
         )}

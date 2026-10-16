@@ -38,7 +38,7 @@ const initialUsers = [
   {
     id: "admin-1",
     username: "admin",
-    pin: "1234",
+    pin: "123456",
     name: "Super Admin",
     role: "SUPER_ADMIN",
     department: "Management",
@@ -311,6 +311,19 @@ async function ensureTables() {
       }
     }
   }
+
+  // Migrasi PIN default lama (1234) ke PIN 6-digit standar (123456)
+  try {
+    const pin1234Hash = crypto.createHash("sha256").update("1234").digest("hex");
+    const pin123456Hash = crypto.createHash("sha256").update("123456").digest("hex");
+    await pool.query(
+      `UPDATE users SET pin = $1 WHERE pin = '1234' OR pin = $2`,
+      [pin123456Hash, pin1234Hash]
+    );
+  } catch (migErr: any) {
+    // Abaikan jika tabel users belum terisi atau database offline
+  }
+
   console.log("✅ Schema ensured: Fase 1-4 & POS tables ready.");
 }
 
@@ -606,7 +619,7 @@ async function startServer() {
     let role = String(u.role || "MANAGER");
     if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
     if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
-    let finalPin = u.pin ? String(u.pin) : (existingPin || "1234");
+    let finalPin = u.pin ? String(u.pin) : (existingPin || "123456");
     if (finalPin.length !== 64) {
       finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
     }
@@ -1050,9 +1063,15 @@ async function startServer() {
         }
       }
 
-      const user = currentUsers.find(u => 
-        u.username === username && (u.pin === finalPin || u.pin === pin)
-      );
+      const user = currentUsers.find(u => {
+        if (u.username !== username) return false;
+        if (u.pin === finalPin || u.pin === pin) return true;
+        // Izinkan login dengan PIN default 123456 jika data user di DB masih memakai PIN default lama 1234
+        if (pin === "123456" && (u.pin === "1234" || u.pin === "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4")) {
+          return true;
+        }
+        return false;
+      });
       
       if (!user) {
         return res.status(401).json({ error: "Username atau PIN salah" });
