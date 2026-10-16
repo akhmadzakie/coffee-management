@@ -287,9 +287,6 @@ export const LeaderChecklist: React.FC = () => {
   const [bakerCategories, setBakerCategories] = useState<TaskCategoryGroup[]>(() =>
     ensureCategoryArray(settings?.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES)
   );
-  const [divisionBonusTarget, setDivisionBonusTarget] = useState<number>(() => {
-    return settings?.divisionKpiBonusTarget?.["BAR"] ?? (settings?.targetBonusAmount || 250000);
-  });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Sub-tab di pengaturan Manager: Tasks vs Allowance Rules
@@ -448,12 +445,6 @@ export const LeaderChecklist: React.FC = () => {
     setBakerCategories(ensureCategoryArray(settings?.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES));
   }, [settings]);
 
-  // Sync bonus target when editing division changes
-  React.useEffect(() => {
-    setDivisionBonusTarget(
-      settings?.divisionKpiBonusTarget?.[editingDivision] ?? (settings?.targetBonusAmount || 250000)
-    );
-  }, [editingDivision, settings]);
 
   // Master categories getter by division
   const getCategoriesForDivision = (div: Division): TaskCategoryGroup[] => {
@@ -601,11 +592,6 @@ export const LeaderChecklist: React.FC = () => {
   const leaderPercentage = totalSubTasksLeader > 0 
     ? Math.round((completedSubTasksLeader / totalSubTasksLeader) * 100) 
     : 0;
-
-  // Target bonus plafon for active division
-  const effectiveDivisionBonus = settings?.divisionKpiBonusTarget?.[leaderActiveDivision] ?? (settings?.targetBonusAmount || 250000);
-  const dailyProratedBonus = Math.round(effectiveDivisionBonus / 22);
-  const projectedBonusToday = Math.round(dailyProratedBonus * (leaderPercentage / 100));
 
   // Tier tunjangan jabatan hari ini untuk leader
   const matchedTodayTier = useMemo(() => {
@@ -825,16 +811,11 @@ export const LeaderChecklist: React.FC = () => {
   };
 
   const handleSaveSettings = () => {
-    const updatedTargets = {
-      ...(settings?.divisionKpiBonusTarget || {}),
-      [editingDivision]: divisionBonusTarget,
-    };
     updateSettings({
       ...settings,
       leaderBarTasks: barCategories,
       leaderKitchenTasks: kitchenCategories,
       leaderBakerTasks: bakerCategories,
-      divisionKpiBonusTarget: updatedTargets,
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 3000);
@@ -1363,10 +1344,10 @@ export const LeaderChecklist: React.FC = () => {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">
-                      Kelola SOP, Rincian Jobdesk & Target Bonus Divisi
+                      Kelola SOP & Master Jobdesk Supervisi Leader
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Atur pembagian tugas Staf Pelaksana vs Leader (Supervisi & QC), jadwal shift, dan plafon bonus KPI.
+                      Atur tugas dan sub-tugas pengawasan stasiun kerja, standar sanitasi, kalibrasi alat, dan kontrol kualitas (QC) per divisi.
                     </p>
                   </div>
 
@@ -1423,37 +1404,6 @@ export const LeaderChecklist: React.FC = () => {
 
               <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 shadow-2xs">
                 👑 Total {statsEditingDivision.totalCount} Tugas Supervisi Leader
-              </div>
-            </div>
-
-            {/* Kartu Target Bonus KPI Divisi */}
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-amber-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-2xs">
-                    <Award className="w-3.5 h-3.5" />
-                    Plafon Bonus KPI Divisi
-                  </span>
-                  <h4 className="font-bold text-slate-800 text-sm">
-                    {editingDivision === "BAR" ? "Divisi Bar & Kasir" : editingDivision === "KITCHEN" ? "Divisi Kitchen (Dapur)" : "Divisi Baker & Pastry"}
-                  </h4>
-                </div>
-                <p className="text-xs text-slate-600">
-                  Besaran plafon bonus yang dikalikan dengan % capaian checklist tugas shift karyawan saat penggajian. (Bonus Diterima = % KPI × Plafon).
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-xl border border-amber-300 shadow-2xs">
-                <span className="text-xs font-bold text-slate-400">Rp</span>
-                <input
-                  type="number"
-                  value={divisionBonusTarget}
-                  onChange={(e) => setDivisionBonusTarget(Math.max(0, parseInt(e.target.value) || 0))}
-                  step={25000}
-                  className="w-32 text-sm font-black text-slate-900 bg-transparent focus:outline-none"
-                  placeholder="250000"
-                />
-                <span className="text-[11px] text-slate-400 font-medium">/ staf</span>
               </div>
             </div>
 
@@ -1639,7 +1589,7 @@ export const LeaderChecklist: React.FC = () => {
                   className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  Simpan Pengaturan Jobdesk & Bonus
+                  Simpan Master Jobdesk Leader
                 </button>
               </div>
             </div>
@@ -1884,7 +1834,7 @@ export const LeaderChecklist: React.FC = () => {
                 {completedSubTasksLeader} dari {totalSubTasksLeader} Tugas Selesai
               </p>
             </div>
-            {isLeaderRole ? (
+            {isLeaderRole && (
               <div className="text-right pl-4 border-l border-slate-200 hidden sm:block">
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-sm font-black text-amber-600 font-mono">
@@ -1906,33 +1856,6 @@ export const LeaderChecklist: React.FC = () => {
                       : "text-rose-700 bg-rose-50 border-rose-300"
                   }`}>
                     {matchedTodayTier?.label || "100% Cair Penuh"}
-                  </span>
-                </div>
-              </div>
-            ) : effectiveDivisionBonus > 0 && (
-              <div className="text-right pl-4 border-l border-slate-200 hidden sm:block">
-                <div className="flex items-baseline justify-end gap-1">
-                  <span className="text-sm font-black text-emerald-600 font-mono">
-                    {formatCurrency(effectiveDivisionBonus)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-bold">/bln</span>
-                </div>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Plafon KPI Bulanan
-                </p>
-                <div className="mt-1 flex items-center justify-end gap-1">
-                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                    leaderPercentage === 100 
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-300" 
-                      : completedSubTasksLeader > 0 
-                      ? "text-amber-700 bg-amber-50 border-amber-300"
-                      : "text-slate-500 bg-slate-50 border-slate-200"
-                  }`}>
-                    {leaderPercentage === 100 
-                      ? "✓ 100% Hari Ini On Track" 
-                      : completedSubTasksLeader > 0 
-                      ? `${leaderPercentage}% Hari Ini`
-                      : "Belum Selesai"}
                   </span>
                 </div>
               </div>
