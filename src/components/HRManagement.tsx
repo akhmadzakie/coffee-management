@@ -35,6 +35,7 @@ import {
   Filter,
   Copy,
   Info,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -572,6 +573,33 @@ export function HRManagement() {
   const weekKey = getLocalDateString(weekDays[0]);
   const currentWeekApproval = (settings?.scheduleApprovals as any)?.[weekKey] || { status: "DRAFT" };
   const isWeekApproved = currentWeekApproval.status === "APPROVED";
+  const isWeekPending = currentWeekApproval.status === "PENDING";
+
+  const handleSubmitSchedule = () => {
+    if (isReadOnly) return;
+    if (scheduleCollisions.length > 0) {
+      const highSeverity = scheduleCollisions.filter(c => c.severity === "high");
+      if (highSeverity.length > 0) {
+        if (!confirm(`Peringatan: Terdeteksi ${highSeverity.length} potensi masalah pada jadwal (misal jeda istirahat < 8 jam / clopen). Tetap ajukan jadwal ini ke Manajer?`)) {
+          return;
+        }
+      }
+    }
+    const newApprovals = {
+      ...((settings?.scheduleApprovals as any) || {}),
+      [weekKey]: {
+        status: "PENDING",
+        submittedBy: currentUser?.name || "Leader",
+        submittedAt: new Date().toISOString(),
+        leaderDivision,
+      }
+    };
+    updateSettings({
+      ...settings,
+      scheduleApprovals: newApprovals,
+    });
+    alert(`Jadwal shift minggu ini (${weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - ${weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short" })}) berhasil diajukan ke Manajer untuk disahkan!`);
+  };
 
   const handleToggleWeekApproval = () => {
     if (!isHRD || isReadOnly) return;
@@ -588,6 +616,23 @@ export function HRManagement() {
       ...settings,
       scheduleApprovals: newApprovals,
     });
+  };
+
+  const handleRejectToDraft = () => {
+    if (!isHRD || isReadOnly) return;
+    const newApprovals = {
+      ...((settings?.scheduleApprovals as any) || {}),
+      [weekKey]: {
+        status: "DRAFT",
+        revisedBy: currentUser?.name || "Manager",
+        revisedAt: new Date().toISOString(),
+      }
+    };
+    updateSettings({
+      ...settings,
+      scheduleApprovals: newApprovals,
+    });
+    alert("Jadwal dikembalikan ke status Draft untuk direvisi oleh Leader.");
   };
 
   const handleUnlockForRevision = () => {
@@ -1416,14 +1461,20 @@ export function HRManagement() {
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                       isWeekApproved 
                         ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                        : "bg-amber-50 text-amber-700 border-amber-200"
+                        : isWeekPending
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
                     }`}>
-                      {isWeekApproved ? "● APPROVED (Disetujui Manajer)" : "● DRAFT (Penyusunan Leader)"}
+                      {isWeekApproved 
+                        ? `● APPROVED (Disetujui: ${currentWeekApproval.approvedBy || "Manajer"})` 
+                        : isWeekPending
+                        ? `● MENUNGGU PERSETUJUAN (Diajukan: ${currentWeekApproval.submittedBy || "Leader"})`
+                        : "● DRAFT (Penyusunan Leader)"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     {isLeader 
-                      ? "Susun giliran shift tim Anda. Pastikan tidak ada jam shift kosong sebelum disetujui Manajer."
+                      ? "Susun giliran shift tim Anda. Pastikan tidak ada jam shift kosong sebelum klik 'Ajukan ke Manajer'."
                       : "Tinjau jadwal yang disusun Leader divisi. Periksa deteksi bentrok sebelum menyetujui jadwal."}
                   </p>
                 </div>
@@ -1471,29 +1522,61 @@ export function HRManagement() {
                       <span>Salin Minggu Lalu</span>
                     </button>
 
-                    {/* Manager Approval Button */}
-                    {isHRD && (
+                    {/* Leader Submit Button when not approved */}
+                    {isLeader && !isWeekApproved && (
                       <button
-                        onClick={handleToggleWeekApproval}
+                        type="button"
+                        onClick={handleSubmitSchedule}
                         disabled={isReadOnly}
                         className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
-                          isWeekApproved
-                            ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
-                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          isWeekPending
+                            ? "bg-amber-500 hover:bg-amber-600 text-white"
+                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
                         }`}
+                        title="Ajukan jadwal shift tim minggu ini kepada Manajer untuk disahkan"
                       >
-                        {isWeekApproved ? (
-                          <>
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            <span>Buka Kunci (Revisi Draft)</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Setujui Jadwal (Approve)</span>
-                          </>
-                        )}
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{isWeekPending ? "Perbarui Pengajuan" : "Ajukan ke Manajer"}</span>
                       </button>
+                    )}
+
+                    {/* Manager Approval & Revision Buttons */}
+                    {isHRD && (
+                      <div className="flex items-center gap-2">
+                        {isWeekPending && !isWeekApproved && (
+                          <button
+                            type="button"
+                            onClick={handleRejectToDraft}
+                            disabled={isReadOnly}
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors"
+                            title="Kembalikan jadwal ke Leader untuk direvisi"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Minta Revisi</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={handleToggleWeekApproval}
+                          disabled={isReadOnly}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
+                            isWeekApproved
+                              ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          }`}
+                        >
+                          {isWeekApproved ? (
+                            <>
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Buka Kunci (Revisi Draft)</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>{isWeekPending ? "Sahkan & Setujui Jadwal" : "Setujui Jadwal (Approve)"}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
 
                     {/* Leader: Tombol Buka Kunci jika Jadwal APPROVED */}

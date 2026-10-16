@@ -225,6 +225,7 @@ function AppContent() {
     LEADER: [
       "kitchen_display",
       "dashboard_employee",
+      "hr",
       "leader_checklist",
       "dashboard_inventory",
       "inventory",

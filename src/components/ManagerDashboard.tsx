@@ -110,6 +110,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       dateRangeStr: string;
       shiftCount: number;
       divisions: string[];
+      status: "DRAFT" | "PENDING";
+      submittedBy?: string;
     }[] = [];
 
     weeks.forEach((w) => {
@@ -162,6 +164,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           dateRangeStr,
           shiftCount: weekShifts.length,
           divisions: Array.from(divSet),
+          status: approval?.status === "PENDING" ? "PENDING" : "DRAFT",
+          submittedBy: approval?.submittedBy,
         });
       }
     });
@@ -447,15 +451,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900 uppercase">
-                      Menunggu ACC Manajer
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      alert.status === "PENDING"
+                        ? "bg-amber-200/90 text-amber-900 border border-amber-300"
+                        : "bg-stone-200/80 text-stone-700"
+                    }`}>
+                      {alert.status === "PENDING" ? "🟡 Diajukan Leader (Menunggu ACC)" : "⚪ Draft Jadwal Belum Disahkan"}
                     </span>
                     <span className="text-xs font-bold text-amber-950">
                       {alert.weekLabel} ({alert.dateRangeStr})
                     </span>
                   </div>
                   <p className="text-xs text-stone-600 leading-relaxed">
-                    Leader divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> telah menyusun <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.
+                    {alert.submittedBy 
+                      ? <>Leader <strong>{alert.submittedBy}</strong> (Divisi {alert.divisions.join(", ") || "Tim"}) telah mengajukan <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.</>
+                      : <>Divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> memiliki <strong>{alert.shiftCount} penugasan shift</strong> yang belum disahkan secara resmi.</>
+                    }
                   </p>
                 </div>
               </div>

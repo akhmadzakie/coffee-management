@@ -317,7 +317,16 @@ export interface Settings {
   monthlyRevenueTarget?: number;
   targetBonusAmount?: number; // Bonus per karyawan jika omzet tembus target
   divisionKpiBonusTarget?: Record<string, number>; // Plafon Target Bonus KPI per divisi yang diatur Manager
-  scheduleApprovals?: Record<string, { status: "DRAFT" | "APPROVED"; approvedBy?: string; approvedAt?: string }>;
+  scheduleApprovals?: Record<string, {
+    status: "DRAFT" | "PENDING" | "APPROVED";
+    approvedBy?: string;
+    approvedAt?: string;
+    submittedBy?: string;
+    submittedAt?: string;
+    revisedBy?: string;
+    revisedAt?: string;
+    leaderDivision?: string;
+  }>;
   taxEnabled?: boolean;
   taxRate?: number;
   taxMode?: "INCLUSIVE" | "EXCLUSIVE";
