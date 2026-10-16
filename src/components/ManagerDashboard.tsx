@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import { getLocalDateString } from "../utils/dateUtils";
 import { ViewState, DailyAttendance } from "../types";
 import {
   Users,
@@ -86,21 +87,21 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   // Deteksi Jadwal Shift yang Menunggu ACC Manajer
   const scheduleApprovalAlerts = useMemo(() => {
     const today = new Date();
+    today.setHours(12, 0, 0, 0);
     const day = today.getDay(); // 0 = Sunday, 1 = Monday
     const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
 
     // Minggu Ini
     const thisMonday = new Date(today);
     thisMonday.setDate(diffToMonday);
-    thisMonday.setHours(0, 0, 0, 0);
 
     // Minggu Depan
     const nextMonday = new Date(thisMonday);
     nextMonday.setDate(nextMonday.getDate() + 7);
 
     const weeks = [
-      { key: thisMonday.toISOString().split("T")[0], label: "Minggu Ini", start: thisMonday },
-      { key: nextMonday.toISOString().split("T")[0], label: "Minggu Depan", start: nextMonday },
+      { key: getLocalDateString(thisMonday), label: "Minggu Ini", start: thisMonday },
+      { key: getLocalDateString(nextMonday), label: "Minggu Depan", start: nextMonday },
     ];
 
     const alerts: {
@@ -119,7 +120,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       const isApproved = approval?.status === "APPROVED";
 
       const startDateStr = w.key;
-      const endDateStr = endSunday.toISOString().split("T")[0];
+      const endDateStr = getLocalDateString(endSunday);
 
       const weekShifts = employeeShifts.filter(
         (s) => s.date >= startDateStr && s.date <= endDateStr && s.shiftType !== "OFF"

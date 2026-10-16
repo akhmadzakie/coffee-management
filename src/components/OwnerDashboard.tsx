@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
+import { getLocalDateString } from "../utils/dateUtils";
 import { useStore } from "../store/StoreContext";
 import { ViewState } from "../types";
 import {
@@ -104,7 +105,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     let cash = [...cashTransactions];
 
     if (period === "today") {
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = getLocalDateString(now);
       sales = sales.filter((s) => s.date.startsWith(todayStr));
       cash = cash.filter((c) => c.date.startsWith(todayStr));
     } else if (period === "this_month") {

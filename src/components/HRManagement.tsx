@@ -118,17 +118,26 @@ export function HRManagement() {
   const leaderDivision = useMemo<"BAR" | "KITCHEN" | "BAKER">(() => {
     if (currentUser?.department) {
       const d = currentUser.department.toUpperCase();
-      if (d.includes("KITCHEN") || d.includes("DAPUR")) return "KITCHEN";
-      if (d.includes("BAKER") || d.includes("PASTRY")) return "BAKER";
-      return "BAR";
+      if (d.includes("KITCHEN") || d.includes("DAPUR") || d.includes("COOK")) return "KITCHEN";
+      if (d.includes("BAKER") || d.includes("PASTRY") || d.includes("ROTI")) return "BAKER";
+      if (d.includes("BAR") || d.includes("KASIR") || d.includes("BEVERAGE")) return "BAR";
     }
     if (leaderEmp) {
       return getEmployeeDivision(leaderEmp);
     }
+    const nameOrUser = `${currentUser?.name || ""} ${currentUser?.username || ""}`.toUpperCase();
+    if (nameOrUser.includes("KITCHEN") || nameOrUser.includes("DAPUR") || nameOrUser.includes("COOK")) return "KITCHEN";
+    if (nameOrUser.includes("BAKER") || nameOrUser.includes("PASTRY") || nameOrUser.includes("ROTI")) return "BAKER";
     return "BAR";
   }, [currentUser, leaderEmp]);
 
   const [scheduleDivisionFilter, setScheduleDivisionFilter] = useState<string>("ALL");
+
+  useEffect(() => {
+    if (isLeader && leaderDivision) {
+      setScheduleDivisionFilter(leaderDivision);
+    }
+  }, [isLeader, leaderDivision]);
   const [activeTab, setActiveTab] = useState<
     "overview" | "employees" | "contracts" | "schedule" | "attendance" | "kpi" | "payroll"
   >(() => {
@@ -511,22 +520,26 @@ export function HRManagement() {
   // --- Weekly Schedule Logic ---
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
     const today = new Date();
+    today.setHours(12, 0, 0, 0);
     const day = today.getDay(); // 0 = Sunday, 1 = Monday
     const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    return new Date(today.setDate(diff));
+    const monday = new Date(today);
+    monday.setDate(diff);
+    return monday;
   });
 
   const generateWeekDays = (start: Date) => {
     const days = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(start);
+      d.setHours(12, 0, 0, 0);
       d.setDate(start.getDate() + i);
       days.push(d);
     }
     return days;
   };
   const weekDays = generateWeekDays(currentWeekStart);
-  const weekKey = weekDays[0].toISOString().split("T")[0];
+  const weekKey = getLocalDateString(weekDays[0]);
   const currentWeekApproval = (settings?.scheduleApprovals as any)?.[weekKey] || { status: "DRAFT" };
   const isWeekApproved = currentWeekApproval.status === "APPROVED";
 
@@ -563,6 +576,27 @@ export function HRManagement() {
     });
   };
 
+  const isEmpActive = (e: any) => e.status === "AKTIF" || e.status === "ACTIVE" || !e.status;
+
+  const canEditShiftForEmployee = (emp: any) => {
+    if (isReadOnly) return false;
+    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua divisi
+    if (isLeader) {
+      // Leader dapat menyusun dan mengedit jadwal staf di divisinya sendiri (Kasir ikut ke Bar)
+      const empDiv = getEmployeeDivision(emp);
+      const posUpper = (emp.position || "").toUpperCase();
+      const isExecutive = posUpper.includes("MANAGER") || posUpper.includes("MANAJER") || posUpper.includes("OWNER");
+      return empDiv === leaderDivision && !isExecutive;
+    }
+    return false;
+  };
+
+  const filteredScheduleEmployees = useMemo(() => {
+    const activeList = employees.filter(isEmpActive);
+    if (scheduleDivisionFilter === "ALL") return activeList;
+    return activeList.filter(e => getEmployeeDivision(e) === scheduleDivisionFilter);
+  }, [employees, scheduleDivisionFilter]);
+
   const handleCopyLastWeekSchedule = () => {
     if (isReadOnly) return;
     const prevWeekDays = generateWeekDays(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000));
@@ -570,12 +604,14 @@ export function HRManagement() {
     let newShifts = [...employeeShifts];
 
     filteredScheduleEmployees.forEach(emp => {
+      if (!canEditShiftForEmployee(emp) && !isHRD) return;
+
       for (let i = 0; i < 7; i++) {
-        const prevDateStr = prevWeekDays[i].toISOString().split("T")[0];
-        const curDateStr = weekDays[i].toISOString().split("T")[0];
+        const prevDateStr = getLocalDateString(prevWeekDays[i]);
+        const curDateStr = getLocalDateString(weekDays[i]);
         const prevShift = employeeShifts.find(s => s.employeeId === emp.id && s.date === prevDateStr)?.shiftType;
         
-        if (prevShift && prevShift !== "OFF") {
+        if (prevShift) {
           const curIndex = newShifts.findIndex(s => s.employeeId === emp.id && s.date === curDateStr);
           if (curIndex >= 0) {
             newShifts[curIndex] = { ...newShifts[curIndex], shiftType: prevShift };
@@ -594,35 +630,14 @@ export function HRManagement() {
 
     if (copiedCount > 0) {
       setEmployeeShifts(newShifts);
+      if (isWeekApproved && isLeader) {
+        handleUnlockForRevision();
+      }
       alert(`Berhasil menyalin ${copiedCount} penugasan shift dari minggu lalu.`);
     } else {
       alert("Tidak ada data jadwal shift dari minggu sebelumnya untuk disalin.");
     }
   };
-
-  const canEditShiftForEmployee = (emp: any) => {
-    if (isReadOnly) return false;
-    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua divisi
-    if (isLeader) {
-      // Leader hanya dapat menyusun dan mengedit jadwal staf di divisinya sendiri (Kasir ikut ke Bar)
-      const empDiv = getEmployeeDivision(emp);
-      const posUpper = (emp.position || "").toUpperCase();
-      const isExecutive = posUpper.includes("MANAGER") || posUpper.includes("MANAJER") || posUpper.includes("OWNER");
-      return empDiv === leaderDivision && !isExecutive;
-    }
-    return false;
-  };
-
-  const filteredScheduleEmployees = useMemo(() => {
-    const activeList = employees.filter(e => e.status === "AKTIF");
-    if (isLeader) {
-      // Leader HANYA melihat staf di divisinya sendiri (Kasir otomatis tergabung ke Bar)
-      return activeList.filter(e => getEmployeeDivision(e) === leaderDivision);
-    }
-    // Manager memiliki akses penuh ke semua divisi atau per divisi
-    if (scheduleDivisionFilter === "ALL") return activeList;
-    return activeList.filter(e => getEmployeeDivision(e) === scheduleDivisionFilter);
-  }, [employees, isLeader, leaderDivision, scheduleDivisionFilter]);
 
   // Smart Collision Detection
   const scheduleCollisions = useMemo(() => {
@@ -630,13 +645,13 @@ export function HRManagement() {
     
     // 1. Clopen Check (Shift Sore jam 15-23 lalu besoknya Shift Pagi jam 07-15)
     const activeEmps = isLeader && leaderDivision 
-      ? employees.filter(e => e.status === "AKTIF" && getEmployeeDivision(e) === leaderDivision)
-      : employees.filter(e => e.status === "AKTIF");
+      ? employees.filter(e => isEmpActive(e) && getEmployeeDivision(e) === leaderDivision)
+      : employees.filter(isEmpActive);
 
     activeEmps.forEach(emp => {
       for (let i = 0; i < 6; i++) {
-        const dayA = weekDays[i].toISOString().split("T")[0];
-        const dayB = weekDays[i + 1].toISOString().split("T")[0];
+        const dayA = getLocalDateString(weekDays[i]);
+        const dayB = getLocalDateString(weekDays[i + 1]);
         const shiftA = employeeShifts.find(s => s.employeeId === emp.id && s.date === dayA)?.shiftType;
         const shiftB = employeeShifts.find(s => s.employeeId === emp.id && s.date === dayB)?.shiftType;
         
@@ -654,7 +669,7 @@ export function HRManagement() {
       
       // 2. Overwork Check (7 hari berturut-turut tanpa libur OFF)
       const shiftsThisWeek = weekDays.map(d => {
-        const dStr = d.toISOString().split("T")[0];
+        const dStr = getLocalDateString(d);
         return employeeShifts.find(s => s.employeeId === emp.id && s.date === dStr)?.shiftType || "OFF";
       });
       const workedDaysCount = shiftsThisWeek.filter(s => s !== "OFF").length;
@@ -671,11 +686,11 @@ export function HRManagement() {
     // 3. Understaffed Check (Shift kosong di divisi yang ada stafnya)
     const divisionsToCheck: ("BAR" | "KITCHEN" | "BAKER")[] = isLeader && leaderDivision ? [leaderDivision] : ["BAR", "KITCHEN", "BAKER"];
     weekDays.forEach((d) => {
-      const dStr = d.toISOString().split("T")[0];
+      const dStr = getLocalDateString(d);
       const dayName = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
       
       divisionsToCheck.forEach(div => {
-        const divEmps = employees.filter(e => e.status === "AKTIF" && getEmployeeDivision(e) === div);
+        const divEmps = employees.filter(e => isEmpActive(e) && getEmployeeDivision(e) === div);
         if (divEmps.length >= 2) {
           const morningCount = divEmps.filter(e => {
             const s = employeeShifts.find(sh => sh.employeeId === e.id && sh.date === dStr)?.shiftType;
@@ -1390,6 +1405,7 @@ export function HRManagement() {
                     <button
                       onClick={() => {
                         const prev = new Date(currentWeekStart);
+                        prev.setHours(12, 0, 0, 0);
                         prev.setDate(prev.getDate() - 7);
                         setCurrentWeekStart(prev);
                       }}
@@ -1403,6 +1419,7 @@ export function HRManagement() {
                     <button
                       onClick={() => {
                         const next = new Date(currentWeekStart);
+                        next.setHours(12, 0, 0, 0);
                         next.setDate(next.getDate() + 7);
                         setCurrentWeekStart(next);
                       }}
@@ -1456,7 +1473,7 @@ export function HRManagement() {
                         type="button"
                         onClick={handleUnlockForRevision}
                         disabled={isReadOnly}
-                        className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-all shadow-2xs"
+                        className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-xs"
                         title="Buka status kunci untuk menyusun revisi shift tim"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
@@ -1474,12 +1491,28 @@ export function HRManagement() {
                 </span>
                 {isLeader ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 shadow-2xs">
-                      {leaderDivision === "BAR" ? "☕ Divisi Bar & Kasir" : leaderDivision === "KITCHEN" ? "🍳 Divisi Kitchen" : leaderDivision === "BAKER" ? "🥐 Divisi Baker" : `Divisi ${leaderDivision}`}
-                    </span>
-                    <span className="text-xs text-slate-400 italic">
-                      (Akses Leader: Terbatas hanya dapat mengatur dan meninjau divisi Anda sendiri)
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setScheduleDivisionFilter(leaderDivision)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        scheduleDivisionFilter === leaderDivision
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      {leaderDivision === "BAR" ? "☕ Tim Bar & Kasir (Bisa Diedit)" : leaderDivision === "KITCHEN" ? "🍳 Tim Kitchen (Bisa Diedit)" : "🥐 Tim Baker (Bisa Diedit)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScheduleDivisionFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        scheduleDivisionFilter === "ALL"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      👁️ Semua Tim (Tinjau / Hanya Baca)
+                    </button>
                   </div>
                 ) : (
                   [
@@ -1598,15 +1631,20 @@ export function HRManagement() {
                           <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-3 px-4 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
                               <p className="font-bold text-slate-800 truncate">{emp.name}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">
                                   {getEmployeeDivision(emp) === "BAR" ? "BAR & KASIR" : getEmployeeDivision(emp)}
                                 </span>
+                                {!canEditThisEmp && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-slate-200/80 text-slate-600">
+                                    Hanya Baca
+                                  </span>
+                                )}
                                 <span className="text-[11px] text-slate-400 truncate">{emp.position}</span>
                               </div>
                             </td>
                             {weekDays.map((d, idx) => {
-                              const dateStr = d.toISOString().split("T")[0];
+                              const dateStr = getLocalDateString(d);
                               const shift = employeeShifts.find(s => s.employeeId === emp.id && s.date === dateStr)?.shiftType || "OFF";
                               return (
                                 <td key={idx} className="p-2 border-l border-slate-100 text-center">
@@ -1614,8 +1652,17 @@ export function HRManagement() {
                                     disabled={!canEditThisEmp}
                                     value={shift}
                                     onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value as any)}
+                                    title={
+                                      !canEditThisEmp
+                                        ? (isWeekApproved
+                                            ? "Jadwal telah disetujui Manajer (Terkunci). Klik 'Buka Kunci (Revisi)' untuk mengedit."
+                                            : isLeader
+                                              ? "Hanya dapat mengedit jadwal tim divisi Anda sendiri"
+                                              : "Hanya Baca")
+                                        : "Pilih shift kerja"
+                                    }
                                     className={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border transition-all ${
-                                      !canEditThisEmp ? "cursor-not-allowed opacity-90" : "cursor-pointer"
+                                      !canEditThisEmp ? "cursor-not-allowed opacity-80 bg-slate-50" : "cursor-pointer"
                                     } ${
                                       shift === "PAGI" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
                                       shift === "SORE" ? "bg-amber-50 text-amber-800 border-amber-300" :
