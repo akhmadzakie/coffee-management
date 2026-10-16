@@ -687,17 +687,18 @@
     <li>Saat karyawan berhenti, ubah status menjadi <b>Resign/Tidak Aktif</b> agar tidak masuk perhitungan.</li>
   </ol>
 
-  <h3>9.2 Jadwal Shift</h3>
+  <h3>9.2 Jadwal Shift &amp; Master Pengaturan Shift</h3>
+  <p>Jadwal shift disusun per minggu oleh Leader per divisi atau Manajer untuk tim operasional (Bar &amp; Kasir, Kitchen, Baker). Jam kerja operasional dihitung <b>flat 8 jam per shift</b> tanpa lembur otomatis.</p>
   <table>
-    <thead><tr><th>Shift</th><th>Jam mulai</th><th>Batas tidak terlambat</th></tr></thead>
+    <thead><tr><th>Shift (Bawaan)</th><th>Jam Kerja</th><th>Toleransi Telat</th><th>Keterangan</th></tr></thead>
     <tbody>
-      <tr><td><b>Pagi</b></td><td>07:00</td><td>07:15</td></tr>
-      <tr><td><b>Middle</b></td><td>11:00</td><td>11:15</td></tr>
-      <tr><td><b>Sore</b></td><td>15:00</td><td>15:15</td></tr>
-      <tr><td><b>Off</b></td><td colspan="2">Libur</td></tr>
+      <tr><td><b>Pagi</b></td><td>07:00 – 15:00</td><td>15 Menit (s/d 07:15)</td><td>Opening, prep bahan pagi, dan operasional awal</td></tr>
+      <tr><td><b>Middle</b></td><td>11:00 – 19:00</td><td>15 Menit (s/d 11:15)</td><td>Mendukung jam makan siang &amp; peak hours sore</td></tr>
+      <tr><td><b>Sore</b></td><td>15:00 – 23:00</td><td>15 Menit (s/d 15:15)</td><td>Peak hours malam, closing, dan sanitasi akhir</td></tr>
+      <tr><td><b>Off</b></td><td colspan="3">Hari libur mingguan</td></tr>
     </tbody>
   </table>
-  <p>Manajer/Leader mengatur jadwal per tanggal untuk tiap karyawan. Jadwal ini dipakai aplikasi untuk menentukan status Hadir atau Terlambat (toleransi 15 menit).</p>
+  <div class="box tip"><span class="t">Fitur Pengaturan Master Shift Fleksibel</span>Manajer dapat menekan tombol <b>"Atur Jam Shift"</b> pada menu Jadwal Shift untuk menyesuaikan jam mulai/selesai sesuai jam operasional kedai, mengubah batas toleransi keterlambatan (menit), mengaktifkan/menonaktifkan shift, atau menambah <b>Shift Kustom Baru</b> (misal: Shift Khusus Weekend atau Shift Event).</div>
 
   <h3>9.3 Clock-In / Clock-Out (Absensi)</h3>
   <ol class="steps">
@@ -709,23 +710,27 @@
   </ol>
   <div class="box warn"><span class="t">Persetujuan absensi</span>Absensi dapat berstatus menunggu persetujuan, disetujui, atau ditolak oleh atasan. Status izin/sakit/alpha juga dicatat dan memengaruhi payroll.</div>
 
-  <h3>9.4 Checklist Jobdesk</h3>
+  <h3>9.4 Supervisi Leader &amp; Checklist Jobdesk</h3>
   <div class="three">
-    <div class="card"><h4>🌅 Opening</h4><ul style="font-size:8.3pt"><li>Cek tablet POS, internet, printer</li><li>Kalibrasi grinder &amp; espresso</li><li>Cek suhu chiller &amp; stok es</li><li>Hitung modal laci</li></ul></div>
-    <div class="card"><h4>☀️ Running</h4><ul style="font-size:8.3pt"><li>Kebersihan meja tamu</li><li>Cek toilet berkala</li><li>Isi ulang bahan di bar</li></ul></div>
-    <div class="card"><h4>🌙 Closing</h4><ul style="font-size:8.3pt"><li>Backflush mesin &amp; steam wand</li><li>Simpan bahan di chiller</li><li>Tutup shift kasir</li><li>Matikan listrik &amp; kunci</li></ul></div>
+    <div class="card"><h4>🌅 Opening (Persiapan)</h4><ul style="font-size:8.3pt"><li>Cek tablet POS, internet, printer</li><li>Kalibrasi grinder &amp; espresso</li><li>Cek suhu chiller &amp; stok es</li><li>Hitung modal laci kasir</li></ul></div>
+    <div class="card"><h4>☀️ Running (Operasional)</h4><ul style="font-size:8.3pt"><li>Kebersihan meja &amp; area tamu</li><li>Cek sanitasi &amp; toilet berkala</li><li>QC rasa &amp; standar penyajian</li><li>Kontrol stok bahan bar &amp; dapur</li></ul></div>
+    <div class="card"><h4>🌙 Closing (Penutupan)</h4><ul style="font-size:8.3pt"><li>Backflush mesin &amp; steam wand</li><li>Simpan bahan di chiller/freezer</li><li>Tutup shift kasir &amp; setor uang</li><li>Matikan listrik &amp; kunci kedai</li></ul></div>
   </div>
-  <p style="margin-top:6px">Item checklist dapat dikelola per shift dan per peran target. Karyawan mencentang tugas yang selesai; Manajer memantau kepatuhan dan menjadikannya bahan penilaian KPI.</p>
+  <p style="margin-top:6px"><b>Fokus Supervisi Leader:</b> Checklist difokuskan untuk Leader divisi (Bar, Kitchen, Baker) dalam mengawasi jalannya tim dan menjamin SOP ditaati. Jobdesk staf operasional difokuskan pada pelayanan dan pembuatan pesanan harian tanpa dibebani checklist ganda yang membingungkan.</p>
 
-  <h3>9.5 Penilaian KPI</h3>
-  <p>KPI dinilai berkala per karyawan dengan skor 0–100. Skor menentukan predikat dan besaran bonus KPI di payroll:</p>
+  <h3>9.5 Penilaian KPI &amp; Skema Tunjangan</h3>
+  <p>Sistem KPI diselaraskan secara adil berdasarkan peran dan tanggung jawab profesional:</p>
+  <ul>
+    <li><b>Leader Divisi (Tunjangan Jabatan Leader):</b> Dihitung dari capaian persentase supervisi checklist dan kualitas kepemimpinan divisi, menghasilkan predikat Grade A s/d D untuk pencairan tunjangan jabatan.</li>
+    <li><b>Staf Operasional (Bonus Omzet Toko):</b> Berfokus pada kehadiran penuh (disiplin shift) dan berhak atas <b>Bonus Omzet Bersama</b> apabila omzet penjualan kedai kopi mencapai target bulanan yang ditetapkan.</li>
+  </ul>
   <table>
-    <thead><tr><th>Skor</th><th>Predikat</th></tr></thead>
+    <thead><tr><th>Grade Leader</th><th>Capaian Supervisi</th><th>Pencairan Tunjangan Leader</th><th>Keterangan</th></tr></thead>
     <tbody>
-      <tr><td>≥ 85</td><td><span class="pill p-g">Sangat Baik (A)</span></td></tr>
-      <tr><td>70 – 84</td><td><span class="pill p-b">Baik (B)</span></td></tr>
-      <tr><td>55 – 69</td><td><span class="pill p-a">Cukup (C)</span></td></tr>
-      <tr><td>&lt; 55</td><td><span class="pill p-r">Perlu Evaluasi (D)</span></td></tr>
+      <tr><td><span class="pill p-g">Grade A</span></td><td>≥ 90%</td><td>100% Tunjangan Penuh</td><td>Kinerja supervisi dan kepemimpinan sangat prima</td></tr>
+      <tr><td><span class="pill p-b">Grade B</span></td><td>80% – 89%</td><td>75% Tunjangan</td><td>Kinerja operasional dan arahan tim baik</td></tr>
+      <tr><td><span class="pill p-a">Grade C</span></td><td>70% – 79%</td><td>50% Tunjangan</td><td>Cukup, perlu peningkatan pengawasan SOP</td></tr>
+      <tr><td><span class="pill p-r">Grade D</span></td><td>&lt; 70%</td><td>25% Tunjangan</td><td>Perlu bimbingan dan evaluasi dari Manajer</td></tr>
     </tbody>
   </table>
 </section>
@@ -744,18 +749,25 @@
     <div class="node c6"><b>PAID</b><small>Dibayar + slip</small></div>
   </div>
 
-  <h3>10.2 Komponen Gaji</h3>
+  <h3>10.2 Komponen Gaji &amp; Aturan Keterlambatan</h3>
   <div class="two">
     <table>
       <thead><tr><th>Pendapatan (+)</th></tr></thead>
-      <tbody><tr><td>Gaji pokok</td></tr><tr><td>Tunjangan jabatan</td></tr><tr><td>Uang makan</td></tr><tr><td>Uang transport</td></tr><tr><td>Bonus KPI</td></tr><tr><td>Bonus target omzet toko</td></tr><tr><td>Lembur / insentif tambahan</td></tr></tbody>
+      <tbody><tr><td>Gaji pokok</td></tr><tr><td>Tunjangan jabatan (Leader)</td></tr><tr><td>Uang makan</td></tr><tr><td>Uang transport</td></tr><tr><td>Bonus target omzet toko (Staf)</td></tr><tr><td>Lembur / insentif (Input manual Manajer)</td></tr></tbody>
     </table>
     <table>
       <thead><tr><th style="background:var(--rose)">Potongan (−)</th></tr></thead>
-      <tbody><tr><td>Potongan alpha (tidak hadir tanpa keterangan)</td></tr><tr><td>Potongan lain-lain</td></tr></tbody>
+      <tbody><tr><td><b>Potongan Keterlambatan</b> (proporsional jam)</td></tr><tr><td>Potongan alpha (tidak hadir tanpa keterangan)</td></tr><tr><td>Potongan lain-lain (kasbon, denda, dll.)</td></tr></tbody>
     </table>
   </div>
-  <div class="box info"><span class="t">Rumus</span><b>Gaji Kotor</b> = semua pendapatan &nbsp;•&nbsp; <b>Take Home Pay (THP)</b> = Gaji Kotor − potongan alpha − potongan lain.</div>
+  <div class="box info"><span class="t">Rumus Potongan Keterlambatan Proporsional</span>
+    <b>Upah per Jam</b> = (Gaji Pokok / Hari Kerja Efektif) ÷ 8 Jam Kerja Standar<br>
+    <b>Potongan Keterlambatan</b> = Upah per Jam × Total Akumulasi Jam Terlambat.<br>
+    <i>Catatan:</i> Jam kerja operasional harian flat 8 jam sesuai jadwal shift. Tidak ada hitungan lembur otomatis; lembur hanya dimasukkan secara manual oleh Manajer di baris tambahan slip gaji jika disepakati.
+  </div>
+  <div class="box tip"><span class="t">Rumus Take Home Pay (THP)</span>
+    <b>Take Home Pay (Gaji Bersih)</b> = Total Pendapatan Kotor − Potongan Keterlambatan − Potongan Alpha − Potongan Lain-lain.
+  </div>
 
   <h3>10.3 Langkah Memproses Gaji Bulanan</h3>
   <ol class="steps">
