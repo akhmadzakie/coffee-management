@@ -342,11 +342,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* ─── Header & Strategic Filters ───────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200/60">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-800 border border-brand-200/60">
+              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
               Executive Suite
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
@@ -396,19 +396,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </button>
           <button
             onClick={() => onNavigate("dashboard_manager")}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-coffee-sm transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-sm transition-all"
           >
-            <Store className="w-3.5 h-3.5 text-amber-400" />
+            <Store className="w-3.5 h-3.5 text-brand-400" />
             Pantauan Lapangan
           </button>
         </div>
       </div>
 
       {/* ─── Target Omzet Bulanan Run-Rate Bar ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-coffee relative overflow-hidden">
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
+            <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
               <Target className="w-4 h-4" />
             </div>
             <div>
@@ -423,7 +423,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                         setTargetInput(monthlyTarget.toString());
                         setIsEditingTarget(true);
                       }}
-                      className="text-[10px] text-amber-600 hover:text-amber-700 underline font-semibold cursor-pointer"
+                      className="text-[10px] text-brand-600 hover:text-brand-700 underline font-semibold cursor-pointer"
                     >
                       Tentukan Target (Manajer)
                     </button>
@@ -517,8 +517,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               targetProgress >= 90
                 ? "bg-emerald-500"
                 : targetProgress >= 60
-                ? "bg-amber-500"
-                : "bg-amber-600"
+                ? "bg-brand-500"
+                : "bg-brand-600"
             }`}
           />
         </div>
@@ -530,7 +530,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Total Omzet Penjualan</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600">
+            <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
@@ -585,7 +585,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500">Volume Terjual</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-700">
+            <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
               <Coffee className="w-4 h-4" />
             </div>
           </div>
@@ -606,7 +606,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-amber-600" />
+              <Layers className="w-4 h-4 text-brand-600" />
               Unit Economics & Rasio Beban Ideal Kafe
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -746,7 +746,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-amber-600" />
+                <BarChart3 className="w-4 h-4 text-brand-600" />
                 Tren Omzet vs Laba Bersih (6 Bulan Terakhir)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -755,7 +755,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
                 <span className="text-slate-600">Omzet</span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -770,8 +770,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="ownerRevGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#d97706" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#1b2cc0" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#1b2cc0" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="ownerProfitGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
@@ -800,7 +800,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   type="monotone"
                   dataKey="revenue"
                   name="Omzet"
-                  stroke="#d97706"
+                  stroke="#1b2cc0"
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url"
@@ -898,7 +898,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-600" />
+                  <Clock className="w-4 h-4 text-brand-600" />
                   Peta Jam Sibuk (Traffic Velocity)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -906,7 +906,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 </p>
               </div>
               {peakHourData.some((slot) => slot.count > 0) && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200/60">
                   Terpantau Aktif
                 </span>
               )}
@@ -942,7 +942,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                       </div>
                       <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-amber-500"
+                          className="h-full rounded-full bg-brand-600"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -960,7 +960,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-amber-600" />
+                  <Flame className="w-4 h-4 text-brand-600" />
                   Menu Bintang (Cash Cows)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -969,7 +969,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               </div>
               <button
                 onClick={() => onNavigate("import_sales")}
-                className="text-xs font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
               >
                 Lihat Penjualan <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -977,7 +977,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
             {topProducts.length === 0 ? (
               <div className="py-10 flex flex-col items-center justify-center text-center">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 mb-2">
                   <Coffee className="w-5 h-5" />
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">Belum Ada Menu Terjual</h4>
@@ -1005,7 +1005,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   <div key={prod.name} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
                     <div className="flex items-center gap-3">
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        idx === 0 ? "bg-amber-500 text-white" : idx === 1 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
+                        idx === 0 ? "bg-brand-600 text-white" : idx === 1 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
                       }`}>
                         {idx + 1}
                       </span>
@@ -1036,7 +1036,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-coffee flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="space-y-1 text-center md:text-left">
           <h4 className="text-base font-bold text-white flex items-center justify-center md:justify-start gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+            <Sparkles className="w-4 h-4 text-brand-400" />
             Ingin Analisis Finansial Lebih Mendalam?
           </h4>
           <p className="text-xs text-slate-300 max-w-xl">
@@ -1058,7 +1058,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </button>
           <button
             onClick={() => onNavigate("dashboard_finance")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-all shadow-coffee-sm"
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white transition-all shadow-sm"
           >
             Kas & Bank
           </button>

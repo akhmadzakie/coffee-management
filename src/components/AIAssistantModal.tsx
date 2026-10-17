@@ -253,17 +253,17 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-white border border-stone-200/90 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh] max-h-[820px] text-stone-900">
+      <div className="bg-white border border-slate-200/90 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh] max-h-[820px] text-slate-900">
         
         {/* ─── MODAL TOPBAR ─── */}
-        <div className="px-6 py-4 border-b border-stone-100 bg-[#FAFAFA] flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-100 bg-[#FAFAFA] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/70 flex items-center justify-center text-brand-600">
               <Sparkles className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-stone-900 tracking-tight">Julia Coffee AI Copilot</h3>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">Julia Coffee AI Copilot</h3>
                 {aiStatus?.isConnected ? (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -271,37 +271,37 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   </span>
                 ) : (
                   <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-mono flex items-center gap-1.5 shadow-xs"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 font-mono flex items-center gap-1.5 shadow-xs"
                     title="Kunci API Gemini belum dipasang di Pengaturan. Sistem menggunakan modul analisis cerdas lokal."
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                     Mode Cerdas Lokal
                   </span>
                 )}
               </div>
-              <p className="text-xs text-stone-500">Konsultan Operasional & Analisis Cerdas Toko</p>
+              <p className="text-xs text-slate-500">Konsultan Operasional & Analisis Cerdas Toko</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* ─── NAVIGATION TABS ─── */}
-        <div className="flex border-b border-stone-200 bg-[#F8F9FA] px-4 gap-1">
+        <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-4 gap-1">
           <button
             onClick={() => setActiveTab("consultant")}
             className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
               activeTab === "consultant"
-                ? "border-amber-500 text-amber-900 bg-white"
-                : "border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100/60"
+                ? "border-brand-600 text-brand-900 bg-white"
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <MessageSquare className="w-4 h-4 text-amber-600" />
+            <MessageSquare className="w-4 h-4 text-brand-600" />
             <span>Konsultan Bisnis & Barista</span>
           </button>
 
@@ -309,11 +309,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             onClick={() => setActiveTab("receipt")}
             className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
               activeTab === "receipt"
-                ? "border-amber-500 text-amber-900 bg-white"
-                : "border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100/60"
+                ? "border-brand-600 text-brand-900 bg-white"
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <Receipt className="w-4 h-4 text-amber-600" />
+            <Receipt className="w-4 h-4 text-brand-600" />
             <span>Ekstraksi Berkas & Struk</span>
           </button>
 
@@ -321,11 +321,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             onClick={() => setActiveTab("insights")}
             className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
               activeTab === "insights"
-                ? "border-amber-500 text-amber-900 bg-white"
-                : "border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100/60"
+                ? "border-brand-600 text-brand-900 bg-white"
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <Lightbulb className="w-4 h-4 text-amber-600" />
+            <Lightbulb className="w-4 h-4 text-brand-600" />
             <span>Rekomendasi Toko</span>
           </button>
         </div>
@@ -343,7 +343,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     className={`flex gap-3 ${isAi ? "justify-start" : "justify-end"}`}
                   >
                     {isAi && (
-                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-600 flex items-center justify-center shrink-0 mt-0.5">
                         <Coffee className="w-4 h-4" />
                       </div>
                     )}
@@ -351,8 +351,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     <div
                       className={`relative max-w-[85%] sm:max-w-[78%] rounded-2xl px-4 py-3 text-xs sm:text-[13px] leading-relaxed group shadow-xs ${
                         isAi
-                          ? "bg-white border border-stone-200/90 text-stone-800"
-                          : "bg-amber-500 text-white font-medium"
+                          ? "bg-white border border-slate-200/90 text-slate-800"
+                          : "bg-brand-600 text-white font-medium"
                       }`}
                     >
                       <div className="whitespace-pre-wrap">{m.text}</div>
@@ -363,7 +363,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleCopy(m.id, m.text)}
-                              className="hover:text-amber-700 flex items-center gap-1 font-medium"
+                              className="hover:text-brand-600 flex items-center gap-1 font-medium"
                               title="Salin jawaban"
                             >
                               {copiedId === m.id ? (
@@ -387,8 +387,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               })}
 
               {isAsking && (
-                <div className="flex gap-3 items-center text-xs text-stone-500 py-1">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center">
+                <div className="flex gap-3 items-center text-xs text-slate-500 py-1">
+                  <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-600 flex items-center justify-center">
                     <Loader2 className="w-4 h-4 animate-spin" />
                   </div>
                   <span>Julia AI sedang menyusun rekomendasi...</span>
@@ -398,8 +398,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             </div>
 
             {/* Quick Prompts */}
-            <div className="px-4 py-2.5 border-t border-stone-200/80 bg-white flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <span className="text-[11px] text-stone-400 uppercase tracking-wider font-bold shrink-0">
+            <div className="px-4 py-2.5 border-t border-slate-200/80 bg-white flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-bold shrink-0">
                 Topik Cepat:
               </span>
               {quickPrompts.map((p, idx) => (
@@ -407,7 +407,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   key={idx}
                   onClick={() => handleSendChat(p.query)}
                   disabled={isAsking}
-                  className="shrink-0 px-3 py-1 rounded-lg bg-stone-50 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 border border-stone-200 text-xs text-stone-700 font-medium transition-colors disabled:opacity-50"
+                  className="shrink-0 px-3 py-1 rounded-lg bg-slate-50 hover:bg-brand-50 hover:text-brand-800 hover:border-brand-300 border border-slate-200 text-xs text-slate-700 font-medium transition-colors disabled:opacity-50"
                 >
                   {p.label}
                 </button>
@@ -415,7 +415,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             </div>
 
             {/* Input Form */}
-            <div className="p-3 sm:p-4 border-t border-stone-200 bg-white">
+            <div className="p-3 sm:p-4 border-t border-slate-200 bg-white">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -429,12 +429,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   onChange={(e) => setInputQuestion(e.target.value)}
                   placeholder="Ketik pertanyaan bisnis, HPP, resep, atau SOP barista..."
                   disabled={isAsking}
-                  className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:bg-white"
                 />
                 <button
                   type="submit"
                   disabled={!inputQuestion.trim() || isAsking}
-                  className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all disabled:opacity-40 shadow-sm"
+                  className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all disabled:opacity-40 shadow-sm"
                 >
                   {isAsking ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -453,28 +453,28 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         {/* ─── TAB 2: EKSTRAKSI BERKAS & STRUK BELANJA ─── */}
         {activeTab === "receipt" && (
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-[#F8F9FA]">
-            <div className="rounded-2xl p-4 bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed shadow-xs">
-              <span className="font-bold text-amber-950">Ekstraksi Pengeluaran Multi-Format:</span>{" "}
+            <div className="rounded-2xl p-4 bg-brand-50/80 border border-brand-200/80 text-xs text-brand-950 leading-relaxed shadow-xs">
+              <span className="font-bold text-brand-950">Ekstraksi Pengeluaran Multi-Format:</span>{" "}
               Unggah berkas bukti belanja atau ketik catatan belanja. AI Copilot mendukung foto struk kamera (JPG/PNG/WebP), dokumen PDF invoice supplier, spreadsheet Excel / CSV, hingga catatan teks dokumen. Transaksi kas akan otomatis dirangkum secara rapi.
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Catatan Naratif / Rincian Belanja (Opsional)
                 </label>
                 <textarea
                   value={receiptText}
                   onChange={(e) => setReceiptText(e.target.value)}
                   placeholder="Contoh: Beli es kristal 2 bal Rp 30.000 pake laci kasir, lalu beli susu segar Diamond 5 kotak total Rp 95.000..."
-                  className="w-full bg-white border border-stone-200 rounded-xl px-4 py-3 text-xs sm:text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 min-h-[85px] resize-none shadow-xs"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 min-h-[85px] resize-none shadow-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
                   <span>Berkas Dokumen / Foto Struk / Invoice</span>
-                  <span className="text-[10px] text-stone-400 font-normal">Mendukung Foto, PDF, Excel/CSV & Dokumen</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Mendukung Foto, PDF, Excel/CSV & Dokumen</span>
                 </label>
                 
                 <input
@@ -504,24 +504,24 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     onClick={() => fileInputRef.current?.click()}
                     className={`w-full py-6 px-4 border-2 border-dashed rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 text-center ${
                       isDragging
-                        ? "border-amber-500 bg-amber-50/70 ring-4 ring-amber-500/10"
-                        : "border-stone-200 bg-stone-50/70 hover:bg-white hover:border-amber-400"
+                        ? "border-brand-600 bg-brand-50/70 ring-4 ring-brand-500/10"
+                        : "border-slate-200 bg-slate-50/70 hover:bg-white hover:border-brand-400"
                     }`}
                   >
-                    <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shadow-xs">
+                    <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shadow-xs">
                       <Upload className="w-5 h-5" />
                     </div>
                     <div>
                       <span className="text-xs font-bold text-stone-800 block">
                         Klik untuk Pilih Berkas atau Tarik ke Sini
                       </span>
-                      <span className="text-[11px] text-stone-500 mt-0.5 block">
+                      <span className="text-[11px] text-slate-500 mt-0.5 block">
                         Mendukung Foto Struk, PDF Invoice, Excel/CSV, dan Catatan Dokumen
                       </span>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                         📷 Foto (JPG/PNG/WebP)
                       </span>
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
@@ -537,21 +537,21 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   </div>
                 ) : previewUrl ? (
                   /* ── Image Preview ── */
-                  <div className="relative rounded-2xl border border-stone-200 p-2.5 bg-white shadow-xs">
+                  <div className="relative rounded-2xl border border-slate-200 p-2.5 bg-white shadow-xs">
                     <img
                       src={previewUrl}
                       alt="Preview Struk"
-                      className="w-full h-44 object-contain rounded-xl bg-stone-50"
+                      className="w-full h-44 object-contain rounded-xl bg-slate-50"
                     />
-                    <div className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between text-xs px-1">
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs px-1">
                       <div className="flex items-center gap-2 truncate pr-2">
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-mono">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200 font-mono">
                           FOTO
                         </span>
-                        <span className="text-stone-700 font-medium truncate max-w-[220px]">
+                        <span className="text-slate-700 font-medium truncate max-w-[220px]">
                           {receiptFile.name}
                         </span>
-                        <span className="text-stone-400 text-[11px]">
+                        <span className="text-slate-400 text-[11px]">
                           ({formatFileSize(receiptFile.size)})
                         </span>
                       </div>
@@ -559,7 +559,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="text-stone-600 hover:text-amber-700 hover:bg-stone-100 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border border-stone-200"
+                          className="text-slate-600 hover:text-brand-700 hover:bg-slate-100 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border border-slate-200"
                         >
                           Ganti
                         </button>
@@ -579,7 +579,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   </div>
                 ) : (
                   /* ── Non-Image Document Preview (PDF, Excel, CSV, Doc, Text) ── */
-                  <div className="rounded-2xl border border-stone-200 p-4 bg-white shadow-xs flex items-center justify-between gap-3">
+                  <div className="rounded-2xl border border-slate-200 p-4 bg-white shadow-xs flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div
                         className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
@@ -587,7 +587,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                             ? "bg-rose-50 border-rose-200 text-rose-600"
                             : receiptFile.name.toLowerCase().match(/\.(csv|xlsx|xls)$/)
                             ? "bg-emerald-50 border-emerald-200 text-emerald-600"
-                            : "bg-amber-50 border-amber-200 text-amber-700"
+                            : "bg-brand-50 border-brand-200 text-brand-700"
                         }`}
                       >
                         {receiptFile.name.toLowerCase().endsWith(".pdf") ? (
@@ -600,7 +600,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-xs sm:text-sm text-stone-900 truncate">
+                          <p className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                             {receiptFile.name}
                           </p>
                           <span
@@ -615,7 +615,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                             {receiptFile.name.split(".").pop()?.toUpperCase() || "DOC"}
                           </span>
                         </div>
-                        <p className="text-[11px] text-stone-500 mt-0.5">
+                        <p className="text-[11px] text-slate-500 mt-0.5">
                           {formatFileSize(receiptFile.size)} • Dokumen siap dipindai oleh AI
                         </p>
                       </div>
@@ -625,7 +625,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition-colors border border-stone-200"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
                       >
                         Ganti
                       </button>
@@ -656,7 +656,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               <button
                 onClick={handleProcessReceipt}
                 disabled={isScanning || (!receiptText && !receiptFile)}
-                className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 shadow-sm"
+                className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 shadow-sm"
               >
                 {isScanning ? (
                   <>
@@ -673,9 +673,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
               {/* Draft Results */}
               {scanResult && scanResult.transactions && (
-                <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-sm space-y-3 animate-in fade-in">
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3 animate-in fade-in">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-stone-900">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       <span>Draf Transaksi Terdeteksi ({scanResult.transactions.length})</span>
                     </div>
@@ -685,11 +685,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     {scanResult.transactions.map((tx: any, idx: number) => (
                       <div
                         key={idx}
-                        className="bg-stone-50 p-3 rounded-xl border border-stone-200/80 flex items-center justify-between text-xs"
+                        className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs"
                       >
                         <div>
-                          <p className="font-bold text-stone-800">{tx.description}</p>
-                          <span className="text-[10px] text-stone-500 px-2 py-0.5 rounded-md bg-white border border-stone-200 mt-1 inline-block font-medium">
+                          <p className="font-bold text-slate-800">{tx.description}</p>
+                          <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-md bg-white border border-slate-200 mt-1 inline-block font-medium">
                             {tx.category || "Operasional"}
                           </span>
                         </div>
@@ -726,57 +726,57 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         {/* ─── TAB 3: REKOMENDASI TOKO HARIAN ─── */}
         {activeTab === "insights" && (
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 bg-[#F8F9FA]">
-            <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
-              <TrendingUp className="w-4 h-4 text-amber-600" />
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <TrendingUp className="w-4 h-4 text-brand-600" />
               <span>Insight & Rekomendasi Prioritas Toko</span>
             </div>
 
             <div className="grid grid-cols-1 gap-3.5">
-              <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs space-y-2">
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-stone-900">1. Optimalisasi Menu Bertiket Tinggi</span>
+                  <span className="text-xs font-bold text-slate-900">1. Optimalisasi Menu Bertiket Tinggi</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                     Margin Tinggi
                   </span>
                 </div>
-                <p className="text-xs text-stone-600 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed">
                   Minuman kopi berbasis susu rasa (Caramel Macchiato, Salted Caramel Latte) memiliki margin kotor di atas 68%. Sarankan kasir melakukan penawaran upselling ukuran upsize atau add-on espresso shot.
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs space-y-2">
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-stone-900">2. Mitigasi Kebocoran Bahan (Waste Control)</span>
+                  <span className="text-xs font-bold text-slate-900">2. Mitigasi Kebocoran Bahan (Waste Control)</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200">
                     SOP Bar
                   </span>
                 </div>
-                <p className="text-xs text-stone-600 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed">
                   Gunakan milk pitcher bergaris skala 100ml / 150ml. Sisa susu yang di-steam ulang menurunkan cita rasa microfoam dan memicu pembuangan susu rata-rata 1.5 - 2 liter per hari.
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs space-y-2">
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-stone-900">3. Strategi Jam Sepi (Slow Hours 14:00 - 17:00)</span>
+                  <span className="text-xs font-bold text-slate-900">3. Strategi Jam Sepi (Slow Hours 14:00 - 17:00)</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200">
                     Omset Booster
                   </span>
                 </div>
-                <p className="text-xs text-stone-600 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed">
                   Pasang promo pairing "Kopi Filter / Americano + Croissant" seharga Rp 35.000 khusus pukul 14.00-17.00. Konversi pelanggan remote-working dapat menaikkan okupansi meja hingga 40%.
                 </p>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 flex items-center justify-between text-xs text-stone-700 mt-4">
+            <div className="p-4 rounded-2xl bg-brand-50/70 border border-brand-200/80 flex items-center justify-between text-xs text-slate-700 mt-4">
               <span className="font-medium">Ingin pembahasan mendalam mengenai toko Anda?</span>
               <button
                 onClick={() => {
                   setActiveTab("consultant");
                   handleSendChat("Analisis cara meningkatkan margin rata-rata toko saya bulan ini.");
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 transition-colors font-bold shadow-xs"
+                className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 transition-colors font-bold shadow-xs"
               >
                 Tanya Konsultan AI →
               </button>

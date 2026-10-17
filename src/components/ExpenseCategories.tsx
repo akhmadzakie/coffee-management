@@ -109,7 +109,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
         <input
           value={name} onChange={(e) => setName(e.target.value)}
           placeholder="Contoh: Kopi & Espresso"
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
           required
         />
       </div>
@@ -120,7 +120,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
           <label className="block text-xs text-slate-500 mb-1">Tipe</label>
           <select
             value={type} onChange={(e) => setType(e.target.value as ExpenseCategoryType)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
           >
             {CATEGORY_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -134,7 +134,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
           <select
             value={parentId ?? ""}
             onChange={(e) => setParentId(e.target.value || null)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
           >
             <option value="">— Tidak ada (root) —</option>
             {rootCategories.map((c) => (
@@ -174,7 +174,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
               <button
                 key={ic} type="button"
                 onClick={() => setIcon(ic)}
-                className={`p-2 rounded-lg transition-colors ${icon === ic ? "bg-amber-500/30 border border-amber-500" : "bg-slate-100 border border-transparent hover:border-slate-300"}`}
+                className={`p-2 rounded-lg transition-colors ${icon === ic ? "bg-brand-50 border border-brand-500 text-brand-600" : "bg-slate-100 border border-transparent hover:border-slate-300"}`}
                 title={ic}
               >
                 <Ic size={16} className="text-slate-600" />
@@ -201,7 +201,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
       <label className="flex items-center gap-2 cursor-pointer">
         <div
           onClick={() => setIsActive(!isActive)}
-          className={`w-10 h-5 rounded-full relative transition-colors ${isActive ? "bg-amber-500" : "bg-slate-200"}`}
+          className={`w-10 h-5 rounded-full relative transition-colors ${isActive ? "bg-brand-600" : "bg-slate-200"}`}
         >
           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? "translate-x-5" : "translate-x-0.5"}`} />
         </div>
@@ -209,7 +209,7 @@ function CategoryForm({ initial, categories, onSave, onCancel }: CategoryFormPro
       </label>
 
       <div className="flex gap-2 pt-1">
-        <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        <button type="submit" className="flex-1 flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm">
           <Save size={15} /> Simpan
         </button>
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-100 transition-colors">
@@ -282,7 +282,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ category, depth = 0, onEdit, onDele
             </button>
           )}
           <button onClick={() => onEdit(category)}
-            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors" title="Edit">
+            className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="Edit">
             <Edit2 size={14} />
           </button>
           <button onClick={() => onDelete(category)}
@@ -447,7 +447,7 @@ export function ExpenseCategories() {
           />
           <button
             onClick={handleAddRoot}
-            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm"
           >
             <Plus size={16} /> Tambah Kategori
           </button>
@@ -459,7 +459,7 @@ export function ExpenseCategories() {
         {[
           { label: "Total Kategori", value: stats.total, color: "text-slate-900" },
           { label: "Aktif", value: stats.active, color: "text-emerald-600" },
-          { label: "Kategori Utama", value: stats.roots, color: "text-amber-600" },
+          { label: "Kategori Utama", value: stats.roots, color: "text-brand-600" },
         ].map((s) => (
           <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -491,13 +491,13 @@ export function ExpenseCategories() {
               <input
                 value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari kategori..."
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
               />
             </div>
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as any)}
-              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-500"
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
             >
               <option value="ALL">Semua Tipe</option>
               {CATEGORY_TYPES.map((t) => (
@@ -513,7 +513,7 @@ export function ExpenseCategories() {
                 <Tag size={40} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Belum ada kategori</p>
                 <button onClick={handleAddRoot}
-                  className="mt-3 text-xs text-amber-600 hover:underline">
+                  className="mt-3 text-xs text-brand-600 hover:underline">
                   Tambah kategori pertama
                 </button>
               </div>

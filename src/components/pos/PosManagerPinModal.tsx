@@ -133,7 +133,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
         {/* Header */}
         <div className="p-4 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+            <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
               <Lock className="w-4 h-4" />
             </div>
             <div>
@@ -166,7 +166,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
                 placeholder="e.g. Tamu ganti menu / salah input kasir"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
               />
             </div>
           )}
@@ -179,7 +179,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
                   key={idx}
                   className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                     pin.length > idx
-                      ? "bg-amber-500 border-amber-500 scale-110 shadow-sm shadow-amber-500/40"
+                      ? "bg-brand-600 border-brand-600 scale-110 shadow-sm shadow-brand-600/40"
                       : "border-slate-300 bg-slate-100"
                   }`}
                 />
@@ -240,7 +240,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
           </button>
           <button
             onClick={handleVerify}
-            className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white shadow-xs transition"
+            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-xs transition"
           >
             Verifikasi PIN
           </button>

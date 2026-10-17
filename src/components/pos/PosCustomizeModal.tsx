@@ -167,7 +167,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
         {/* Header Modal */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-100 border border-amber-200 text-amber-700">
+            <div className="p-2 rounded-xl bg-brand-50 border border-brand-200 text-brand-700">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -177,7 +177,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                   {item.category}
                 </span>
               </h2>
-              <p className="text-[11px] text-amber-700 font-bold">
+              <p className="text-[11px] text-brand-700 font-bold">
                 Harga Dasar: {formatCurrency(basePrice)}
               </p>
             </div>
@@ -216,11 +216,11 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                   onClick={() => setTemperature("HOT")}
                   className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition ${
                     temperature === "HOT"
-                      ? "bg-amber-50 border-amber-400 text-amber-900 shadow-xs"
+                      ? "bg-rose-50 border-rose-400 text-rose-900 shadow-xs"
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <Flame className="w-4 h-4 text-amber-600" />
+                  <Flame className="w-4 h-4 text-rose-600" />
                   <span>Panas / Hot (Rp 0)</span>
                 </button>
               </div>
@@ -246,7 +246,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                     onClick={() => setSweetness(lvl)}
                     className={`py-2 px-1 rounded-xl border text-[11px] font-semibold text-center transition ${
                       sweetness === lvl
-                        ? "bg-amber-600 text-white font-bold border-amber-600 shadow-xs"
+                        ? "bg-brand-600 text-white font-bold border-brand-600 shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
@@ -286,7 +286,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           {isDrink && (
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                <Milk className="w-3.5 h-3.5 text-amber-600" />
+                <Milk className="w-3.5 h-3.5 text-brand-600" />
                 <span>Pilihan Jenis Susu</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -331,12 +331,12 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
                     onClick={() => toggleAddon(addon)}
                     className={`p-2.5 rounded-xl border text-xs text-left transition flex items-center justify-between ${
                       isSelected
-                        ? "bg-amber-50 border-amber-500 text-amber-900 font-bold shadow-xs"
+                        ? "bg-brand-50 border-brand-500 text-brand-900 font-bold shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     <span>{addon.name}</span>
-                    <span className="text-[10px] font-bold text-amber-700">
+                    <span className="text-[10px] font-bold text-brand-700">
                       +{formatCurrency(addon.price)}
                     </span>
                   </button>
@@ -356,7 +356,7 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Pisah es di cup lain, bawa tumbler sendiri..."
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             />
           </div>
         </div>
@@ -388,10 +388,10 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex-1 py-3 px-4 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-amber-600/20 transition"
+            className="flex-1 py-3 px-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-brand-600/20 transition"
           >
             <span>Tambah ke Keranjang</span>
-            <span className="bg-amber-700/60 px-2 py-0.5 rounded-lg text-white font-extrabold text-sm">
+            <span className="bg-brand-700/60 px-2 py-0.5 rounded-lg text-white font-extrabold text-sm">
               {formatCurrency(subtotal)}
             </span>
           </button>

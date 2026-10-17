@@ -191,18 +191,18 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
       {/* ── Top Bar KDS ─────────────────────────────────────────────────── */}
       <div className="h-16 px-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-700 shadow-xs">
+          <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 shadow-xs">
             <UtensilsCrossed className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               Kitchen & Bar Display System (KDS)
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold border border-amber-200">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 font-bold border border-brand-200">
                 {tickets.length} Antrean Aktif
               </span>
             </h1>
             <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-              <span>Stasiun: <strong className="text-amber-800 font-bold">{stationFilter}</strong></span>
+              <span>Stasiun: <strong className="text-brand-800 font-bold">{stationFilter}</strong></span>
               <span>•</span>
               <span className="flex items-center gap-1 font-medium">
                 {isOnline ? (
@@ -240,7 +240,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
-                  <IconComp className="w-3.5 h-3.5 text-amber-700" />
+                  <IconComp className="w-3.5 h-3.5 text-brand-600" />
                   <span>{st.label}</span>
                 </button>
               );
@@ -252,12 +252,12 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             onClick={() => setSoundEnabled(!soundEnabled)}
             className={`p-2.5 rounded-xl border transition ${
               soundEnabled
-                ? "bg-amber-50 text-amber-800 border-amber-300 shadow-2xs"
+                ? "bg-brand-50 text-brand-800 border-brand-200 shadow-2xs"
                 : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
             }`}
             title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-700" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
           {/* Refresh button */}
@@ -294,7 +294,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
       <div className="flex-1 overflow-x-auto overflow-y-auto p-4 bg-slate-100/80">
         {isLoading ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
-            <RotateCcw className="w-8 h-8 animate-spin text-amber-600" />
+            <RotateCcw className="w-8 h-8 animate-spin text-brand-600" />
             <p className="text-xs font-medium text-slate-600">Memuat antrean dapur & bar...</p>
           </div>
         ) : tickets.length === 0 ? (
@@ -350,7 +350,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-extrabold ${
                             ticket.orderType === "DINE_IN"
-                              ? "bg-amber-100 text-amber-900 border border-amber-200"
+                              ? "bg-brand-50 text-brand-700 border border-brand-200"
                               : "bg-sky-100 text-sky-900 border border-sky-200"
                           }`}
                         >
@@ -414,7 +414,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                         >
                           <div className="flex-1">
                             <div className="flex items-baseline gap-2">
-                              <span className="text-base font-black text-amber-700 min-w-[24px]">
+                              <span className="text-base font-black text-brand-700 min-w-[24px]">
                                 {item.quantity}x
                               </span>
                               <span className="text-sm font-bold leading-tight text-slate-900">
@@ -425,7 +425,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
 
                             {/* Modifiers & Notes (Bold & Highlighted) */}
                             {item.notes && (
-                              <p className="text-xs font-bold text-amber-900 mt-1 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 inline-block">
+                              <p className="text-xs font-bold text-brand-900 mt-1 bg-brand-50 px-2 py-0.5 rounded border border-brand-200 inline-block">
                                 Catatan: {item.notes}
                               </p>
                             )}

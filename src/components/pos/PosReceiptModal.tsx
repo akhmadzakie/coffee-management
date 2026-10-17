@@ -190,7 +190,7 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
 
           <button
             onClick={handlePrint}
-            className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20 transition flex items-center justify-center gap-2"
           >
             <Printer className="w-4 h-4" />
             <span>Cetak Struk</span>

@@ -102,7 +102,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
         {/* Header */}
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
               <Printer className="w-5 h-5" />
             </div>
             <div>
@@ -161,7 +161,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                 }}
                 className={`flex-1 py-2 px-2.5 rounded-xl text-left border transition ${
                   isSelected
-                    ? "bg-white border-amber-500 text-slate-900 shadow-xs ring-1 ring-amber-500/30"
+                    ? "bg-white border-brand-500 text-slate-900 shadow-xs ring-1 ring-brand-500/30"
                     : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900"
                 }`}
               >
@@ -182,7 +182,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             />
           </div>
 
@@ -209,7 +209,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                     }
                     className={`p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
                       isSelected
-                        ? "bg-amber-600 border-amber-600 text-white font-bold shadow-xs"
+                        ? "bg-brand-600 border-brand-600 text-white font-bold shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
                     }`}
                   >
@@ -232,7 +232,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                   placeholder="e.g. 192.168.1.200"
                   value={formData.ipAddress}
                   onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono transition"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 font-mono transition"
                 />
               </div>
               <div>
@@ -244,7 +244,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                   placeholder="9100"
                   value={formData.port}
                   onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) || 9100 })}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono transition"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 font-mono transition"
                 />
               </div>
             </div>
@@ -341,7 +341,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
           <button
             onClick={handleSavePrinter}
             disabled={isSaving}
-            className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs flex items-center gap-2 transition"
+            className="px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs flex items-center gap-2 transition"
           >
             <Save className="w-4 h-4" />
             <span>Simpan Konfigurasi</span>

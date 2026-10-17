@@ -617,7 +617,7 @@ export function ClockIn() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 p-3.5 text-xs text-slate-700 min-h-[100px] outline-none transition-all placeholder:text-slate-400"
+                className="w-full rounded-2xl border border-slate-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-100 p-3.5 text-xs text-slate-700 min-h-[100px] outline-none transition-all placeholder:text-slate-400"
                 placeholder="Tuliskan alasan izin / sakit secara rinci (misal: Sakit demam dengan surat dokter, atau keperluan mendesak)..."
               />
             </div>

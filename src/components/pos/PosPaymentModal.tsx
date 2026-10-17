@@ -246,7 +246,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-amber-600" />
+              <Receipt className="w-5 h-5 text-brand-600" />
               Pembayaran Pesanan Kasir
             </h2>
             <p className="text-xs text-slate-500">
@@ -263,11 +263,11 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
         </div>
 
         {/* Total Display */}
-        <div className="p-5 bg-gradient-to-b from-amber-50/70 to-amber-50/30 border-b border-amber-100/80 text-center">
+        <div className="p-5 bg-gradient-to-b from-brand-50/80 to-brand-50/20 border-b border-brand-100/80 text-center">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             Total yang Harus Dibayar
           </p>
-          <h1 className="text-3xl font-black text-amber-700 mt-1">
+          <h1 className="text-3xl font-black text-brand-900 mt-1">
             {formatCurrency(totalAmount)}
           </h1>
           {discountAmount > 0 && (
@@ -302,7 +302,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     }}
                     className={`p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
                       isSelected
-                        ? "bg-amber-600 border-amber-600 text-white shadow-md font-bold"
+                        ? "bg-brand-600 border-brand-600 text-white shadow-md font-bold"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300"
                     }`}
                   >
@@ -330,8 +330,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                       onClick={() => setCashReceived(val)}
                       className={`py-2 px-1 rounded-xl text-xs font-bold border transition ${
                         cashReceived === val
-                          ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                          : "bg-white border-slate-200 text-slate-700 hover:bg-amber-50 hover:border-amber-300"
+                          ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-brand-50 hover:border-brand-300"
                       }`}
                     >
                       {val === totalAmount ? "Uang Pas" : formatCurrency(val)}
@@ -363,7 +363,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                       key={btn.label}
                       type="button"
                       onClick={() => setCashReceived((prev) => (prev || 0) + btn.val)}
-                      className="py-1.5 rounded-xl bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 border border-slate-200 hover:border-amber-300 text-xs font-bold transition shadow-2xs"
+                      className="py-1.5 rounded-xl bg-white hover:bg-brand-50 text-slate-700 hover:text-brand-800 border border-slate-200 hover:border-brand-300 text-xs font-bold transition shadow-2xs"
                     >
                       {btn.label}
                     </button>
@@ -381,7 +381,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   value={cashReceived || ""}
                   onChange={(e) => setCashReceived(Number(e.target.value) || 0)}
                   placeholder="Ketik jumlah uang..."
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition shadow-inner"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition shadow-inner"
                 />
               </div>
 
@@ -456,7 +456,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
 
                 <div className="mt-2 text-center">
                   <p className="text-[10px] text-slate-500 font-semibold">Total Tagihan QRIS</p>
-                  <p className="text-sm font-black text-amber-700">{formatCurrency(totalAmount)}</p>
+                  <p className="text-sm font-black text-brand-700">{formatCurrency(totalAmount)}</p>
                 </div>
               </div>
 
@@ -474,7 +474,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   placeholder="No. Referensi / RRN (Opsional)"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 />
                 <button
                   type="button"
@@ -482,7 +482,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     const randomRrn = `RRN-${Math.floor(10000000 + Math.random() * 90000000)}`;
                     setReferenceNo(randomRrn);
                   }}
-                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition shrink-0"
+                  className="px-3 py-2 bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200 rounded-xl text-xs font-bold transition shrink-0"
                 >
                   Generate RRN
                 </button>
@@ -500,7 +500,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                     onClick={() => setSelectedBank(b)}
                     className={`py-2 rounded-xl text-xs font-bold border transition ${
                       selectedBank === b
-                        ? "bg-amber-600 border-amber-600 text-white shadow-xs"
+                        ? "bg-brand-600 border-brand-600 text-white shadow-xs"
                         : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
@@ -518,7 +518,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
                   placeholder="e.g. 129482 (dari kertas slip EDC)"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 />
               </div>
             </div>
@@ -533,7 +533,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             >
               {cashAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
@@ -564,7 +564,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           <button
             onClick={handleProcessPayment}
             disabled={isSubmitting || !isCashSufficient}
-            className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold shadow-md shadow-amber-600/20 transition flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold shadow-md shadow-brand-600/20 transition flex items-center gap-2"
           >
             {isSubmitting ? (
               <>

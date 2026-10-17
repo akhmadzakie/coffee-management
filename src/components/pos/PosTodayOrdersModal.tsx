@@ -90,7 +90,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
         {/* Header */}
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
               <Receipt className="w-5 h-5" />
             </div>
             <div>
@@ -114,7 +114,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
         <div className="grid grid-cols-4 gap-2.5 p-4 bg-slate-50/70 border-b border-slate-200">
           <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
             <p className="text-[10px] font-semibold text-slate-500">Total Omzet Lunas</p>
-            <p className="text-sm font-black text-amber-700 mt-0.5">
+            <p className="text-sm font-black text-brand-700 mt-0.5">
               {formatCurrency(summaryData.totalRevenue)}
             </p>
           </div>
@@ -147,7 +147,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
               placeholder="Cari no nota, meja, atau pelanggan..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             />
           </div>
 
@@ -185,7 +185,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-slate-50/20">
           {isLoading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
-              <RotateCcw className="w-6 h-6 animate-spin text-amber-600" />
+              <RotateCcw className="w-6 h-6 animate-spin text-brand-600" />
               <p className="text-xs">Memuat transaksi kasir hari ini...</p>
             </div>
           ) : filteredOrders.length === 0 ? (
@@ -244,7 +244,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
 
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-xs font-black text-amber-700">
+                      <p className="text-xs font-black text-brand-700">
                         {formatCurrency(ord.totalAmount)}
                       </p>
                       <p className="text-[10px] text-slate-500 font-medium">
@@ -258,7 +258,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                         className="p-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition flex items-center gap-1.5 text-xs font-bold"
                         title="Cetak Ulang Struk"
                       >
-                        <Printer className="w-4 h-4 text-amber-600" />
+                        <Printer className="w-4 h-4 text-brand-600" />
                         <span>Cetak Ulang</span>
                       </button>
                     )}

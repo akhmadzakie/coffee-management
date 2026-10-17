@@ -99,7 +99,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
         {/* Header Modal */}
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
               <Users className="w-5 h-5" />
             </div>
             <div>
@@ -131,7 +131,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
               placeholder="Cari berdasarkan nomor meja, nama tamu, atau no order..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
             />
           </div>
           <button
@@ -147,7 +147,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
           {isLoading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
-              <RotateCcw className="w-6 h-6 animate-spin text-amber-600" />
+              <RotateCcw className="w-6 h-6 animate-spin text-brand-600" />
               <p className="text-xs">Memuat daftar open bill meja...</p>
             </div>
           ) : filteredBills.length === 0 ? (
@@ -178,8 +178,8 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                     <div>
                       {/* Top row: Table badge & time */}
                       <div className="flex items-center justify-between mb-2">
-                        <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold flex items-center gap-1.5">
-                          <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-800 border border-slate-200 text-xs font-bold flex items-center gap-1.5">
+                          <Utensils className="w-3.5 h-3.5 text-slate-600" />
                           {bill.tableNumber || "Meja -"}
                         </span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1 font-medium">
@@ -207,7 +207,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                       <div>
                         <p className="text-[10px] text-slate-500 font-medium">{itemCount} Menu</p>
-                        <p className="text-sm font-black text-amber-700">
+                        <p className="text-sm font-black text-brand-700">
                           {formatCurrency(bill.totalAmount)}
                         </p>
                       </div>
@@ -224,10 +224,10 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                             });
                             setSplitItemQuantities(initialQty);
                           }}
-                          className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                          className="px-2.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200 text-xs font-bold transition flex items-center gap-1 shadow-2xs"
                           title="Pecah Tagihan (Split Bill)"
                         >
-                          <GitFork className="w-3.5 h-3.5 text-amber-700" />
+                          <GitFork className="w-3.5 h-3.5 text-brand-700" />
                           <span>Split Bill</span>
                         </button>
                         <button
@@ -239,7 +239,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         </button>
                         <button
                           onClick={() => onSelectOrder(bill)}
-                          className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+                          className="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
                         >
                           <span>Proses</span>
                           <ArrowRight className="w-3.5 h-3.5" />
@@ -282,7 +282,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
             {/* Header Split Bill */}
             <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700">
                   <GitFork className="w-5 h-5" />
                 </div>
                 <div>
@@ -342,7 +342,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         key={it.id}
                         className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 ${
                           currentSplitQty > 0
-                            ? "bg-amber-50/60 border-amber-300 shadow-2xs"
+                            ? "bg-brand-50/60 border-brand-300 shadow-2xs"
                             : "bg-slate-50 border-slate-200"
                         }`}
                       >
@@ -369,7 +369,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="w-6 text-center text-sm font-black text-amber-800">
+                          <span className="w-6 text-center text-sm font-black text-brand-800">
                             {currentSplitQty}
                           </span>
                           <button
@@ -401,7 +401,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         onClick={() => setSplitPersonsCount(num)}
                         className={`w-12 h-12 rounded-2xl text-sm font-bold border transition ${
                           splitPersonsCount === num
-                            ? "bg-amber-600 text-white border-amber-600 shadow-xs font-black"
+                            ? "bg-brand-600 text-white border-brand-600 shadow-xs font-black"
                             : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
@@ -410,9 +410,9 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                     ))}
                   </div>
 
-                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 mt-3 text-center">
+                  <div className="p-4 bg-brand-50/60 rounded-2xl border border-brand-200 mt-3 text-center">
                     <p className="text-xs font-semibold text-slate-600">Tagihan per Orang</p>
-                    <p className="text-2xl font-black text-amber-700 mt-1">
+                    <p className="text-2xl font-black text-brand-700 mt-1">
                       {formatCurrency(Math.round(selectedSplitOrder.totalAmount / splitPersonsCount))}
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
@@ -427,7 +427,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
             <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <div>
                 <p className="text-[11px] text-slate-500">Nominal Bagian Ini</p>
-                <p className="text-base font-black text-amber-700">
+                <p className="text-base font-black text-brand-700">
                   {splitMode === "ITEMS"
                     ? formatCurrency(
                         (selectedSplitOrder.items || []).reduce((sum: number, it: any) => {
@@ -484,7 +484,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                     }
                     setSelectedSplitOrder(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
                 >
                   <span>Bayar Bagian Ini</span>
                   <ArrowRight className="w-3.5 h-3.5" />

@@ -356,28 +356,28 @@ export const Layout: React.FC<LayoutProps> = ({
     switch (role?.toUpperCase()) {
       case "SUPER_ADMIN":
       case "OWNER":
-        return { label: "Owner", bg: "bg-amber-500/15 text-amber-300 border-amber-500/30", icon: "👑" };
+        return { label: "Owner", bg: "bg-brand-50 text-brand-700 border-brand-200", icon: "👑" };
       case "MANAGER":
-        return { label: "Manager", bg: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30", icon: "💼" };
+        return { label: "Manager", bg: "bg-violet-50 text-violet-700 border-violet-200", icon: "💼" };
       case "FINANCE":
-        return { label: "Finance", bg: "bg-blue-500/15 text-blue-300 border-blue-500/30", icon: "📊" };
+        return { label: "Finance", bg: "bg-sky-50 text-sky-700 border-sky-200", icon: "📊" };
       case "KASIR":
-        return { label: "Kasir POS", bg: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30", icon: "💳" };
+        return { label: "Kasir POS", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "💳" };
       case "LEADER": {
         const emp = employees?.find(
           (e) => e.id === currentUser?.employeeId || e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
         );
         const dept = (currentUser?.department || emp?.department || emp?.position || "").toUpperCase();
         if (dept.includes("KITCHEN")) {
-          return { label: "Leader Kitchen", bg: "bg-orange-500/15 text-orange-300 border-orange-500/30", icon: "🍳" };
+          return { label: "Leader Kitchen", bg: "bg-indigo-50 text-indigo-700 border-indigo-200", icon: "🍳" };
         }
         if (dept.includes("BAKER") || dept.includes("PASTRY")) {
-          return { label: "Leader Baker", bg: "bg-amber-500/15 text-amber-300 border-amber-500/30", icon: "🥐" };
+          return { label: "Leader Baker", bg: "bg-purple-50 text-purple-700 border-purple-200", icon: "🥐" };
         }
-        return { label: "Leader Bar", bg: "bg-orange-500/15 text-orange-300 border-orange-500/30", icon: "☕" };
+        return { label: "Leader Bar", bg: "bg-indigo-50 text-indigo-700 border-indigo-200", icon: "☕" };
       }
       default:
-        return { label: role || "Staff", bg: "bg-slate-500/15 text-slate-300 border-slate-500/30", icon: "👤" };
+        return { label: role || "Staff", bg: "bg-slate-50 text-slate-700 border-slate-200", icon: "👤" };
     }
   };
 
@@ -423,7 +423,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
       {/* ─── SIDEBAR (DESKTOP) ─── */}
       <aside
-        className={`hidden md:flex flex-col bg-white border-r border-stone-200/90 text-stone-800 transition-all duration-300 select-none z-40 ${
+        className={`hidden md:flex flex-col bg-white border-r border-slate-200/90 text-slate-800 transition-all duration-300 select-none z-40 ${
           isSidebarCollapsed ? "w-20" : "w-64"
         }`}
       >
@@ -550,21 +550,21 @@ export const Layout: React.FC<LayoutProps> = ({
         </nav>
 
         {/* Footer Operator Card & Actions (Desktop Sidebar) */}
-        <div className={`p-3 border-t border-stone-100 bg-[#FAFAFA] ${isSidebarCollapsed ? "flex flex-col items-center gap-2" : "space-y-2"}`}>
+        <div className={`p-3 border-t border-slate-100 bg-[#FAFBFF] ${isSidebarCollapsed ? "flex flex-col items-center gap-2" : "space-y-2"}`}>
           <div className="flex items-center gap-2.5">
             <div
               title={isSidebarCollapsed ? `${currentUser?.name} (${currentUser?.role})` : undefined}
-              className="w-9 h-9 shrink-0 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 font-bold border border-amber-200 text-xs shadow-xs"
+              className="w-9 h-9 shrink-0 rounded-xl bg-brand-50 flex items-center justify-center text-brand-700 font-bold border border-brand-200 text-xs shadow-xs"
             >
               {currentUser?.name?.charAt(0).toUpperCase() || "U"}
             </div>
             {!isSidebarCollapsed && (
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-stone-900 truncate leading-tight">
+                <p className="text-xs font-bold text-slate-900 truncate leading-tight">
                   {currentUser?.name}
                 </p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${roleTheme.bg}`}>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${roleTheme.bg}`}>
                     {roleTheme.icon} {roleTheme.label}
                   </span>
                 </div>
@@ -576,10 +576,10 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="grid grid-cols-2 gap-1.5 pt-1">
               <button
                 onClick={() => setIsSwitchAccountOpen(true)}
-                className="flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                className="flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                 title="Beralih Operator"
               >
-                <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                <KeyRound className="w-3.5 h-3.5 text-brand-600" />
                 <span>Ganti Akun</span>
               </button>
               <button
@@ -596,9 +596,9 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 onClick={() => setIsSwitchAccountOpen(true)}
                 title="Ganti Akun Cepat"
-                className="flex items-center justify-center p-2 text-stone-600 hover:text-stone-900 bg-white hover:bg-stone-50 border border-stone-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
-                <KeyRound className="w-4 h-4 text-amber-600" />
+                <KeyRound className="w-4 h-4 text-brand-600" />
               </button>
               <button
                 onClick={() => logout()}
@@ -613,9 +613,9 @@ export const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       {/* ─── MAIN CONTENT WRAPPER ─── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#F8F9FA]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#f6f8ff]">
         {/* ─── MODERN HEADER BAR ─── */}
-        <header className="h-16 px-4 sm:px-6 bg-white/95 backdrop-blur-md border-b border-stone-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs">
+        <header className="h-16 px-4 sm:px-6 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs">
           {/* Left: Sidebar Toggle & Page Title */}
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -626,7 +626,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsMobileMenuOpen(!isMobileMenuOpen);
                 }
               }}
-              className="text-stone-500 hover:text-stone-900 p-2 rounded-xl bg-stone-50 border border-stone-200 hover:bg-stone-100 transition-colors cursor-pointer shadow-2xs"
+              className="text-slate-500 hover:text-slate-900 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
               aria-label="Toggle Sidebar"
             >
               {isSidebarCollapsed ? (
@@ -638,7 +638,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* Breadcrumb Title */}
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-stone-900 tracking-tight truncate">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                 {{
                   dashboard_owner: "Dashboard Eksekutif Owner",
                   dashboard_employee: "Portal Karyawan & Tim",
@@ -670,7 +670,7 @@ export const Layout: React.FC<LayoutProps> = ({
           {/* Right Header: AI, Export, Clock, Profile Capsule */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Live Clock Pill (Desktop) */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-mono text-stone-700 shadow-2xs">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-semibold">
                 {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -682,9 +682,9 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 onClick={() => setIsAIAssistantOpen(true)}
                 title="Julia Coffee AI Copilot & Business Consultant"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-all shadow-2xs cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-all shadow-2xs cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-600 stroke-[2.2]" />
+                <Sparkles className="w-3.5 h-3.5 text-brand-600 stroke-[2.2]" />
                 <span className="hidden sm:inline">AI Copilot</span>
               </button>
             )}
@@ -708,9 +708,9 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsExportModalOpen(true);
                 }}
                 title="Pusat Ekspor Multi-Format"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-700 transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-all cursor-pointer shadow-2xs"
               >
-                <Download className="w-3.5 h-3.5 text-stone-500" />
+                <Download className="w-3.5 h-3.5 text-slate-500" />
                 <span className="hidden sm:inline">Ekspor & Laporan</span>
               </button>
             )}
@@ -721,11 +721,11 @@ export const Layout: React.FC<LayoutProps> = ({
               title="Sinkronisasi Cloud DB"
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                 isSyncing
-                  ? "bg-amber-100 border-amber-300 text-amber-900"
-                  : "bg-stone-50 border-stone-200 text-stone-600 hover:text-stone-900"
+                  ? "bg-brand-50 border-brand-300 text-brand-900"
+                  : "bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900"
               }`}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-600" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-brand-600" : ""}`} />
               <span className="hidden md:inline">{isSyncing ? "Sync..." : "Cloud"}</span>
             </button>
 
@@ -733,33 +733,33 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-2xl bg-stone-50 border border-stone-200 hover:bg-stone-100 transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                   {currentUser?.name?.charAt(0).toUpperCase() || "U"}
                 </div>
                 <div className="hidden sm:flex flex-col items-start text-left">
-                  <span className="text-xs font-bold text-stone-900 line-clamp-1 leading-tight">
+                  <span className="text-xs font-bold text-slate-900 line-clamp-1 leading-tight">
                     {currentUser?.name}
                   </span>
-                  <span className="text-[10px] text-stone-500 font-medium leading-tight">
+                  <span className="text-[10px] text-slate-500 font-medium leading-tight">
                     {roleTheme.label}
                   </span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-stone-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
               {/* Dropdown Floating Menu */}
               {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                   {/* Operator Info */}
-                  <div className="px-4 py-3 border-b border-stone-100">
-                    <p className="text-xs font-bold text-stone-900 truncate">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-900 truncate">
                       {currentUser?.name}
                     </p>
-                    <p className="text-[11px] text-stone-500 truncate">
+                    <p className="text-[11px] text-slate-500 truncate">
                       @{currentUser?.username}
                     </p>
                     <div className="mt-2">
@@ -777,9 +777,9 @@ export const Layout: React.FC<LayoutProps> = ({
                         setIsUserDropdownOpen(false);
                         setIsSwitchAccountOpen(true);
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                     >
-                      <KeyRound className="w-4 h-4 text-amber-600" />
+                      <KeyRound className="w-4 h-4 text-brand-600" />
                       <span>Ganti Akun Operator (Switch)</span>
                     </button>
 
@@ -790,14 +790,14 @@ export const Layout: React.FC<LayoutProps> = ({
                           setExportModalModule("executive");
                           setIsExportModalOpen(true);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                       >
-                        <FileSpreadsheet className="w-4 h-4 text-stone-500" />
+                        <FileSpreadsheet className="w-4 h-4 text-slate-500" />
                         <span>Pusat Ekspor & Laporan</span>
                       </button>
                     )}
 
-                    <div className="my-1 border-t border-stone-100" />
+                    <div className="my-1 border-t border-slate-100" />
 
                     <button
                       onClick={() => {
@@ -826,7 +826,7 @@ export const Layout: React.FC<LayoutProps> = ({
             />
 
             {/* Drawer Container */}
-            <div className="relative w-72 max-w-[85vw] bg-white border-r border-stone-200 text-stone-800 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="relative w-72 max-w-[85vw] bg-white border-r border-slate-200 text-slate-800 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
               {/* Drawer Header */}
               <div className="p-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white">
                 <div className="flex items-center gap-2.5">
@@ -870,15 +870,15 @@ export const Layout: React.FC<LayoutProps> = ({
               </nav>
 
               {/* Mobile Drawer Footer */}
-              <div className="p-3 border-t border-stone-100 bg-stone-50 space-y-2">
+              <div className="p-3 border-t border-slate-100 bg-slate-50 space-y-2">
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
                     setIsSwitchAccountOpen(true);
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-stone-200 text-stone-700 text-xs font-bold rounded-xl shadow-2xs"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-2xs"
                 >
-                  <KeyRound className="w-4 h-4 text-amber-600" />
+                  <KeyRound className="w-4 h-4 text-brand-600" />
                   Ganti Akun
                 </button>
                 <button
@@ -897,11 +897,11 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F8F9FA] relative z-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar">
           {/* View-Only Alert for Owner */}
           {currentUser?.role === "OWNER" && (
-            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs shadow-2xs">
-              <Eye className="w-4 h-4 shrink-0 text-amber-600" />
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-brand-50/80 border border-brand-200 rounded-2xl text-brand-900 text-xs shadow-2xs">
+              <Eye className="w-4 h-4 shrink-0 text-brand-600" />
               <div>
                 <strong className="font-bold">Mode Pantau (View Only): </strong>
                 <span>Anda masuk sebagai <strong>Owner</strong> — melihat laporan dan analitik real-time.</span>

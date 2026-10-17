@@ -518,7 +518,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               <span className="text-[11px] font-normal text-slate-400">|</span>
               <span className="text-xs font-semibold text-slate-600">POS Kasir</span>
               {currentEditingOrderId && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-800 border border-brand-200 font-bold">
                   Mode Edit Open Bill
                 </span>
               )}
@@ -568,7 +568,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               <button
                 onClick={syncOfflineOrders}
                 disabled={!isOnline || isSyncing}
-                className="ml-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-[10px] shadow-xs flex items-center gap-1 transition animate-pulse"
+                className="ml-1 px-2 py-0.5 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-black text-[10px] shadow-xs flex items-center gap-1 transition animate-pulse"
                 title="Klik untuk menyinkronkan antrean pesanan offline ke server"
               >
                 <RotateCcw className={`w-3 h-3 ${isSyncing ? "animate-spin" : ""}`} />
@@ -591,10 +591,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             onClick={() => setIsOpenBillsModalOpen(true)}
             className="relative px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 border border-slate-200 transition flex items-center gap-2"
           >
-            <Users className="w-4 h-4 text-amber-600" />
+            <Users className="w-4 h-4 text-brand-600" />
             <span>Open Bill Meja</span>
             {activeBillsCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px] flex items-center justify-center animate-pulse">
+              <span className="w-5 h-5 rounded-full bg-brand-600 text-white font-bold text-[10px] flex items-center justify-center animate-pulse">
                 {activeBillsCount}
               </span>
             )}
@@ -651,7 +651,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   placeholder="Cari menu minuman, kopi, bakery, atau makanan..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10 focus:bg-white transition"
                 />
                 {searchQuery && (
                   <button
@@ -681,7 +681,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                     onClick={() => setSelectedCategory(cat.id)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 shrink-0 ${
                       isSelected
-                        ? "bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20"
+                        ? "bg-brand-600 text-white font-bold shadow-md shadow-brand-600/20"
                         : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
                     }`}
                   >
@@ -697,7 +697,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           <div className="flex-1 overflow-y-auto p-3">
             {isLoadingMenu ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
-                <RotateCcw className="w-6 h-6 animate-spin text-amber-500" />
+                <RotateCcw className="w-6 h-6 animate-spin text-brand-600" />
                 <p className="text-xs">Memuat katalog menu & ketersediaan stok...</p>
               </div>
             ) : filteredMenu.length === 0 ? (
@@ -721,12 +721,12 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         !item.isAvailable
                           ? "bg-slate-100/60 border-slate-200 opacity-60 grayscale"
                           : inCartQty > 0
-                          ? "bg-amber-50/60 border-amber-500 shadow-md ring-1 ring-amber-400"
-                          : "bg-white border-slate-200/80 hover:border-amber-300 hover:shadow-md"
+                          ? "bg-brand-50/50 border-brand-500 shadow-md ring-1 ring-brand-400"
+                          : "bg-white border-slate-200/80 hover:border-brand-300 hover:shadow-md"
                       }`}
                     >
                       {inCartQty > 0 && (
-                        <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
+                        <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center shadow-md">
                           {inCartQty}
                         </div>
                       )}
@@ -743,10 +743,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                                 e.stopPropagation();
                                 setCustomizingItem(item);
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 text-[9px] font-bold transition"
+                              className="px-2 py-0.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200 flex items-center gap-1 text-[9px] font-bold transition"
                               title="Kustomisasi suhu, gula, es, susu, dan add-on"
                             >
-                              <Sliders className="w-3 h-3 text-amber-600" />
+                              <Sliders className="w-3 h-3 text-brand-600" />
                               <span>Kustom</span>
                             </button>
                           )}
@@ -760,7 +760,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                       <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
                         <div>
                           <p className="text-[10px] text-slate-400">Harga</p>
-                          <p className="text-xs font-bold text-amber-700">
+                          <p className="text-xs font-bold text-brand-700">
                             {formatCurrency(item.price || 0)}
                           </p>
                         </div>
@@ -795,7 +795,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 onClick={() => setOrderType("DINE_IN")}
                 className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
                   orderType === "DINE_IN"
-                    ? "bg-amber-500 text-slate-950 shadow"
+                    ? "bg-brand-600 text-white shadow"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
@@ -806,7 +806,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 onClick={() => setOrderType("TAKE_AWAY")}
                 className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
                   orderType === "TAKE_AWAY"
-                    ? "bg-amber-500 text-slate-950 shadow"
+                    ? "bg-brand-600 text-white shadow"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
@@ -825,7 +825,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   placeholder="e.g. Meja 05"
                   value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10"
                 />
               </div>
               <div>
@@ -837,7 +837,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   placeholder="e.g. Pak Dimas"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10"
                 />
               </div>
             </div>
@@ -864,7 +864,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         {item.menuName}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-amber-700 font-bold">
+                        <span className="text-[11px] text-brand-700 font-bold">
                           {formatCurrency(item.unitPrice)}
                         </span>
                         <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 uppercase font-semibold">
@@ -872,7 +872,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         </span>
                       </div>
                       {item.variantName && item.variantName !== "Regular" && (
-                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">
+                        <p className="text-[10px] text-brand-700 font-medium mt-0.5">
                           {item.variantName}
                         </p>
                       )}
@@ -900,7 +900,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         )
                       );
                     }}
-                    className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                    className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:bg-white"
                   />
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100">
@@ -946,7 +946,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               <div className="flex justify-between items-center text-slate-500">
                 <button
                   onClick={() => setIsDiscountModalOpen(true)}
-                  className="text-amber-700 hover:underline flex items-center gap-1 text-[11px] font-semibold"
+                  className="text-brand-600 hover:underline flex items-center gap-1 text-[11px] font-semibold"
                 >
                   <Percent className="w-3 h-3" />
                   <span>
@@ -973,7 +973,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
               <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
                 <span className="text-sm font-bold text-slate-900">Total Tagihan</span>
-                <span className="text-xl font-black text-amber-700">
+                <span className="text-xl font-black text-brand-700">
                   {formatCurrency(totalAmount)}
                 </span>
               </div>
@@ -985,14 +985,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 onClick={handleSaveOpenBill}
                 className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:pointer-events-none text-slate-700 text-xs font-bold border border-slate-200 transition flex items-center justify-center gap-1.5"
               >
-                <FileText className="w-4 h-4 text-amber-600" />
+                <FileText className="w-4 h-4 text-brand-600" />
                 <span>Simpan Bill Meja</span>
               </button>
 
               <button
                 disabled={cart.length === 0}
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 disabled:pointer-events-none text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-1.5"
+                className="py-2.5 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold shadow-lg shadow-brand-600/20 transition flex items-center justify-center gap-1.5"
               >
                 <Banknote className="w-4 h-4" />
                 <span>Bayar Sekarang</span>
@@ -1093,7 +1093,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Percent className="w-4 h-4 text-amber-600" />
+                <Percent className="w-4 h-4 text-brand-600" />
                 Atur Diskon Pesanan
               </h3>
               <button
@@ -1137,7 +1137,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                     <button
                       key={p}
                       onClick={() => handleApplyDiscount(p, "PERCENT")}
-                      className="py-1.5 rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-xs font-bold text-slate-700 border border-slate-200 transition"
+                      className="py-1.5 rounded-lg bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-xs font-bold text-slate-700 border border-slate-200 transition"
                     >
                       {p}%
                     </button>
@@ -1154,7 +1154,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   placeholder="0"
                   defaultValue={discountValue || ""}
                   id="customDiscountInput"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 />
               </div>
 
@@ -1165,7 +1165,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   placeholder="e.g. Promo Member, Teman Owner, Event"
                   value={discountReason}
                   onChange={(e) => setDiscountReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 />
               </div>
 
@@ -1186,7 +1186,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                     const val = Number(el?.value) || 0;
                     handleApplyDiscount(val, discountType);
                   }}
-                  className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white shadow-xs transition"
+                  className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-xs transition"
                 >
                   Terapkan
                 </button>

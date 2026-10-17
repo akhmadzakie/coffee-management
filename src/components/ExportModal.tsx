@@ -412,16 +412,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   onClick={() => setActiveModule("all_in_one")}
                   className={`w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
                     activeModule === "all_in_one"
-                      ? "border-amber-500 bg-gradient-to-r from-amber-50 via-amber-100/40 to-orange-50 ring-2 ring-amber-500/40 text-amber-950 shadow-md"
-                      : "border-slate-200 bg-white hover:border-amber-300 hover:bg-amber-50/20 text-slate-700"
+                      ? "border-brand-600 bg-gradient-to-r from-brand-50 via-brand-100/40 to-indigo-50/50 ring-2 ring-brand-500/40 text-brand-950 shadow-md"
+                      : "border-slate-200 bg-white hover:border-brand-300 hover:bg-brand-50/20 text-slate-700"
                   }`}
                 >
                   <div className="flex items-start sm:items-center gap-3.5">
                     <div
                       className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
                         activeModule === "all_in_one"
-                          ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-amber-500/25"
-                          : "bg-amber-100 text-amber-700"
+                          ? "bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-brand-500/25"
+                          : "bg-brand-50 border border-brand-200/80 text-brand-600"
                       }`}
                     >
                       <Sparkles className="w-6 h-6" />
@@ -431,7 +431,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <span className="text-sm font-extrabold text-slate-900 tracking-tight">
                           Laporan Master Komprehensif (All-in-One)
                         </span>
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500 text-white uppercase tracking-wider shadow-2xs">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-brand-600 text-white uppercase tracking-wider shadow-2xs">
                           👑 Rekomendasi Owner / Atasan
                         </span>
                       </div>
@@ -667,27 +667,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             {/* Live Data Summary Banner */}
             <div className={`rounded-2xl p-4 flex items-start sm:items-center gap-3 text-xs leading-relaxed border transition-all ${
               activeModule === "all_in_one"
-                ? "bg-gradient-to-r from-amber-50/90 via-orange-50/70 to-amber-50/90 border-amber-300 text-amber-950 shadow-2xs"
+                ? "bg-gradient-to-r from-brand-50/90 via-slate-50 to-brand-50/90 border-brand-300 text-brand-950 shadow-2xs"
                 : "bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border-blue-200/80 text-blue-950"
             }`}>
               <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 sm:mt-0 ${
-                activeModule === "all_in_one" ? "bg-amber-500 animate-bounce" : "bg-blue-600 animate-pulse"
+                activeModule === "all_in_one" ? "bg-brand-600 animate-pulse" : "bg-blue-600 animate-pulse"
               }`} />
               <div className="w-full">
                 {activeModule === "all_in_one" && (
                   <div className="space-y-2">
-                    <div className="font-extrabold text-amber-950 flex items-center justify-between flex-wrap gap-2">
+                    <div className="font-extrabold text-brand-950 flex items-center justify-between flex-wrap gap-2">
                       <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                        <Sparkles className="w-4 h-4 text-brand-600 shrink-0" />
                         Ringkasan Gabungan Seluruh Divisi ({periodLabel}):
                       </span>
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-200/60 px-2.5 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold text-brand-800 bg-brand-100 px-2.5 py-0.5 rounded-full border border-brand-200">
                         7 Sheet Siap Diunduh
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                      <div className="p-2 rounded-xl bg-white/80 border border-brand-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-500 font-semibold block">Penjualan Bersih</span>
                         <span className="font-bold text-slate-900 text-xs">
                           {formatCurrency(filteredSales.reduce((s, i) => s + (i.total || i.totalPrice || 0), 0))}
@@ -695,7 +695,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <span className="text-[9px] text-blue-600 block">({filteredSales.length} struk kasir)</span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                      <div className="p-2 rounded-xl bg-white/80 border border-brand-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-500 font-semibold block">Kas Masuk (Non-Kasir)</span>
                         <span className="font-bold text-emerald-700 text-xs">
                           {formatCurrency(
@@ -709,7 +709,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         </span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                      <div className="p-2 rounded-xl bg-white/80 border border-brand-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-500 font-semibold block">Pengeluaran Kas</span>
                         <span className="font-bold text-rose-700 text-xs">
                           {formatCurrency(
@@ -721,7 +721,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <span className="text-[9px] text-rose-600 block">Biaya operasional & belanja</span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                      <div className="p-2 rounded-xl bg-white/80 border border-brand-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-500 font-semibold block">Total Beban Gaji</span>
                         <span className="font-bold text-indigo-700 text-xs">
                           {formatCurrency(filteredPayroll.reduce((s, p) => s + (p.netPay || 0), 0))}
@@ -729,12 +729,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <span className="text-[9px] text-indigo-600 block">({filteredPayroll.length} slip gaji)</span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-white/80 border border-amber-200/80 shadow-2xs">
+                      <div className="p-2 rounded-xl bg-white/80 border border-brand-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-500 font-semibold block">Inventaris & Bahan</span>
                         <span className="font-bold text-slate-900 text-xs">
                           {ingredients.length} Bahan Baku
                         </span>
-                        <span className="text-[9px] text-amber-700 block">
+                        <span className="text-[9px] text-brand-700 block">
                           ({filteredInventoryTrx.length} mutasi stok)
                         </span>
                       </div>

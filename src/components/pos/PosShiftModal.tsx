@@ -354,7 +354,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
             <div className="p-3 border-t border-slate-200 flex items-center justify-end gap-2 bg-slate-50">
               <button
                 onClick={handlePrintZReport}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
+                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 <span>Cetak Slip Z-Report</span>
@@ -396,7 +396,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 {activeShift ? "Tutup Shift Kasir (Z-Report)" : "Buka Shift Kasir Baru"}
               </h2>
               <p className="text-[11px] text-slate-500">
-                Kasir: <span className="text-amber-700 font-bold">{currentUser?.name || "Kasir"}</span> • Peran: {currentUser?.role || "Staff"}
+                Kasir: <span className="text-brand-700 font-bold">{currentUser?.name || "Kasir"}</span> • Peran: {currentUser?.role || "Staff"}
               </p>
             </div>
           </div>
@@ -428,7 +428,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 <select
                   value={selectedAccountId}
                   onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 >
                   {cashOnlyAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -459,7 +459,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     }
                     onChange={(e) => setStartingCashInput(e.target.value)}
                     placeholder="200.000"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                     required
                   />
                 </div>
@@ -471,7 +471,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       key={nom}
                       type="button"
                       onClick={() => setStartingCashInput(nom.toString())}
-                      className="py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-[11px] font-bold text-slate-700 border border-slate-200 transition"
+                      className="py-1.5 px-2 rounded-lg bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-[11px] font-bold text-slate-700 border border-slate-200 transition"
                     >
                       {formatCurrency(nom)}
                     </button>
@@ -496,7 +496,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                   <p className="text-[10px] text-slate-500 flex items-center gap-1 mb-1 font-semibold">
-                    <Clock className="w-3 h-3 text-amber-600" />
+                    <Clock className="w-3 h-3 text-brand-600" />
                     Waktu Mulai Shift
                   </p>
                   <p className="font-bold text-slate-800">
@@ -522,7 +522,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
                 <div className="flex justify-between items-center text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-200">
                   <span>Rincian Pembayaran POS ({shiftStats.transactionCount} Order)</span>
-                  <span className="text-amber-700 font-extrabold">
+                  <span className="text-brand-700 font-extrabold">
                     {formatCurrency(shiftStats.salesTotal)}
                   </span>
                 </div>
@@ -549,7 +549,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               </div>
 
               {/* Kalkulasi Kas yang Seharusnya Ada di Laci */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200 text-xs space-y-1.5">
                 <div className="flex justify-between text-slate-700">
                   <span>Modal Awal:</span>
                   <span className="font-semibold">{formatCurrency(activeShift.startingCash)}</span>
@@ -570,7 +570,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     <span className="font-semibold">({formatCurrency(shiftStats.cashOut)})</span>
                   </div>
                 )}
-                <div className="flex justify-between font-extrabold text-amber-800 pt-2 border-t border-amber-200 text-sm">
+                <div className="flex justify-between font-extrabold text-brand-800 pt-2 border-t border-brand-200 text-sm">
                   <span>Harus Ada di Laci (Expected):</span>
                   <span>{formatCurrency(shiftStats.expectedEndingCash)}</span>
                 </div>
@@ -597,7 +597,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     }
                     onChange={(e) => setActualCashInput(e.target.value)}
                     placeholder="Contoh: 1.250.000"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                     required
                   />
                 </div>
@@ -639,7 +639,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Keterangan bila ada selisih uang atau penyerahan laci..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
                 />
               </div>
 
