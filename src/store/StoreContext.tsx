@@ -222,12 +222,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>(() => {
     const defaultSettings: Settings = {
       id: "1",
-      logoDataUrl: null,
-      brandName: "Julia's Management System",
-      companyAddress: "",
-      bankDetails: "",
-      salesPerson: "",
-      footerMessage: "",
+      logoDataUrl: "/logo-wordmark-white.png",
+      brandName: "Julia's",
+      companyAddress: "Julia's • Specialty Room • Coffee • Eatery",
+      bankDetails: "Bank BCA 1234567890",
+      salesPerson: "Admin",
+      footerMessage: "Terima kasih atas kunjungannya di Julia's.",
       language: "id",
       monthlyRevenueTarget: 150000000,
       targetBonusAmount: 0,

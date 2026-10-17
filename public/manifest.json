@@ -1,13 +1,13 @@
 {
-  "name": "Julia Coffee POS & Management",
-  "short_name": "Julia POS",
-  "description": "Terminal Kasir POS & Sistem Manajemen Coffee Shop Terpadu",
+  "name": "Julia's • Specialty Room • Coffee • Eatery",
+  "short_name": "Julia's",
+  "description": "Julia's Specialty Room • Coffee • Eatery - Terminal Kasir POS & Sistem Manajemen Terpadu",
   "start_url": "/pos",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "orientation": "landscape-primary",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0a1040",
+  "theme_color": "#1b2cc0",
   "icons": [
     {
       "src": "/icon-192.png",

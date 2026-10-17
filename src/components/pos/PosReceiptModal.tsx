@@ -53,10 +53,10 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
             {/* Header Struk */}
             <div className="text-center pb-3 border-b border-dashed border-slate-400">
               <h2 className="text-sm font-black uppercase tracking-wider">
-                {settings?.brandName || "COFFEE MANAGEMENT"}
+                {settings?.brandName || "Julia's"}
               </h2>
               <p className="text-[10px] text-slate-600 mt-0.5">
-                {settings?.companyAddress || "Pusat Operasional Kafe & Bar"}
+                {settings?.companyAddress || "Specialty Room • Coffee • Eatery"}
               </p>
               <p className="text-[10px] text-slate-600">
                 {settings?.bankDetails || ""}
@@ -174,7 +174,7 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
             {/* Footer Struk */}
             <div className="text-center pt-3 text-[10px] text-slate-600">
               <p>{settings?.footerMessage || "Terima kasih atas kunjungannya!"}</p>
-              <p className="mt-0.5 text-[8px] text-slate-400">Coffee Management POS System</p>
+              <p className="mt-0.5 text-[8px] text-slate-400">Julia's POS System • Specialty Room • Coffee • Eatery</p>
             </div>
           </div>
         </div>

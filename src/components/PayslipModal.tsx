@@ -621,7 +621,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
               <div>
                 <p className="text-slate-400 text-[11px] mb-12">Manajemen / Keuangan,</p>
                 <p className="font-bold text-slate-900 underline underline-offset-4">
-                  {settings.brandName || "Coffee Management"}
+                  {settings.brandName || "Julia's"}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5">Otorisasi Resmi Outlet</p>
               </div>
@@ -629,7 +629,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
             {/* Footer small note */}
             <div className="mt-6 pt-2 border-t border-slate-100 text-[9px] text-slate-400 text-center">
-              Dokumen ini dicetak otomatis oleh sistem Coffee Management. Disimpan secara elektronik dan sah tanpa tanda tangan basah bila berstatus LUNAS.
+              Dokumen ini dicetak otomatis oleh sistem Julia's • Specialty Room • Coffee • Eatery. Disimpan secara elektronik dan sah tanpa tanda tangan basah bila berstatus LUNAS.
             </div>
           </div>
         </div>

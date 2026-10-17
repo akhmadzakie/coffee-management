@@ -463,7 +463,7 @@ export const KPI: React.FC = () => {
                     Transparansi Perhitungan Bonus di Modul Penggajian (Payroll)
                   </h3>
                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                    Sistem coffee management ini menghubungkan data dari <strong>Kontrak Kerja</strong>, <strong>Checklist Jobdesk Leader</strong>, <strong>Presensi & Evaluasi</strong>, dan <strong>Penjualan Kasir</strong> secara otomatis ke dalam slip gaji. Berikut rincian cara kerjanya:
+                    Sistem Julia's ini menghubungkan data dari <strong>Kontrak Kerja</strong>, <strong>Checklist Jobdesk Leader</strong>, <strong>Presensi & Evaluasi</strong>, dan <strong>Penjualan Kasir</strong> secara otomatis ke dalam slip gaji. Berikut rincian cara kerjanya:
                   </p>
                 </div>
               </div>

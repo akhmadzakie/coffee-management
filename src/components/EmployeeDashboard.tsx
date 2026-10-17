@@ -1042,7 +1042,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
           <div className="pt-4 border-t border-slate-100 mt-4 text-[11px] text-slate-400 flex items-center justify-between">
             <span>Sistem KPI Outlet</span>
-            <span className="text-indigo-600 font-semibold">Coffee Management</span>
+            <span className="text-brand-600 font-semibold">Julia's</span>
           </div>
         </div>
       </div>

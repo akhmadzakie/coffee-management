@@ -507,12 +507,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       {/* ── Top Bar Kasir (Light) ─────────────────────────────────────────── */}
       <div className="h-14 px-4 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700">
-            <Store className="w-5 h-5" />
-          </div>
+          <img
+            src="/logo-icon-color.png"
+            alt="Julia's"
+            className="w-9 h-9 rounded-xl object-contain shadow-xs border border-brand-200"
+          />
           <div>
             <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              POS Terminal Kasir
+              <span>Julia's</span>
+              <span className="text-[11px] font-normal text-slate-400">|</span>
+              <span className="text-xs font-semibold text-slate-600">POS Kasir</span>
               {currentEditingOrderId && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold">
                   Mode Edit Open Bill

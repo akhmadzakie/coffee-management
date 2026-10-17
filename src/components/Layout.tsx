@@ -384,7 +384,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const roleTheme = getRoleTheme(currentUser?.role);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex antialiased text-stone-900">
+    <div className="min-h-screen bg-[#f6f8ff] flex antialiased text-slate-900">
       {/* ─── Switch Account Modal ─── */}
       <SwitchAccountModal
         isOpen={isSwitchAccountOpen}
@@ -429,30 +429,24 @@ export const Layout: React.FC<LayoutProps> = ({
       >
         {/* Brand Header */}
         <div
-          className={`h-16 border-b border-stone-100 flex items-center px-4 ${
+          className={`h-16 flex items-center px-4 bg-brand-gradient text-white border-b border-brand-800 ${
             isSidebarCollapsed ? "justify-center" : "justify-between"
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
-            {settings.logoDataUrl ? (
+            {isSidebarCollapsed ? (
               <img
-                src={settings.logoDataUrl}
-                alt={settings.brandName}
-                className={`h-8 w-auto object-contain rounded-lg ${isSidebarCollapsed ? "max-w-[40px]" : "max-w-[120px]"}`}
+                src={settings.logoDataUrl || "/logo-icon-color.png"}
+                alt={settings.brandName || "Julia's"}
+                className="w-9 h-9 object-contain rounded-xl shadow-xs"
               />
             ) : (
-              <div className="w-9 h-9 shrink-0 bg-amber-500 rounded-xl flex items-center justify-center text-white font-black shadow-xs">
-                <Coffee className="w-5 h-5 stroke-[2.2]" />
-              </div>
-            )}
-            {!isSidebarCollapsed && (
-              <div className="min-w-0">
-                <h1 className="text-sm font-bold tracking-tight text-stone-900 truncate">
-                  {settings.brandName || "COFFEE POS"}
-                </h1>
-                <p className="text-[10px] text-amber-700 font-semibold tracking-wider uppercase">
-                  Management System
-                </p>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={settings.logoDataUrl || "/logo-name-white.png"}
+                  alt={settings.brandName || "Julia's"}
+                  className="h-8 max-h-9 w-auto object-contain rounded-md"
+                />
               </div>
             )}
           </div>
@@ -460,7 +454,7 @@ export const Layout: React.FC<LayoutProps> = ({
           {!isSidebarCollapsed && (
             <button
               onClick={() => setIsSidebarCollapsed(true)}
-              className="text-stone-400 hover:text-stone-700 p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
               title="Ciutkan Sidebar"
             >
               <PanelLeftClose className="w-4 h-4" />
@@ -495,11 +489,11 @@ export const Layout: React.FC<LayoutProps> = ({
                           title={`${item.name} (${group})`}
                           className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm transition-all mb-1 cursor-pointer ${
                             isActive
-                              ? "bg-amber-500 text-white font-bold shadow-xs"
-                              : "text-stone-400 hover:bg-stone-100 hover:text-stone-800"
+                              ? "bg-brand-600 text-white font-bold shadow-xs"
+                              : "text-slate-400 hover:bg-slate-100 hover:text-slate-800"
                           }`}
                         >
-                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-white" : "text-stone-500"}`} />
+                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-white" : "text-slate-500"}`} />
                         </button>
                       );
                     })}
@@ -512,7 +506,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   <button
                     onClick={() => toggleGroup(group)}
                     className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                      isActiveGroup ? "text-amber-800 font-bold" : "text-stone-400 hover:text-stone-700"
+                      isActiveGroup ? "text-brand-800 font-bold" : "text-slate-400 hover:text-slate-700"
                     }`}
                   >
                     <span>{group}</span>
@@ -534,13 +528,13 @@ export const Layout: React.FC<LayoutProps> = ({
                             onClick={() => onViewChange(item.view)}
                             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                               isActive
-                                ? "bg-amber-50 text-amber-950 font-bold border-l-3 border-amber-500 shadow-2xs"
-                                : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                                ? "bg-brand-50 text-brand-950 font-bold border-l-3 border-brand-600 shadow-2xs"
+                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                             }`}
                           >
                             <Icon
                               className={`w-4 h-4 shrink-0 transition-transform ${
-                                isActive ? "text-amber-600 scale-105" : "text-stone-400"
+                                isActive ? "text-brand-600 scale-105" : "text-slate-400"
                               }`}
                             />
                             <span className="truncate">{item.name}</span>
@@ -834,19 +828,17 @@ export const Layout: React.FC<LayoutProps> = ({
             {/* Drawer Container */}
             <div className="relative w-72 max-w-[85vw] bg-white border-r border-stone-200 text-stone-800 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
               {/* Drawer Header */}
-              <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50">
+              <div className="p-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
-                    <Coffee className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-stone-900">{settings.brandName}</h3>
-                    <span className="text-[10px] text-amber-700 font-semibold">POS Menu</span>
-                  </div>
+                  <img
+                    src={settings.logoDataUrl || "/logo-name-white.png"}
+                    alt={settings.brandName || "Julia's"}
+                    className="h-8 w-auto object-contain rounded-md"
+                  />
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
+                  className="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -866,11 +858,11 @@ export const Layout: React.FC<LayoutProps> = ({
                       }}
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                         isActive
-                          ? "bg-amber-50 text-amber-900 font-bold border-l-3 border-amber-500"
-                          : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                          ? "bg-brand-50 text-brand-900 font-bold border-l-3 border-brand-600"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? "text-amber-600" : "text-stone-400"}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
                       <span>{item.name}</span>
                     </button>
                   );

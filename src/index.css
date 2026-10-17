@@ -1,14 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #0f172a;
-  --color-accent: #d97706;
-  --color-secondary: #f8fafc;
-  --color-coffee-dark: #0f172a;
-  --color-coffee-roast: #1e293b;
-  --color-coffee-crema: #d97706;
-  --color-coffee-latte: #f8fafc;
-  --color-coffee-border: #e2e8f0;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #dfe6ff;
+  --color-brand-200: #c3cfff;
+  --color-brand-300: #a8bcff;
+  --color-brand-400: #7692ff;
+  --color-brand-500: #4a5ff0;
+  --color-brand-600: #1b2cc0;
+  --color-brand-700: #1624a0;
+  --color-brand-800: #121d80;
+  --color-brand-900: #0f1860;
+  --color-brand-950: #0a1040;
+  --color-brand-sky: #a2c5fb;
+
+  --color-primary: #1b2cc0;
+  --color-accent: #1b2cc0;
+  --color-secondary: #f6f8ff;
+  --color-coffee-dark: #0a1040;
+  --color-coffee-roast: #0f1860;
+  --color-coffee-crema: #1b2cc0;
+  --color-coffee-latte: #eef2ff;
+  --color-coffee-border: #dfe6ff;
 }
 
 @layer utilities {
@@ -27,6 +40,11 @@
     background-color: #94a3b8;
   }
 
+  /* Julia's Brand Gradient (Sidebar Header, Hero Card, Big CTA) */
+  .bg-brand-gradient {
+    background: linear-gradient(135deg, #1b2cc0 0%, #121d80 60%, #0a1040 100%);
+  }
+
   /* Clean Nordic & Glassmorphism styles */
   .glass-card {
     background: rgba(255, 255, 255, 0.96);
@@ -42,7 +60,7 @@
     border-bottom: 1px solid rgba(226, 232, 240, 0.8);
   }
 
-  /* Apple-inspired subtle elevation for clean management */
+  /* Elevation for clean management */
   .shadow-coffee-sm {
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
   }
@@ -66,7 +84,7 @@
   body {
     font-family: inherit;
     color: #0f172a;
-    background-color: #f8fafc;
+    background-color: #f6f8ff;
   }
 
   /* Tabular numbers for clean currency and KPI alignment */
@@ -74,9 +92,9 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Focus ring aesthetic */
+  /* Focus ring aesthetic - Julia's Brand Focus */
   *:focus-visible {
-    outline: 2px solid rgba(217, 119, 6, 0.4);
+    outline: 2px solid rgba(74, 95, 240, 0.4);
     outline-offset: 2px;
   }
 }

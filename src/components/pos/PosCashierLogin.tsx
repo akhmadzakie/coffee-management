@@ -127,43 +127,40 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between items-center relative overflow-hidden select-none font-sans p-4 sm:p-6 lg:p-8">
-      {/* Background Soft Coffee Accent */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-amber-100/50 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-[#f6f8ff] text-slate-900 flex flex-col justify-between items-center relative overflow-hidden select-none font-sans p-4 sm:p-6 lg:p-8">
+      {/* Background Soft Brand Accent */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-brand-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* ─── TOP STATUS BAR ─── */}
       <header className="w-full max-w-4xl flex items-center justify-between z-10 py-2 border-b border-slate-200/80 pb-4">
         <div className="flex items-center gap-3">
-          {settings.logoDataUrl ? (
-            <img
-              src={settings.logoDataUrl}
-              alt={settings.brandName}
-              className="h-11 w-auto object-contain rounded-2xl shadow-xs"
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-bold shadow-sm shadow-amber-600/30">
-              <Coffee className="w-6 h-6 stroke-[2.2]" />
-            </div>
-          )}
-          <div>
+          <img
+            src="/logo-name-blue.png"
+            alt="Julia's"
+            className="h-11 w-auto object-contain"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = "/logo-icon-color.png";
+            }}
+          />
+          <div className="border-l border-slate-200 pl-3 hidden sm:block">
             <div className="flex items-center gap-2">
               <h1 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                {settings.brandName || "COFFEE MANAGEMENT"}
+                Julia's
               </h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200 flex items-center gap-1">
-                <Store className="w-3 h-3 text-amber-600" />
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 font-bold border border-brand-200 flex items-center gap-1">
+                <Store className="w-3 h-3 text-brand-600" />
                 TERMINAL KASIR
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              Sistem Kasir Layar Sentuh Tablet Standalone
+              Specialty Room • Coffee • Eatery
             </p>
           </div>
         </div>
 
         {/* Jam Realtime & Status Toko */}
         <div className="flex items-center gap-3 bg-white px-3.5 py-2 rounded-2xl border border-slate-200 shadow-xs">
-          <Clock className="w-4 h-4 text-amber-600" />
+          <Clock className="w-4 h-4 text-brand-600" />
           <div className="text-right">
             <p className="text-xs font-bold text-slate-900 font-mono leading-none">
               {currentTime.toLocaleTimeString("id-ID", {
@@ -212,7 +209,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                     }}
                     className={`w-full p-3 rounded-2xl border text-left transition flex items-center justify-between ${
                       isSelected
-                        ? "bg-amber-50 border-amber-500 shadow-xs ring-1 ring-amber-500/30"
+                        ? "bg-brand-50 border-brand-500 shadow-xs ring-1 ring-brand-500/30"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80"
                     }`}
                   >
@@ -220,7 +217,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
                           isSelected
-                            ? "bg-amber-600 text-white shadow-xs"
+                            ? "bg-brand-600 text-white shadow-xs"
                             : "bg-slate-200 text-slate-600"
                         }`}
                       >
@@ -230,13 +227,13 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                         <p className="text-xs font-bold text-slate-900">{u.name}</p>
                         <p className="text-[10px] text-slate-500">
                           {u.department ? `${u.department} • ` : ""}
-                          <span className="font-semibold text-amber-700">{u.role}</span>
+                          <span className={isSelected ? "font-semibold text-brand-700" : "font-semibold text-slate-500"}>{u.role}</span>
                         </p>
                       </div>
                     </div>
 
                     {isSelected && (
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
                     )}
                   </button>
                 );
@@ -254,7 +251,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
         <div className="md:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center justify-center">
           <div className="text-center mb-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center justify-center gap-2">
-              <Lock className="w-4 h-4 text-amber-600" />
+              <Lock className="w-4 h-4 text-brand-600" />
               <span>Masukkan PIN Otorisasi</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -270,7 +267,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                   key={idx}
                   className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                     pin.length > idx
-                      ? "bg-amber-600 border-amber-600 scale-110 shadow-sm shadow-amber-600/30"
+                      ? "bg-brand-600 border-brand-600 scale-110 shadow-sm shadow-brand-600/30"
                       : "border-slate-300 bg-slate-100"
                   }`}
                 />
@@ -296,7 +293,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                 key={num}
                 type="button"
                 onClick={() => handleKeypadPress(num)}
-                className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
+                className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
               >
                 {num}
               </button>
@@ -311,7 +308,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             <button
               type="button"
               onClick={() => handleKeypadPress("0")}
-              className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
+              className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
             >
               0
             </button>
@@ -328,7 +325,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
 
       {/* ─── FOOTER ─── */}
       <footer className="w-full max-w-4xl text-center py-2 text-[11px] text-slate-500 z-10 flex items-center justify-between border-t border-slate-200/80 pt-3">
-        <p>© {new Date().getFullYear()} {settings.brandName || "Coffee Shop Management"} • Dedicated POS Terminal</p>
+        <p>© {new Date().getFullYear()} Julia's • Specialty Room • Coffee • Eatery • Dedicated POS Terminal</p>
         <p className="font-medium text-slate-600">Mode Operasional Kasir Terisolasi</p>
       </footer>
     </div>

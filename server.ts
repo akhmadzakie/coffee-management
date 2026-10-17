@@ -12,12 +12,12 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 const initialSettings = {
   id: "1",
-  logoDataUrl: null,
-  brandName: "Julia's Management System",
-  companyAddress: "Alamat Julia's Management",
+  logoDataUrl: "/logo-wordmark-white.png",
+  brandName: "Julia's",
+  companyAddress: "Julia's • Specialty Room • Coffee • Eatery",
   bankDetails: "Bank BCA 1234567890",
   salesPerson: "Admin",
-  footerMessage: "Terima kasih atas kunjungannya.",
+  footerMessage: "Terima kasih atas kunjungannya di Julia's.",
   language: "id",
   leaderBarTasks: "[]",
   leaderKitchenTasks: "[]",
