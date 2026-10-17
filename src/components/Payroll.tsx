@@ -63,6 +63,7 @@ export function Payroll() {
   const isHRD = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
   const canApprove = isHRD || currentUser?.role === "OWNER";
   const canPay = isFinance || currentUser?.role === "OWNER";
+  const canEdit = !isReadOnly && (isHRD || currentUser?.role === "OWNER" || currentUser?.role === "SUPER_ADMIN");
 
   // Filter records based on period
   const currentPeriodRecords = useMemo(() => {

@@ -216,7 +216,7 @@ export const Sales = () => {
             onClick={() => setActiveTab("pos_orders")}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
               activeTab === "pos_orders"
-                ? "bg-amber-500 text-slate-950 shadow-sm"
+                ? "bg-brand-600 text-white shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >

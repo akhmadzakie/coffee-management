@@ -40,6 +40,17 @@
     background-color: #94a3b8;
   }
 
+  /* Sembunyikan scrollbar bawaan browser tapi tetap bisa di-scroll */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
   /* Julia's Brand Gradient (Sidebar Header, Hero Card, Big CTA) */
   .bg-brand-gradient {
     background: linear-gradient(135deg, #1b2cc0 0%, #121d80 60%, #0a1040 100%);
