@@ -19,9 +19,14 @@ import {
   CheckSquare,
   TrendingUp,
   Calendar,
-  UserCheck
+  UserCheck,
+  FileSpreadsheet,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { PayslipModal } from "./PayslipModal";
+import { ExportModal } from "./ExportModal";
+import { exportPayrollToXlsx } from "../utils/exportXlsx";
 
 export function Payroll() {
   const {
@@ -32,6 +37,7 @@ export function Payroll() {
     payrollRecords,
     addPayrollRecord,
     updatePayrollRecord,
+    deletePayrollRecord,
     bulkAddPayrollRecords,
     cashAccounts,
     addCashTransaction,
@@ -58,6 +64,21 @@ export function Payroll() {
   const [editingPayroll, setEditingPayroll] = useState<PayrollRecord | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payrollToPay, setPayrollToPay] = useState<PayrollRecord | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    employeeId: "",
+    basicSalary: 0,
+    mealAllowance: 0,
+    positionAllowance: 0,
+    transportAllowance: 0,
+    kpiBonus: 0,
+    targetBonus: 0,
+    overtimePay: 0,
+    alphaDeduction: 0,
+    otherDeductions: 0,
+    notes: "",
+  });
 
   const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN";
   const isHRD = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
@@ -362,6 +383,112 @@ export function Payroll() {
     }
   };
 
+  const handleQuickExportXlsx = () => {
+    if (currentPeriodRecords.length === 0) {
+      alert(`Tidak ada data penggajian untuk periode ${period} yang dapat diekspor.`);
+      return;
+    }
+    exportPayrollToXlsx({
+      payroll: currentPeriodRecords,
+      employees,
+      settings,
+      periodLabel: `Bulan_${period}`,
+    });
+  };
+
+  const handleSelectManualEmployee = (empId: string) => {
+    const contract =
+      contracts.find((c: any) => c.employeeId === empId && c.status === "ACTIVE") ||
+      contracts.find((c: any) => c.employeeId === empId);
+
+    setManualForm((prev) => ({
+      ...prev,
+      employeeId: empId,
+      basicSalary: contract?.basicSalary || 0,
+      mealAllowance: contract?.mealAllowance || 0,
+      positionAllowance: contract?.positionAllowance || 0,
+      transportAllowance: contract?.transportAllowance || 0,
+    }));
+  };
+
+  const handleSaveManualPayroll = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualForm.employeeId) {
+      alert("Silakan pilih karyawan terlebih dahulu.");
+      return;
+    }
+
+    const existing = (payrollRecords || []).find(
+      (r: any) => r.employeeId === manualForm.employeeId && r.period === period
+    );
+    if (existing) {
+      if (
+        !confirm(
+          `Karyawan ini sudah memiliki slip gaji pada periode ${period}. Apakah Anda ingin memperbarui (menimpa) slip gaji tersebut?`
+        )
+      ) {
+        return;
+      }
+    }
+
+    const bSal = Number(manualForm.basicSalary) || 0;
+    const mAll = Number(manualForm.mealAllowance) || 0;
+    const pAll = Number(manualForm.positionAllowance) || 0;
+    const tAll = Number(manualForm.transportAllowance) || 0;
+    const kBon = Number(manualForm.kpiBonus) || 0;
+    const tBon = Number(manualForm.targetBonus) || 0;
+    const oPay = Number(manualForm.overtimePay) || 0;
+    const aDed = Number(manualForm.alphaDeduction) || 0;
+    const oDed = Number(manualForm.otherDeductions) || 0;
+
+    const gross = bSal + mAll + pAll + tAll + kBon + tBon + oPay;
+    const net = Math.max(0, gross - aDed - oDed);
+
+    const recordToSave: PayrollRecord = {
+      id: existing ? existing.id : `pay-manual-${Date.now()}-${manualForm.employeeId}`,
+      employeeId: manualForm.employeeId,
+      period,
+      basicSalary: bSal,
+      mealAllowance: mAll,
+      positionAllowance: pAll,
+      transportAllowance: tAll,
+      kpiBonus: kBon,
+      targetBonus: tBon,
+      overtimePay: oPay,
+      alphaDeduction: aDed,
+      otherDeductions: oDed,
+      grossPay: gross,
+      netPay: net,
+      status: "DRAFT",
+      paidDate: null,
+      paidVia: null,
+      notes: manualForm.notes ? `[Manual] ${manualForm.notes}` : "Slip gaji dibuat manual oleh HRD/Manajer",
+      createdBy: currentUser?.name || currentUser?.username || "Manual",
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existing) {
+      updatePayrollRecord(recordToSave);
+    } else {
+      addPayrollRecord(recordToSave);
+    }
+
+    setManualModalOpen(false);
+    setManualForm({
+      employeeId: "",
+      basicSalary: 0,
+      mealAllowance: 0,
+      positionAllowance: 0,
+      transportAllowance: 0,
+      kpiBonus: 0,
+      targetBonus: 0,
+      overtimePay: 0,
+      alphaDeduction: 0,
+      otherDeductions: 0,
+      notes: "",
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -656,17 +783,54 @@ export function Payroll() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50">
-            <h2 className="font-semibold text-slate-800">Daftar Slip Gaji ({period})</h2>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                placeholder="Cari karyawan..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent"
-              />
+          <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-slate-50">
+            <div>
+              <h2 className="font-semibold text-slate-800 text-base">Daftar Slip Gaji ({period})</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Total {currentPeriodRecords.length} slip gaji pada periode ini
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+              <div className="relative flex-1 sm:w-56 min-w-[180px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                <input
+                  type="text"
+                  placeholder="Cari nama karyawan..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-accent"
+                />
+              </div>
+
+              {canEdit && (
+                <button
+                  onClick={() => setManualModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                  title="Buat slip gaji manual jika ada error atau data khusus"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Slip Manual</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleQuickExportXlsx}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                title="Unduh detail slip gaji periode ini dalam format Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Unduh Excel</span>
+              </button>
+
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+                title="Buka opsi ekspor lengkap (PDF Rekap, CSV, Excel dengan filter tanggal)"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>Ekspor Laporan</span>
+              </button>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -785,9 +949,23 @@ export function Payroll() {
                             <button
                               onClick={() => setEditingPayroll(record)}
                               className="p-1.5 text-slate-400 hover:text-amber-500 transition-colors"
-                              title="Edit Manual (Lembur / Potongan)"
+                              title="Edit / Koreksi Slip Gaji"
                             >
                               <Edit2 size={16} />
+                            </button>
+                          )}
+
+                          {record.status === "DRAFT" && !isReadOnly && isHRD && !closedPeriods.some((p: any) => p.period === record.period) && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Hapus slip gaji untuk ${empName}?`)) {
+                                  deletePayrollRecord(record.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                              title="Hapus Slip Gaji (Draft)"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           )}
                           
@@ -819,97 +997,454 @@ export function Payroll() {
         </div>
       )}
 
-      {/* Slip Gaji Modal */}
+      {/* Modal Edit / Koreksi Slip Gaji */}
       {editingPayroll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-800">Edit Tambahan Manual</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Edit & Koreksi Slip Gaji</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Karyawan: {employees.find((e: any) => e.id === editingPayroll.employeeId)?.name || editingPayroll.employeeId} • Periode: {editingPayroll.period}
+                </p>
+              </div>
               <button
                 onClick={() => setEditingPayroll(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
               >
                 <X size={20} />
               </button>
             </div>
-            <div className="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Tambahan Lain (Misal: Lembur)
-                </label>
-                <input
-                  type="number"
-                  value={editingPayroll.overtimePay || 0}
-                  onChange={(e) => {
-                    const overtimePay = parseFloat(e.target.value) || 0;
-                    setEditingPayroll(prev => {
-                      if (!prev) return null;
-                      const grossPay = prev.basicSalary + prev.positionAllowance + prev.mealAllowance + (prev.transportAllowance || 0) + prev.kpiBonus + overtimePay;
-                      const netPay = grossPay - prev.alphaDeduction - prev.otherDeductions;
-                      return { ...prev, overtimePay, grossPay, netPay: netPay > 0 ? netPay : 0 };
-                    });
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
-                />
+            
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-900 text-[11px] leading-relaxed">
+                💡 <strong>Koreksi Fleksibel:</strong> Anda dapat menyesuaikan angka jika terdapat ketidaksesuaian absensi atau kesepakatan khusus. Total Take Home Pay akan dihitung otomatis secara live.
               </div>
+
+              {/* Penghasilan */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Potongan Manual (Cth: Terlambat, Hukuman)
-                </label>
+                <span className="font-bold text-slate-700 uppercase tracking-wider block mb-2 pb-1 border-b border-slate-100">
+                  A. Komponen Penghasilan / Tunjangan
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Gaji Pokok (Upah Kehadiran)</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.basicSalary || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = val + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, basicSalary: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Tunjangan Jabatan (Leader)</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.positionAllowance || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = (prev.basicSalary || 0) + val + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, positionAllowance: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Uang Makan</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.mealAllowance || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + val + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, mealAllowance: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Uang Transport</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.transportAllowance || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + val + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, transportAllowance: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Bonus KPI / Capaian</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.kpiBonus || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + val + (prev.targetBonus || 0) + (prev.overtimePay || 0);
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, kpiBonus: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Tambahan Lembur / Bonus Khusus</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.overtimePay || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + val;
+                          const net = Math.max(0, gross - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, overtimePay: val, grossPay: gross, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Potongan */}
+              <div>
+                <span className="font-bold text-rose-700 uppercase tracking-wider block mb-2 pb-1 border-b border-rose-100">
+                  B. Komponen Potongan
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Potongan Alpha</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.alphaDeduction || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const net = Math.max(0, prev.grossPay - val - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
+                          return { ...prev, alphaDeduction: val, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Potongan Telat</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.lateDeduction || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const net = Math.max(0, prev.grossPay - (prev.alphaDeduction || 0) - val - (prev.otherDeductions || 0));
+                          return { ...prev, lateDeduction: val, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium mb-1">Potongan Lainnya</label>
+                    <input
+                      type="number"
+                      value={editingPayroll.otherDeductions || 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setEditingPayroll((prev: any) => {
+                          if (!prev) return null;
+                          const net = Math.max(0, prev.grossPay - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - val);
+                          return { ...prev, otherDeductions: val, netPay: net };
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Catatan Koreksi */}
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">Catatan Slip Gaji / Alasan Koreksi</label>
                 <input
-                  type="number"
-                  value={editingPayroll.otherDeductions || 0}
-                  onChange={(e) => {
-                    const otherDeductions = parseFloat(e.target.value) || 0;
-                    setEditingPayroll(prev => {
-                      if (!prev) return null;
-                      const netPay = prev.grossPay - prev.alphaDeduction - otherDeductions;
-                      return { ...prev, otherDeductions, netPay: netPay > 0 ? netPay : 0 };
-                    });
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                  type="text"
+                  placeholder="Misal: Penyesuaian lembur event akhir pekan..."
+                  value={editingPayroll.notes || ""}
+                  onChange={(e) => setEditingPayroll((prev: any) => prev ? { ...prev, notes: e.target.value } : null)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs"
                 />
               </div>
               
-              <div className="bg-slate-50 p-4 rounded-xl mt-4 border border-slate-100">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-600">Gaji Pokok & Tunjangan Dasar:</span>
-                  <span className="font-medium text-slate-800">{formatCurrency(editingPayroll.basicSalary + editingPayroll.positionAllowance + editingPayroll.mealAllowance + (editingPayroll.transportAllowance || 0) + editingPayroll.kpiBonus)}</span>
+              {/* Ringkasan Akhir */}
+              <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xs">
+                <div className="flex justify-between text-xs text-slate-300 mb-1">
+                  <span>Total Penghasilan Kotor (Gross):</span>
+                  <span className="font-mono font-bold text-white">{formatCurrency(editingPayroll.grossPay)}</span>
                 </div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-emerald-600">Lembur/Tambahan Manual:</span>
-                  <span className="font-medium text-emerald-600">+{formatCurrency(editingPayroll.overtimePay || 0)}</span>
+                <div className="flex justify-between text-xs text-rose-300 mb-2">
+                  <span>Total Seluruh Potongan:</span>
+                  <span className="font-mono font-bold text-rose-300">
+                    -{formatCurrency((editingPayroll.alphaDeduction || 0) + (editingPayroll.lateDeduction || 0) + (editingPayroll.otherDeductions || 0))}
+                  </span>
                 </div>
-                <div className="flex justify-between text-sm mb-4">
-                  <span className="text-rose-600">Total Potongan (Alpha + Manual):</span>
-                  <span className="font-medium text-rose-600">-{formatCurrency((editingPayroll.alphaDeduction || 0) + (editingPayroll.otherDeductions || 0))}</span>
-                </div>
-                <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-3">
-                  <span className="text-slate-800">Total Take Home Pay:</span>
-                  <span className="text-emerald-600">{formatCurrency(editingPayroll.netPay)}</span>
+                <div className="flex justify-between text-base font-black border-t border-slate-700 pt-2 text-emerald-400">
+                  <span>Take Home Pay (Diterima):</span>
+                  <span className="font-mono text-lg">{formatCurrency(editingPayroll.netPay)}</span>
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
               <button
+                type="button"
                 onClick={() => setEditingPayroll(null)}
-                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg"
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg text-xs"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={() => {
                   updatePayrollRecord(editingPayroll);
                   setEditingPayroll(null);
                 }}
-                className="px-4 py-2 bg-primary text-white font-medium hover:bg-slate-800 rounded-lg"
+                className="px-4 py-2 bg-primary hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors shadow-xs"
               >
-                Simpan Perubahan
+                Simpan Hasil Koreksi
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Modal Buat Slip Gaji Manual */}
+      {manualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh]">
+            <form onSubmit={handleSaveManualPayroll}>
+              <div className="flex justify-between items-center p-5 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-indigo-600" />
+                    Buat Slip Gaji Manual ({period})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Gunakan formulir ini jika terdapat staf lepas, sistem presensi error, atau pembuatan slip khusus
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 overflow-y-auto text-xs max-h-[65vh]">
+                {/* Pilih Karyawan */}
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Pilih Karyawan *</label>
+                  <select
+                    required
+                    value={manualForm.employeeId}
+                    onChange={(e) => handleSelectManualEmployee(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs"
+                  >
+                    <option value="">-- Pilih Karyawan --</option>
+                    {employees.map((emp: any) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.position || "Staff"} • {emp.department || "Main"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Penghasilan */}
+                <div>
+                  <span className="font-bold text-slate-700 uppercase tracking-wider block mb-2 pb-1 border-b border-slate-100">
+                    A. Penerimaan
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Gaji Pokok (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.basicSalary}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, basicSalary: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Tunjangan Jabatan (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.positionAllowance}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, positionAllowance: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Uang Makan (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.mealAllowance}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, mealAllowance: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Uang Transport (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.transportAllowance}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, transportAllowance: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Bonus KPI / Capaian (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.kpiBonus}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, kpiBonus: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Lembur / Bonus Tambahan (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.overtimePay}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, overtimePay: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Potongan */}
+                <div>
+                  <span className="font-bold text-rose-700 uppercase tracking-wider block mb-2 pb-1 border-b border-rose-100">
+                    B. Potongan
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Potongan Alpha (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.alphaDeduction}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, alphaDeduction: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 font-medium mb-1">Potongan Terlambat / Lainnya (IDR)</label>
+                      <input
+                        type="number"
+                        value={manualForm.otherDeductions}
+                        onChange={(e) => setManualForm(prev => ({ ...prev, otherDeductions: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Catatan */}
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Catatan Khusus</label>
+                  <input
+                    type="text"
+                    placeholder="Alasan pembuatan manual / catatan untuk karyawan..."
+                    value={manualForm.notes}
+                    onChange={(e) => setManualForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary text-xs"
+                  />
+                </div>
+
+                {/* Live Preview Take Home Pay */}
+                {(() => {
+                  const gross = (manualForm.basicSalary || 0) + (manualForm.mealAllowance || 0) + (manualForm.positionAllowance || 0) + (manualForm.transportAllowance || 0) + (manualForm.kpiBonus || 0) + (manualForm.targetBonus || 0) + (manualForm.overtimePay || 0);
+                  const deductions = (manualForm.alphaDeduction || 0) + (manualForm.otherDeductions || 0);
+                  const net = Math.max(0, gross - deductions);
+                  return (
+                    <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xs">
+                      <div className="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>Penghasilan Kotor:</span>
+                        <span className="font-mono font-bold text-white">{formatCurrency(gross)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-rose-300 mb-2">
+                        <span>Total Potongan:</span>
+                        <span className="font-mono font-bold text-rose-300">-{formatCurrency(deductions)}</span>
+                      </div>
+                      <div className="flex justify-between text-base font-black border-t border-slate-700 pt-2 text-emerald-400">
+                        <span>Take Home Pay Diterima:</span>
+                        <span className="font-mono text-lg">{formatCurrency(net)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors shadow-xs"
+                >
+                  Simpan Slip Gaji Manual
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal Lengkap */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        defaultModule="payroll"
+      />
 
       {selectedPayroll && (
         <PayslipModal
