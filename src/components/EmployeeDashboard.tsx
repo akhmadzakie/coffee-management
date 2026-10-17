@@ -30,6 +30,8 @@ import {
   Info,
   FileText,
   Wallet,
+  Megaphone,
+  Target,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES, ensureCategoryArray, normalizeTaskItem } from "./LeaderChecklist";
@@ -53,6 +55,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     contracts,
     payrollRecords,
     employeeShifts,
+    salesTransactions,
   } = useStore();
 
   const [showKpiDetails, setShowKpiDetails] = useState(false);
@@ -349,6 +352,64 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
       .sort((a, b) => b.period.localeCompare(a.period));
   }, [payrollRecords, activeEmployeeId]);
 
+  // ─── 11. OFFICIAL WEEKLY SCHEDULE & MANAGER'S BRIEF ───
+  const currentMonday = useMemo(() => {
+    const d = new Date(now);
+    d.setHours(12, 0, 0, 0);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  }, [now]);
+
+  const currentWeekDays = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, [currentMonday]);
+
+  const currentWeekKey = getLocalDateString(currentMonday);
+  const currentWeekApproval = (settings?.scheduleApprovals as any)?.[currentWeekKey] || { status: "DRAFT" };
+  const isWeekApproved = currentWeekApproval.status === "APPROVED";
+  const isWeekPending = currentWeekApproval.status === "PENDING";
+
+  const myWeekRoster = useMemo(() => {
+    return currentWeekDays.map((d) => {
+      const dateStr = getLocalDateString(d);
+      const shiftRecord = (employeeShifts || []).find(
+        (s: any) => s.employeeId === activeEmployeeId && s.date === dateStr
+      );
+      const shiftType: "PAGI" | "MIDDLE" | "SORE" | "OFF" = (shiftRecord?.shiftType || "OFF") as any;
+      return {
+        date: d,
+        dateStr,
+        dayName: d.toLocaleDateString("id-ID", { weekday: "short" }),
+        fullDayName: d.toLocaleDateString("id-ID", { weekday: "long" }),
+        dayNum: d.getDate(),
+        monthStr: d.toLocaleDateString("id-ID", { month: "short" }),
+        isToday: dateStr === todayStr,
+        shiftType,
+        notes: shiftRecord?.notes,
+      };
+    });
+  }, [currentWeekDays, employeeShifts, activeEmployeeId, todayStr]);
+
+  // ─── 12. STORE REVENUE & TEAM BONUS REALIZATION ───
+  const periodSales = useMemo(() => {
+    return (salesTransactions || [])
+      .filter((s: any) => s.date && s.date.startsWith(currentMonthStr))
+      .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
+  }, [salesTransactions, currentMonthStr]);
+
+  const monthlyRevenueTarget = settings?.monthlyRevenueTarget || 0;
+  const storeBonusAmount = settings?.targetBonusAmount || 0;
+  const isStoreBonusActive = settings?.enableStoreSalesBonus !== false;
+  const isRevenueTargetAchieved = monthlyRevenueTarget > 0 && periodSales >= monthlyRevenueTarget;
+  const revenueAchievementRate = monthlyRevenueTarget > 0 ? (periodSales / monthlyRevenueTarget) * 100 : 0;
+
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
       {/* ─── 1. GREETING & IDENTITY BANNER ─── */}
@@ -408,6 +469,186 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 <span>Checklist Supervisi Leader</span>
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 1B. BRIEF JADWAL RESMI & ROSTER SHIFT MINGGU INI ─── */}
+      <div className={`rounded-2xl p-6 border shadow-xs transition-all ${
+        isWeekApproved 
+          ? "bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border-emerald-200/80" 
+          : isWeekPending 
+          ? "bg-gradient-to-br from-amber-50/60 via-white to-orange-50/30 border-amber-200/80" 
+          : "bg-white border-slate-200/80"
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${
+              isWeekApproved 
+                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20" 
+                : isWeekPending 
+                ? "bg-amber-500 text-white shadow-sm shadow-amber-500/20" 
+                : "bg-slate-100 text-slate-600"
+            }`}>
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">
+                  Jadwal Kerja & Brief Mingguan
+                </h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  ({currentWeekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - {currentWeekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isWeekApproved
+                  ? `Jadwal resmi telah disetujui & disahkan oleh ${currentWeekApproval.approvedBy || "Manager"} pada ${currentWeekApproval.approvedAt ? new Date(currentWeekApproval.approvedAt).toLocaleDateString("id-ID", { day: "numeric", month: "long" }) : "minggu ini"}.`
+                  : isWeekPending
+                  ? "Jadwal telah diajukan oleh Leader dan sedang menunggu verifikasi pengesahan Manajer."
+                  : "Jadwal minggu ini masih dalam penyusunan oleh Leader / Manajer."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+              isWeekApproved
+                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                : isWeekPending
+                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                : "bg-slate-100 text-slate-600 border border-slate-200"
+            }`}>
+              {isWeekApproved ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>JADWAL RESMI DISETUJUI</span>
+                </>
+              ) : isWeekPending ? (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>MENUNGGU ACC MANAGER</span>
+                </>
+              ) : (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>DRAFT PENYUSUNAN</span>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Kotak Catatan / Brief Resmi Manajer */}
+        <div className={`p-4 rounded-xl border mb-5 flex items-start gap-3.5 ${
+          isWeekApproved
+            ? "bg-white/90 border-emerald-200 text-slate-800 shadow-2xs"
+            : "bg-slate-50/80 border-slate-200 text-slate-700"
+        }`}>
+          <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+            isWeekApproved ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+          }`}>
+            <Megaphone className="w-4 h-4" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                {isWeekApproved ? "📢 Pesan & Arahan Brief Manajer:" : "📢 Catatan Operasional Minggu Ini:"}
+              </span>
+              {isWeekApproved && currentWeekApproval.approvedBy && (
+                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                  Oleh {currentWeekApproval.approvedBy}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed italic">
+              {currentWeekApproval.notes ? (
+                `"${currentWeekApproval.notes}"`
+              ) : isWeekApproved ? (
+                `"Jadwal mingguan resmi telah disahkan. Harap hadir tepat waktu sesuai shift, jaga kebersihan area kerja divisi, konsistensi rasa racikan kopi & makanan, dan berikan pelayanan terbaik kepada pelanggan!"`
+              ) : (
+                `"Jadwal shift Anda akan otomatis terkunci dan terkonfirmasi setelah disetujui Manajer. Tetap ikuti arahan operasional dari Leader divisi."`
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* 7-Hari Roster Shift Saya */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              Jadwal Shift 7 Hari Anda:
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Senin s/d Minggu
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+            {myWeekRoster.map((roster, idx) => {
+              const isPagi = roster.shiftType === "PAGI";
+              const isMiddle = roster.shiftType === "MIDDLE";
+              const isSore = roster.shiftType === "SORE";
+              const isOff = roster.shiftType === "OFF";
+
+              return (
+                <div
+                  key={roster.dateStr || idx}
+                  className={`p-3 rounded-xl border flex flex-col justify-between transition-all relative ${
+                    roster.isToday
+                      ? "bg-blue-50/70 border-blue-400 shadow-sm ring-2 ring-blue-400/30"
+                      : isOff
+                      ? "bg-slate-50 border-slate-200/70 opacity-70"
+                      : "bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs"
+                  }`}
+                >
+                  {roster.isToday && (
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-blue-600 text-white font-black text-[9px] rounded-full uppercase tracking-wider shadow-2xs">
+                      HARI INI
+                    </span>
+                  )}
+
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className={`font-bold ${roster.isToday ? "text-blue-900" : "text-slate-700"}`}>
+                        {roster.dayName}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                        {roster.dayNum} {roster.monthStr}
+                      </span>
+                    </div>
+
+                    <div className="mt-1.5 mb-1">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-wide w-full text-center ${
+                        isPagi
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          : isMiddle
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          : isSore
+                          ? "bg-amber-100 text-amber-800 border border-amber-200"
+                          : "bg-slate-100 text-slate-500 border border-slate-200"
+                      }`}>
+                        {roster.shiftType}
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 text-center font-medium">
+                      {isPagi && "07:00 - 15:00"}
+                      {isMiddle && "11:00 - 19:00"}
+                      {isSore && "15:00 - 23:00"}
+                      {isOff && "Libur / Off"}
+                    </div>
+                  </div>
+
+                  {roster.notes && (
+                    <p className="mt-1.5 pt-1 border-t border-slate-100 text-[10px] text-slate-500 italic truncate" title={roster.notes}>
+                      {roster.notes}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -847,201 +1088,122 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           </div>
         </div>
 
-        {/* Skor & Evaluasi KPI Bulan Ini (Col 3) */}
+        {/* ─── 4B. TARGET OMSET TOKO & BONUS TIM (Col 3) ─── */}
         <div className="lg:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                  <Award className="w-5 h-5" />
+                <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                  <Target className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">KPI Kinerja</h3>
+                  <h3 className="text-base font-bold text-slate-900">Target Omset & Bonus</h3>
                   <p className="text-[11px] text-slate-500">Bulan Berjalan</p>
                 </div>
               </div>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                {now.toLocaleDateString("id-ID", { month: "short" })}
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                {now.toLocaleDateString("id-ID", { month: "short", year: "numeric" })}
               </span>
             </div>
 
-            {currentKpi ? (
-              <div className="space-y-4">
-                {/* Total Score Display (Official) */}
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100/80 text-center">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
-                      Skor Resmi Manager
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                      Disahkan ✓
-                    </span>
-                  </div>
-                  <div className="text-4xl font-black text-indigo-950 font-mono mt-1">
-                    {currentKpi.totalScore}
-                    <span className="text-base font-medium text-slate-400"> / 100</span>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-center gap-1.5">
-                    <span
-                      className={`px-3 py-0.5 rounded-full text-xs font-bold ${
-                        currentKpi.totalScore >= 85
-                          ? "bg-emerald-100 text-emerald-800"
-                          : currentKpi.totalScore >= 70
-                          ? "bg-blue-100 text-blue-800"
-                          : currentKpi.totalScore >= 55
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-rose-100 text-rose-800"
-                      }`}
-                    >
-                      {currentKpi.totalScore >= 85
-                        ? "Sangat Baik (A)"
-                        : currentKpi.totalScore >= 70
-                        ? "Baik (B)"
-                        : currentKpi.totalScore >= 55
-                        ? "Cukup (C)"
-                        : "Perlu Evaluasi (D)"}
-                    </span>
-                  </div>
+            <div className="space-y-4">
+              {/* Progress Omset Toko */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/50 to-slate-50 border border-indigo-100/90">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
+                    Penjualan Toko Saat Ini
+                  </span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-mono">
+                    {revenueAchievementRate.toFixed(1)}%
+                  </span>
                 </div>
 
-                {/* KPI Bonus jika ada */}
-                {currentKpi.kpiBonus > 0 && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
-                    <span className="text-emerald-800 font-semibold flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-emerald-600" />
-                      Bonus KPI Cair
-                    </span>
-                    <span className="font-mono font-bold text-emerald-700 text-sm">
-                      {formatRupiah(currentKpi.kpiBonus)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Catatan Evaluator */}
-                {currentKpi.notes && (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200/70 rounded-xl text-xs">
-                    <span className="font-bold text-slate-700 block mb-1">Catatan Evaluator:</span>
-                    <p className="text-slate-600 italic">"{currentKpi.notes}"</p>
-                  </div>
-                )}
-
-                {/* Rincian Target Button */}
-                {currentKpi.targets && currentKpi.targets.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowKpiDetails(!showKpiDetails)}
-                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                  >
-                    <span>{showKpiDetails ? "Tutup Rincian Target" : "Lihat Rincian Target KPI"}</span>
-                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showKpiDetails ? "rotate-90" : ""}`} />
-                  </button>
-                )}
-
-                {showKpiDetails && currentKpi.targets && (
-                  <div className="space-y-2 pt-1 border-t border-slate-100">
-                    {currentKpi.targets.map((t, idx) => (
-                      <div key={t.id || idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                        <div className="flex justify-between font-bold text-slate-800 mb-0.5">
-                          <span>{t.description}</span>
-                          <span className="font-mono text-indigo-700">{t.score} pt</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500">Bobot: {t.weight}%</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Live Realtime Tracking Display */}
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-blue-50/40 to-slate-50 border border-indigo-100/90 text-center">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
-                      Estimasi Berjalan
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                      Live Tracking
-                    </span>
-                  </div>
-                  <div className="text-4xl font-black text-indigo-950 font-mono mt-1">
-                    {livePerformance.score}
-                    <span className="text-base font-medium text-slate-400"> / 100</span>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-center gap-1.5">
-                    <span
-                      className={`px-3 py-0.5 rounded-full text-xs font-bold ${
-                        livePerformance.score >= 85
-                          ? "bg-emerald-100 text-emerald-800"
-                          : livePerformance.score >= 70
-                          ? "bg-blue-100 text-blue-800"
-                          : livePerformance.score >= 55
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-rose-100 text-rose-800"
-                      }`}
-                    >
-                      {livePerformance.score >= 85
-                        ? "Sangat Baik (A)"
-                        : livePerformance.score >= 70
-                        ? "Baik (B)"
-                        : livePerformance.score >= 55
-                        ? "Cukup (C)"
-                        : "Perlu Ditingkatkan (D)"}
-                    </span>
-                  </div>
-
-                  {/* Progress Metric bar */}
-                  <div className="mt-3.5 pt-3 border-t border-indigo-100/60 text-left">
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
-                      <span className="font-semibold text-slate-700">{livePerformance.metricTitle}</span>
-                      <span className="font-bold text-indigo-600">{livePerformance.score}%</span>
-                    </div>
-                    <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden mb-1">
-                      <div
-                        className="h-full rounded-full bg-indigo-600 transition-all duration-500"
-                        style={{ width: `${livePerformance.score}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-slate-400">{livePerformance.metricSubtitle}</p>
-                  </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
+                  {formatRupiah(periodSales)}
                 </div>
 
-                {/* Target & Estimasi Bonus KPI */}
-                {livePerformance.targetBonus > 0 ? (
-                  <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600 font-medium">Target Bonus Kontrak:</span>
-                      <span className="font-mono font-semibold text-slate-800">
-                        {formatRupiah(livePerformance.targetBonus)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-emerald-200/60">
-                      <span className="text-emerald-800 font-bold flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-emerald-600" />
-                        Estimasi Bonus Saat Ini:
-                      </span>
-                      <span className="font-mono font-black text-emerald-700 text-sm">
-                        {formatRupiah(livePerformance.estimatedBonus)}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] text-slate-500 flex items-center gap-2">
-                    <Info className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>Target bonus KPI belum diset di kontrak kerja karyawan.</span>
-                  </div>
-                )}
+                <div className="flex justify-between items-center text-xs text-slate-500 mt-1 mb-2">
+                  <span>Target Outlet:</span>
+                  <span className="font-mono font-bold text-slate-700">
+                    {monthlyRevenueTarget > 0 ? formatRupiah(monthlyRevenueTarget) : "Belum Diset"}
+                  </span>
+                </div>
 
-                <p className="text-[11px] text-slate-400 leading-relaxed px-1 italic">
-                  💡 Nilai di atas adalah estimasi otomatis berdasarkan capaian {livePerformance.isLeader ? "jobdesk harian divisi" : "kehadiran & disiplin"} Anda bulan ini sebelum disahkan oleh Manager.
-                </p>
+                {/* Progress bar omset */}
+                <div className="w-full bg-slate-200/80 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      isRevenueTargetAchieved
+                        ? "bg-emerald-500"
+                        : revenueAchievementRate >= 70
+                        ? "bg-blue-600"
+                        : "bg-indigo-600"
+                    }`}
+                    style={{ width: `${Math.min(100, revenueAchievementRate)}%` }}
+                  />
+                </div>
               </div>
-            )}
+
+              {/* Status Bonus Omset Toko */}
+              {monthlyRevenueTarget > 0 ? (
+                <div className={`p-4 rounded-xl border space-y-1.5 ${
+                  isRevenueTargetAchieved
+                    ? "bg-emerald-50/90 border-emerald-300 text-emerald-950"
+                    : "bg-slate-50 border-slate-200/90 text-slate-700"
+                }`}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <Sparkles className={`w-4 h-4 ${isRevenueTargetAchieved ? "text-emerald-600" : "text-amber-500"}`} />
+                      {isRevenueTargetAchieved ? "Bonus Omset Toko Siap Cair!" : "Bonus Tembus Omset Toko"}
+                    </span>
+                    <span className="font-mono font-black text-emerald-700 text-sm">
+                      +{formatRupiah(storeBonusAmount)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    {!isStoreBonusActive ? (
+                      <span className="text-slate-500 italic">Kebijakan bonus omset sedang dinonaktifkan sementara oleh manajemen.</span>
+                    ) : isRevenueTargetAchieved ? (
+                      <span className="text-emerald-800 font-medium">🎉 Selamat! Omset toko telah tembus target. Bonus siap masuk ke slip gaji bulan ini bersama seluruh rekan tim!</span>
+                    ) : (
+                      <span className="text-slate-600">Kurang <strong className="font-mono text-indigo-700">{formatRupiah(Math.max(0, monthlyRevenueTarget - periodSales))}</strong> lagi agar bonus omset cair ke seluruh staf. Terus upselling & jaga kepuasan tamu!</span>
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] text-slate-500 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>Target omset bulanan belum diset oleh Manajemen di Pengaturan.</span>
+                </div>
+              )}
+
+              {/* Komponen Tunjangan Leader (Khusus jika Karyawan bertindak sebagai Leader) */}
+              {isLeader && (
+                <div className="p-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200/80 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-indigo-900 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      Tunjangan Posisi Leader ({leaderDivision})
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                      Aktif ✓
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    Tunjangan posisi diberikan atas pelaksanaan checklist supervisi shift, kebersihan, dan kontrol operasional tim divisi Anda ({checklistProgress.completedCount}/{checklistProgress.totalTasks} tugas hari ini).
+                  </p>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400 leading-relaxed italic px-1">
+                💡 Sistem bonus fokus pada kekompakan tim mengejar omset toko dan dedikasi harian, tanpa sistem skor KPI korporat yang rumit.
+              </p>
+            </div>
           </div>
 
           <div className="pt-4 border-t border-slate-100 mt-4 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>Sistem KPI Outlet</span>
+            <span>Sistem Insentif & Bonus Outlet</span>
             <span className="text-brand-600 font-semibold">Julia's</span>
           </div>
         </div>

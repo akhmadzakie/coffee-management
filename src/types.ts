@@ -367,6 +367,7 @@ export interface Settings {
     revisedBy?: string;
     revisedAt?: string;
     leaderDivision?: string;
+    notes?: string;
   }>;
   taxEnabled?: boolean;
   taxRate?: number;

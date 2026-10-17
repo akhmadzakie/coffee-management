@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   UserX,
   Settings as SettingsIcon,
+  Megaphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -197,6 +198,8 @@ export function HRManagement() {
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<any | null>(null);
+  const [isBriefModalOpen, setIsBriefModalOpen] = useState(false);
+  const [briefNotesInput, setBriefNotesInput] = useState("");
 
   // --- Modal Form State ---
   const [empForm, setEmpForm] = useState({ username: "", name: "", position: "", department: "", status: "AKTIF" as any, employmentType: "TETAP" as any, phone: "", email: "", address: "" });
@@ -680,21 +683,50 @@ export function HRManagement() {
     alert(`Jadwal shift minggu ini (${weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - ${weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short" })}) berhasil diajukan ke Manajer untuk disahkan!`);
   };
 
-  const handleToggleWeekApproval = () => {
+  const handleOpenApproveModal = () => {
     if (!isHRD || isReadOnly) return;
-    const newStatus = isWeekApproved ? "DRAFT" : "APPROVED";
+    const existingNotes = currentWeekApproval.notes || "Semangat bertugas minggu ini! Jaga konsistensi rasa kopi & makanan, kebersihan area kerja divisi, dan senyum ramah ke pelanggan.";
+    setBriefNotesInput(existingNotes);
+    setIsBriefModalOpen(true);
+  };
+
+  const handleSaveApprovedBrief = () => {
+    if (!isHRD || isReadOnly) return;
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
       [weekKey]: {
-        status: newStatus,
+        status: "APPROVED",
         approvedBy: currentUser?.name || "Manager",
         approvedAt: new Date().toISOString(),
+        notes: briefNotesInput.trim() || undefined,
       }
     };
     updateSettings({
       ...settings,
       scheduleApprovals: newApprovals,
     });
+    setIsBriefModalOpen(false);
+    alert("Jadwal mingguan resmi telah disahkan! Catatan brief otomatis terkirim dan tampil di Dashboard Karyawan.");
+  };
+
+  const handleToggleWeekApproval = () => {
+    if (!isHRD || isReadOnly) return;
+    if (!isWeekApproved) {
+      handleOpenApproveModal();
+    } else {
+      const newApprovals = {
+        ...((settings?.scheduleApprovals as any) || {}),
+        [weekKey]: {
+          status: "DRAFT",
+          revisedBy: currentUser?.name || "Manager",
+          revisedAt: new Date().toISOString(),
+        }
+      };
+      updateSettings({
+        ...settings,
+        scheduleApprovals: newApprovals,
+      });
+    }
   };
 
   const handleRejectToDraft = () => {
@@ -2045,6 +2077,18 @@ export function HRManagement() {
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             <span>Minta Revisi</span>
+                          </button>
+                        )}
+                        {isWeekApproved && (
+                          <button
+                            type="button"
+                            onClick={handleOpenApproveModal}
+                            disabled={isReadOnly}
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors shadow-2xs"
+                            title="Edit arahan brief yang tampil di Dashboard Karyawan"
+                          >
+                            <Megaphone className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Edit Brief Mingguan</span>
                           </button>
                         )}
                         <button
@@ -3938,6 +3982,98 @@ export function HRManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Brief Mingguan & Pengesahan Jadwal Modal */}
+      {isBriefModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-md">
+                  <Megaphone className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Sahkan Jadwal & Kirim Brief Mingguan</h3>
+                  <p className="text-xs text-emerald-100">
+                    Periode: {weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} – {weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBriefModalOpen(false)}
+                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-900 leading-relaxed">
+                  Setelah disahkan, status jadwal minggu ini resmi menjadi <strong className="text-emerald-700">APPROVED</strong>. Catatan brief manajer di bawah ini akan <strong>langsung terkirim & muncul di Dashboard Karyawan</strong> beserta rincian jadwal shift 7 hari mereka.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Pesan Brief / Catatan Operasional Manajer:</span>
+                  <span className="text-[11px] text-slate-400 font-normal">Maks. 300 karakter disarankan</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={briefNotesInput}
+                  onChange={(e) => setBriefNotesInput(e.target.value)}
+                  placeholder="Contoh: Semangat tim! Fokus minggu ini upsell pastry dan pertahankan keramahan senyum di kasir & bar. Jangan lupa checklist closing divisi tepat waktu."
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-xs text-slate-800 leading-relaxed resize-none shadow-sm placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Template Cepat */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 mb-2">Pilih template cepat catatan:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Semangat bertugas minggu ini! Jaga kebersihan divisi & senyum ramah ke pelanggan ☕",
+                    "Fokus upsell menu seasonal & promo mingguan untuk capai target omset toko 🎯",
+                    "Weekend diperkirakan ramai. Bar & Kitchen harap siapkan bahan olahan & mise en place lebih awal 🚀",
+                    "Pastikan checklist SOP opening & closing diisi rapi setiap shift ✨",
+                  ].map((tpl, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setBriefNotesInput(tpl)}
+                      className="text-[11px] px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 rounded-lg text-slate-600 text-left transition-colors"
+                    >
+                      {tpl.slice(0, 40)}...
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsBriefModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveApprovedBrief}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-200 hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Sahkan & Kirim ke Dashboard</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body

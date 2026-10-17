@@ -87,7 +87,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
 
   // Total Likuiditas Kas
   const totalLiquidity = useMemo(() => {
-    return Object.values(accountBalances).reduce((sum, val) => sum + val, 0);
+    return (Object.values(accountBalances) as number[]).reduce((sum, val) => sum + val, 0);
   }, [accountBalances]);
 
   // Arus Kas Periode Ini

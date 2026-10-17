@@ -176,19 +176,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   const [approvedToast, setApprovedToast] = useState<string | null>(null);
 
   const handleQuickApproveSchedule = (weekKey: string, weekLabel: string) => {
+    const existing = (settings?.scheduleApprovals as any)?.[weekKey] || {};
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
       [weekKey]: {
+        ...existing,
         status: "APPROVED",
         approvedBy: currentUser?.name || "Manager",
         approvedAt: new Date().toISOString(),
+        notes: existing.notes || "Jadwal mingguan resmi telah disahkan oleh Manajer. Selamat bertugas, jaga kebersihan area kerja divisi, dan konsistensi pelayanan prima!",
       },
     };
     updateSettings({
       ...settings,
       scheduleApprovals: newApprovals,
     });
-    setApprovedToast(`Jadwal ${weekLabel} berhasil di-ACC & disahkan resmi!`);
+    setApprovedToast(`Jadwal ${weekLabel} berhasil disahkan & brief terkirim ke karyawan!`);
     setTimeout(() => setApprovedToast(null), 4000);
   };
 

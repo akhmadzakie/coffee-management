@@ -390,6 +390,70 @@ export function Payroll() {
         </div>
       </div>
 
+      {/* ─── FORMULA PENGGAJIAN COFFEE SHOP (TRANSPARAN & SEDERHANA) ─── */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-white/10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 bg-blue-500/20 text-blue-300 rounded-xl border border-blue-400/30">
+              <Calculator className="w-5 h-5" />
+            </span>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                Alur & Formula Payroll Coffee Shop
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-400/30 font-semibold">
+                  SOP Terpadu
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Penggajian difokuskan pada kehadiran nyata, tunjangan penanggung jawab shift (Leader), dan bonus omset toko.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300 block mb-1">1. Gaji Pokok Harian</span>
+            <div className="font-black text-white text-sm">Hari Hadir × Upah Harian</div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+              Dihitung riil dari jumlah shift masuk aktif (Upah = Gaji Pokok / 26).
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300 block mb-1">2. Makan & Transport</span>
+            <div className="font-black text-white text-sm">Fasilitas Kehadiran</div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+              Uang makan & transport per hari hadir untuk operasional shift kerja.
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 block mb-1">3. Tunjangan Leader</span>
+            <div className="font-black text-amber-200 text-sm">Tanggung Jawab Shift</div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+              Khusus Head Bar/Kitchen/Baker yang mengawal SOP & checklist divisi.
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 block mb-1">4. Bonus Omset Toko</span>
+            <div className="font-black text-emerald-200 text-sm">Target Bersama Outlet</div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+              Jika penjualan toko tembus target bulanan, seluruh tim kecipratan bonus.
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300 block mb-1">5. Potongan Disiplin</span>
+            <div className="font-black text-rose-200 text-sm">Telat & Alpha</div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+              Hanya memotong jika staf terlambat jam kerja atau tidak masuk tanpa izin (Alpha).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {activeTab === "generate" ? (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm space-y-0">
           {/* Target Omzet Store Status Banner */}
@@ -495,12 +559,12 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200">Kehadiran (Shift)</th>
-                  <th className="p-4 font-medium border-b border-slate-200">Jobdesk & KPI</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Presensi Shift</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Tunjangan</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus KPI & Omzet</th>
-                  <th className="p-4 font-medium border-b border-slate-200 text-right">Potongan Alpha</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Makan & Transport</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Tunj. Leader</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Bonus Omset</th>
+                  <th className="p-4 font-medium border-b border-slate-200 text-right">Potongan</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
                 </tr>
@@ -532,49 +596,42 @@ export function Payroll() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <div className="flex flex-col gap-1 w-32">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-indigo-700">{performanceSummary.completionPercentage}%</span>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            {performanceSummary.isLeader 
-                              ? `${performanceSummary.checklistDays}/${performanceSummary.expectedDays} Shift` 
-                              : `${performanceSummary.presentDays}/${performanceSummary.expectedDays} Hadir`}
+                    <td className="p-4 text-right font-mono font-bold text-slate-800">
+                      {formatCurrency(calculation.basicSalary)}
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="font-mono">{formatCurrency(calculation.mealAllowance + (calculation.transportAllowance || 0))}</div>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Kehadiran aktif</span>
+                    </td>
+                    <td className="p-4 text-right">
+                      {calculation.positionAllowance > 0 ? (
+                        <div>
+                          <div className="font-mono font-bold text-amber-700">{formatCurrency(calculation.positionAllowance)}</div>
+                          <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            👑 {calculation.matchedLeaderTier?.grade || "Leader"} ({calculation.matchedLeaderTier?.payoutPercentage || 100}%)
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              performanceSummary.completionPercentage >= 90 ? "bg-emerald-500" :
-                              performanceSummary.completionPercentage >= 70 ? "bg-indigo-500" : "bg-amber-500"
-                            }`}
-                            style={{ width: `${performanceSummary.completionPercentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-4 text-right">{formatCurrency(calculation.basicSalary)}</td>
-                    <td className="p-4 text-right">
-                      <div>{formatCurrency(calculation.positionAllowance + calculation.mealAllowance + (calculation.transportAllowance || 0))}</div>
-                      {Boolean(calculation.rawPositionAllowance && calculation.rawPositionAllowance > 0 && calculation.matchedLeaderTier) && (
-                        <div className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          👑 {calculation.matchedLeaderTier?.grade} ({calculation.matchedLeaderTier?.payoutPercentage}%)
-                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
                       )}
                     </td>
-                    <td className="p-4 text-right text-emerald-600">
-                      <div>+{formatCurrency(calculation.kpiBonus)}</div>
-                      {(calculation.targetBonus || 0) > 0 && (
-                        <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          🎯 +{formatCurrency(calculation.targetBonus)} (Omzet)
-                        </span>
+                    <td className="p-4 text-right">
+                      {(calculation.targetBonus || 0) > 0 ? (
+                        <div>
+                          <div className="font-mono font-bold text-emerald-700">+{formatCurrency(calculation.targetBonus)}</div>
+                          <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            🎯 Tembus Target
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">Belum capai</span>
                       )}
                     </td>
                     <td className="p-4 text-right text-rose-600">
                       <div>-{formatCurrency(calculation.alphaDeduction + (calculation.lateDeduction || 0))}</div>
                       {(calculation.lateDeduction || 0) > 0 && (
                         <span className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 block mt-0.5">
-                          Telat: -{formatCurrency(calculation.lateDeduction || 0)} ({calculation.lateHours || 0}j)
+                          Telat: -{formatCurrency(calculation.lateDeduction || 0)}
                         </span>
                       )}
                       {calculation.alphaDeduction > 0 && (
@@ -583,7 +640,7 @@ export function Payroll() {
                         </span>
                       )}
                     </td>
-                    <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(calculation.netPay)}</td>
+                    <td className="p-4 text-right font-black text-emerald-800 font-mono text-base">{formatCurrency(calculation.netPay)}</td>
                     <td className="p-4">
                       {existingRecord ? (
                         <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-medium border border-slate-200">Sudah Digenerate</span>
@@ -617,8 +674,8 @@ export function Payroll() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase">
                   <th className="p-4 font-medium border-b border-slate-200">Karyawan</th>
-                  <th className="p-4 font-medium border-b border-slate-200">Kehadiran (Bulan Ini)</th>
-                  <th className="p-4 font-medium border-b border-slate-200">Capaian Jobdesk & KPI</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Kehadiran Shift</th>
+                  <th className="p-4 font-medium border-b border-slate-200">Tunjangan & Bonus</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right">Gaji Pokok</th>
                   <th className="p-4 font-medium border-b border-slate-200 text-right text-emerald-700">Take Home Pay</th>
                   <th className="p-4 font-medium border-b border-slate-200">Status</th>
@@ -679,27 +736,23 @@ export function Payroll() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <div className="flex flex-col gap-1 w-32">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-indigo-700">{perf.completionPercentage}%</span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {perf.isLeader 
-                                ? `${perf.checklistDays}/${perf.expectedDays} Shift` 
-                                : `${perf.presentDays}/${perf.expectedDays} Hadir`}
+                        <div className="flex flex-col gap-1 text-xs">
+                          {record.positionAllowance > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 w-fit">
+                              👑 Tunj. Leader +{formatCurrency(record.positionAllowance)}
                             </span>
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                perf.completionPercentage >= 90 ? "bg-emerald-500" :
-                                perf.completionPercentage >= 70 ? "bg-indigo-500" : "bg-amber-500"
-                              }`}
-                              style={{ width: `${perf.completionPercentage}%` }}
-                            />
-                          </div>
+                          )}
+                          {(record.targetBonus || 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 w-fit">
+                              🎯 Bonus Omset +{formatCurrency(record.targetBonus)}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Makan/Transport: +{formatCurrency(record.mealAllowance + (record.transportAllowance || 0))}
+                          </span>
                         </div>
                       </td>
-                      <td className="p-4 text-right">{formatCurrency(record.basicSalary)}</td>
+                      <td className="p-4 text-right font-mono font-medium text-slate-800">{formatCurrency(record.basicSalary)}</td>
                       <td className="p-4 text-right font-bold text-slate-800">{formatCurrency(record.netPay)}</td>
                       <td className="p-4">
                         {record.status === "DRAFT" && (

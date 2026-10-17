@@ -1909,7 +1909,7 @@ export const LeaderChecklist: React.FC = () => {
                   {cat.items.map((item, itemIdx) => {
                     const itemDetail = normalizeTaskItem(item);
                     const isChecked = isTaskChecked(leaderCompletedTasks, cat.category, item);
-                    const isShiftLocked = userScheduledShift !== "ALL" && 
+                    const isShiftLocked = (userScheduledShift as string) !== "ALL" && 
                                           itemDetail.shift !== "ALL" && 
                                           itemDetail.shift !== userScheduledShift;
 

@@ -665,7 +665,7 @@ export const exportKpiToXlsx = ({
       "Nama Karyawan": emp?.name || k.employeeId,
       Jabatan: emp?.position || "-",
       Divisi: emp?.department || "-",
-      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      Periode: (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
       "Total Skor (0-100)": k.totalScore,
       "Predikat Grade": grade,
       "Bonus KPI (Rp)": k.kpiBonus,
@@ -726,17 +726,17 @@ export const exportMasterExecutiveReportXlsx = ({
   const wb = XLSX.utils.book_new();
 
   // ─── 1. SHEET 1: RINGKASAN EKSEKUTIF (EXECUTIVE SUMMARY) ──────────────────────
-  const totalGrossSales = sales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
-  const totalDiscount = sales.reduce((sum, s) => sum + (s.discount || 0), 0);
-  const totalNetSales = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || (s as any).total || s.totalPrice || 0), 0);
+  const totalDiscount = sales.reduce((sum, s) => sum + ((s as any).discount || 0), 0);
+  const totalNetSales = sales.reduce((sum, s) => sum + ((s as any).total || s.totalPrice || 0), 0);
   const totalSalesTransactions = sales.length;
   const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
 
   const totalCashIn = finance
-    .filter((f) => f.type === "IN" || (f as any).type === "INCOME")
+    .filter((f) => (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
   const totalCashOut = finance
-    .filter((f) => f.type === "OUT" || (f as any).type === "EXPENSE")
+    .filter((f) => (f.type as string) === "OUT" || (f as any).type === "EXPENSE" || f.type === "CASH_OUT")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
 
   const totalPayrollCost = payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0);
@@ -744,18 +744,19 @@ export const exportMasterExecutiveReportXlsx = ({
 
   const totalInventoryAssetValue = ingredients.reduce((sum, ing) => {
     const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
-    return sum + (cost * (ing.stock || 0));
+    const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
+    return sum + (cost * stockQty);
   }, 0);
-  const lowStockCount = ingredients.filter((ing) => (ing.stock || 0) <= (ing.minStock || 0)).length;
+  const lowStockCount = ingredients.filter((ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)).length;
 
   const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
 
   const summaryRows = [
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Nama Usaha / Outlet", Nilai: settings.storeName || "Julia Coffee", Keterangan: "-" },
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Nama Usaha / Outlet", Nilai: settings.brandName || (settings as any).storeName || "Julia Coffee", Keterangan: "-" },
     { Kategori: "INFORMASI LAPORAN", Indikator: "Periode Laporan", Nilai: periodLabel, Keterangan: "-" },
     { Kategori: "INFORMASI LAPORAN", Indikator: "Tanggal Pembuatan Laporan", Nilai: toDateIndo(new Date()), Keterangan: "Diekspor otomatis dari sistem" },
-    { Kategori: "INFORMASI LAPORAN", Indikator: "Mata Uang", Nilai: settings.currency || "IDR", Keterangan: "Rupiah Indonesia" },
+    { Kategori: "INFORMASI LAPORAN", Indikator: "Mata Uang", Nilai: (settings as any).currency || "IDR", Keterangan: "Rupiah Indonesia" },
 
     { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Omzet Penjualan Kotor", Nilai: totalGrossSales, Keterangan: "Subtotal sebelum diskon" },
     { Kategori: "RINGKASAN PENJUALAN", Indikator: "Total Diskon & Promo", Nilai: totalDiscount, Keterangan: "Potongan harga yang diberikan" },
@@ -793,10 +794,10 @@ export const exportMasterExecutiveReportXlsx = ({
     "No. Receipt": (s as any).receiptNumber || (s as any).invoiceNumber || s.id,
     "Metode Pembayaran": (s as any).paymentMethod || "TUNAI",
     Kasir: (s as any).cashierName || (s as any).servedBy || "-",
-    Subtotal: s.subtotal || s.total || 0,
-    Diskon: s.discount || 0,
-    Pajak: s.tax || 0,
-    "Total Bayar (Rp)": s.total || 0,
+    Subtotal: (s as any).subtotal || (s as any).total || s.totalPrice || 0,
+    Diskon: (s as any).discount || 0,
+    Pajak: (s as any).tax || 0,
+    "Total Bayar (Rp)": (s as any).total || s.totalPrice || 0,
     Status: (s as any).status || "COMPLETED",
   }));
   const wsSales = XLSX.utils.json_to_sheet(salesRows);
@@ -809,7 +810,7 @@ export const exportMasterExecutiveReportXlsx = ({
   const financeRows = finance.map((f, idx) => ({
     No: idx + 1,
     Tanggal: toDateIndo(f.date || (f as any).createdAt),
-    Tipe: f.type === "IN" || (f as any).type === "INCOME" ? "Pemasukan (IN)" : "Pengeluaran (OUT)",
+    Tipe: (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN" ? "Pemasukan (IN)" : "Pengeluaran (OUT)",
     Kategori: f.category || (f as any).categoryName || "-",
     Keterangan: f.description || (f as any).notes || "-",
     "Akun Kas/Bank": (f as any).accountId || (f as any).accountName || "Kas Utama",
@@ -825,13 +826,14 @@ export const exportMasterExecutiveReportXlsx = ({
   // ─── 4. SHEET 4: INVENTARIS & BAHAN (INVENTORY) ──────────────────────────────
   const inventoryRows = ingredients.map((ing, idx) => {
     const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
-    const assetVal = cost * (ing.stock || 0);
-    const isLow = (ing.stock || 0) <= (ing.minStock || 0);
+    const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
+    const assetVal = cost * stockQty;
+    const isLow = stockQty <= (ing.minStock || 0);
     return {
       No: idx + 1,
       "Nama Bahan": ing.name,
       Kategori: ing.category || "Bahan Baku",
-      "Stok Saat Ini": ing.stock || 0,
+      "Stok Saat Ini": stockQty,
       Satuan: ing.unit,
       "Stok Minimum": ing.minStock || 0,
       "Biaya Satuan HPP (Rp)": cost,
@@ -904,7 +906,7 @@ export const exportMasterExecutiveReportXlsx = ({
       "Nama Karyawan": emp?.name || k.employeeId,
       Jabatan: emp?.position || "-",
       Divisi: emp?.department || "-",
-      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      Periode: (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
       "Skor KPI (0-100)": k.totalScore,
       Grade: grade,
       "Bonus KPI (Rp)": k.kpiBonus,
@@ -918,7 +920,7 @@ export const exportMasterExecutiveReportXlsx = ({
   XLSX.utils.book_append_sheet(wb, wsKpi, "Kinerja KPI");
 
   // Simpan File Master Workbook Multi-Sheet
-  const storeSlug = (settings.storeName || "Julia_Coffee").replace(/\s+/g, "_");
+  const storeSlug = (settings.brandName || (settings as any).storeName || "Julia_Coffee").replace(/\s+/g, "_");
   const periodSlug = periodLabel.replace(/\s+/g, "_");
   XLSX.writeFile(wb, `Laporan_Komprehensif_${storeSlug}_${periodSlug}.xlsx`);
 };

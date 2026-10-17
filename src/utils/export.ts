@@ -133,7 +133,7 @@ const setupPdfHeader = (
   // --- BARIS 1: BRAND NAME (Kiri) & TANGGAL CETAK (Kanan) ---
   const brandName = (
     settings.brandName ||
-    settings.storeName ||
+    (settings as any).storeName ||
     "JULIA'S MANAGEMENT SYSTEM"
   ).toUpperCase();
   doc.setTextColor(255, 255, 255);
@@ -748,7 +748,7 @@ export const exportKpiToPDF = ({
             String(idx + 1),
             emp?.name || k.employeeId,
             emp?.position || "-",
-            k.period || `Bulan ${k.month}/${k.year}`,
+            (k as any).period || `Bulan ${k.month}/${k.year}`,
             `${k.totalScore.toFixed(1)} / 100`,
             grade,
             formatCurrency(k.kpiBonus),
@@ -794,7 +794,7 @@ export const exportKpiToCSV = ({
       "Nama Karyawan": emp?.name || k.employeeId,
       Jabatan: emp?.position || "-",
       Divisi: emp?.department || "-",
-      Periode: k.period || `${k.year}-${String(k.month).padStart(2, "0")}`,
+      Periode: (k as any).period || `${k.year}-${String(k.month).padStart(2, "0")}`,
       "Total Skor (0-100)": k.totalScore,
       "Bonus KPI (Rp)": k.kpiBonus,
       "Catatan Evaluator": k.notes || "-",
@@ -827,17 +827,17 @@ export const exportMasterExecutiveReportPDF = ({
   const doc = new jsPDF();
   setupPdfHeader(doc, settings, "Laporan Eksekutif Master (Executive Summary)", periodLabel);
 
-  const totalGrossSales = sales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
-  const totalDiscount = sales.reduce((sum, s) => sum + (s.discount || 0), 0);
-  const totalNetSales = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || (s as any).total || s.totalPrice || 0), 0);
+  const totalDiscount = sales.reduce((sum, s) => sum + ((s as any).discount || 0), 0);
+  const totalNetSales = sales.reduce((sum, s) => sum + ((s as any).total || s.totalPrice || 0), 0);
   const totalSalesTransactions = sales.length;
   const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
 
   const totalCashIn = finance
-    .filter((f) => f.type === "IN" || (f as any).type === "INCOME")
+    .filter((f) => (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
   const totalCashOut = finance
-    .filter((f) => f.type === "OUT" || (f as any).type === "EXPENSE")
+    .filter((f) => (f.type as string) === "OUT" || (f as any).type === "EXPENSE" || f.type === "CASH_OUT")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
 
   const totalPayrollCost = payroll.reduce((sum, p) => sum + (p.netPay || p.grossPay || 0), 0);
@@ -845,9 +845,10 @@ export const exportMasterExecutiveReportPDF = ({
 
   const totalInventoryAssetValue = ingredients.reduce((sum, ing) => {
     const cost = ing.costPerUnit || (ing as any).unitPrice || (ing as any).price || 0;
-    return sum + (cost * (ing.stock || 0));
+    const stockQty = ing.currentStock ?? (ing as any).stock ?? 0;
+    return sum + (cost * stockQty);
   }, 0);
-  const lowStockCount = ingredients.filter((ing) => (ing.stock || 0) <= (ing.minStock || 0)).length;
+  const lowStockCount = ingredients.filter((ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)).length;
 
   const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
@@ -903,7 +904,7 @@ export const exportMasterExecutiveReportPDF = ({
     },
   });
 
-  const storeSlug = (settings.storeName || "Julia_Coffee").replace(/\s+/g, "_");
+  const storeSlug = (settings.brandName || (settings as any).storeName || "Julia_Coffee").replace(/\s+/g, "_");
   const periodSlug = periodLabel.replace(/\s+/g, "_");
   doc.save(`Laporan_Eksekutif_${storeSlug}_${periodSlug}.pdf`);
 };
