@@ -206,7 +206,7 @@ export function Payroll() {
               : 0);
 
         // ─── Cek Aturan Bonus Bertingkat (Tiered) Masuk Otomatis ───
-        const isKpiScoreBonusActive = settings?.enableKpiScoreBonus !== false;
+        const isKpiScoreBonusActive = Boolean(settings?.enableKpiScoreBonus);
         const activeRules = (kpiBonusRules || []).filter((r: any) => r.isActive !== false);
         const applicableRule = autoScore > 0 ? activeRules.find((r: any) => autoScore >= r.minScore && autoScore <= r.maxScore) : undefined;
 
