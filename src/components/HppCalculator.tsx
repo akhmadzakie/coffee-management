@@ -59,6 +59,239 @@ interface PackagingOption {
 
 const PRICE_PRESETS = [15000, 18000, 20000, 22000, 25000, 28000, 32000, 35000];
 
+interface StandardRecipePreset {
+  id: string;
+  name: string;
+  division: ProductDivision;
+  category: string;
+  servingNote: string;
+  targetPrice: number;
+  targetFoodCost: number;
+  icon: string;
+  ingredients: {
+    matchKeywords: string[];
+    fallbackName: string;
+    quantity: number;
+    unit: string;
+    defaultCost: number;
+  }[];
+  includedPackagingKeywords: string[];
+}
+
+const STANDARD_RECIPE_PRESETS: StandardRecipePreset[] = [
+  {
+    id: "preset-kopsus-aren",
+    name: "Kopi Susu Gula Aren",
+    division: "BAR",
+    category: "COFFEE",
+    servingNote: "Cup 16oz Dingin (Ice)",
+    targetPrice: 22000,
+    targetFoodCost: 28,
+    icon: "☕",
+    ingredients: [
+      {
+        matchKeywords: ["beans", "espresso", "biji", "kopi"],
+        fallbackName: "Espresso Beans House Blend",
+        quantity: 18,
+        unit: "gr",
+        defaultCost: 250,
+      },
+      {
+        matchKeywords: ["milk", "susu", "fresh milk", "uht"],
+        fallbackName: "Fresh Milk UHT",
+        quantity: 120,
+        unit: "ml",
+        defaultCost: 18.5,
+      },
+      {
+        matchKeywords: ["aren", "gula aren", "brown sugar"],
+        fallbackName: "Saus Gula Aren Racikan",
+        quantity: 25,
+        unit: "ml",
+        defaultCost: 38,
+      },
+      {
+        matchKeywords: ["es", "ice", "kristal"],
+        fallbackName: "Es Batu Kristal Tube",
+        quantity: 150,
+        unit: "gr",
+        defaultCost: 2,
+      },
+    ],
+    includedPackagingKeywords: ["cup", "sedotan", "seal"],
+  },
+  {
+    id: "preset-caffe-latte",
+    name: "Caffe Latte",
+    division: "BAR",
+    category: "COFFEE",
+    servingNote: "Hot 8oz / Iced 12oz",
+    targetPrice: 28000,
+    targetFoodCost: 25,
+    icon: "🥛",
+    ingredients: [
+      {
+        matchKeywords: ["beans", "espresso", "biji", "kopi"],
+        fallbackName: "Espresso Beans House Blend",
+        quantity: 18,
+        unit: "gr",
+        defaultCost: 250,
+      },
+      {
+        matchKeywords: ["milk", "susu", "fresh milk", "uht"],
+        fallbackName: "Fresh Milk UHT",
+        quantity: 160,
+        unit: "ml",
+        defaultCost: 18.5,
+      },
+    ],
+    includedPackagingKeywords: ["cup", "lid"],
+  },
+  {
+    id: "preset-americano",
+    name: "Iced Americano",
+    division: "BAR",
+    category: "COFFEE",
+    servingNote: "Cup 12oz Dingin",
+    targetPrice: 18000,
+    targetFoodCost: 18,
+    icon: "🧊",
+    ingredients: [
+      {
+        matchKeywords: ["beans", "espresso", "biji", "kopi"],
+        fallbackName: "Espresso Beans House Blend",
+        quantity: 18,
+        unit: "gr",
+        defaultCost: 250,
+      },
+      {
+        matchKeywords: ["air", "water", "galon", "ro"],
+        fallbackName: "Air Bersih RO",
+        quantity: 180,
+        unit: "ml",
+        defaultCost: 0.5,
+      },
+      {
+        matchKeywords: ["es", "ice", "kristal"],
+        fallbackName: "Es Batu Kristal Tube",
+        quantity: 120,
+        unit: "gr",
+        defaultCost: 2,
+      },
+    ],
+    includedPackagingKeywords: ["cup", "sedotan", "seal"],
+  },
+  {
+    id: "preset-matcha-latte",
+    name: "Kyoto Matcha Latte",
+    division: "BAR",
+    category: "NON-COFFEE",
+    servingNote: "Cup 16oz Dingin",
+    targetPrice: 30000,
+    targetFoodCost: 28,
+    icon: "🍵",
+    ingredients: [
+      {
+        matchKeywords: ["matcha", "powder", "teh"],
+        fallbackName: "Powder Pure Matcha",
+        quantity: 15,
+        unit: "gr",
+        defaultCost: 450,
+      },
+      {
+        matchKeywords: ["milk", "susu", "fresh milk", "uht"],
+        fallbackName: "Fresh Milk UHT",
+        quantity: 140,
+        unit: "ml",
+        defaultCost: 18.5,
+      },
+      {
+        matchKeywords: ["simple", "syrup", "gula", "pemanis"],
+        fallbackName: "Simple Syrup (1:1)",
+        quantity: 20,
+        unit: "ml",
+        defaultCost: 12,
+      },
+      {
+        matchKeywords: ["es", "ice", "kristal"],
+        fallbackName: "Es Batu Kristal Tube",
+        quantity: 120,
+        unit: "gr",
+        defaultCost: 2,
+      },
+    ],
+    includedPackagingKeywords: ["cup", "sedotan", "seal"],
+  },
+  {
+    id: "preset-croissant",
+    name: "Butter Croissant Artisanal",
+    division: "BAKER",
+    category: "BAKERY",
+    servingNote: "Pcs Panggang Hangat",
+    targetPrice: 25000,
+    targetFoodCost: 32,
+    icon: "🥐",
+    ingredients: [
+      {
+        matchKeywords: ["croissant", "adonan", "dough"],
+        fallbackName: "Dough Croissant Butter 70g",
+        quantity: 1,
+        unit: "pcs",
+        defaultCost: 6500,
+      },
+      {
+        matchKeywords: ["butter", "mentega"],
+        fallbackName: "French Pure Butter",
+        quantity: 15,
+        unit: "gr",
+        defaultCost: 140,
+      },
+    ],
+    includedPackagingKeywords: ["paper bag", "bag", "plastik"],
+  },
+  {
+    id: "preset-rice-bowl-ayam",
+    name: "Rice Bowl Ayam Sambal Matah",
+    division: "KITCHEN",
+    category: "FOOD",
+    servingNote: "Porsi Bowl Dine-In / Takeaway",
+    targetPrice: 35000,
+    targetFoodCost: 32,
+    icon: "🍳",
+    ingredients: [
+      {
+        matchKeywords: ["beras", "nasi", "rice"],
+        fallbackName: "Beras Pulen Pandan Wangi",
+        quantity: 100,
+        unit: "gr",
+        defaultCost: 16,
+      },
+      {
+        matchKeywords: ["ayam", "chicken", "daging"],
+        fallbackName: "Daging Ayam Fillet Paha",
+        quantity: 120,
+        unit: "gr",
+        defaultCost: 58,
+      },
+      {
+        matchKeywords: ["sambal", "matah"],
+        fallbackName: "Sambal Matah Matang",
+        quantity: 30,
+        unit: "gr",
+        defaultCost: 48,
+      },
+      {
+        matchKeywords: ["minyak", "oil"],
+        fallbackName: "Minyak Kelapa Asli",
+        quantity: 10,
+        unit: "ml",
+        defaultCost: 32,
+      },
+    ],
+    includedPackagingKeywords: ["paper box", "box", "lunch box", "sendok"],
+  },
+];
+
 export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const {
     ingredients,
@@ -92,27 +325,35 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const [items, setItems] = useState<RecipeIngredientItem[]>([
     {
       id: "item-1",
-      ingredientId: "",
-      name: "Espresso Double Shot (Beans)",
+      ingredientId: "ing-coffee-beans",
+      name: "House Blend Espresso Beans",
       quantity: 18,
       unit: "gr",
-      costPerUnit: 250, // Rp 250.000 / kg = Rp 250/gr
+      costPerUnit: 250,
     },
     {
       id: "item-2",
-      ingredientId: "",
-      name: "Fresh Milk / Susu UHT",
+      ingredientId: "ing-fresh-milk",
+      name: "Fresh Milk UHT Greenfields",
       quantity: 120,
       unit: "ml",
-      costPerUnit: 18.5, // Rp 18.500 / liter = Rp 18.5/ml
+      costPerUnit: 18.5,
     },
     {
       id: "item-3",
-      ingredientId: "",
-      name: "Sirup Gula Aren Organik",
-      quantity: 20,
+      ingredientId: "ing-aren-cair",
+      name: "Gula Aren Cair Racikan",
+      quantity: 25,
       unit: "ml",
-      costPerUnit: 45, // Rp 45.000 / liter = Rp 45/ml
+      costPerUnit: 38,
+    },
+    {
+      id: "item-4",
+      ingredientId: "ing-ice-cube",
+      name: "Es Batu Kristal Tube",
+      quantity: 150,
+      unit: "gr",
+      costPerUnit: 2,
     },
   ]);
 
@@ -128,6 +369,77 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         DEFAULT_DIVISION_PACKAGING[div].map((p) => ({ ...p, isIncluded: Boolean(p.isIncluded) }))
       );
     }
+  };
+
+  // Grouped ingredients by category for clean dropdown selection
+  const groupedIngredients = useMemo(() => {
+    const groups: Record<string, Ingredient[]> = {};
+    ingredients.forEach((ing) => {
+      const cat = ing.category?.trim() || "Lainnya";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(ing);
+    });
+    return groups;
+  }, [ingredients]);
+
+  // Terapkan preset resep standar kafe
+  const handleApplyPreset = (preset: StandardRecipePreset) => {
+    setSelectedDivision(preset.division);
+    setMenuName(preset.name);
+    setServingNote(preset.servingNote);
+    setPublishCategory(preset.category);
+    setTargetSellingPrice(preset.targetPrice);
+    setTargetFoodCostPercent(preset.targetFoodCost);
+    setSelectedRecipeId("");
+
+    // Setup packaging options for this division
+    const defaultPacks = DEFAULT_DIVISION_PACKAGING[preset.division] || [];
+    setPackagingList(
+      defaultPacks.map((p) => {
+        const isMatched = preset.includedPackagingKeywords.some((kw) =>
+          p.name.toLowerCase().includes(kw.toLowerCase())
+        );
+        return {
+          ...p,
+          isIncluded: isMatched,
+        };
+      })
+    );
+
+    // Map ingredients from store matching keywords
+    const mappedItems: RecipeIngredientItem[] = preset.ingredients.map((item, idx) => {
+      const matchedIng = ingredients.find((ing) => {
+        const lowerName = ing.name.toLowerCase();
+        const lowerCat = (ing.category || "").toLowerCase();
+        return item.matchKeywords.some(
+          (kw) => lowerName.includes(kw.toLowerCase()) || lowerCat.includes(kw.toLowerCase())
+        );
+      });
+
+      if (matchedIng) {
+        return {
+          id: `item-${Date.now()}-${idx}`,
+          ingredientId: matchedIng.id,
+          name: matchedIng.name,
+          quantity: item.quantity,
+          unit: matchedIng.unit,
+          costPerUnit: Number(matchedIng.costPerUnit || item.defaultCost),
+        };
+      }
+
+      return {
+        id: `item-${Date.now()}-${idx}`,
+        ingredientId: "",
+        name: item.fallbackName,
+        quantity: item.quantity,
+        unit: item.unit,
+        costPerUnit: item.defaultCost,
+      };
+    });
+
+    setItems(mappedItems);
+    setSaveSuccessMessage(`Preset resep "${preset.name}" berhasil diterapkan!`);
+    setTimeout(() => setSaveSuccessMessage(null), 3000);
   };
 
   // Buffer Wastage & Purge (%)
@@ -439,6 +751,26 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       });
       setSaveSuccessMessage(`Produk baru "${menuName}" berhasil diterbitkan ke Katalog Menu Toko!`);
     }
+
+    // Pastikan Master Resep Toko juga tersinkronisasi
+    if (validIngredients.length > 0) {
+      const existingRec = recipes.find(
+        (r) => r.menuName.trim().toLowerCase() === menuName.trim().toLowerCase()
+      );
+      if (existingRec) {
+        updateRecipe({
+          id: existingRec.id,
+          menuName: menuName.trim(),
+          ingredients: validIngredients,
+        });
+      } else {
+        addRecipe({
+          menuName: menuName.trim(),
+          ingredients: validIngredients,
+        });
+      }
+    }
+
     setIsPublishProductModalOpen(false);
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
@@ -651,6 +983,42 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* KOLOM KIRI (7/12): INPUT FORM BAHAN & KEMASAN */}
           <div className="lg:col-span-7 space-y-6">
+            {/* Integrated Supply Chain Strip */}
+            <div className="p-3.5 bg-gradient-to-r from-amber-900/90 via-stone-900 to-amber-950 text-white rounded-2xl shadow-sm border border-amber-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
+                  <RefreshCw className="w-4 h-4 animate-spin-slow" />
+                </span>
+                <div>
+                  <span className="font-extrabold text-amber-200 block text-[11px] uppercase tracking-wider">
+                    Alur Terintegrasi Supply Chain
+                  </span>
+                  <span className="text-[11px] text-stone-300">
+                    Bahan Baku (Inventori) ➜ Formulasi HPP ➜ Katalog Menu POS ➜ Pengurangan Stok Kasir
+                  </span>
+                </div>
+              </div>
+
+              {onNavigate && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("inventory")}
+                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold transition-all border border-white/10"
+                  >
+                    Bahan Baku ↗
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("menu_management")}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-xs"
+                  >
+                    Katalog Menu ↗
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Card 1: Identitas Menu & Muat Resep Eksisting */}
             <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
@@ -659,7 +1027,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     1. Identitas Menu & Varian
                   </h2>
                   <p className="text-xs text-stone-500">
-                    Pilih dari resep toko yang sudah ada atau racik simulasi menu baru.
+                    Pilih preset kopi standar kafe, muat dari resep toko, atau racik menu baru.
                   </p>
                 </div>
 
@@ -682,7 +1050,32 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Quick Presets Standard Coffee Shop Recipes */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  Preset Cepat Menu Standar Kafe:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {STANDARD_RECIPE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleApplyPreset(preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                        menuName === preset.name
+                          ? "bg-amber-800 text-white border-amber-900 shadow-2xs font-extrabold"
+                          : "bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200"
+                      }`}
+                    >
+                      <span>{preset.icon}</span>
+                      <span>{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
                     Nama Menu / Minuman
@@ -822,10 +1215,18 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             className="w-full text-xs font-medium px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-700"
                           >
                             <option value="">-- Input Bahan Kustom --</option>
-                            {ingredients.map((ing) => (
-                              <option key={ing.id} value={ing.id}>
-                                {ing.name} ({ing.unit}) · @{formatCurrency(Number(ing.costPerUnit || 0))}
-                              </option>
+                            {Object.entries(groupedIngredients).map(([cat, list]) => (
+                              <optgroup key={cat} label={`📂 ${cat}`}>
+                                {list.map((ing) => {
+                                  const isLow = ing.currentStock <= ing.minStock;
+                                  const isZeroCost = !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
+                                  return (
+                                    <option key={ing.id} value={ing.id}>
+                                      {ing.name} ({ing.unit}) · @{formatCurrency(Number(ing.costPerUnit || 0))} · Stok: {ing.currentStock} {ing.unit} {isLow ? "⚠️" : ""} {isZeroCost ? "[Biaya 0]" : ""}
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
                             ))}
                           </select>
                         </div>
@@ -884,6 +1285,27 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   </div>
                 )}
               </div>
+
+              {/* Zero Cost Alert */}
+              {items.some((it) => it.costPerUnit <= 0) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      Perhatian: Ada bahan baku dengan biaya modal Rp 0. Perhitungan HPP mungkin belum mencerminkan biaya riil.
+                    </span>
+                  </div>
+                  {onNavigate && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("inventory")}
+                      className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-[10px] shrink-0 self-start sm:self-auto"
+                    >
+                      Isi Harga di Inventori ↗
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Subtotal Bahan Baku Pokok */}
               <div className="pt-2 border-t border-stone-100 flex justify-between items-center text-xs">

@@ -10,6 +10,7 @@ import {
   ProductDivision,
   BatchPreparation,
   RecipeIngredient,
+  Recipe,
   DEFAULT_DIVISION_PACKAGING,
 } from "../types";
 import {
@@ -36,6 +37,7 @@ import {
   Clock,
   ChevronDown,
   Info,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -55,6 +57,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
     deleteBatchPreparation,
     executeBatchCook,
     ingredients,
+    recipes,
     currentUser,
     isReadOnly,
   } = useStore();
@@ -145,15 +148,27 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   }, [currentDivisionProducts]);
 
   // ─── Live Stock Availability Helper ────────────────────────────────────────
-  const calculateVariantStockAvailability = (variant: ProductVariant) => {
-    if (!variant.recipe || variant.recipe.length === 0) {
+  const calculateVariantStockAvailability = (variant: ProductVariant, productName?: string) => {
+    let effectiveRecipe = variant.recipe;
+    if (!effectiveRecipe || effectiveRecipe.length === 0) {
+      if (productName) {
+        const fallbackRec = recipes.find(
+          (r) => r.menuName.trim().toLowerCase() === productName.trim().toLowerCase()
+        );
+        if (fallbackRec) {
+          effectiveRecipe = fallbackRec.ingredients;
+        }
+      }
+    }
+
+    if (!effectiveRecipe || effectiveRecipe.length === 0) {
       return { status: "ready" as const, portions: null, bottleneck: null };
     }
 
     let minPortions = Infinity;
     let bottleneckIng: string | null = null;
 
-    for (const ri of variant.recipe) {
+    for (const ri of effectiveRecipe) {
       const ing = ingredients.find((i) => i.id === ri.ingredientId);
       if (!ing || ing.currentStock <= 0 || ri.quantity <= 0) {
         return {
@@ -217,6 +232,64 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
     }
   };
 
+  // ─── Bulk Recalculate HPP from latest ingredients & packaging ───────────────
+  const handleBulkRecalculateHpp = () => {
+    let updatedProductsCount = 0;
+    let updatedVariantsCount = 0;
+
+    products.forEach((p) => {
+      let isProductChanged = false;
+      const updatedVariants = (p.variants || []).map((v) => {
+        let effectiveRecipe = v.recipe;
+        if (!effectiveRecipe || effectiveRecipe.length === 0) {
+          const rec = recipes.find(
+            (r) => r.menuName.trim().toLowerCase() === p.name.trim().toLowerCase()
+          );
+          if (rec) effectiveRecipe = rec.ingredients;
+        }
+
+        if (!effectiveRecipe || effectiveRecipe.length === 0) return v;
+
+        let rawCost = 0;
+        for (const ri of effectiveRecipe) {
+          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+          if (ing && ing.costPerUnit) {
+            rawCost += ri.quantity * Number(ing.costPerUnit);
+          }
+        }
+
+        const newEstimatedHpp = Math.round(rawCost + Number(v.packagingCost || 0));
+        if (newEstimatedHpp !== v.estimatedHpp || (!v.recipe?.length && effectiveRecipe.length > 0)) {
+          isProductChanged = true;
+          updatedVariantsCount++;
+          return {
+            ...v,
+            recipe: v.recipe?.length ? v.recipe : effectiveRecipe,
+            estimatedHpp: newEstimatedHpp,
+          };
+        }
+        return v;
+      });
+
+      if (isProductChanged) {
+        updateProduct({ ...p, variants: updatedVariants });
+        updatedProductsCount++;
+      }
+    });
+
+    if (updatedProductsCount > 0) {
+      showToast(
+        "success",
+        `Berhasil menyinkronkan HPP untuk ${updatedProductsCount} menu (${updatedVariantsCount} varian) dengan harga bahan baku terbaru!`
+      );
+    } else {
+      showToast(
+        "success",
+        "Seluruh HPP produk sudah akurat dengan harga bahan baku & kemasan terkini di inventori."
+      );
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Toast Notification */}
@@ -259,6 +332,16 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleBulkRecalculateHpp}
+            className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-2xl text-xs transition-colors flex items-center gap-2 border border-amber-300 shadow-2xs"
+            title="Hitung ulang estimasi HPP seluruh produk berdasarkan harga bahan baku dan kemasan terbaru di inventori"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
+            Sinkronkan HPP Terkini
+          </button>
+
           {onNavigate && (
             <button
               onClick={() => onNavigate("hpp_calculator")}
@@ -517,7 +600,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                     </span>
 
                     {product.variants?.map((variant) => {
-                      const avail = calculateVariantStockAvailability(variant);
+                      const avail = calculateVariantStockAvailability(variant, product.name);
                       const hpp = variant.estimatedHpp || 0;
                       const profit = Math.max(0, variant.price - hpp);
                       const marginPct = variant.price > 0 ? (profit / variant.price) * 100 : 0;
@@ -1009,6 +1092,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             product={editingProduct}
             defaultDivision={activeTab === "BATCH_PREP" ? "BAR" : activeTab}
             ingredients={ingredients}
+            recipes={recipes}
+            onNavigateHpp={onNavigate ? () => onNavigate("hpp_calculator") : undefined}
             onClose={() => setIsProductModalOpen(false)}
             onSave={(prodData) => {
               if (editingProduct) {
@@ -1055,6 +1140,8 @@ interface ProductFormModalProps {
   product: Product | null;
   defaultDivision: ProductDivision;
   ingredients: any[];
+  recipes: Recipe[];
+  onNavigateHpp?: () => void;
   onClose: () => void;
   onSave: (data: Omit<Product, "id" | "createdAt">) => void;
 }
@@ -1063,6 +1150,8 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
   product,
   defaultDivision,
   ingredients,
+  recipes,
+  onNavigateHpp,
   onClose,
   onSave,
 }) => {
@@ -1328,11 +1417,75 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         type="number"
                         min="0"
                         value={v.packagingCost || 0}
-                        onChange={(e) =>
-                          handleUpdateVariant(idx, { packagingCost: Number(e.target.value) })
-                        }
+                        onChange={(e) => {
+                          const newPackCost = Number(e.target.value);
+                          // Recalculate HPP if recipe exists
+                          let rawCost = 0;
+                          if (v.recipe && v.recipe.length > 0) {
+                            v.recipe.forEach((ri) => {
+                              const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                              if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
+                            });
+                          }
+                          handleUpdateVariant(idx, {
+                            packagingCost: newPackCost,
+                            estimatedHpp: rawCost > 0 ? Math.round(rawCost + newPackCost) : v.estimatedHpp,
+                          });
+                        }}
                         className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-mono"
                       />
+                    </div>
+                  </div>
+
+                  {/* Tautkan ke Master Resep Toko */}
+                  <div className="pt-2 border-t border-stone-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white/70 p-2 rounded-xl">
+                    <div className="flex-1 w-full sm:w-auto">
+                      <label className="block text-[10px] font-bold text-stone-600 mb-0.5">
+                        Tautkan Resep Master (Pengurangan Stok Otomatis):
+                      </label>
+                      <select
+                        value={
+                          recipes.find(
+                            (r) =>
+                              JSON.stringify(r.ingredients) === JSON.stringify(v.recipe) ||
+                              r.menuName.toLowerCase() === v.name.toLowerCase()
+                          )?.id || ""
+                        }
+                        onChange={(e) => {
+                          const picked = recipes.find((r) => r.id === e.target.value);
+                          if (picked) {
+                            let rawCost = 0;
+                            picked.ingredients.forEach((ri) => {
+                              const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                              if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
+                            });
+                            handleUpdateVariant(idx, {
+                              recipe: picked.ingredients,
+                              estimatedHpp: Math.round(rawCost + Number(v.packagingCost || 0)),
+                            });
+                          }
+                        }}
+                        className="w-full text-xs font-semibold px-2 py-1 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 focus:bg-white"
+                      >
+                        <option value="">-- Pilih Resep Toko (Opsional) --</option>
+                        {recipes.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.menuName} ({r.ingredients.length} bahan baku)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto text-[11px] pt-1 sm:pt-0">
+                      {v.recipe && v.recipe.length > 0 ? (
+                        <span className="px-2 py-1 bg-emerald-50 text-emerald-800 rounded-lg font-bold border border-emerald-200 text-[10px]">
+                          ✅ {v.recipe.length} bahan terhubung
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-stone-100 text-stone-500 rounded-lg font-medium text-[10px]">
+                          Resep belum ditautkan
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

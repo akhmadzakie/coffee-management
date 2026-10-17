@@ -189,10 +189,13 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       if (res.ok) {
         const data = await res.json();
         const itemsWithPrices = (data.menu || []).map((m: MenuItem) => {
-          let estimatedPrice = Math.max(18000, Math.round((m.estimatedHpp * 2.8) / 1000) * 1000);
-          if (m.name.toLowerCase().includes("espresso")) estimatedPrice = 15000;
-          if (m.name.toLowerCase().includes("croissant")) estimatedPrice = 28000;
-          return { ...m, price: estimatedPrice };
+          let price = m.price;
+          if (!price) {
+            price = Math.max(18000, Math.round((m.estimatedHpp * 2.8) / 1000) * 1000);
+            if (m.name.toLowerCase().includes("espresso")) price = 15000;
+            if (m.name.toLowerCase().includes("croissant")) price = 28000;
+          }
+          return { ...m, price };
         });
         setMenuList(itemsWithPrices);
         // Simpan ke cache lokal untuk mode offline

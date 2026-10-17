@@ -2251,9 +2251,23 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     try {
       const allRecipes = await db.select().from(schema.recipes);
       const allIngredients = await db.select().from(schema.ingredients);
+      const allProducts = await db.select().from(schema.products);
       const settings = (await db.select().from(schema.settings).limit(1))[0];
 
       const ingredientMap = new Map(allIngredients.map((ing) => [ing.id, ing]));
+      const productPriceMap = new Map<string, number>();
+
+      for (const p of allProducts) {
+        let vars: any[] = [];
+        try {
+          vars = typeof p.variants === "string" ? JSON.parse(p.variants) : p.variants;
+        } catch {
+          vars = [];
+        }
+        if (Array.isArray(vars) && vars.length > 0 && vars[0].price) {
+          productPriceMap.set(p.name.toLowerCase().trim(), Number(vars[0].price));
+        }
+      }
 
       const menuList = allRecipes.map((r) => {
         let recipeItems: { ingredientId: string; quantity: number }[] = [];
@@ -2298,6 +2312,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           defaultStation = "BAR";
         }
 
+        const officialPrice = productPriceMap.get(lowerName.trim());
+
         return {
           id: r.id,
           name: r.menuName,
@@ -2307,6 +2323,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           estimatedHpp: Math.round(hppCost),
           maxPortions,
           isAvailable: maxPortions > 0,
+          price: officialPrice || undefined,
         };
       });
 
@@ -2470,14 +2487,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               importLogId: `POS-${receiptNo}`,
             });
 
+            let rec: any[] = [];
             if (item.recipeId) {
-              const rec = await tx
+              rec = await tx
                 .select()
                 .from(schema.recipes)
                 .where(eq(schema.recipes.id, item.recipeId))
                 .limit(1);
-              if (rec.length > 0) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+            }
+            if (rec.length === 0 && item.menuName) {
+              rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.menuName, item.menuName))
+                .limit(1);
+            }
+
+            if (rec.length > 0) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
                 try {
                   recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
                 } catch {}
@@ -2513,7 +2540,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               }
             }
           }
-        }
       });
 
       const createdOrder = (
@@ -2624,14 +2650,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             importLogId: `POS-${currentOrder.receiptNo}`,
           });
 
+          let rec: any[] = [];
           if (item.recipeId) {
-            const rec = await tx
+            rec = await tx
               .select()
               .from(schema.recipes)
               .where(eq(schema.recipes.id, item.recipeId))
               .limit(1);
-            if (rec.length > 0) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+          }
+          if (rec.length === 0 && item.menuName) {
+            rec = await tx
+              .select()
+              .from(schema.recipes)
+              .where(eq(schema.recipes.menuName, item.menuName))
+              .limit(1);
+          }
+
+          if (rec.length > 0) {
+            let recIngredients: { ingredientId: string; quantity: number }[] = [];
               try {
                 recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
               } catch {}
@@ -2666,7 +2702,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               }
             }
           }
-        }
       });
 
       const updatedOrder = (
