@@ -39,6 +39,22 @@ interface PosCustomizeModalProps {
   }) => void;
 }
 
+interface PosCustomizeModalContentProps {
+  onClose: () => void;
+  item: MenuItem;
+  onAddToCartWithCustomization: (customizedData: {
+    recipeId: string;
+    menuName: string;
+    variantName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    modifiers: OrderModifier[];
+    notes?: string;
+    printDestination: PrintDestination;
+  }) => void;
+}
+
 export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
   isOpen,
   onClose,
@@ -47,6 +63,21 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
 }) => {
   if (!isOpen || !item) return null;
 
+  return (
+    <PosCustomizeModalContent
+      key={item.id}
+      onClose={onClose}
+      item={item}
+      onAddToCartWithCustomization={onAddToCartWithCustomization}
+    />
+  );
+};
+
+const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
+  onClose,
+  item,
+  onAddToCartWithCustomization,
+}) => {
   const basePrice = item.price || 20000;
   const isDrink =
     item.category.toUpperCase() === "COFFEE" ||
@@ -117,27 +148,28 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
 
     if (isDrink) {
       if (temperature === "ICED") {
-        modifiers.push({ name: "Suhu: Dingin (Iced)", extraPrice: 2000 });
+        modifiers.push({ name: "Suhu: Dingin (Iced)", price: 2000, extraPrice: 2000 });
       } else {
-        modifiers.push({ name: "Suhu: Panas (Hot)", extraPrice: 0 });
+        modifiers.push({ name: "Suhu: Panas (Hot)", price: 0, extraPrice: 0 });
       }
 
-      modifiers.push({ name: sweetness, extraPrice: 0 });
+      modifiers.push({ name: sweetness, price: 0, extraPrice: 0 });
 
       if (temperature === "ICED") {
-        modifiers.push({ name: iceLevel, extraPrice: 0 });
+        modifiers.push({ name: iceLevel, price: 0, extraPrice: 0 });
       }
 
       if (selectedMilk.price > 0) {
         modifiers.push({
           name: `Susu: ${selectedMilk.name}`,
+          price: selectedMilk.price,
           extraPrice: selectedMilk.price,
         });
       }
     }
 
     selectedAddons.forEach((a) => {
-      modifiers.push({ name: `+ ${a.name}`, extraPrice: a.price });
+      modifiers.push({ name: `+ ${a.name}`, price: a.price, extraPrice: a.price });
     });
 
     const variantName = isDrink

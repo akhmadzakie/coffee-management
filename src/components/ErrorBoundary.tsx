@@ -9,9 +9,13 @@ interface Props {
 interface State {
   hasError: boolean;
   error?: Error;
+  errorInfo?: ErrorInfo;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  declare props: Props;
+  declare setState: (update: Partial<State> | ((prevState: State) => Partial<State>)) => void;
+
   public state: State = {
     hasError: false
   };
@@ -23,6 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error in ErrorBoundary:", error, errorInfo);
+    this.setState({ errorInfo });
 
     const isChunkError =
       error.message?.includes("Failed to fetch dynamically imported module") ||
@@ -64,10 +69,10 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
           <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 border border-gray-700 text-center shadow-xl shadow-black/50">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
-              isChunkError ? "bg-amber-500/10" : "bg-red-500/10"
+              isChunkError ? "bg-brand-500/10" : "bg-red-500/10"
             }`}>
               {isChunkError ? (
-                <RefreshCw className="w-8 h-8 text-amber-500" />
+                <RefreshCw className="w-8 h-8 text-brand-400" />
               ) : (
                 <AlertTriangle className="w-8 h-8 text-red-500" />
               )}
@@ -84,16 +89,21 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
             
             {this.state.error && !isChunkError && (
-              <div className="bg-black/40 rounded border border-gray-700 p-3 mb-6 text-left overflow-auto max-h-32">
-                <p className="text-red-400 text-xs font-mono break-all">
+              <div className="bg-black/40 rounded-xl border border-gray-700/80 p-3 mb-6 text-left overflow-auto max-h-40">
+                <p className="text-red-400 text-xs font-mono break-all font-semibold mb-1">
                   {this.state.error.message}
                 </p>
+                {this.state.errorInfo?.componentStack && (
+                  <pre className="text-gray-400 text-[10px] font-mono whitespace-pre-wrap leading-tight mt-1 border-t border-gray-700/50 pt-1">
+                    {this.state.errorInfo.componentStack.trim()}
+                  </pre>
+                )}
               </div>
             )}
 
             <button
               onClick={this.handleReload}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-brand-600/20 active:scale-95"
             >
               <RefreshCw className="w-4 h-4" />
               Muat Ulang Halaman

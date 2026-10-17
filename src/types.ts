@@ -528,6 +528,7 @@ export interface OrderModifier {
   name: string;
   price: number;
   quantity?: number;
+  extraPrice?: number;
 }
 
 export interface OrderItem {

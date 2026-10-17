@@ -28,8 +28,6 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
-
   const targetPinLength = selectedUser?.pin?.length === 4 ? 4 : 6;
 
   const pinRef = useRef(pin);
@@ -168,6 +166,16 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedUser(null);
+      setPin("");
+      setError("");
+      setIsSubmitting(false);
+      pinRef.current = "";
+    }
+  }, [isOpen]);
+
   const getRoleBadge = (role: string) => {
     switch (role?.toUpperCase()) {
       case "SUPER_ADMIN":
@@ -185,6 +193,8 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
         return { label: role || "Staff", color: "text-slate-700 bg-slate-100 border-slate-200" };
     }
   };
+
+  if (!isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
