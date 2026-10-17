@@ -1105,10 +1105,19 @@ export function HRManagement() {
 
         if (!emp || !contract) return null;
 
+        const isManagerOrExempt = emp.position?.toUpperCase().includes("MANAGER") ||
+                                  emp.position?.toUpperCase().includes("MANAJER") ||
+                                  emp.department?.toUpperCase().includes("MANAGEMENT") ||
+                                  emp.position?.toUpperCase().includes("OWNER");
+
         const basic = contract.basicSalary;
-        const meal = contract.mealAllowance * att.presentDays;
+        const meal = isManagerOrExempt 
+          ? contract.mealAllowance * (att.presentDays > 0 ? att.presentDays : 25) 
+          : contract.mealAllowance * att.presentDays;
         const dailyWage = Math.round(contract.basicSalary / 25);
-        const alphaDeduction = ((contract.alphaDeductionPerDay !== undefined && contract.alphaDeductionPerDay !== 0) ? contract.alphaDeductionPerDay : dailyWage) * att.alphaDays;
+        const alphaDeduction = isManagerOrExempt 
+          ? 0 
+          : ((contract.alphaDeductionPerDay !== undefined && contract.alphaDeductionPerDay !== 0) ? contract.alphaDeductionPerDay : dailyWage) * att.alphaDays;
 
         // Hitung Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100)
         const empChecklists = (dailyChecklists || []).filter(

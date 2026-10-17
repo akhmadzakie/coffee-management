@@ -282,7 +282,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "inventory",
     ],
 
-    // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama)
+    // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama, tidak perlu clock in)
     MANAGER: [
       "dashboard_manager",
       "dashboard_inventory",
@@ -293,7 +293,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "suppliers",
       "hr",
       "leader_checklist",
-      "attendance_clock",
       "users",
     ],
 

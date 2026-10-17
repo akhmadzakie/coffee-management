@@ -303,6 +303,35 @@ export function ClockIn() {
 
   if (!currentUser) return <div className="p-8 text-center text-slate-500">Silakan login terlebih dahulu.</div>;
 
+  const userPos = (activeEmployee?.position || "").toUpperCase();
+  const userRole = (currentUser?.role || "").toUpperCase();
+  const isManagerOrExempt = userRole === "MANAGER" || userRole === "OWNER" || userRole === "SUPER_ADMIN" ||
+                            userPos.includes("MANAGER") || userPos.includes("MANAJER") || userPos.includes("OWNER");
+
+  if (isManagerOrExempt) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4 text-center">
+        <div className="bg-white p-8 rounded-3xl border border-stone-200/80 shadow-coffee max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto mb-4 shadow-coffee-sm">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
+            Bebas Kewajiban Presensi & Absen
+          </h2>
+          <p className="text-xs text-stone-500 mt-2 leading-relaxed">
+            Sebagai <strong>{currentUser.name} ({currentUser.role})</strong>, Anda dibebaskan dari kewajiban absensi foto selfie, GPS, dan clock in/out harian. Fokus utama Anda adalah supervisi dan pemantauan manajemen operasional toko.
+          </p>
+          <div className="mt-6 p-4 rounded-2xl bg-amber-50/70 border border-amber-200/60 text-left">
+            <p className="text-xs font-bold text-amber-900 mb-1">Kebijakan Operasional:</p>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              Manajer mengawasi kedisiplinan dan checklist staf melalui <strong>Dashboard Pintar Manajer</strong> tanpa perlu mengisi absen pribadi.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       {/* Toast Feedback */}

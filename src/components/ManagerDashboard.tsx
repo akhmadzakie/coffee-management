@@ -4,6 +4,17 @@ import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
 import { ViewState, DailyAttendance } from "../types";
 import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  CartesianGrid,
+} from "recharts";
+import {
   Users,
   Clock,
   Coffee,
@@ -29,6 +40,19 @@ import {
   Calendar,
   CheckCheck,
   Check,
+  DollarSign,
+  Wallet,
+  Activity,
+  ShoppingBag,
+  Truck,
+  BarChart3,
+  Receipt,
+  Flame,
+  Layers,
+  CreditCard,
+  QrCode,
+  Banknote,
+  ArrowUpRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -56,6 +80,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   } = useStore();
 
   const [selectedAttendancePhoto, setSelectedAttendancePhoto] = useState<DailyAttendance | null>(null);
+  const [activeDashboardTab, setActiveDashboardTab] = useState<
+    "overview" | "sales" | "inventory" | "team"
+  >("overview");
 
   // Metrik Ringkas HPP untuk Manager
   const hppStats = useMemo(() => {
@@ -228,7 +255,21 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   }, [dailyAttendances, todayStr]);
 
   const activeEmployees = useMemo(() => {
-    return employees.filter((e) => e.status === "AKTIF");
+    return employees.filter((e) => {
+      const isAktif = e.status === "AKTIF" || (e.status as any) === "ACTIVE" || !e.status;
+      if (!isAktif) return false;
+      const pos = (e.position || "").toUpperCase();
+      const dept = (e.department || "").toUpperCase();
+      const isOfficeOrManager =
+        pos.includes("MANAGER") ||
+        pos.includes("MANAJER") ||
+        dept.includes("MANAGEMENT") ||
+        dept.includes("MANAJEMEN") ||
+        pos.includes("OWNER") ||
+        pos.includes("DIREKTUR") ||
+        pos.includes("KEPALA TOKO");
+      return !isOfficeOrManager;
+    });
   }, [employees]);
 
   // Statistik Kehadiran Hari Ini
@@ -348,6 +389,134 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     return purchaseOrders.filter((po) => po.deliveryStatus === "PENDING");
   }, [purchaseOrders]);
 
+  // Bulan ini YYYY-MM
+  const currentMonthStr = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}`;
+  }, []);
+
+  // Transaksi & Omzet Hari Ini
+  const todaySalesList = useMemo(() => {
+    return salesTransactions.filter((s) => s.date.startsWith(todayStr));
+  }, [salesTransactions, todayStr]);
+
+  const todayRevenue = useMemo(() => {
+    return todaySalesList.reduce((sum, s) => sum + s.totalPrice, 0);
+  }, [todaySalesList]);
+
+  // Transaksi & Omzet Bulan Ini
+  const thisMonthSalesList = useMemo(() => {
+    return salesTransactions.filter((s) => s.date.startsWith(currentMonthStr));
+  }, [salesTransactions, currentMonthStr]);
+
+  const thisMonthRevenue = useMemo(() => {
+    return thisMonthSalesList.reduce((sum, s) => sum + s.totalPrice, 0);
+  }, [thisMonthSalesList]);
+
+  // Breakdown Metode Pembayaran Hari Ini
+  const paymentStats = useMemo(() => {
+    let cash = 0;
+    let qris = 0;
+    let transfer = 0;
+    todaySalesList.forEach((s) => {
+      const m = (s.paymentMethod || "CASH").toUpperCase();
+      if (m.includes("QRIS")) qris += s.totalPrice;
+      else if (m.includes("TRANSFER") || m.includes("EDC") || m.includes("DEBIT")) transfer += s.totalPrice;
+      else cash += s.totalPrice;
+    });
+    return { cash, qris, transfer, total: todayRevenue };
+  }, [todaySalesList, todayRevenue]);
+
+  // Tren Omzet 7 Hari Terakhir
+  const last7DaysChartData = useMemo(() => {
+    const data = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = getLocalDateString(d);
+      const dayLabel = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
+      const daySales = salesTransactions.filter((s) => s.date.startsWith(dateStr));
+      const omzet = daySales.reduce((sum, s) => sum + s.totalPrice, 0);
+      data.push({
+        name: dayLabel,
+        omzet,
+        transaksi: daySales.length,
+      });
+    }
+    return data;
+  }, [salesTransactions]);
+
+  // Jam Ramai Toko Hari Ini (Hourly Traffic 08:00 - 22:00)
+  const hourlyTrafficData = useMemo(() => {
+    const hoursMap: Record<number, { omzet: number; transaksi: number }> = {};
+    for (let h = 8; h <= 22; h++) {
+      hoursMap[h] = { omzet: 0, transaksi: 0 };
+    }
+    todaySalesList.forEach((s) => {
+      try {
+        const timePart = s.time || (s.date.includes("T") ? s.date.split("T")[1] : "");
+        const hour = timePart ? parseInt(timePart.split(":")[0], 10) : new Date(s.date).getHours();
+        if (hour >= 8 && hour <= 22) {
+          hoursMap[hour].omzet += s.totalPrice;
+          hoursMap[hour].transaksi += 1;
+        }
+      } catch {}
+    });
+    return Object.entries(hoursMap).map(([hour, val]) => ({
+      hour: `${hour}:00`,
+      omzet: val.omzet,
+      transaksi: val.transaksi,
+    }));
+  }, [todaySalesList]);
+
+  // Valuasi Total Stok Bahan Baku di Toko
+  const stockValuation = useMemo(() => {
+    let totalValue = 0;
+    ingredients.forEach((ing) => {
+      const cost = Number(ing.costPerUnit || 0);
+      totalValue += ing.currentStock * cost;
+    });
+    const criticalCount = ingredients.filter((i) => i.currentStock <= i.minStock).length;
+    const safeCount = Math.max(0, ingredients.length - criticalCount);
+    return { totalValue, criticalCount, safeCount, totalIngredients: ingredients.length };
+  }, [ingredients]);
+
+  // Top 10 Produk Terlaris Hari Ini dengan Omzet
+  const bestSellersTodayFull = useMemo(() => {
+    const stats: Record<string, { qty: number; revenue: number }> = {};
+    todaySalesList.forEach((s) => {
+      if (!stats[s.menuName]) {
+        stats[s.menuName] = { qty: 0, revenue: 0 };
+      }
+      stats[s.menuName].qty += s.quantitySold;
+      stats[s.menuName].revenue += s.totalPrice;
+    });
+    return Object.entries(stats)
+      .sort((a, b) => b[1].qty - a[1].qty)
+      .slice(0, 10)
+      .map(([name, data]) => ({ name, ...data }));
+  }, [todaySalesList]);
+
+  // Skor Kesehatan Operasional Toko (0 - 100%)
+  const storeHealthScore = useMemo(() => {
+    const attRatio = activeEmployees.length > 0 ? attendanceStats.hadir / activeEmployees.length : 1;
+    const attScore = attRatio * 30;
+
+    const stockRatio = stockValuation.totalIngredients > 0 ? stockValuation.safeCount / stockValuation.totalIngredients : 1;
+    const stockScore = stockRatio * 30;
+
+    const avgProgress = divisionChecklists.length > 0
+      ? divisionChecklists.reduce((acc, d) => acc + d.progress, 0) / divisionChecklists.length
+      : 100;
+    const checklistScore = (avgProgress / 100) * 25;
+
+    const shiftScore = activeShift ? 15 : 8;
+
+    return Math.min(100, Math.round(attScore + stockScore + checklistScore + shiftScore));
+  }, [activeEmployees, attendanceStats, stockValuation, divisionChecklists, activeShift]);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header Banner */}
@@ -379,589 +548,1237 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         </div>
       </div>
 
-      {/* HR Alert Banners if any */}
-      {(expiredContracts.length > 0 || expiringContracts.length > 0) && (
-        <div className="space-y-2">
-          {expiredContracts.length > 0 && (
-            <div className="p-4 bg-rose-50/80 border border-rose-200/80 rounded-2xl flex items-center justify-between text-xs text-rose-900 shadow-coffee-sm">
-              <div className="flex items-center gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>
-                  <strong>Perhatian Manajer:</strong> {expiredContracts.length} karyawan kontraknya telah kedaluwarsa namun masih berstatus aktif.
-                </span>
-              </div>
-              <button
-                onClick={() => onNavigate("hr")}
-                className="font-bold underline hover:text-rose-700 shrink-0 ml-2"
-              >
-                Perbarui Kontrak
-              </button>
-            </div>
-          )}
-          {expiringContracts.length > 0 && (
-            <div className="p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center justify-between text-xs text-amber-900 shadow-coffee-sm">
-              <div className="flex items-center gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  <strong>Pengingat:</strong> {expiringContracts.length} kontrak karyawan akan habis dalam 30 hari ke depan.
-                </span>
-              </div>
-              <button
-                onClick={() => onNavigate("hr")}
-                className="font-bold underline hover:text-amber-700 shrink-0 ml-2"
-              >
-                Lihat HR
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Toast Notifikasi ACC Cepat */}
-      <AnimatePresence>
-        {approvedToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs"
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{approvedToast}</span>
-            </div>
-            <button
-              onClick={() => setApprovedToast(null)}
-              className="font-bold text-emerald-700 hover:text-emerald-900"
-            >
-              Tutup
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Schedule Approval Banner for Manager */}
-      {scheduleApprovalAlerts.length > 0 && (
-        <div className="space-y-3">
-          {scheduleApprovalAlerts.map((alert) => (
-            <div
-              key={alert.weekKey}
-              className="p-5 bg-gradient-to-r from-brand-50/70 via-slate-50 to-brand-50/40 border border-brand-200/80 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm"
-            >
-              <div className="flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shrink-0">
-                  <Calendar className="w-5 h-5 text-brand-600" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      alert.status === "PENDING"
-                        ? "bg-brand-100 text-brand-800 border border-brand-200"
-                        : "bg-slate-200/80 text-slate-700"
-                    }`}>
-                      {alert.status === "PENDING" ? "🔵 Diajukan Leader (Menunggu ACC)" : "⚪ Draft Jadwal Belum Disahkan"}
-                    </span>
-                    <span className="text-xs font-bold text-slate-900">
-                      {alert.weekLabel} ({alert.dateRangeStr})
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {alert.submittedBy 
-                      ? <>Leader <strong>{alert.submittedBy}</strong> (Divisi {alert.divisions.join(", ") || "Tim"}) telah mengajukan <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.</>
-                      : <>Divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> memiliki <strong>{alert.shiftCount} penugasan shift</strong> yang belum disahkan secara resmi.</>
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                <button
-                  onClick={handleNavigateToSchedule}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5"
-                >
-                  <span>Tinjau di Jadwal SDM</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>ACC Sekarang (Sah)</span>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* HPP & Margin Simulator Banner / Quick Command */}
-      <div className="bg-gradient-to-r from-brand-950 via-slate-900 to-brand-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border border-brand-800/40 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-80 h-full bg-radial from-brand-500/15 via-transparent to-transparent pointer-events-none" />
-        <div className="space-y-2 relative z-10 max-w-2xl">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-brand-500/20 text-brand-300 uppercase border border-brand-500/30 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-brand-400" /> Fitur Baru Manajer
+      {/* 4 Smart Executive Management Health Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Penjualan Hari Ini */}
+        <div
+          onClick={() => setActiveDashboardTab("sales")}
+          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-emerald-300 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+              Omzet Hari Ini
             </span>
-            <span className="text-xs text-slate-300 font-medium">
-              Menu Engineering & Profitability
-            </span>
+            <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
+              <DollarSign className="w-4 h-4" />
+            </div>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Calculator className="w-6 h-6 text-brand-400" />
-            Simulasi & Kalkulator HPP Menu
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Hitung biaya bahan baku riil, kemasan takeaway, buffer penyusutan barista (5%), serta simulasi target harga jual & margin laba ideal (food cost 28% - 32%) didukung AI Gemini.
+          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
+            {formatCurrency(todayRevenue)}
           </p>
-
-          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
-            <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
-              <span className="text-slate-300">Resep Terdaftar:</span>
-              <span className="font-bold font-mono text-brand-300">{hppStats.totalRecipes} Menu</span>
-            </div>
-            {hppStats.avgHpp > 0 && (
-              <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
-                <span className="text-slate-300">Rata-rata HPP Bahan:</span>
-                <span className="font-bold font-mono text-emerald-300">~{formatCurrency(hppStats.avgHpp)}</span>
-              </div>
-            )}
-            <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
-              <span className="text-slate-300">Target Food Cost:</span>
-              <span className="font-bold text-brand-200">28% - 32%</span>
-            </div>
+          <div className="flex items-center justify-between text-xs text-stone-500 mt-2">
+            <span>{todaySalesList.length} pesanan kasir</span>
+            <span className="text-emerald-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
+              Lihat Tren <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
         </div>
 
-        <div className="relative z-10 w-full sm:w-auto shrink-0">
-          <button
-            onClick={() => onNavigate("hpp_calculator")}
-            className="w-full sm:w-auto px-6 py-3.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs sm:text-sm rounded-2xl transition-all shadow-md shadow-brand-600/30 flex items-center justify-center gap-2 group cursor-pointer"
-          >
-            <span>Buka Kalkulator HPP</span>
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
+        {/* Card 2: Valuasi Stok Toko */}
+        <div
+          onClick={() => setActiveDashboardTab("inventory")}
+          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-amber-300 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+              Aset Bahan Baku
+            </span>
+            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200">
+              <Package className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
+            {formatCurrency(stockValuation.totalValue)}
+          </p>
+          <div className="flex items-center justify-between text-xs mt-2">
+            <span className={stockValuation.criticalCount > 0 ? "text-rose-600 font-bold" : "text-stone-500"}>
+              {stockValuation.criticalCount > 0
+                ? `⚠️ ${stockValuation.criticalCount} bahan menipis!`
+                : "Semua stok aman"}
+            </span>
+            <span className="text-amber-800 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
+              Cek Stok <ArrowRight className="w-3 h-3" />
+            </span>
+          </div>
         </div>
-      </div>
 
-      {/* Live Operational Section: Kasir & Absensi */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sesi Kasir & Shift Hari Ini */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+        {/* Card 3: Disiplin Kehadiran Staf */}
+        <div
+          onClick={() => setActiveDashboardTab("team")}
+          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-indigo-300 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+              Kehadiran Staf
+            </span>
+            <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200">
+              <Users className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
+            {attendanceStats.hadir} <span className="text-sm font-normal text-stone-500">/ {attendanceStats.total} Hadir</span>
+          </p>
+          <div className="flex items-center justify-between text-xs text-stone-500 mt-2">
+            <span>
+              {attendanceStats.terlambat > 0 ? `${attendanceStats.terlambat} telat` : "Tepat waktu"}
+              {pendingToday.length > 0 && ` · ${pendingToday.length} perlu ACC`}
+            </span>
+            <span className="text-indigo-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
+              Verifikasi <ArrowRight className="w-3 h-3" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Store Health Score */}
+        <div className="p-5 bg-gradient-to-br from-[#241813] to-[#3a2820] text-white rounded-3xl border border-stone-700 shadow-coffee flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                <Store className="w-4 h-4 text-amber-700" />
-                Status Shift Kasir Toko
-              </h2>
-              {activeShift ? (
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  KASIR BUKA
-                </span>
-              ) : (
-                <span className="px-3 py-1 bg-stone-100 text-stone-600 border border-stone-200 text-xs font-bold rounded-full">
-                  SHIFT DITUTUP
-                </span>
-              )}
-            </div>
-
-            {activeShift ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200/60">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-stone-500">Kasir Bertugas:</span>
-                    <span className="font-bold text-stone-900 text-sm">
-                      {cashierUser?.name || "Kasir"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-stone-500">Waktu Mulai Shift:</span>
-                    <span className="font-semibold text-stone-700">
-                      {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-                    <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider mb-1">
-                      Modal Awal Laci
-                    </p>
-                    <p className="text-lg font-bold font-mono text-stone-900">
-                      {formatCurrency(activeShift.startingCash)}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/70 shadow-2xs">
-                    <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider mb-1">
-                      Penjualan Shift Ini
-                    </p>
-                    <p className="text-lg font-bold font-mono text-amber-950">
-                      +{formatCurrency(activeShiftSales)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center bg-stone-50/50 rounded-2xl border border-dashed border-stone-200">
-                <Clock className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                <p className="text-sm font-bold text-stone-700">Belum Ada Shift Kasir Berjalan</p>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  Laci kasir belum dibuka oleh kasir bertugas hari ini.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => onNavigate("shifts")}
-            className="w-full mt-5 py-3 rounded-2xl bg-[#241813] hover:bg-[#1b130f] text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm"
-          >
-            Kelola Shift & Laci Kasir <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Kehadiran Staf Hari Ini (Live Attendance) */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                <Users className="w-4 h-4 text-amber-700" />
-                Kehadiran Staf Hari Ini
-              </h2>
-              <div className="flex items-center gap-2">
-                {pendingToday.length > 0 && (
-                  <button
-                    onClick={() => {
-                      if (confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingToday.length} absensi yang menunggu verifikasi hari ini?`)) {
-                        pendingToday.forEach((att) => {
-                          updateDailyAttendance({
-                            ...att,
-                            approvalStatus: "APPROVED",
-                          });
-                        });
-                      }
-                    }}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors shadow-2xs"
-                    title="Sahkan seluruh absensi yang masih berstatus menunggu verifikasi hari ini"
-                  >
-                    <CheckCheck className="w-3.5 h-3.5" />
-                    <span>Sahkan Semua ({pendingToday.length})</span>
-                  </button>
-                )}
-                <span className="text-xs font-semibold text-stone-500">
-                  Total: {attendanceStats.total} Karyawan
-                </span>
-              </div>
-            </div>
-
-            {/* Metric Bars */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              <div className="p-3 bg-emerald-50/80 rounded-2xl border border-emerald-200/70 text-center">
-                <p className="text-lg font-black font-mono text-emerald-800">{attendanceStats.hadir}</p>
-                <p className="text-[10px] font-bold text-emerald-700 uppercase">Hadir</p>
-              </div>
-              <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/70 text-center">
-                <p className="text-lg font-black font-mono text-amber-800">{attendanceStats.terlambat}</p>
-                <p className="text-[10px] font-bold text-amber-700 uppercase">Telat</p>
-              </div>
-              <div className="p-3 bg-sky-50/80 rounded-2xl border border-sky-200/70 text-center">
-                <p className="text-lg font-black font-mono text-sky-800">{attendanceStats.izinSakit}</p>
-                <p className="text-[10px] font-bold text-sky-700 uppercase">Izin/Sakit</p>
-              </div>
-              <div className="p-3 bg-stone-100/80 rounded-2xl border border-stone-200 text-center">
-                <p className="text-lg font-black font-mono text-stone-700">{attendanceStats.belumHadir}</p>
-                <p className="text-[10px] font-bold text-stone-500 uppercase">Belum</p>
-              </div>
-            </div>
-
-            {/* List Absensi Terbaru dengan Tombol Preview Foto Selfie & Verifikasi */}
-            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-              {todayAttendances.map((att) => {
-                const emp = employees.find((e) => e.id === att.employeeId);
-                const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
-                const appStatus = att.approvalStatus || "PENDING";
-
-                return (
-                  <div
-                    key={att.id}
-                    className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
-                  >
-                    <div
-                      className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 cursor-pointer"
-                      onClick={() => setSelectedAttendancePhoto(att)}
-                      title="Klik untuk membuka bukti foto & verifikasi"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center shrink-0 text-xs">
-                        {emp?.name.charAt(0) || "U"}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-stone-900 truncate">{emp?.name}</p>
-                        <p className="text-[10px] text-stone-500 truncate">
-                          {att.clockInTime
-                            ? `Clock in: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`
-                            : att.notes || "Tidak hadir"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Badge Kehadiran */}
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          att.status === "HADIR"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : att.status === "TERLAMBAT"
-                              ? "bg-amber-100 text-amber-800"
-                              : att.status === "ALPHA"
-                                ? "bg-rose-100 text-rose-800"
-                                : "bg-stone-200 text-stone-700"
-                        }`}
-                      >
-                        {att.status}
-                      </span>
-
-                      {/* Badge Pengesahan Manager */}
-                      {appStatus === "APPROVED" ? (
-                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5" title="Telah Disahkan oleh Manager">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Sah</span>
-                        </span>
-                      ) : appStatus === "REJECTED" ? (
-                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-0.5" title="Ditolak oleh Manager (Set Alpha)">
-                          <XCircle className="w-3 h-3 text-rose-600" />
-                          <span>Ditolak</span>
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-0.5" title="Menunggu Verifikasi Manager">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          <span>Review</span>
-                        </span>
-                      )}
-
-                      {/* Quick Sahkan Button if not yet approved and not alpha */}
-                      {appStatus !== "APPROVED" && att.status !== "ALPHA" && (
-                        <button
-                          onClick={() => updateDailyAttendance({ ...att, approvalStatus: "APPROVED" })}
-                          title="Sahkan langsung dengan 1-klik"
-                          className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs transition-colors"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {/* Detail Button (Eye / Camera) */}
-                      <button
-                        onClick={() => setSelectedAttendancePhoto(att)}
-                        title="Lihat Bukti Foto, GPS, & Detail Verifikasi"
-                        className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 shadow-2xs transition-colors"
-                      >
-                        {hasPhoto ? (
-                          <Camera className="w-3.5 h-3.5 text-amber-800" />
-                        ) : (
-                          <Eye className="w-3.5 h-3.5 text-stone-600" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {todayAttendances.length === 0 && (
-                <div className="py-6 text-center text-xs text-stone-400">
-                  Belum ada catatan absensi yang masuk hari ini.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={() => onNavigate("hr")}
-            className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
-          >
-            Buka Rekap Absensi Seluruh Karyawan <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Progres Checklist Jobdesk Divisi & Peringatan Bahan Menipis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Checklist Jobdesk Divisi Hari Ini */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4 text-amber-700" />
-                Progres Checklist Jobdesk Divisi
-              </h2>
-              <p className="text-xs text-stone-500 mt-0.5">
-                Evaluasi penyelesaian tugas operasional harian tiap tim.
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate("leader_checklist")}
-              className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1"
-            >
-              Buka Checklist <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {divisionChecklists.map((div) => (
-              <div key={div.id} className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60">
-                <div className="flex justify-between items-center mb-2">
-                  <div>
-                    <p className="text-xs font-bold text-stone-800">{div.name}</p>
-                    <p className="text-[10px] text-stone-500">
-                      {div.submittedCount} checklist tercatat ({div.staffCount} personil)
-                    </p>
-                  </div>
-                  <span className="text-xs font-black font-mono text-stone-900">
-                    {div.progress}%
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 rounded-full ${
-                      div.progress === 100
-                        ? "bg-emerald-600"
-                        : div.progress > 50
-                          ? "bg-amber-600"
-                          : "bg-rose-500"
-                    }`}
-                    style={{ width: `${div.progress}%` }}
-                  />
-                </div>
-
-                {div.notes && div.notes.length > 0 && (
-                  <div className="mt-2.5 p-2 bg-amber-50/80 border border-amber-200/70 rounded-xl text-[11px] text-amber-950 flex items-start gap-1.5">
-                    <span className="font-bold shrink-0 text-amber-800">Catatan:</span>
-                    <span className="italic truncate" title={div.notes.join("; ")}>
-                      "{div.notes.join("; ")}"
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Peringatan Stok Kritis & PO Bahan Baku */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600" />
-                  Peringatan Bahan Baku Menipis
-                </h2>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Bahan baku di bawah batas aman yang perlu segera dipesan ulang.
-                </p>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                {lowStockIngredients.length} Kritis
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-200/80">
+                Skor Operasional Toko
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Smart AI
               </span>
             </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black font-mono text-white tracking-tight">
+                {storeHealthScore}%
+              </span>
+              <span className="text-xs font-semibold text-emerald-400">
+                {storeHealthScore >= 85 ? "Optimal" : storeHealthScore >= 70 ? "Baik" : "Perhatian"}
+              </span>
+            </div>
+          </div>
+          <p className="text-[11px] text-stone-300 mt-2">
+            {storeHealthScore >= 85
+              ? "Semua divisi berjalan lancar sesuai SOP."
+              : "Periksa bahan menipis dan tugas checklist yang tertunda."}
+          </p>
+        </div>
+      </div>
 
-            <div className="space-y-2.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-              {lowStockIngredients.slice(0, 5).map((ing) => (
+      {/* Smart Dashboard Tab Switcher */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-stone-100 rounded-2xl border border-stone-200">
+        <button
+          onClick={() => setActiveDashboardTab("overview")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeDashboardTab === "overview"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+          }`}
+        >
+          <Activity className="w-4 h-4 text-amber-700" />
+          <span>Command Center</span>
+        </button>
+        <button
+          onClick={() => setActiveDashboardTab("sales")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeDashboardTab === "sales"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+          }`}
+        >
+          <TrendingUp className="w-4 h-4 text-emerald-600" />
+          <span>Tracking Penjualan & Omzet</span>
+        </button>
+        <button
+          onClick={() => setActiveDashboardTab("inventory")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeDashboardTab === "inventory"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+          }`}
+        >
+          <Package className="w-4 h-4 text-brand-600" />
+          <span>Tracking Stok & Bahan Baku</span>
+          {lowStockIngredients.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+              {lowStockIngredients.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveDashboardTab("team")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeDashboardTab === "team"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+          }`}
+        >
+          <Users className="w-4 h-4 text-indigo-600" />
+          <span>Tracking Tim & SOP</span>
+          {scheduleApprovalAlerts.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black">
+              {scheduleApprovalAlerts.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── TAB 1: TRACKING PENJUALAN & OMZET PINTAR ─────────────────────────── */}
+      {activeDashboardTab === "sales" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Ringkasan Angka Penjualan */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Omzet Hari Ini
+              </span>
+              <p className="text-2xl font-black font-mono text-emerald-800">
+                {formatCurrency(todayRevenue)}
+              </p>
+              <p className="text-xs text-stone-500 mt-1">
+                Dari {todaySalesList.length} transaksi di kasir toko
+              </p>
+            </div>
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Omzet Bulan Ini ({new Date().toLocaleDateString("id-ID", { month: "long" })})
+              </span>
+              <p className="text-2xl font-black font-mono text-stone-900">
+                {formatCurrency(thisMonthRevenue)}
+              </p>
+              <p className="text-xs text-stone-500 mt-1">
+                Total {thisMonthSalesList.length} pesanan bulan ini
+              </p>
+            </div>
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Rata-rata Nilai Pesanan (AOV)
+              </span>
+              <p className="text-2xl font-black font-mono text-amber-900">
+                {formatCurrency(todaySalesList.length > 0 ? Math.round(todayRevenue / todaySalesList.length) : 0)}
+              </p>
+              <p className="text-xs text-stone-500 mt-1">
+                Rata-rata belanja per struk kasir
+              </p>
+            </div>
+          </div>
+
+          {/* Grafik Tren 7 Hari Terakhir & Jam Ramai */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Grafik Tren Omzet 7 Hari */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-emerald-600" />
+                    Tren Penjualan 7 Hari Terakhir
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-0.5">Grafik dinamika omzet harian toko</p>
+                </div>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={last7DaysChartData}>
+                    <defs>
+                      <linearGradient id="managerOmzetGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                    <YAxis
+                      stroke="#94a3b8"
+                      fontSize={11}
+                      tickLine={false}
+                      tickFormatter={(val) => `${val / 1000}k`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any) => [formatCurrency(Number(val)), "Omzet"]}
+                      labelStyle={{ fontWeight: "bold" }}
+                      contentStyle={{ borderRadius: "1rem", border: "1px solid #e2e8f0" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="omzet"
+                      stroke="#059669"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#managerOmzetGrad)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Jam Ramai Toko (Peak Hours Traffic) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-700" />
+                    Jam Ramai Toko (Peak Hours)
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-0.5">Jumlah transaksi per jam hari ini</p>
+                </div>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={hourlyTrafficData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="hour" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
+                    <RechartsTooltip
+                      formatter={(val: any, name: any) => [
+                        name === "omzet" ? formatCurrency(Number(val)) : `${val} pesanan`,
+                        name === "omzet" ? "Omzet" : "Transaksi",
+                      ]}
+                      contentStyle={{ borderRadius: "1rem", border: "1px solid #e2e8f0" }}
+                    />
+                    <Bar dataKey="transaksi" fill="#d97706" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Metode Pembayaran & Top 10 Menu */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Metode Pembayaran */}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <h3 className="text-base font-bold text-stone-900 mb-1 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-amber-700" />
+                Metode Pembayaran
+              </h3>
+              <p className="text-xs text-stone-500 mb-4">Porsi kas masuk berdasarkan jenis channel</p>
+
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="flex items-center gap-1.5 text-stone-700">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Tunai / Cash
+                    </span>
+                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.cash)}</span>
+                  </div>
+                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{
+                        width: `${paymentStats.total > 0 ? (paymentStats.cash / paymentStats.total) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="flex items-center gap-1.5 text-stone-700">
+                      <QrCode className="w-3.5 h-3.5 text-sky-600" /> QRIS / Statis / Dinamis
+                    </span>
+                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.qris)}</span>
+                  </div>
+                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sky-500 rounded-full"
+                      style={{
+                        width: `${paymentStats.total > 0 ? (paymentStats.qris / paymentStats.total) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-bold mb-1">
+                    <span className="flex items-center gap-1.5 text-stone-700">
+                      <CreditCard className="w-3.5 h-3.5 text-purple-600" /> Transfer / EDC / Debit
+                    </span>
+                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.transfer)}</span>
+                  </div>
+                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-purple-500 rounded-full"
+                      style={{
+                        width: `${paymentStats.total > 0 ? (paymentStats.transfer / paymentStats.total) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Top 10 Menu Terlaris Hari Ini */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <h3 className="text-base font-bold text-stone-900 mb-1 flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-600" />
+                10 Menu Paling Laris Hari Ini
+              </h3>
+              <p className="text-xs text-stone-500 mb-4">Peringkat menu dengan volume penjualan tertinggi</p>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                {bestSellersTodayFull.map((item, idx) => (
+                  <div
+                    key={item.name}
+                    className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-[10px]">
+                        #{idx + 1}
+                      </span>
+                      <div>
+                        <p className="font-bold text-stone-900">{item.name}</p>
+                        <p className="text-[10px] text-stone-500">{item.qty} cup/porsi terjual</p>
+                      </div>
+                    </div>
+                    <span className="font-bold font-mono text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </div>
+                ))}
+
+                {bestSellersTodayFull.length === 0 && (
+                  <div className="py-8 text-center text-xs text-stone-400">
+                    Belum ada menu yang terjual hari ini.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 2: TRACKING STOK & INVENTORI PINTAR ─────────────────────────── */}
+      {activeDashboardTab === "inventory" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Total Nilai Aset Bahan Baku
+              </span>
+              <p className="text-2xl font-black font-mono text-stone-900">
+                {formatCurrency(stockValuation.totalValue)}
+              </p>
+              <p className="text-xs text-stone-500 mt-1">
+                Dari total {stockValuation.totalIngredients} item bahan terdaftar
+              </p>
+            </div>
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Status Stok Bahan
+              </span>
+              <p className="text-2xl font-black font-mono text-emerald-800">
+                {stockValuation.safeCount} <span className="text-sm font-normal text-stone-500">Aman</span>
+              </p>
+              <p className="text-xs text-rose-600 font-bold mt-1">
+                {stockValuation.criticalCount} item di bawah batas minimum
+              </p>
+            </div>
+            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Purchase Order Berjalan
+              </span>
+              <p className="text-2xl font-black font-mono text-amber-900">
+                {pendingDeliveries.length} PO
+              </p>
+              <p className="text-xs text-stone-500 mt-1">
+                Menunggu pengiriman & serah terima barang dari supplier
+              </p>
+            </div>
+          </div>
+
+          {/* Tabel Bahan Kritis */}
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  Daftar Bahan Baku Kritis (Perlu Restock Segera)
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Bahan baku yang sisa stoknya sudah di bawah batas minimum operasional
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate("purchases")}
+                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Buat PO Pembelian Bahan</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {lowStockIngredients.map((ing) => (
                 <div
                   key={ing.id}
-                  className="p-3 rounded-2xl bg-rose-50/50 border border-rose-200/60 flex items-center justify-between text-xs"
+                  className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
                 >
                   <div>
-                    <p className="font-bold text-stone-900">{ing.name}</p>
-                    <p className="text-[10px] text-stone-500">
-                      Batas Aman: {ing.minStock} {ing.unit}
+                    <p className="font-bold text-stone-900 text-sm">{ing.name}</p>
+                    <p className="text-stone-500 mt-0.5">
+                      Batas Aman: {ing.minStock} {ing.unit} · Harga Satuan: ~{formatCurrency(Number(ing.costPerUnit || 0))}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold font-mono text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold font-mono text-rose-800 bg-rose-100/90 px-3 py-1 rounded-xl text-sm border border-rose-200">
                       Sisa: {ing.currentStock} {ing.unit}
                     </span>
+                    <button
+                      onClick={() => onNavigate("purchases")}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 font-bold text-xs transition"
+                    >
+                      Pesan ke Supplier
+                    </button>
                   </div>
                 </div>
               ))}
 
               {lowStockIngredients.length === 0 && (
-                <div className="py-8 text-center text-xs text-stone-400">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                  Semua stok bahan baku saat ini berada di atas batas minimum aman.
+                <div className="py-12 text-center text-xs text-stone-500 bg-stone-50 rounded-2xl border border-stone-200/60">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
+                  <p className="font-bold text-stone-700 text-sm">Semua Stok Bahan Aman</p>
+                  <p className="text-stone-400 mt-0.5">Tidak ada bahan baku yang berada di bawah batas minimum.</p>
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
 
-            {pendingDeliveries.length > 0 && (
-              <div className="mt-4 p-3 rounded-2xl bg-amber-50/70 border border-amber-200/70 text-xs text-amber-900 flex items-center justify-between">
-                <span>Ada <strong>{pendingDeliveries.length} Purchase Order</strong> menunggu penerimaan barang.</span>
-                <button
-                  onClick={() => onNavigate("purchases")}
-                  className="font-bold underline hover:text-amber-950 shrink-0 ml-2"
+      {/* ── TAB 3: TRACKING TIM & SOP PINTAR ─────────────────────────────────── */}
+      {activeDashboardTab === "team" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Schedule Approval Banner */}
+          {scheduleApprovalAlerts.length > 0 && (
+            <div className="space-y-3">
+              {scheduleApprovalAlerts.map((alert) => (
+                <div
+                  key={alert.weekKey}
+                  className="p-5 bg-gradient-to-r from-brand-50/70 via-slate-50 to-brand-50/40 border border-brand-200/80 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm"
                 >
-                  Cek PO
-                </button>
-              </div>
-            )}
-          </div>
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5 text-brand-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          alert.status === "PENDING"
+                            ? "bg-brand-100 text-brand-800 border border-brand-200"
+                            : "bg-slate-200/80 text-slate-700"
+                        }`}>
+                          {alert.status === "PENDING" ? "🔵 Diajukan Leader (Menunggu ACC)" : "⚪ Draft Jadwal Belum Disahkan"}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {alert.weekLabel} ({alert.dateRangeStr})
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {alert.submittedBy 
+                          ? <>Leader <strong>{alert.submittedBy}</strong> (Divisi {alert.divisions.join(", ") || "Tim"}) telah mengajukan <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.</>
+                          : <>Divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> memiliki <strong>{alert.shiftCount} penugasan shift</strong> yang belum disahkan secara resmi.</>
+                        }
+                      </p>
+                    </div>
+                  </div>
 
-          <button
-            onClick={() => onNavigate("inventory")}
-            className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
-          >
-            Buka Inventori & Order Bahan <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Snapshot Menu Terlaris Hari Ini */}
-      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-amber-700" />
-              Menu Terlaris Hari Ini (Best Sellers)
-            </h2>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Menu yang paling banyak terjual oleh kasir hari ini.
-            </p>
-          </div>
-          <button
-            onClick={() => onNavigate("import_sales")}
-            className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1"
-          >
-            Lihat Semua Penjualan <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {bestSellersToday.map((item, idx) => (
-            <div
-              key={item.name}
-              className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60 flex flex-col justify-between"
-            >
-              <div>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
-                  #{idx + 1}
-                </span>
-                <p className="text-xs font-bold text-stone-900 mt-2 truncate">{item.name}</p>
-              </div>
-              <p className="text-lg font-black font-mono text-amber-950 mt-2">
-                {item.qty} <span className="text-xs font-normal text-stone-500">cup/porsi</span>
-              </p>
-            </div>
-          ))}
-
-          {bestSellersToday.length === 0 && (
-            <div className="col-span-full py-8 text-center text-xs text-stone-400">
-              Belum ada data transaksi penjualan yang tercatat hari ini.
+                  <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <button
+                      onClick={handleNavigateToSchedule}
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                    >
+                      <span>Tinjau di Jadwal SDM</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>ACC Sekarang (Sah)</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
+
+          {/* Grid Absensi & Checklist */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Kehadiran Staf */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-700" />
+                  Presensi & Selfie Karyawan
+                </h3>
+                <button
+                  onClick={() => onNavigate("hr")}
+                  className="text-xs font-bold text-amber-800 hover:text-amber-900"
+                >
+                  Buka HR Management →
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                {todayAttendances.map((att) => {
+                  const emp = employees.find((e) => e.id === att.employeeId);
+                  const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
+                  return (
+                    <div
+                      key={att.id}
+                      className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-xs">
+                          {emp?.name.charAt(0) || "U"}
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-900">{emp?.name}</p>
+                          <p className="text-[10px] text-stone-500">
+                            {att.clockInTime ? `Masuk: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}` : "Tidak hadir"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          att.status === "HADIR" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {att.status}
+                        </span>
+                        <button
+                          onClick={() => setSelectedAttendancePhoto(att)}
+                          className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700"
+                          title="Lihat Foto Selfie & GPS"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-amber-800" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Kepatuhan Checklist Jobdesk Divisi */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-amber-700" />
+                  Kepatuhan Checklist Jobdesk Divisi
+                </h3>
+                <button
+                  onClick={() => onNavigate("leader_checklist")}
+                  className="text-xs font-bold text-amber-800 hover:text-amber-900"
+                >
+                  Buka Checklist →
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {divisionChecklists.map((div) => (
+                  <div key={div.id} className="p-4 rounded-2xl bg-stone-50 border border-stone-200/60">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="font-bold text-xs text-stone-900">{div.name}</span>
+                      <span className="font-mono font-bold text-xs text-stone-900">{div.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          div.progress === 100 ? "bg-emerald-600" : div.progress > 50 ? "bg-amber-600" : "bg-rose-500"
+                        }`}
+                        style={{ width: `${div.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── TAB 4: OVERVIEW / COMMAND CENTER (DEFAULT VIEW) ────────────────── */}
+      {activeDashboardTab === "overview" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* HR Alert Banners if any */}
+          {(expiredContracts.length > 0 || expiringContracts.length > 0) && (
+            <div className="space-y-2">
+              {expiredContracts.length > 0 && (
+                <div className="p-4 bg-rose-50/80 border border-rose-200/80 rounded-2xl flex items-center justify-between text-xs text-rose-900 shadow-coffee-sm">
+                  <div className="flex items-center gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>
+                      <strong>Perhatian Manajer:</strong> {expiredContracts.length} karyawan kontraknya telah kedaluwarsa namun masih berstatus aktif.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("hr")}
+                    className="font-bold underline hover:text-rose-700 shrink-0 ml-2"
+                  >
+                    Perbarui Kontrak
+                  </button>
+                </div>
+              )}
+              {expiringContracts.length > 0 && (
+                <div className="p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center justify-between text-xs text-amber-900 shadow-coffee-sm">
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>Pengingat:</strong> {expiringContracts.length} kontrak karyawan akan habis dalam 30 hari ke depan.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("hr")}
+                    className="font-bold underline hover:text-amber-700 shrink-0 ml-2"
+                  >
+                    Lihat HR
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Toast Notifikasi ACC Cepat */}
+          <AnimatePresence>
+            {approvedToast && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{approvedToast}</span>
+                </div>
+                <button
+                  onClick={() => setApprovedToast(null)}
+                  className="font-bold text-emerald-700 hover:text-emerald-900"
+                >
+                  Tutup
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Schedule Approval Banner for Manager */}
+          {scheduleApprovalAlerts.length > 0 && (
+            <div className="space-y-3">
+              {scheduleApprovalAlerts.map((alert) => (
+                <div
+                  key={alert.weekKey}
+                  className="p-5 bg-gradient-to-r from-brand-50/70 via-slate-50 to-brand-50/40 border border-brand-200/80 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm"
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5 text-brand-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          alert.status === "PENDING"
+                            ? "bg-brand-100 text-brand-800 border border-brand-200"
+                            : "bg-slate-200/80 text-slate-700"
+                        }`}>
+                          {alert.status === "PENDING" ? "🔵 Diajukan Leader (Menunggu ACC)" : "⚪ Draft Jadwal Belum Disahkan"}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {alert.weekLabel} ({alert.dateRangeStr})
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {alert.submittedBy 
+                          ? <>Leader <strong>{alert.submittedBy}</strong> (Divisi {alert.divisions.join(", ") || "Tim"}) telah mengajukan <strong>{alert.shiftCount} penugasan shift</strong> dan menunggu pengesahan resmi dari Anda.</>
+                          : <>Divisi <strong>{alert.divisions.join(", ") || "Tim"}</strong> memiliki <strong>{alert.shiftCount} penugasan shift</strong> yang belum disahkan secara resmi.</>
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <button
+                      onClick={handleNavigateToSchedule}
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                    >
+                      <span>Tinjau di Jadwal SDM</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>ACC Sekarang (Sah)</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* HPP & Margin Simulator Banner / Quick Command */}
+          <div className="bg-gradient-to-r from-brand-950 via-slate-900 to-brand-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border border-brand-800/40 relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-80 h-full bg-radial from-brand-500/15 via-transparent to-transparent pointer-events-none" />
+            <div className="space-y-2 relative z-10 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-brand-500/20 text-brand-300 uppercase border border-brand-500/30 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-brand-400" /> Fitur Baru Manajer
+                </span>
+                <span className="text-xs text-slate-300 font-medium">
+                  Menu Engineering & Profitability
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <Calculator className="w-6 h-6 text-brand-400" />
+                Simulasi & Kalkulator HPP Menu
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Hitung biaya bahan baku riil, kemasan takeaway, buffer penyusutan barista (5%), serta simulasi target harga jual & margin laba ideal (food cost 28% - 32%) didukung AI Gemini.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+                <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+                  <span className="text-slate-300">Resep Terdaftar:</span>
+                  <span className="font-bold font-mono text-brand-300">{hppStats.totalRecipes} Menu</span>
+                </div>
+                {hppStats.avgHpp > 0 && (
+                  <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+                    <span className="text-slate-300">Rata-rata HPP Bahan:</span>
+                    <span className="font-bold font-mono text-emerald-300">~{formatCurrency(hppStats.avgHpp)}</span>
+                  </div>
+                )}
+                <div className="px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-1.5">
+                  <span className="text-slate-300">Target Food Cost:</span>
+                  <span className="font-bold text-brand-200">28% - 32%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative z-10 w-full sm:w-auto shrink-0">
+              <button
+                onClick={() => onNavigate("hpp_calculator")}
+                className="w-full sm:w-auto px-6 py-3.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs sm:text-sm rounded-2xl transition-all shadow-md shadow-brand-600/30 flex items-center justify-center gap-2 group cursor-pointer"
+              >
+                <span>Buka Kalkulator HPP</span>
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              </button>
+            </div>
+          </div>
+
+          {/* Live Operational Section: Kasir & Absensi */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sesi Kasir & Shift Hari Ini */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <Store className="w-4 h-4 text-amber-700" />
+                    Status Shift Kasir Toko
+                  </h2>
+                  {activeShift ? (
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      KASIR BUKA
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 bg-stone-100 text-stone-600 border border-stone-200 text-xs font-bold rounded-full">
+                      SHIFT DITUTUP
+                    </span>
+                  )}
+                </div>
+
+                {activeShift ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200/60">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-stone-500">Kasir Bertugas:</span>
+                        <span className="font-bold text-stone-900 text-sm">
+                          {cashierUser?.name || "Kasir"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-stone-500">Waktu Mulai Shift:</span>
+                        <span className="font-semibold text-stone-700">
+                          {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
+                        <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider mb-1">
+                          Modal Awal Laci
+                        </p>
+                        <p className="text-lg font-bold font-mono text-stone-900">
+                          {formatCurrency(activeShift.startingCash)}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200/70 shadow-2xs">
+                        <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider mb-1">
+                          Penjualan Shift Ini
+                        </p>
+                        <p className="text-lg font-bold font-mono text-amber-950">
+                          +{formatCurrency(activeShiftSales)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center bg-stone-50/50 rounded-2xl border border-dashed border-stone-200">
+                    <Clock className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-stone-700">Belum Ada Shift Kasir Berjalan</p>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      Laci kasir belum dibuka oleh kasir bertugas hari ini.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => onNavigate("pos_cashier")}
+                className="w-full mt-5 py-3 rounded-2xl bg-[#241813] hover:bg-[#1b130f] text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm cursor-pointer"
+              >
+                Buka Terminal POS Kasir <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Kehadiran Staf Hari Ini (Live Attendance) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <Users className="w-4 h-4 text-amber-700" />
+                    Kehadiran Staf Hari Ini
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {pendingToday.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingToday.length} absensi yang menunggu verifikasi hari ini?`)) {
+                            pendingToday.forEach((att) => {
+                              updateDailyAttendance({
+                                ...att,
+                                approvalStatus: "APPROVED",
+                              });
+                            });
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors shadow-2xs"
+                        title="Sahkan seluruh absensi yang masih berstatus menunggu verifikasi hari ini"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        <span>Sahkan Semua ({pendingToday.length})</span>
+                      </button>
+                    )}
+                    <span className="text-xs font-semibold text-stone-500">
+                      Total: {attendanceStats.total} Karyawan
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metric Bars */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  <div className="p-3 bg-emerald-50/80 rounded-2xl border border-emerald-200/70 text-center">
+                    <p className="text-lg font-black font-mono text-emerald-800">{attendanceStats.hadir}</p>
+                    <p className="text-[10px] font-bold text-emerald-700 uppercase">Hadir</p>
+                  </div>
+                  <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/70 text-center">
+                    <p className="text-lg font-black font-mono text-amber-800">{attendanceStats.terlambat}</p>
+                    <p className="text-[10px] font-bold text-amber-700 uppercase">Telat</p>
+                  </div>
+                  <div className="p-3 bg-sky-50/80 rounded-2xl border border-sky-200/70 text-center">
+                    <p className="text-lg font-black font-mono text-sky-800">{attendanceStats.izinSakit}</p>
+                    <p className="text-[10px] font-bold text-sky-700 uppercase">Izin/Sakit</p>
+                  </div>
+                  <div className="p-3 bg-stone-100/80 rounded-2xl border border-stone-200 text-center">
+                    <p className="text-lg font-black font-mono text-stone-700">{attendanceStats.belumHadir}</p>
+                    <p className="text-[10px] font-bold text-stone-500 uppercase">Belum</p>
+                  </div>
+                </div>
+
+                {/* List Absensi Terbaru dengan Tombol Preview Foto Selfie & Verifikasi */}
+                <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                  {todayAttendances.map((att) => {
+                    const emp = employees.find((e) => e.id === att.employeeId);
+                    const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
+                    const appStatus = att.approvalStatus || "PENDING";
+
+                    return (
+                      <div
+                        key={att.id}
+                        className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
+                      >
+                        <div
+                          className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 cursor-pointer"
+                          onClick={() => setSelectedAttendancePhoto(att)}
+                          title="Klik untuk membuka bukti foto & verifikasi"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center shrink-0 text-xs">
+                            {emp?.name.charAt(0) || "U"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-stone-900 truncate">{emp?.name}</p>
+                            <p className="text-[10px] text-stone-500 truncate">
+                              {att.clockInTime
+                                ? `Clock in: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`
+                                : att.notes || "Tidak hadir"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Badge Kehadiran */}
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              att.status === "HADIR"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : att.status === "TERLAMBAT"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : att.status === "ALPHA"
+                                    ? "bg-rose-100 text-rose-800"
+                                    : "bg-stone-200 text-stone-700"
+                            }`}
+                          >
+                            {att.status}
+                          </span>
+
+                          {/* Badge Pengesahan Manager */}
+                          {appStatus === "APPROVED" ? (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5" title="Telah Disahkan oleh Manager">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Sah</span>
+                            </span>
+                          ) : appStatus === "REJECTED" ? (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-0.5" title="Ditolak oleh Manager (Set Alpha)">
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Ditolak</span>
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-0.5" title="Menunggu Verifikasi Manager">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              <span>Review</span>
+                            </span>
+                          )}
+
+                          {/* Quick Sahkan Button if not yet approved and not alpha */}
+                          {appStatus !== "APPROVED" && att.status !== "ALPHA" && (
+                            <button
+                              onClick={() => updateDailyAttendance({ ...att, approvalStatus: "APPROVED" })}
+                              title="Sahkan langsung dengan 1-klik"
+                              className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs transition-colors"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* Detail Button (Eye / Camera) */}
+                          <button
+                            onClick={() => setSelectedAttendancePhoto(att)}
+                            title="Lihat Bukti Foto, GPS, & Detail Verifikasi"
+                            className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 shadow-2xs transition-colors"
+                          >
+                            {hasPhoto ? (
+                              <Camera className="w-3.5 h-3.5 text-amber-800" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5 text-stone-600" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {todayAttendances.length === 0 && (
+                    <div className="py-6 text-center text-xs text-stone-400">
+                      Belum ada catatan absensi yang masuk hari ini.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => onNavigate("hr")}
+                className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                Buka Rekap Absensi Seluruh Karyawan <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Progres Checklist Jobdesk Divisi & Peringatan Bahan Menipis */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Checklist Jobdesk Divisi Hari Ini */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-amber-700" />
+                    Progres Checklist Jobdesk Divisi
+                  </h2>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    Evaluasi penyelesaian tugas operasional harian tiap tim.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate("leader_checklist")}
+                  className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
+                >
+                  Buka Checklist <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {divisionChecklists.map((div) => (
+                  <div key={div.id} className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60">
+                    <div className="flex justify-between items-center mb-2">
+                      <div>
+                        <p className="text-xs font-bold text-stone-800">{div.name}</p>
+                        <p className="text-[10px] text-stone-500">
+                          {div.submittedCount} checklist tercatat ({div.staffCount} personil)
+                        </p>
+                      </div>
+                      <span className="text-xs font-black font-mono text-stone-900">
+                        {div.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          div.progress === 100
+                            ? "bg-emerald-600"
+                            : div.progress > 50
+                              ? "bg-amber-600"
+                              : "bg-rose-500"
+                        }`}
+                        style={{ width: `${div.progress}%` }}
+                      />
+                    </div>
+
+                    {div.notes && div.notes.length > 0 && (
+                      <div className="mt-2.5 p-2 bg-amber-50/80 border border-amber-200/70 rounded-xl text-[11px] text-amber-950 flex items-start gap-1.5">
+                        <span className="font-bold shrink-0 text-amber-800">Catatan:</span>
+                        <span className="italic truncate" title={div.notes.join("; ")}>
+                          "{div.notes.join("; ")}"
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Peringatan Stok Kritis & PO Bahan Baku */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      Peringatan Bahan Baku Menipis
+                    </h2>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Bahan baku di bawah batas aman yang perlu segera dipesan ulang.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    {lowStockIngredients.length} Kritis
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                  {lowStockIngredients.slice(0, 5).map((ing) => (
+                    <div
+                      key={ing.id}
+                      className="p-3 rounded-2xl bg-rose-50/50 border border-rose-200/60 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <p className="font-bold text-stone-900">{ing.name}</p>
+                        <p className="text-[10px] text-stone-500">
+                          Batas Aman: {ing.minStock} {ing.unit}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold font-mono text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-lg">
+                          Sisa: {ing.currentStock} {ing.unit}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {lowStockIngredients.length === 0 && (
+                    <div className="py-8 text-center text-xs text-stone-400">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                      Semua stok bahan baku saat ini berada di atas batas minimum aman.
+                    </div>
+                  )}
+                </div>
+
+                {pendingDeliveries.length > 0 && (
+                  <div className="mt-4 p-3 rounded-2xl bg-amber-50/70 border border-amber-200/70 text-xs text-amber-900 flex items-center justify-between">
+                    <span>Ada <strong>{pendingDeliveries.length} Purchase Order</strong> menunggu penerimaan barang.</span>
+                    <button
+                      onClick={() => onNavigate("purchases")}
+                      className="font-bold underline hover:text-amber-950 shrink-0 ml-2 cursor-pointer"
+                    >
+                      Cek PO
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => onNavigate("inventory")}
+                className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                Buka Inventori & Order Bahan <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Snapshot Menu Terlaris Hari Ini */}
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-amber-700" />
+                  Menu Terlaris Hari Ini (Best Sellers)
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Menu yang paling banyak terjual oleh kasir hari ini.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveDashboardTab("sales")}
+                className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
+              >
+                Lihat Analisis Penjualan Lengkap <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {bestSellersToday.map((item, idx) => (
+                <div
+                  key={item.name}
+                  className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60 flex flex-col justify-between"
+                >
+                  <div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
+                      #{idx + 1}
+                    </span>
+                    <p className="text-xs font-bold text-stone-900 mt-2 truncate">{item.name}</p>
+                  </div>
+                  <p className="text-lg font-black font-mono text-amber-950 mt-2">
+                    {item.qty} <span className="text-xs font-normal text-stone-500">cup/porsi</span>
+                  </p>
+                </div>
+              ))}
+
+              {bestSellersToday.length === 0 && (
+                <div className="col-span-full py-8 text-center text-xs text-stone-400">
+                  Belum ada data transaksi penjualan yang tercatat hari ini.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Preview Foto Selfie & Verifikasi Lokasi GPS Absensi */}
       <AnimatePresence>

@@ -210,7 +210,6 @@ function AppContent() {
       "suppliers",
       "hr",
       "leader_checklist",
-      "attendance_clock",
       "users",
       "pos_cashier",
       "kitchen_display",
