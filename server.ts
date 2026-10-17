@@ -32,6 +32,9 @@ const initialSettings = {
   targetBonusAmount: 0,
   divisionKpiBonusTarget: "{}",
   scheduleApprovals: "{}",
+  enableStoreSalesBonus: true,
+  enableLeaderAllowanceBonus: true,
+  enableKpiScoreBonus: false,
 };
 
 const initialUsers = [
@@ -232,6 +235,9 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS target_bonus_amount DOUBLE PRECISION DEFAULT 0`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS division_kpi_bonus_target TEXT DEFAULT '{}'`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS schedule_approvals TEXT DEFAULT '{}'`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_store_sales_bonus BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_leader_allowance_bonus BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_kpi_score_bonus BOOLEAN DEFAULT FALSE`,
     `CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         receipt_no TEXT NOT NULL,
@@ -625,6 +631,9 @@ async function startServer() {
     targetBonusAmount: Number(st?.targetBonusAmount !== undefined ? st.targetBonusAmount : 0),
     divisionKpiBonusTarget: typeof st?.divisionKpiBonusTarget === "object" ? JSON.stringify(st.divisionKpiBonusTarget) : String(st?.divisionKpiBonusTarget || "{}"),
     scheduleApprovals: typeof st?.scheduleApprovals === "object" ? JSON.stringify(st.scheduleApprovals) : String(st?.scheduleApprovals || "{}"),
+    enableStoreSalesBonus: st?.enableStoreSalesBonus !== false,
+    enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
+    enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
   });
 
   const sanitizeUser = (u: any) => {
@@ -1030,6 +1039,9 @@ async function startServer() {
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
         divisionKpiBonusTarget: parseObjSafe(rawSettings.divisionKpiBonusTarget),
         scheduleApprovals: parseObjSafe(rawSettings.scheduleApprovals),
+        enableStoreSalesBonus: rawSettings.enableStoreSalesBonus !== false,
+        enableLeaderAllowanceBonus: rawSettings.enableLeaderAllowanceBonus !== false,
+        enableKpiScoreBonus: Boolean(rawSettings.enableKpiScoreBonus),
         taxEnabled: Boolean(rawSettings.taxEnabled ?? false),
         taxRate: Number(rawSettings.taxRate ?? 10),
         taxMode: String(rawSettings.taxMode || "EXCLUSIVE"),

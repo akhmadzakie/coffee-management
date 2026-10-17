@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { 
-  Plus, Edit2, Trash2, Save, X, BookOpen, Target, Award, Sparkles, 
-  CheckCircle2, TrendingUp, Info, HelpCircle, Users, Check, AlertCircle,
-  Calendar, DollarSign, Sliders
+  Save, X, BookOpen, Target, Award, Sparkles, 
+  Users, Sliders, TrendingUp, CheckCircle2, AlertCircle, DollarSign, Check
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -10,13 +9,7 @@ import { DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 
 export const KPI: React.FC = () => {
   const { 
-    kpiTasks, 
     employees, 
-    updateKpiTask, 
-    kpiBonusRules, 
-    updateKpiBonusRule,
-    deleteKpiBonusRule,
-    deleteKpiTask, 
     isReadOnly,
     currentUser, 
     user,
@@ -28,18 +21,9 @@ export const KPI: React.FC = () => {
     users
   } = useStore() as any;
 
-  const [activeSubTab, setActiveSubTab] = useState<"guide" | "target" | "tasks" | "rules">("guide");
-  const isIndo = true;
+  const [activeSubTab, setActiveSubTab] = useState<"guide" | "target" | "tasks">("guide");
   const loggedInUser = currentUser || user;
   const canEditHR = (loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER" || loggedInUser?.role === "SUPER_ADMIN") && !isReadOnly;
-
-  // State for new/edit task
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [taskForm, setTaskForm] = useState<any>({});
-
-  // State for new/edit rule
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [ruleForm, setRuleForm] = useState<any>({});
 
   // State for Store Target & Bonus
   const defaultTarget = settings?.monthlyRevenueTarget || 150000000;
@@ -47,6 +31,7 @@ export const KPI: React.FC = () => {
   const [targetInput, setTargetInput] = useState<string>(defaultTarget.toString());
   const [bonusInput, setBonusInput] = useState<string>(defaultBonus.toString());
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [policyToast, setPolicyToast] = useState<string | null>(null);
 
   // Current month metrics
   const currentPeriod = useMemo(() => {
@@ -151,78 +136,17 @@ export const KPI: React.FC = () => {
   const achievementRate = monthlyTarget > 0 ? (currentMonthSales / monthlyTarget) * 100 : 0;
   const isTargetAchieved = currentMonthSales >= monthlyTarget && monthlyTarget > 0;
 
-  const handleEditTask = (task: any) => {
-    setEditingTaskId(task.id);
-    setTaskForm({ ...task });
-  };
-
-  const handleSaveTask = () => {
-    const id = editingTaskId || `kpi-task-${Date.now()}`;
-    const realization = parseFloat(taskForm.realization) || 0;
-    const target = parseFloat(taskForm.target) || 1;
-    const weight = parseFloat(taskForm.weight) || 0;
-    const score = Math.min((realization / target) * weight, weight);
-    
-    updateKpiTask(id, {
-      ...taskForm,
-      realization,
-      target,
-      weight,
-      score,
-      createdAt: taskForm.createdAt || new Date().toISOString(),
-    });
-    setEditingTaskId(null);
-    setTaskForm({});
-  };
-
-  const handleEditRule = (rule: any) => {
-    setEditingRuleId(rule.id);
-    setRuleForm({ ...rule });
-  };
-
-  const handleSaveRule = () => {
-    const id = editingRuleId || `kpi-rule-${Date.now()}`;
-    updateKpiBonusRule(id, {
-      ...ruleForm,
-      minScore: parseFloat(ruleForm.minScore) || 0,
-      maxScore: parseFloat(ruleForm.maxScore) || 0,
-      bonusAmount: parseFloat(ruleForm.bonusAmount) || 0,
-      isActive: ruleForm.isActive ?? true,
-    });
-    setEditingRuleId(null);
-    setRuleForm({});
-  };
-
-  const handleToggleRuleStatus = (rule: any) => {
-    updateKpiBonusRule(rule.id, {
-      ...rule,
-      isActive: !rule.isActive,
-    });
-  };
-
-  const handleToggleBonusPolicy = (key: "enableStoreSalesBonus" | "enableLeaderAllowanceBonus" | "enableKpiScoreBonus") => {
+  const handleToggleBonusPolicy = (key: "enableStoreSalesBonus" | "enableLeaderAllowanceBonus") => {
     if (!canEditHR) return;
     const currentVal = settings?.[key] !== false;
+    const nextVal = !currentVal;
     updateSettings({
       ...settings,
-      [key]: !currentVal,
+      [key]: nextVal,
     });
-  };
-
-  const handleDeleteRule = (id: string) => {
-    if (confirm("Hapus aturan rentang skor bonus ini?")) {
-      deleteKpiBonusRule(id);
-    }
-  };
-
-  const handleLoadDefaultRules = () => {
-    const defaults = [
-      { id: "rule-1", minScore: 90, maxScore: 100, bonusAmount: 400000, isActive: true },
-      { id: "rule-2", minScore: 80, maxScore: 89, bonusAmount: 250000, isActive: true },
-      { id: "rule-3", minScore: 70, maxScore: 79, bonusAmount: 100000, isActive: true },
-      { id: "rule-4", minScore: 0, maxScore: 69, bonusAmount: 0, isActive: true },
-    ];
-    defaults.forEach(d => updateKpiBonusRule(d.id, d));
+    const label = key === "enableStoreSalesBonus" ? "Bonus Omzet Toko" : "Tunjangan Leader";
+    setPolicyToast(`Kebijakan ${label} berhasil diubah ke: ${nextVal ? "AKTIF" : "NONAKTIF"}`);
+    setTimeout(() => setPolicyToast(null), 3000);
   };
 
   const handleSaveStoreTargetSettings = (e: React.FormEvent) => {
@@ -260,11 +184,11 @@ export const KPI: React.FC = () => {
                 <Award className="w-5 h-5" />
               </span>
               <h2 className="text-xl font-bold text-slate-800">
-                Pusat Skema Bonus, KPI & Target Toko
+                Pusat Skema Bonus & Target Toko
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Panduan transparansi dan konfigurasi besaran tunjangan jobdesk, evaluasi capaian KPI, dan bonus omzet toko.
+              Panduan transparansi dan konfigurasi besaran target omzet toko serta tunjangan supervisi leader.
             </p>
           </div>
 
@@ -318,20 +242,8 @@ export const KPI: React.FC = () => {
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            <CheckCircle2 className="w-4 h-4 text-slate-600" />
-            📋 Daftar Task KPI Karyawan
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("rules")}
-            className={`pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors ${
-              activeSubTab === "rules"
-                ? "border-indigo-600 text-indigo-700 bg-white rounded-t-lg border-t border-x border-slate-200"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <TrendingUp className="w-4 h-4 text-amber-600" />
-            📊 Aturan Bonus Bertingkat (Tiered)
+            <Users className="w-4 h-4 text-indigo-600" />
+            👥 Rekapitulasi Insentif Tim
           </button>
         </div>
       </div>
@@ -358,22 +270,31 @@ export const KPI: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {policyToast && (
+            <div className="mb-3 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center justify-between shadow-xs animate-fade-in">
+              <span>{policyToast}</span>
+              <button type="button" onClick={() => setPolicyToast(null)} className="text-white/80 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 1. Bonus Omzet Toko */}
-            <div className={`p-3.5 rounded-xl border transition-all ${
+            <div className={`p-4 rounded-xl border transition-all ${
               settings?.enableStoreSalesBonus !== false
-                ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                ? "bg-emerald-50/80 border-emerald-200 text-emerald-950"
                 : "bg-white border-slate-200 text-slate-500 opacity-80"
             }`}>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-bold text-xs flex items-center gap-1.5">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="font-bold text-xs flex items-center gap-1.5 text-slate-900">
                   <span>🎯</span> Bonus Omzet Toko
                 </span>
                 <button
                   type="button"
                   disabled={!canEditHR}
                   onClick={() => handleToggleBonusPolicy("enableStoreSalesBonus")}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                  className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
                     settings?.enableStoreSalesBonus !== false
                       ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
                       : "bg-slate-200 text-slate-600 hover:bg-slate-300"
@@ -390,20 +311,20 @@ export const KPI: React.FC = () => {
             </div>
 
             {/* 2. Tunjangan Jabatan Leader (Grade A-D) */}
-            <div className={`p-3.5 rounded-xl border transition-all ${
+            <div className={`p-4 rounded-xl border transition-all ${
               settings?.enableLeaderAllowanceBonus !== false
-                ? "bg-indigo-50/70 border-indigo-200 text-indigo-950"
+                ? "bg-indigo-50/80 border-indigo-200 text-indigo-950"
                 : "bg-white border-slate-200 text-slate-500 opacity-80"
             }`}>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-bold text-xs flex items-center gap-1.5">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="font-bold text-xs flex items-center gap-1.5 text-slate-900">
                   <span>👑</span> Tunjangan Leader (A–D)
                 </span>
                 <button
                   type="button"
                   disabled={!canEditHR}
                   onClick={() => handleToggleBonusPolicy("enableLeaderAllowanceBonus")}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                  className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
                     settings?.enableLeaderAllowanceBonus !== false
                       ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs"
                       : "bg-slate-200 text-slate-600 hover:bg-slate-300"
@@ -416,36 +337,6 @@ export const KPI: React.FC = () => {
                 {settings?.enableLeaderAllowanceBonus !== false
                   ? "Tunjangan evaluasi checklist Leader (25% - 100%) aktif dicairkan pada payroll."
                   : "Dinonaktifkan: Tunjangan evaluasi Leader ditangguhkan dan bernilai Rp 0 pada penggajian."}
-              </p>
-            </div>
-
-            {/* 3. Aturan Skor Bonus KPI Tambahan */}
-            <div className={`p-3.5 rounded-xl border transition-all ${
-              settings?.enableKpiScoreBonus !== false
-                ? "bg-amber-50/70 border-amber-200 text-amber-950"
-                : "bg-white border-slate-200 text-slate-500 opacity-80"
-            }`}>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-bold text-xs flex items-center gap-1.5">
-                  <span>📊</span> Bonus Skor KPI Tiered
-                </span>
-                <button
-                  type="button"
-                  disabled={!canEditHR}
-                  onClick={() => handleToggleBonusPolicy("enableKpiScoreBonus")}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
-                    settings?.enableKpiScoreBonus !== false
-                      ? "bg-amber-600 text-white hover:bg-amber-700 shadow-xs"
-                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                  } ${!canEditHR ? "opacity-70 cursor-not-allowed" : ""}`}
-                >
-                  {settings?.enableKpiScoreBonus !== false ? "✓ AKTIF" : "✕ NONAKTIF"}
-                </button>
-              </div>
-              <p className="text-[11px] leading-relaxed">
-                {settings?.enableKpiScoreBonus !== false
-                  ? "Aturan bonus tambahan berdasarkan rentang skor KPI (Tabel Tiered) diizinkan cair."
-                  : "Dinonaktifkan: Bonus skor tambahan tidak akan dihitung ke slip gaji."}
               </p>
             </div>
           </div>
@@ -875,313 +766,10 @@ export const KPI: React.FC = () => {
                 </table>
               </div>
             </div>
-
-            {/* Target Tambahan / Indikator Tertulis Khusus */}
-            <div className="pt-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Catatan Indikator KPI Tambahan (Opsional)</h3>
-                  <p className="text-xs text-slate-500">Form target angka manual jika manajemen memiliki indikator khusus di luar checklist jobdesk.</p>
-                </div>
-                {canEditHR && (
-                  <button 
-                    onClick={() => { setEditingTaskId(""); setTaskForm({ period: currentPeriod }); }}
-                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
-                  >
-                    <Plus className="w-4 h-4" /> Tambah Task Manual
-                  </button>
-                )}
-              </div>
-            
-            {editingTaskId !== null && (
-              <div className="bg-indigo-50/70 p-5 rounded-2xl mb-6 border border-indigo-100">
-                <h4 className="font-bold text-indigo-900 text-sm mb-4">
-                  {editingTaskId ? "Edit Task KPI" : "Tambah Task KPI Baru"}
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Karyawan</label>
-                    <select
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white"
-                      value={taskForm.employeeId || ""}
-                      onChange={(e) => setTaskForm({ ...taskForm, employeeId: e.target.value })}
-                    >
-                      <option value="">Pilih Karyawan</option>
-                      {employees.map((e: any) => (
-                        <option key={e.id} value={e.id}>{e.name} ({e.position || "Staff"})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Periode (YYYY-MM)</label>
-                    <input
-                      type="month"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={taskForm.period || currentPeriod}
-                      onChange={(e) => setTaskForm({ ...taskForm, period: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Indikator / Target</label>
-                    <input
-                      type="text"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white"
-                      value={taskForm.taskName || ""}
-                      onChange={(e) => setTaskForm({ ...taskForm, taskName: e.target.value })}
-                      placeholder="Contoh: Ketepatan Dialing Espresso & Kebersihan Bar"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Target Angka</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={taskForm.target || ""}
-                      onChange={(e) => setTaskForm({ ...taskForm, target: e.target.value })}
-                      placeholder="100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Realisasi</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={taskForm.realization || ""}
-                      onChange={(e) => setTaskForm({ ...taskForm, realization: e.target.value })}
-                      placeholder="95"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Bobot (%)</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={taskForm.weight || ""}
-                      onChange={(e) => setTaskForm({ ...taskForm, weight: e.target.value })}
-                      placeholder="100"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => setEditingTaskId(null)} className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 bg-white text-xs font-semibold">Batal</button>
-                  <button onClick={handleSaveTask} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs"><Save className="w-4 h-4" /> Simpan Task</button>
-                </div>
-              </div>
-            )}
-
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                    <th className="py-3 px-4 font-semibold">Periode</th>
-                    <th className="py-3 px-4 font-semibold">Karyawan</th>
-                    <th className="py-3 px-4 font-semibold">Indikator KPI</th>
-                    <th className="py-3 px-4 font-semibold text-center">Target</th>
-                    <th className="py-3 px-4 font-semibold text-center">Realisasi</th>
-                    <th className="py-3 px-4 font-semibold text-center">Bobot</th>
-                    <th className="py-3 px-4 font-semibold text-center">Skor Capaian</th>
-                    <th className="py-3 px-4 font-semibold text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiTasks?.map((task: any) => (
-                    <tr key={task.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-3 px-4 font-mono">{task.period}</td>
-                      <td className="py-3 px-4 font-bold text-slate-800">{getEmployeeName(task.employeeId)}</td>
-                      <td className="py-3 px-4 text-slate-700">{task.taskName}</td>
-                      <td className="py-3 px-4 text-center font-mono">{task.target}</td>
-                      <td className="py-3 px-4 text-center font-mono font-medium">{task.realization}</td>
-                      <td className="py-3 px-4 text-center font-mono">{task.weight}%</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold font-mono">
-                          {task.score?.toFixed(1)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <button onClick={() => handleEditTask(task)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"><Edit2 className="w-4 h-4" /></button>
-                      </td>
-                    </tr>
-                  ))}
-                  {(!kpiTasks || kpiTasks.length === 0) && (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400 italic">Belum ada data Task KPI karyawan.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-        {/* ─── TAB 4: ATURAN BONUS BERTINGKAT (TIERED) ─── */}
-        {activeSubTab === "rules" && (
-          <div className="space-y-6">
-            {/* Info Explanation Card */}
-            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
-              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span className="font-bold block">Cara Kerja Aturan Tier Skor di Payroll:</span>
-                <p className="text-amber-800 leading-relaxed">
-                  Jika aturan ini <strong>Aktif</strong>, sistem saat generate slip gaji akan mengecek total skor evaluasi KPI karyawan. Bila skor karyawan masuk dalam rentang skor (misalnya skor 85 berada di rentang 80–89), maka karyawan otomatis mendapatkan nominal bonus pada tier tersebut (misal Rp 250.000).
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Daftar Rentang Nilai (Tiered Rules)</h3>
-                <p className="text-xs text-slate-500">Kelola batas skor minimal, maksimal, nominal rupiah bonus, dan status aktif.</p>
-              </div>
-              {canEditHR && (
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={handleLoadDefaultRules}
-                    className="px-3 py-2 border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold rounded-xl transition-colors shadow-xs"
-                    title="Muat template standar 4 tingkat (Grade A, B, C, D)"
-                  >
-                    Muat Template Standar (A/B/C/D)
-                  </button>
-                  <button 
-                    onClick={() => { setEditingRuleId(""); setRuleForm({ isActive: true, minScore: 80, maxScore: 89, bonusAmount: 200000 }); }}
-                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2 hover:bg-indigo-700 shadow-xs"
-                  >
-                    <Plus className="w-4 h-4" /> Tambah Rentang Nilai
-                  </button>
-                </div>
-              )}
-            </div>
-            
-            {editingRuleId !== null && (
-              <div className="bg-indigo-50/70 p-5 rounded-2xl border border-indigo-100 space-y-4">
-                <h4 className="font-bold text-indigo-900 text-sm">
-                  {editingRuleId ? "Edit Rentang Nilai" : "Tambah Rentang Nilai Baru"}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Skor Minimal (0 - 100)</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.minScore !== undefined ? ruleForm.minScore : ""}
-                      onChange={(e) => setRuleForm({ ...ruleForm, minScore: e.target.value })}
-                      placeholder="80"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Skor Maksimal (0 - 100)</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.maxScore !== undefined ? ruleForm.maxScore : ""}
-                      onChange={(e) => setRuleForm({ ...ruleForm, maxScore: e.target.value })}
-                      placeholder="89"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nominal Bonus (Rp)</label>
-                    <input
-                      type="number"
-                      step="25000"
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-mono"
-                      value={ruleForm.bonusAmount !== undefined ? ruleForm.bonusAmount : ""}
-                      onChange={(e) => setRuleForm({ ...ruleForm, bonusAmount: e.target.value })}
-                      placeholder="250000"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Status Aturan</label>
-                    <select
-                      className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white"
-                      value={ruleForm.isActive ? "true" : "false"}
-                      onChange={(e) => setRuleForm({ ...ruleForm, isActive: e.target.value === "true" })}
-                    >
-                      <option value="true">Aktif</option>
-                      <option value="false">Nonaktif</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={() => setEditingRuleId(null)} className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 bg-white text-xs font-semibold">Batal</button>
-                  <button onClick={handleSaveRule} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs"><Save className="w-4 h-4" /> Simpan Rentang Nilai</button>
-                </div>
-              </div>
-            )}
-
-            <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                    <th className="py-3 px-4 font-semibold">Grade / Rentang</th>
-                    <th className="py-3 px-4 font-semibold text-center">Skor Minimal</th>
-                    <th className="py-3 px-4 font-semibold text-center">Skor Maksimal</th>
-                    <th className="py-3 px-4 font-semibold text-right">Nominal Bonus (Rp)</th>
-                    <th className="py-3 px-4 font-semibold text-center">Status</th>
-                    <th className="py-3 px-4 font-semibold text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiBonusRules?.map((rule: any) => {
-                    const gradeLabel = rule.minScore >= 90 ? "Grade A (Sangat Baik)" :
-                                       rule.minScore >= 80 ? "Grade B (Baik)" :
-                                       rule.minScore >= 70 ? "Grade C (Cukup)" : "Grade D (Kurang)";
-                    return (
-                      <tr key={rule.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800">{gradeLabel}</span>
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">{rule.minScore}</td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">{rule.maxScore}</td>
-                        <td className="py-3 px-4 text-right text-emerald-600 font-mono font-bold">
-                          {formatCurrency(rule.bonusAmount)}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleToggleRuleStatus(rule)}
-                            title="Klik untuk ubah status aktif/nonaktif"
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
-                              rule.isActive 
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300' 
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300'
-                            }`}
-                          >
-                            {rule.isActive ? '✓ Aktif' : '✕ Nonaktif'}
-                          </button>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button 
-                              onClick={() => handleEditRule(rule)} 
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"
-                              title="Edit rentang nilai"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteRule(rule.id)} 
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                              title="Hapus aturan"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {(!kpiBonusRules || kpiBonusRules.length === 0) && (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 italic">
-                        Belum ada aturan rentang skor bonus. Klik "Muat Template Standar (A/B/C/D)" untuk mengisi otomatis.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
           </div>
         )}
       </div>
     </div>
   );
 };
+

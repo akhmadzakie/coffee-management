@@ -151,6 +151,9 @@ export const settings = pgTable("settings", {
   targetBonusAmount: doublePrecision("target_bonus_amount").default(0),
   divisionKpiBonusTarget: text("division_kpi_bonus_target").default("{}"),
   scheduleApprovals: text("schedule_approvals").default("{}"),
+  enableStoreSalesBonus: boolean("enable_store_sales_bonus").default(true),
+  enableLeaderAllowanceBonus: boolean("enable_leader_allowance_bonus").default(true),
+  enableKpiScoreBonus: boolean("enable_kpi_score_bonus").default(false),
 });
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),

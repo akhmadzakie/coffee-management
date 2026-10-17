@@ -531,7 +531,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       shiftDefinitions: DEFAULT_SHIFT_DEFINITIONS,
       enableStoreSalesBonus: true,
       enableLeaderAllowanceBonus: true,
-      enableKpiScoreBonus: true,
+      enableKpiScoreBonus: false,
     };
     try {
       const cached = localStorage.getItem("app_settings_cache");
@@ -802,7 +802,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             shiftDefinitions: parseArr(s.shiftDefinitions).length > 0 ? parseArr(s.shiftDefinitions) : DEFAULT_SHIFT_DEFINITIONS,
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
-            enableKpiScoreBonus: s.enableKpiScoreBonus !== false,
+            enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),
           };
           setSettings(newSettings);
           try {
