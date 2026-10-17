@@ -64,9 +64,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   // 1. Identify the active employee record matching currentUser
   const activeEmployee = useMemo(() => {
     if (!currentUser) return null;
-    return employees.find((e) => e.username === currentUser.username) ||
-      employees.find((e) => e.id === currentUser.employeeId) ||
-      null;
+    const cleanUser = (currentUser.username || "").toLowerCase().trim();
+    const cleanName = (currentUser.name || "").toLowerCase().trim();
+    return (
+      employees.find((e) => (e.username || "").toLowerCase().trim() === cleanUser) ||
+      employees.find((e) => currentUser.employeeId && e.id === currentUser.employeeId) ||
+      employees.find((e) => (e.name || "").toLowerCase().trim() === cleanName) ||
+      null
+    );
   }, [employees, currentUser]);
 
   const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
@@ -151,7 +156,20 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   // - KITCHEN: Kitchen, Dapur, Cook
   // - BAKER: Baker, Pastry, Roti
   // - BAR: Barista, Kasir, Beverage, Main (Kasir digabung ke Divisi Bar)
-  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" => {
+  const getEmployeeDivision = (emp?: { department?: string | null; position?: string | null } | null): "BAR" | "KITCHEN" | "BAKER" => {
+    if (!emp) {
+      if (currentUser?.department) {
+        const d = (currentUser.department || "").toUpperCase();
+        if (d.includes("KITCHEN") || d.includes("DAPUR") || d.includes("COOK")) return "KITCHEN";
+        if (d.includes("BAKER") || d.includes("PASTRY") || d.includes("ROTI")) return "BAKER";
+      }
+      if (currentUser?.role === "KITCHEN") return "KITCHEN";
+      if (currentUser?.role === "BAKER") return "BAKER";
+      const nameOrUser = `${currentUser?.name || ""} ${currentUser?.username || ""}`.toUpperCase();
+      if (nameOrUser.includes("KITCHEN") || nameOrUser.includes("DAPUR") || nameOrUser.includes("COOK")) return "KITCHEN";
+      if (nameOrUser.includes("BAKER") || nameOrUser.includes("PASTRY") || nameOrUser.includes("ROTI")) return "BAKER";
+      return "BAR";
+    }
     const dept = (emp.department || "").toUpperCase();
     const pos = (emp.position || "").toUpperCase();
 
@@ -168,13 +186,18 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   const leaderDivision = useMemo<"BAR" | "KITCHEN" | "BAKER">(() => {
     if (currentUser?.department) {
       const d = currentUser.department.toUpperCase();
-      if (d.includes("KITCHEN") || d.includes("DAPUR")) return "KITCHEN";
-      if (d.includes("BAKER") || d.includes("PASTRY")) return "BAKER";
+      if (d.includes("KITCHEN") || d.includes("DAPUR") || d.includes("COOK")) return "KITCHEN";
+      if (d.includes("BAKER") || d.includes("PASTRY") || d.includes("ROTI")) return "BAKER";
       return "BAR";
     }
+    if (currentUser?.role === "KITCHEN") return "KITCHEN";
+    if (currentUser?.role === "BAKER") return "BAKER";
     if (activeEmployee) {
       return getEmployeeDivision(activeEmployee);
     }
+    const nameOrUser = `${currentUser?.name || ""} ${currentUser?.username || ""}`.toUpperCase();
+    if (nameOrUser.includes("KITCHEN") || nameOrUser.includes("DAPUR") || nameOrUser.includes("COOK")) return "KITCHEN";
+    if (nameOrUser.includes("BAKER") || nameOrUser.includes("PASTRY") || nameOrUser.includes("ROTI")) return "BAKER";
     return "BAR";
   }, [currentUser, activeEmployee]);
 
@@ -430,11 +453,19 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 backdrop-blur-md border border-white/15 text-blue-200">
                   {currentUser?.role || "Staff"}
                 </span>
-                {activeEmployee?.department && (
+                {activeEmployee?.department ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
                     Divisi {activeEmployee.department}
                   </span>
-                )}
+                ) : currentUser?.department ? (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                    Divisi {currentUser.department}
+                  </span>
+                ) : myDivision ? (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20">
+                    Divisi {myDivision}
+                  </span>
+                ) : null}
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
                 {currentUser?.name || "Karyawan"}

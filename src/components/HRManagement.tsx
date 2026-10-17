@@ -110,7 +110,8 @@ export function HRManagement() {
   const canEditHR = isHRD && !isReadOnly;
 
   // Klasifikasi staf: hanya staf operasional (Bar, Kasir, Kitchen, Baker) yang masuk jadwal shift mingguan
-  const isOperationalStaff = (emp: { department?: string | null; position?: string | null }): boolean => {
+  const isOperationalStaff = (emp?: { department?: string | null; position?: string | null } | null): boolean => {
+    if (!emp) return false;
     const dept = (emp.department || "").toUpperCase();
     const pos = (emp.position || "").toUpperCase();
 
@@ -137,7 +138,8 @@ export function HRManagement() {
   // - BAKER: Baker, Pastry, Roti
   // - BAR: Barista, Kasir, Beverage, Main (Kasir digabung ke Divisi Bar)
   // - OFFICE: Manager, Finance, Accounting, Admin, HRD (Non-shift / jam reguler)
-  const getEmployeeDivision = (emp: { department?: string | null; position?: string | null }): "BAR" | "KITCHEN" | "BAKER" | "OFFICE" => {
+  const getEmployeeDivision = (emp?: { department?: string | null; position?: string | null } | null): "BAR" | "KITCHEN" | "BAKER" | "OFFICE" => {
+    if (!emp) return "OFFICE";
     const dept = (emp.department || "").toUpperCase();
     const pos = (emp.position || "").toUpperCase();
 
