@@ -44,6 +44,7 @@ export type ViewState =
   | "attendance_clock"
   | "dashboard_employee"
   | "hpp_calculator"
+  | "menu_management"
   | "pos_cashier"
   | "kitchen_display";
 
@@ -441,6 +442,99 @@ export interface Recipe {
   menuName: string;
   ingredients: RecipeIngredient[];
 }
+
+// ─── Product, Variant & Kondimen Olahan (Menu Engineering) ───────────────────
+export type ProductDivision = "BAR" | "KITCHEN" | "BAKER";
+
+export interface PackagingOption {
+  id: string;
+  name: string;
+  cost: number;
+  division?: ProductDivision | "ALL";
+  isIncluded?: boolean;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  name: string; // e.g. "Hot 8oz", "Iced 16oz", "Botol 1L", "Single", "Double"
+  sku?: string;
+  price: number; // Harga jual resmi (Rupiah integer)
+  recipeId?: string | null;
+  recipe?: RecipeIngredient[]; // Takaran bahan spesifik varian ini
+  packagingCost?: number;
+  packagingNotes?: string;
+  estimatedHpp?: number;
+  isAvailable: boolean;
+}
+
+export interface ProductModifier {
+  id: string;
+  name: string; // e.g. "Extra Shot Espresso", "Ganti Susu Oat", "Sirup Vanilla"
+  price: number; // Harga tambahan (e.g. 5000)
+  cost?: number; // Estimasi HPP tambahan
+  recipe?: RecipeIngredient[]; // Bahan yang dipotong (e.g. 18g espresso beans)
+}
+
+export interface ProductModifierGroup {
+  id: string;
+  name: string; // e.g. "Pilihan Susu", "Extra Shot", "Level Manis"
+  minSelect?: number;
+  maxSelect?: number;
+  options: ProductModifier[];
+}
+
+export interface Product {
+  id: string;
+  name: string; // e.g. "Kopi Susu Gula Aren", "Cafe Latte"
+  category: string; // "COFFEE" | "NON-COFFEE" | "FOOD" | "BAKERY" | "TEA" | "SNACK"
+  division: ProductDivision;
+  description?: string;
+  imageUrl?: string;
+  isActive: boolean;
+  variants: ProductVariant[];
+  modifierGroups?: ProductModifierGroup[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface BatchPreparation {
+  id: string;
+  name: string; // e.g. "Saus Gula Aren Racikan", "Simple Syrup", "Sambal Matah", "Cold Brew Concentrate"
+  division: ProductDivision; // "BAR" | "KITCHEN" | "BAKER"
+  targetIngredientId: string; // ID bahan jadi di master Ingredient
+  targetIngredientName?: string;
+  yieldQuantity: number; // Jumlah hasil olahan, misal 1200
+  yieldUnit: string; // "ml", "gr", "portion"
+  ingredients: RecipeIngredient[]; // Bahan mentah yang dipakai (misal 1000 gr aren + 600 ml air)
+  notes?: string;
+  lastPreparedDate?: string;
+}
+
+export const DEFAULT_DIVISION_PACKAGING: Record<ProductDivision, PackagingOption[]> = {
+  BAR: [
+    { id: "cup-16oz", name: "Cup Plastik Injection 16oz", cost: 650, division: "BAR", isIncluded: true },
+    { id: "lid-flat", name: "Tutup Flat Lid", cost: 200, division: "BAR", isIncluded: true },
+    { id: "straw-steril", name: "Sedotan Steril", cost: 150, division: "BAR", isIncluded: true },
+    { id: "cup-hot-8oz", name: "Paper Cup Hot 8oz + Lid", cost: 850, division: "BAR", isIncluded: false },
+    { id: "bottle-1l", name: "Botol Kaca/PET 1 Liter + Segel", cost: 2800, division: "BAR", isIncluded: false },
+    { id: "cup-sleeve", name: "Cup Sleeve / Stiker Logo", cost: 150, division: "BAR", isIncluded: false },
+    { id: "tway-bag", name: "Kantong Plastik Takeaway 1 Cup", cost: 150, division: "BAR", isIncluded: false },
+  ],
+  KITCHEN: [
+    { id: "rice-bowl", name: "Paper Bowl + Lid 650ml", cost: 1200, division: "KITCHEN", isIncluded: true },
+    { id: "cutlery-set", name: "Sendok Garpu Kayu + Tisue", cost: 450, division: "KITCHEN", isIncluded: true },
+    { id: "bento-box", name: "Bento Box Sekat 4", cost: 2200, division: "KITCHEN", isIncluded: false },
+    { id: "kertas-nasi", name: "Kertas Nasi Laminasi", cost: 250, division: "KITCHEN", isIncluded: false },
+    { id: "paperbag-food", name: "Paperbag Makanan Cokelat", cost: 800, division: "KITCHEN", isIncluded: false },
+  ],
+  BAKER: [
+    { id: "paperbag-roti", name: "Paperbag Roti / Pastry Gusset", cost: 450, division: "BAKER", isIncluded: true },
+    { id: "cake-box-slice", name: "Kotak Mika Slice Cake", cost: 950, division: "BAKER", isIncluded: false },
+    { id: "cake-box-large", name: "Cake Box Karton 20x20", cost: 3500, division: "BAKER", isIncluded: false },
+    { id: "baking-paper", name: "Baking Paper Alas", cost: 150, division: "BAKER", isIncluded: false },
+  ],
+};
 
 export interface SalesImportLog {
   id: string;

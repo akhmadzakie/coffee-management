@@ -1,7 +1,13 @@
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
-import { ViewState, Recipe, Ingredient } from "../types";
+import {
+  ViewState,
+  Recipe,
+  Ingredient,
+  ProductDivision,
+  DEFAULT_DIVISION_PACKAGING,
+} from "../types";
 import {
   Calculator,
   TrendingUp,
@@ -25,6 +31,9 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
+  UtensilsCrossed,
+  Cake,
+  Flame,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -48,14 +57,6 @@ interface PackagingOption {
   isIncluded: boolean;
 }
 
-const DEFAULT_PACKAGING: PackagingOption[] = [
-  { id: "cup", name: "Cup Plastik / Paper Cup (12-16oz)", cost: 650, isIncluded: true },
-  { id: "lid", name: "Tutup Cup (Flat/Dome/Hot Lid)", cost: 200, isIncluded: true },
-  { id: "straw", name: "Sedotan Steril / Paper Straw", cost: 150, isIncluded: true },
-  { id: "sleeve", name: "Cup Sleeve / Seal / Stiker Logo", cost: 150, isIncluded: false },
-  { id: "bag", name: "Kantong Plastik / Paperbag Takeaway", cost: 300, isIncluded: false },
-];
-
 const PRICE_PRESETS = [15000, 18000, 20000, 22000, 25000, 28000, 32000, 35000];
 
 export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
@@ -64,15 +65,28 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     recipes,
     addRecipe,
     updateRecipe,
+    products,
+    addProduct,
+    updateProduct,
+    batchPreparations,
+    addBatchPreparation,
     currentUser,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<"simulator" | "catalog">("simulator");
 
-  // Form State
+  // Division & Form State
+  const [selectedDivision, setSelectedDivision] = useState<ProductDivision>("BAR");
   const [menuName, setMenuName] = useState("Kopi Susu Gula Aren");
   const [servingNote, setServingNote] = useState("Cup 16oz Dingin (Ice)");
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
+
+  // Publish & Batch Modals
+  const [isPublishProductModalOpen, setIsPublishProductModalOpen] = useState(false);
+  const [publishCategory, setPublishCategory] = useState("COFFEE");
+  const [isBatchPrepModalOpen, setIsBatchPrepModalOpen] = useState(false);
+  const [batchYieldQty, setBatchYieldQty] = useState(1200);
+  const [batchYieldUnit, setBatchYieldUnit] = useState("ml");
 
   // Recipe Items
   const [items, setItems] = useState<RecipeIngredientItem[]>([
@@ -103,7 +117,18 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   ]);
 
   // Packaging & Disposables
-  const [packagingList, setPackagingList] = useState<PackagingOption[]>(DEFAULT_PACKAGING);
+  const [packagingList, setPackagingList] = useState<PackagingOption[]>(() =>
+    DEFAULT_DIVISION_PACKAGING["BAR"].map((p) => ({ ...p, isIncluded: Boolean(p.isIncluded) }))
+  );
+
+  const handleDivisionChange = (div: ProductDivision) => {
+    setSelectedDivision(div);
+    if (DEFAULT_DIVISION_PACKAGING[div]) {
+      setPackagingList(
+        DEFAULT_DIVISION_PACKAGING[div].map((p) => ({ ...p, isIncluded: Boolean(p.isIncluded) }))
+      );
+    }
+  };
 
   // Buffer Wastage & Purge (%)
   const [wastagePercent, setWastagePercent] = useState<number>(5);
@@ -334,6 +359,124 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
+  // Terbitkan Langsung ke Katalog Produk Toko
+  const handlePublishToProductCatalog = () => {
+    if (!menuName.trim()) {
+      alert("Nama menu tidak boleh kosong.");
+      return;
+    }
+    const validIngredients = items
+      .filter((it) => it.ingredientId && it.quantity > 0)
+      .map((it) => ({
+        ingredientId: it.ingredientId,
+        quantity: it.quantity,
+      }));
+
+    const existingProd = products.find(
+      (p) => p.name.trim().toLowerCase() === menuName.trim().toLowerCase()
+    );
+
+    const variantName = servingNote.trim() || (selectedDivision === "BAR" ? "Iced 16oz" : "Reguler");
+    const packagingNotes = packagingList
+      .filter((p) => p.isIncluded)
+      .map((p) => p.name)
+      .join(" + ") || "Tanpa Kemasan (Dine-In)";
+
+    if (existingProd) {
+      const existingVarIdx = (existingProd.variants || []).findIndex(
+        (v) => v.name.trim().toLowerCase() === variantName.toLowerCase()
+      );
+      let updatedVariants = [...(existingProd.variants || [])];
+      if (existingVarIdx >= 0) {
+        updatedVariants[existingVarIdx] = {
+          ...updatedVariants[existingVarIdx],
+          price: targetSellingPrice,
+          estimatedHpp: totalHpp,
+          packagingCost: packagingCost,
+          packagingNotes,
+          recipe: validIngredients,
+        };
+      } else {
+        updatedVariants.push({
+          id: `var-${Date.now()}`,
+          productId: existingProd.id,
+          name: variantName,
+          price: targetSellingPrice,
+          estimatedHpp: totalHpp,
+          packagingCost: packagingCost,
+          packagingNotes,
+          recipe: validIngredients,
+          isAvailable: true,
+        });
+      }
+      updateProduct({
+        ...existingProd,
+        division: selectedDivision,
+        category: publishCategory,
+        variants: updatedVariants,
+      });
+      setSaveSuccessMessage(`Varian "${variantName}" untuk produk "${menuName}" berhasil diterbitkan ke Katalog Toko!`);
+    } else {
+      addProduct({
+        name: menuName.trim(),
+        category: publishCategory,
+        division: selectedDivision,
+        description: `Produk racikan resmi Julia's (${selectedDivision}).`,
+        isActive: true,
+        variants: [
+          {
+            id: `var-${Date.now()}`,
+            productId: "",
+            name: variantName,
+            price: targetSellingPrice,
+            estimatedHpp: totalHpp,
+            packagingCost: packagingCost,
+            packagingNotes,
+            recipe: validIngredients,
+            isAvailable: true,
+          },
+        ],
+      });
+      setSaveSuccessMessage(`Produk baru "${menuName}" berhasil diterbitkan ke Katalog Menu Toko!`);
+    }
+    setIsPublishProductModalOpen(false);
+    setTimeout(() => setSaveSuccessMessage(null), 4000);
+  };
+
+  // Simpan Sebagai Resep Kondimen Olahan (Batch Prep)
+  const handleSaveAsBatchPrep = () => {
+    if (!menuName.trim()) {
+      alert("Nama olahan tidak boleh kosong.");
+      return;
+    }
+    const validIngredients = items
+      .filter((it) => it.ingredientId && it.quantity > 0)
+      .map((it) => ({
+        ingredientId: it.ingredientId,
+        quantity: it.quantity,
+      }));
+
+    if (validIngredients.length === 0) {
+      alert("Minimal 1 bahan baku harus dipilih dari master inventori.");
+      return;
+    }
+
+    addBatchPreparation({
+      name: menuName.trim(),
+      division: selectedDivision,
+      targetIngredientId: `ing-prep-${Date.now()}`,
+      targetIngredientName: menuName.trim(),
+      yieldQuantity: Number(batchYieldQty),
+      yieldUnit: batchYieldUnit.trim(),
+      ingredients: validIngredients,
+      notes: `Resep kondimen batch dari formulasi HPP. Catatan: ${servingNote}`,
+    });
+
+    setSaveSuccessMessage(`Resep olahan batch "${menuName}" berhasil disimpan ke Dapur Olahan!`);
+    setIsBatchPrepModalOpen(false);
+    setTimeout(() => setSaveSuccessMessage(null), 4000);
+  };
+
   // Minta Konsultasi AI Gemini 3.8 Flash
   const handleAskGeminiAi = async () => {
     setIsAiLoading(true);
@@ -441,29 +584,42 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         </div>
 
         {/* Tab Selector & Navigation */}
-        <div className="flex items-center gap-2 bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200">
-          <button
-            onClick={() => setActiveTab("simulator")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === "simulator"
-                ? "bg-white text-stone-900 shadow-2xs"
-                : "text-stone-600 hover:text-stone-900"
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5 text-amber-700" />
-            Simulator HPP & Laba
-          </button>
-          <button
-            onClick={() => setActiveTab("catalog")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === "catalog"
-                ? "bg-white text-stone-900 shadow-2xs"
-                : "text-stone-600 hover:text-stone-900"
-            }`}
-          >
-            <Coffee className="w-3.5 h-3.5 text-amber-700" />
-            Katalog Resep ({recipes.length})
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200">
+            <button
+              onClick={() => setActiveTab("simulator")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === "simulator"
+                  ? "bg-white text-stone-900 shadow-2xs"
+                  : "text-stone-600 hover:text-stone-900"
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5 text-amber-700" />
+              Simulator HPP & Laba
+            </button>
+            <button
+              onClick={() => setActiveTab("catalog")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === "catalog"
+                  ? "bg-white text-stone-900 shadow-2xs"
+                  : "text-stone-600 hover:text-stone-900"
+              }`}
+            >
+              <Coffee className="w-3.5 h-3.5 text-amber-700" />
+              Katalog Resep ({recipes.length})
+            </button>
+          </div>
+
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate("menu_management")}
+              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shadow-2xs"
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-400" />
+              Katalog Menu & Dapur Olahan
+              <ArrowRight className="w-3 h-3 text-stone-400" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -544,7 +700,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    Keterangan Porsi / Serving
+                    Keterangan Porsi / Serving / Varian
                   </label>
                   <input
                     type="text"
@@ -554,6 +710,54 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     className="w-full px-3.5 py-2.5 text-xs font-semibold bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
                   />
                 </div>
+              </div>
+
+              {/* Division Selector */}
+              <div className="pt-2 border-t border-stone-100">
+                <label className="block text-xs font-bold text-stone-700 mb-2">
+                  Divisi Operasional & Paket Kemasan Khusus
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDivisionChange("BAR")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                      selectedDivision === "BAR"
+                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
+                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    }`}
+                  >
+                    <Coffee className="w-3.5 h-3.5 text-amber-700" />
+                    Divisi Bar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDivisionChange("KITCHEN")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                      selectedDivision === "KITCHEN"
+                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
+                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    }`}
+                  >
+                    <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />
+                    Divisi Kitchen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDivisionChange("BAKER")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                      selectedDivision === "BAKER"
+                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
+                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    }`}
+                  >
+                    <Cake className="w-3.5 h-3.5 text-amber-700" />
+                    Divisi Bakery
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1.5">
+                  Mengubah divisi akan otomatis menyesuaikan opsi kemasan (packaging cost) di formulir bawah.
+                </p>
               </div>
             </div>
 
@@ -1002,21 +1206,40 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   </div>
                 </div>
 
-                {/* Action Buttons: Simpan ke Resep & Konsultasi AI */}
+                {/* Action Buttons: Terbitkan Produk, Kondimen Olahan, Simpan Resep & Konsultasi AI */}
                 <div className="space-y-2 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPublishProductModalOpen(true)}
+                      className="w-full py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                    >
+                      <UtensilsCrossed className="w-4 h-4 text-amber-200" />
+                      Terbitkan ke Katalog
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsBatchPrepModalOpen(true)}
+                      className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                    >
+                      <Flame className="w-4 h-4 text-amber-400" />
+                      Simpan sbg Kondimen
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleSaveToStoreRecipes}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm"
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm"
                   >
-                    <Save className="w-4 h-4" /> Simpan Sebagai Resep Resmi Toko
+                    <Save className="w-4 h-4" /> Simpan Sebagai Resep Pokok Toko
                   </button>
 
                   <button
                     type="button"
                     onClick={handleAskGeminiAi}
                     disabled={isAiLoading}
-                    className="w-full py-3 bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-coffee-sm disabled:opacity-50"
+                    className="w-full py-2.5 bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-coffee-sm disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
                     {isAiLoading ? "Menganalisis Komposisi Resep..." : "Analisis Resep & Rekomendasi AI Gemini"}
@@ -1178,6 +1401,202 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Terbitkan ke Katalog Produk Toko */}
+      {isPublishProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-5 h-5 text-amber-700" />
+                <h3 className="font-bold text-stone-900 text-base">Terbitkan ke Katalog Produk</h3>
+              </div>
+              <button
+                onClick={() => setIsPublishProductModalOpen(false)}
+                className="text-stone-400 hover:text-stone-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/70 space-y-2">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-stone-500 font-medium">Nama Produk:</span>
+                  <span className="font-bold text-stone-900 text-sm">{menuName}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium">Divisi Operasional:</span>
+                  <span className="font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px]">
+                    {selectedDivision}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium">Nama Varian:</span>
+                  <span className="font-bold text-stone-900">
+                    {servingNote || (selectedDivision === "BAR" ? "Iced 16oz" : "Reguler")}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-stone-700 font-bold mb-1.5">
+                  Kategori Menu Toko
+                </label>
+                <select
+                  value={publishCategory}
+                  onChange={(e) => setPublishCategory(e.target.value)}
+                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                >
+                  <option value="COFFEE">☕ COFFEE (Espresso-based, Cold Brew)</option>
+                  <option value="NON_COFFEE">🍵 NON_COFFEE (Matcha, Tea, Chocolate)</option>
+                  <option value="FOOD">🍳 FOOD (Makanan Berat, Rice Bowl)</option>
+                  <option value="SNACK">🍟 SNACK (Camilan, Finger Food)</option>
+                  <option value="PASTRY">🥐 PASTRY (Croissant, Cake, Bakery)</option>
+                </select>
+              </div>
+
+              {/* Rincian Finansial yang Diterbitkan */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-2">
+                <div className="flex justify-between text-stone-700">
+                  <span>HPP Terkalkulasi (Bahan + Kemasan):</span>
+                  <span className="font-bold font-mono text-amber-950">{formatCurrency(totalHpp)}</span>
+                </div>
+                <div className="flex justify-between text-stone-700">
+                  <span>Harga Jual Resmi Kasir:</span>
+                  <span className="font-extrabold font-mono text-stone-900">{formatCurrency(targetSellingPrice)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-800 font-bold pt-1 border-t border-amber-200">
+                  <span>Proyeksi Gross Margin:</span>
+                  <span className="font-mono">
+                    {formatCurrency(grossProfit)} ({grossMarginPercent.toFixed(1)}%)
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                Produk ini akan terdaftar di <b>Katalog Menu Toko</b>. Kasir dan tim bar/kitchen akan langsung dapat melihat harga jual resmi, estimasi laba, dan live ketersediaan porsi berdasarkan stok bahan baku.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsPublishProductModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-800 rounded-xl"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handlePublishToProductCatalog}
+                className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Terbitkan Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) */}
+      {isBatchPrepModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-700" />
+                <h3 className="font-bold text-stone-900 text-base">Simpan Resep Kondimen Olahan</h3>
+              </div>
+              <button
+                onClick={() => setIsBatchPrepModalOpen(false)}
+                className="text-stone-400 hover:text-stone-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <p className="text-stone-500 leading-relaxed">
+                Resep ini akan disimpan sebagai formula <b>Dapur Olahan (Batch Prep)</b>. Tim barista/kitchen dapat memasak batch ini kapan saja untuk menghasilkan kondimen siap pakai (seperti Sirup Gula Aren Racikan, Sambal Matah, Cold Brew Concentrate) dengan HPP unit otomatis.
+              </p>
+
+              <div>
+                <label className="block text-stone-700 font-bold mb-1">
+                  Nama Kondimen / Olahan
+                </label>
+                <input
+                  type="text"
+                  value={menuName}
+                  onChange={(e) => setMenuName(e.target.value)}
+                  placeholder="e.g. Sirup Gula Aren Racikan Toko"
+                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-stone-700 font-bold mb-1">
+                    Hasil Jadi (Yield Qty)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={batchYieldQty}
+                    onChange={(e) => setBatchYieldQty(Math.max(1, Number(e.target.value)))}
+                    className="w-full text-xs font-bold font-mono px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-stone-700 font-bold mb-1">
+                    Satuan Hasil (Unit)
+                  </label>
+                  <select
+                    value={batchYieldUnit}
+                    onChange={(e) => setBatchYieldUnit(e.target.value)}
+                    className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                  >
+                    <option value="ml">ml (Mililiter)</option>
+                    <option value="gr">gr (Gram)</option>
+                    <option value="porsi">porsi (Porsi/Pcs)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Rincian Modal Bahan Baku Batch */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-2">
+                <div className="flex justify-between text-stone-700">
+                  <span>Total Biaya Bahan Baku Pokok:</span>
+                  <span className="font-bold font-mono text-amber-950">{formatCurrency(rawMaterialCost)}</span>
+                </div>
+                <div className="flex justify-between text-stone-700 font-bold pt-1 border-t border-amber-200">
+                  <span>Estimasi HPP per {batchYieldUnit}:</span>
+                  <span className="font-extrabold font-mono text-emerald-800">
+                    {formatCurrency(Math.round(batchYieldQty > 0 ? rawMaterialCost / batchYieldQty : 0))} / {batchYieldUnit}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsBatchPrepModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-800 rounded-xl"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAsBatchPrep}
+                className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Simpan ke Dapur Olahan
+              </button>
+            </div>
           </div>
         </div>
       )}

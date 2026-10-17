@@ -299,7 +299,33 @@ async function ensureTables() {
         created_at TEXT NOT NULL
       )`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'QUEUED'`,
-    `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`
+    `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`,
+    `CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        division TEXT NOT NULL DEFAULT 'BAR',
+        description TEXT,
+        image_url TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        variants JSONB DEFAULT '[]'::jsonb,
+        modifier_groups JSONB DEFAULT '[]'::jsonb,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      )`,
+    `CREATE TABLE IF NOT EXISTS batch_preparations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        division TEXT NOT NULL DEFAULT 'BAR',
+        target_ingredient_id TEXT NOT NULL,
+        target_ingredient_name TEXT,
+        yield_quantity NUMERIC NOT NULL,
+        yield_unit TEXT NOT NULL,
+        ingredients JSONB NOT NULL,
+        notes TEXT,
+        last_prepared_date TEXT
+      )`,
+    `ALTER TABLE batch_preparations ADD COLUMN IF NOT EXISTS division TEXT DEFAULT 'BAR'`
   ];
 
   for (const q of queries) {
@@ -819,6 +845,8 @@ async function startServer() {
       let stock_opname_items: any[] = [];
       let payroll_records: any[] = [];
       let closed_periods: any[] = [];
+      let products: any[] = [];
+      let batch_preparations: any[] = [];
 
       try {
         [
@@ -851,6 +879,8 @@ async function startServer() {
           stock_opname_items,
           payroll_records,
           closed_periods,
+          products,
+          batch_preparations,
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -881,6 +911,8 @@ async function startServer() {
           db.select().from(schema.stockOpnameItems),
           db.select().from(schema.payrollRecords),
           db.select().from(schema.closedPeriods),
+          db.select().from(schema.products),
+          db.select().from(schema.batchPreparations),
         ]);
 
         // Seed default expense categories if empty
@@ -1035,6 +1067,8 @@ async function startServer() {
         stock_opname_items,
         payroll_records,
         closed_periods,
+        products,
+        batch_preparations,
         serverTime: new Date().toISOString(),
       });
     } catch (e) {
@@ -1163,11 +1197,19 @@ async function startServer() {
         stock_opname_items,
         payroll_records,
         closed_periods,
+        products,
+        batch_preparations,
       } = req.body;
 
       await db.transaction(async (tx) => {
         // --- PHASE 1: DELETES (Child -> Parent) ---
         let existingPaidIds = new Set<string>();
+        if (products !== undefined) {
+          await tx.delete(schema.products);
+        }
+        if (batch_preparations !== undefined) {
+          await tx.delete(schema.batchPreparations);
+        }
         if (device_sessions !== undefined) {
           await tx.delete(schema.deviceSessions);
         }
@@ -1426,6 +1468,38 @@ async function startServer() {
             if (filteredItems.length > 0) {
               await tx.insert(schema.deviceSessions).values(filteredItems.map(sanitizeDeviceSession));
             }
+          }
+        }
+        if (products !== undefined) {
+          if (Array.isArray(products) && products.length > 0) {
+            await tx.insert(schema.products).values(products.map((p: any) => ({
+              id: String(p.id),
+              name: String(p.name),
+              category: String(p.category || "COFFEE"),
+              division: String(p.division || "BAR"),
+              description: p.description || null,
+              imageUrl: p.imageUrl || null,
+              isActive: Boolean(p.isActive !== false),
+              variants: Array.isArray(p.variants) ? p.variants : [],
+              modifierGroups: Array.isArray(p.modifierGroups) ? p.modifierGroups : [],
+              createdAt: p.createdAt || new Date().toISOString(),
+              updatedAt: p.updatedAt || new Date().toISOString(),
+            })));
+          }
+        }
+        if (batch_preparations !== undefined) {
+          if (Array.isArray(batch_preparations) && batch_preparations.length > 0) {
+            await tx.insert(schema.batchPreparations).values(batch_preparations.map((bp: any) => ({
+              id: String(bp.id),
+              name: String(bp.name),
+              targetIngredientId: String(bp.targetIngredientId),
+              targetIngredientName: bp.targetIngredientName || null,
+              yieldQuantity: Number(bp.yieldQuantity || 0),
+              yieldUnit: String(bp.yieldUnit || "ml"),
+              ingredients: Array.isArray(bp.ingredients) ? bp.ingredients : [],
+              notes: bp.notes || null,
+              lastPreparedDate: bp.lastPreparedDate || null,
+            })));
           }
         }
       });
@@ -1862,7 +1936,7 @@ async function startServer() {
       try {
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
-        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
       } catch {}
 
       // Extract text content if it's a text-based, CSV, or JSON document
@@ -2049,7 +2123,7 @@ async function startServer() {
       try {
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
-        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
       } catch {}
 
       const systemInstruction = `Anda adalah "Julia Coffee AI Copilot" — konsultan bisnis eksekutif dan pakar operasional specialty coffee shop Indonesia.
@@ -3076,7 +3150,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       try {
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
-        else if (settings[0]?.geminiApiKey) apiKey = settings[0].geminiApiKey;
+        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
       } catch {}
 
       const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
@@ -3100,7 +3174,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       if (!keyToTest) {
         try {
           const settings = await db.select().from(schema.settings).limit(1);
-          keyToTest = settings[0]?.gemini_api_key || settings[0]?.geminiApiKey || process.env.GEMINI_API_KEY;
+          keyToTest = settings[0]?.gemini_api_key || (settings[0] as any)?.geminiApiKey || process.env.GEMINI_API_KEY;
         } catch {
           keyToTest = process.env.GEMINI_API_KEY;
         }

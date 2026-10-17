@@ -41,6 +41,10 @@ import {
   ClosedPeriod,
   DEFAULT_LEADER_ALLOWANCE_RULES,
   DEFAULT_SHIFT_DEFINITIONS,
+  Product,
+  ProductVariant,
+  BatchPreparation,
+  DEFAULT_DIVISION_PACKAGING,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -58,6 +62,284 @@ const generateId = () => {
   );
 };
 
+export const DEFAULT_INITIAL_INGREDIENTS: Ingredient[] = [
+  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250 },
+  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5 },
+  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Pemanis", costPerUnit: 35 },
+  { id: "ing-air", name: "Air Bersih Galon RO", unit: "ml", currentStock: 50000, minStock: 10000, category: "Air & Es", costPerUnit: 0.5 },
+  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Pemanis", costPerUnit: 16 },
+  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Kondimen Olahan", costPerUnit: 38 },
+  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Kondimen Olahan", costPerUnit: 12 },
+  { id: "ing-ice-cube", name: "Es Batu Kristal Tube", unit: "gr", currentStock: 25000, minStock: 5000, category: "Air & Es", costPerUnit: 2 },
+  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Kitchen", costPerUnit: 16 },
+  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Kitchen", costPerUnit: 58 },
+  { id: "ing-bawang-merah", name: "Bawang Merah Kupas", unit: "gr", currentStock: 3000, minStock: 1000, category: "Kitchen", costPerUnit: 38 },
+  { id: "ing-cabai-rawit", name: "Cabai Rawit Merah Segar", unit: "gr", currentStock: 2000, minStock: 800, category: "Kitchen", costPerUnit: 60 },
+  { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Kitchen", costPerUnit: 32 },
+  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48 },
+  { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Kitchen", costPerUnit: 18 },
+  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500 },
+  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140 },
+];
+
+export const DEFAULT_BATCH_PREPARATIONS: BatchPreparation[] = [
+  {
+    id: "bp-gula-aren",
+    name: "Saus Gula Aren Racikan",
+    division: "BAR",
+    targetIngredientId: "ing-aren-cair",
+    targetIngredientName: "Gula Aren Cair Racikan",
+    yieldQuantity: 1200,
+    yieldUnit: "ml",
+    ingredients: [
+      { ingredientId: "ing-aren-padat", quantity: 1000 },
+      { ingredientId: "ing-air", quantity: 600 },
+    ],
+    notes: "Masak api kecil selama 25 menit bersama daun pandan hingga mengental. Saring sebelum disimpan di chiller botol.",
+    lastPreparedDate: new Date().toISOString(),
+  },
+  {
+    id: "bp-simple-syrup",
+    name: "Simple Syrup Bar",
+    division: "BAR",
+    targetIngredientId: "ing-simple-syrup",
+    targetIngredientName: "Simple Syrup (1:1)",
+    yieldQuantity: 1600,
+    yieldUnit: "ml",
+    ingredients: [
+      { ingredientId: "ing-gula-pasir", quantity: 1000 },
+      { ingredientId: "ing-air", quantity: 1000 },
+    ],
+    notes: "Aduk hingga gula larut sempurna (rasio 1:1). Simpan dalam squeeze bottle bar.",
+    lastPreparedDate: new Date().toISOString(),
+  },
+  {
+    id: "bp-cold-brew",
+    name: "Cold Brew Concentrate",
+    division: "BAR",
+    targetIngredientId: "ing-coffee-beans",
+    targetIngredientName: "Cold Brew Concentrate",
+    yieldQuantity: 1200,
+    yieldUnit: "ml",
+    ingredients: [
+      { ingredientId: "ing-coffee-beans", quantity: 250 },
+      { ingredientId: "ing-air", quantity: 1500 },
+    ],
+    notes: "Steep selama 16-18 jam di chiller 4°C, saring 2 lapis paper filter.",
+    lastPreparedDate: new Date().toISOString(),
+  },
+  {
+    id: "bp-sambal-matah",
+    name: "Sambal Matah House",
+    division: "KITCHEN",
+    targetIngredientId: "ing-sambal-matah",
+    targetIngredientName: "Sambal Matah Matang",
+    yieldQuantity: 900,
+    yieldUnit: "gr",
+    ingredients: [
+      { ingredientId: "ing-bawang-merah", quantity: 500 },
+      { ingredientId: "ing-cabai-rawit", quantity: 300 },
+      { ingredientId: "ing-minyak-kelapa", quantity: 200 },
+    ],
+    notes: "Iris halus bahan mentah, siram dengan minyak kelapa panas mendidih dan perasan jeruk limau.",
+    lastPreparedDate: new Date().toISOString(),
+  },
+  {
+    id: "bp-pastry-cream",
+    name: "Pastry Cream (Vanilla Custard)",
+    division: "BAKER",
+    targetIngredientId: "ing-pastry-cream",
+    targetIngredientName: "Pastry Cream Vanilla",
+    yieldQuantity: 1000,
+    yieldUnit: "gr",
+    ingredients: [
+      { ingredientId: "ing-fresh-milk", quantity: 600 },
+      { ingredientId: "ing-gula-pasir", quantity: 150 },
+    ],
+    notes: "Masak susu segar, kuning telur, dan pati jagung hingga meletup dan kental berkilau. Dinginkan tertutup plastic wrap.",
+    lastPreparedDate: new Date().toISOString(),
+  },
+];
+
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "prod-kopsu-aren",
+    name: "Kopi Susu Gula Aren",
+    category: "COFFEE",
+    division: "BAR",
+    description: "Signature blend espresso dengan susu segar creamy dan siraman saus gula aren racikan Julia's.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-kopsu-iced",
+        productId: "prod-kopsu-aren",
+        name: "Iced 16oz",
+        sku: "JUL-BAR-001",
+        price: 22000,
+        packagingCost: 1000,
+        packagingNotes: "Cup 16oz + Lid + Sedotan Steril",
+        estimatedHpp: 7250,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 120 },
+          { ingredientId: "ing-aren-cair", quantity: 25 },
+          { ingredientId: "ing-ice-cube", quantity: 120 },
+        ],
+      },
+      {
+        id: "var-kopsu-hot",
+        productId: "prod-kopsu-aren",
+        name: "Hot 8oz",
+        sku: "JUL-BAR-002",
+        price: 20000,
+        packagingCost: 850,
+        packagingNotes: "Paper Cup Hot 8oz + Lid",
+        estimatedHpp: 6900,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 140 },
+          { ingredientId: "ing-aren-cair", quantity: 20 },
+        ],
+      },
+      {
+        id: "var-kopsu-1l",
+        productId: "prod-kopsu-aren",
+        name: "Botol 1 Liter",
+        sku: "JUL-BAR-003",
+        price: 85000,
+        packagingCost: 2800,
+        packagingNotes: "Botol PET 1L + Segel Cap",
+        estimatedHpp: 28500,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 90 },
+          { ingredientId: "ing-fresh-milk", quantity: 650 },
+          { ingredientId: "ing-aren-cair", quantity: 140 },
+        ],
+      },
+    ],
+    modifierGroups: [
+      {
+        id: "modgrp-milk",
+        name: "Pilihan Susu Alternatif",
+        minSelect: 0,
+        maxSelect: 1,
+        options: [
+          { id: "mod-oatmilk", name: "Ganti Oat Milk (Oatside)", price: 8000, cost: 3500 },
+          { id: "mod-soymilk", name: "Ganti Soy Milk", price: 6000, cost: 2500 },
+        ],
+      },
+      {
+        id: "modgrp-extra",
+        name: "Tambahan Shot & Topping",
+        minSelect: 0,
+        maxSelect: 2,
+        options: [
+          { id: "mod-extra-shot", name: "Extra Shot Espresso", price: 6000, cost: 2500, recipe: [{ ingredientId: "ing-coffee-beans", quantity: 9 }] },
+          { id: "mod-caramel-drizzle", name: "Caramel Drizzle", price: 4000, cost: 1200 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "prod-cafe-latte",
+    name: "Cafe Latte",
+    category: "COFFEE",
+    division: "BAR",
+    description: "Espresso klasik berpadu dengan steamed fresh milk bertekstur microfoam sutra.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-latte-hot",
+        productId: "prod-cafe-latte",
+        name: "Hot 8oz",
+        sku: "JUL-BAR-010",
+        price: 25000,
+        packagingCost: 850,
+        estimatedHpp: 6500,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 150 },
+        ],
+      },
+      {
+        id: "var-latte-iced",
+        productId: "prod-cafe-latte",
+        name: "Iced 16oz",
+        sku: "JUL-BAR-011",
+        price: 27000,
+        packagingCost: 1000,
+        estimatedHpp: 6900,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 140 },
+          { ingredientId: "ing-ice-cube", quantity: 120 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "prod-ayam-matah",
+    name: "Nasi Ayam Sambal Matah",
+    category: "FOOD",
+    division: "KITCHEN",
+    description: "Nasi pulen hangat dengan ayam fillet krispi keemasan disiram sambal matah racikan segar.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-ayam-reguler",
+        productId: "prod-ayam-matah",
+        name: "Porsi Reguler",
+        sku: "JUL-KIT-001",
+        price: 35000,
+        packagingCost: 1650,
+        packagingNotes: "Paper Bowl 650ml + Sendok Garpu Kayu",
+        estimatedHpp: 13500,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-beras", quantity: 150 },
+          { ingredientId: "ing-ayam-fillet", quantity: 120 },
+          { ingredientId: "ing-sambal-matah", quantity: 40 },
+          { ingredientId: "ing-minyak-goreng", quantity: 30 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "prod-croissant-butter",
+    name: "French Butter Croissant",
+    category: "BAKERY",
+    division: "BAKER",
+    description: "Croissant berlapis renyah keemasan dengan mentega murni Prancis yang wangi gurih.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-croissant-single",
+        productId: "prod-croissant-butter",
+        name: "Single Piece",
+        sku: "JUL-BAK-001",
+        price: 24000,
+        packagingCost: 450,
+        packagingNotes: "Paperbag Roti Gusset",
+        estimatedHpp: 7800,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-adonan-croissant", quantity: 1 },
+          { ingredientId: "ing-butter", quantity: 15 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+];
+
 interface StoreContextType {
   currentUser: User | null;
   users: User[];
@@ -67,6 +349,8 @@ interface StoreContextType {
   cashTransactions: CashTransaction[];
   ingredients: Ingredient[];
   recipes: Recipe[];
+  products: Product[];
+  batchPreparations: BatchPreparation[];
   stockMovements: StockMovement[];
   salesTransactions: SalesTransaction[];
   salesImportLogs: SalesImportLog[];
@@ -195,6 +479,15 @@ interface StoreContextType {
   updateRecipe: (recipe: Recipe) => void;
   deleteRecipe: (id: string) => void;
 
+  addProduct: (product: Omit<Product, "id" | "createdAt">) => string;
+  updateProduct: (product: Product) => void;
+  deleteProduct: (id: string) => void;
+
+  addBatchPreparation: (bp: Omit<BatchPreparation, "id">) => string;
+  updateBatchPreparation: (bp: BatchPreparation) => void;
+  deleteBatchPreparation: (id: string) => void;
+  executeBatchCook: (batchPrepId: string, multiplier?: number, notes?: string) => { success: boolean; message: string };
+
   addStockMovement: (movement: Omit<StockMovement, "id">) => void;
 
   // Sync Status
@@ -254,8 +547,31 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(
     [],
   );
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
+    try {
+      const saved = localStorage.getItem("app_ingredients_cache");
+      return saved ? JSON.parse(saved) : DEFAULT_INITIAL_INGREDIENTS;
+    } catch {
+      return DEFAULT_INITIAL_INGREDIENTS;
+    }
+  });
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem("app_products_cache");
+      return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+    } catch {
+      return DEFAULT_PRODUCTS;
+    }
+  });
+  const [batchPreparations, setBatchPreparations] = useState<BatchPreparation[]>(() => {
+    try {
+      const saved = localStorage.getItem("app_batch_preparations_cache");
+      return saved ? JSON.parse(saved) : DEFAULT_BATCH_PREPARATIONS;
+    } catch {
+      return DEFAULT_BATCH_PREPARATIONS;
+    }
+  });
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [salesTransactions, setSalesTransactions] = useState<
     SalesTransaction[]
@@ -532,6 +848,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.stock_opname_items)) setStockOpnameItems(data.stock_opname_items);
         if (Array.isArray(data.payroll_records)) setPayrollRecords(data.payroll_records);
         if (Array.isArray(data.closed_periods)) setClosedPeriods(data.closed_periods);
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products);
+        }
+        if (Array.isArray(data.batch_preparations) && data.batch_preparations.length > 0) {
+          setBatchPreparations(data.batch_preparations);
+        }
 
         setLastSyncTime(new Date());
         hasLocalChanges.current = false;
@@ -764,6 +1086,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             stock_opname_items: stockOpnameItems,
             payroll_records: payrollRecords,
             closed_periods: closedPeriods,
+            products,
+            batch_preparations: batchPreparations,
           }),
         });
         if (res.ok) {
@@ -790,6 +1114,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     sessions,
     ingredients,
     recipes,
+    products,
+    batchPreparations,
     stockMovements,
     salesTransactions,
     salesImportLogs,
@@ -1259,6 +1585,179 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const addProduct = (prod: Omit<Product, "id" | "createdAt">): string => {
+    const id = generateId();
+    const newProduct: Product = {
+      ...prod,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setProducts((prev) => [...prev, newProduct]);
+    writeAuditLog("CREATE", "products", id);
+    markChanged();
+    return id;
+  };
+
+  const updateProduct = (prod: Product) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === prod.id ? { ...prod, updatedAt: new Date().toISOString() } : p))
+    );
+    writeAuditLog("UPDATE", "products", prod.id);
+    markChanged();
+  };
+
+  const deleteProduct = (id: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    writeAuditLog("DELETE", "products", id);
+    markChanged();
+  };
+
+  const addBatchPreparation = (bp: Omit<BatchPreparation, "id">): string => {
+    const id = generateId();
+    const newBp: BatchPreparation = { ...bp, id };
+    setBatchPreparations((prev) => [...prev, newBp]);
+    writeAuditLog("CREATE", "batch_preparations", id);
+    markChanged();
+    return id;
+  };
+
+  const updateBatchPreparation = (bp: BatchPreparation) => {
+    setBatchPreparations((prev) => prev.map((b) => (b.id === bp.id ? bp : b)));
+    writeAuditLog("UPDATE", "batch_preparations", bp.id);
+    markChanged();
+  };
+
+  const deleteBatchPreparation = (id: string) => {
+    setBatchPreparations((prev) => prev.filter((b) => b.id !== id));
+    writeAuditLog("DELETE", "batch_preparations", id);
+    markChanged();
+  };
+
+  const executeBatchCook = (
+    batchPrepId: string,
+    multiplier: number = 1,
+    notes?: string
+  ): { success: boolean; message: string } => {
+    const bp = batchPreparations.find((b) => b.id === batchPrepId);
+    if (!bp) {
+      return { success: false, message: "Kondimen olahan tidak ditemukan." };
+    }
+    if (multiplier <= 0) {
+      return { success: false, message: "Jumlah batch harus lebih dari 0." };
+    }
+
+    // 1. Cek kecukupan stok seluruh bahan mentah
+    const missingIngredients: string[] = [];
+    let totalCostSpent = 0;
+
+    for (const ri of bp.ingredients) {
+      const ing = ingredients.find((i) => i.id === ri.ingredientId);
+      const neededQty = ri.quantity * multiplier;
+      if (!ing) {
+        missingIngredients.push(`Bahan dengan ID ${ri.ingredientId} tidak ditemukan di inventori.`);
+        continue;
+      }
+      if (ing.currentStock < neededQty) {
+        missingIngredients.push(
+          `${ing.name} (Kurang ${(neededQty - ing.currentStock).toFixed(1)} ${ing.unit}, butuh ${neededQty} ${ing.unit}, stok ${ing.currentStock} ${ing.unit})`
+        );
+      }
+      totalCostSpent += neededQty * (ing.costPerUnit || 0);
+    }
+
+    if (missingIngredients.length > 0) {
+      return {
+        success: false,
+        message: `Stok bahan mentah tidak mencukupi untuk memasak ${multiplier} batch:\n- ${missingIngredients.join("\n- ")}`,
+      };
+    }
+
+    // 2. Data target kondimen
+    let targetIng = ingredients.find((i) => i.id === bp.targetIngredientId);
+    const yieldedQty = bp.yieldQuantity * multiplier;
+    const batchUnitCost = yieldedQty > 0 ? Math.round(totalCostSpent / yieldedQty) : 0;
+    const nowIso = new Date().toISOString();
+
+    // 3. Potong stok bahan mentah (USAGE)
+    bp.ingredients.forEach((ri) => {
+      const ing = ingredients.find((i) => i.id === ri.ingredientId);
+      const neededQty = ri.quantity * multiplier;
+      const ingCost = ing ? (ing.costPerUnit || 0) : 0;
+
+      addStockMovement({
+        ingredientId: ri.ingredientId,
+        type: "USAGE",
+        quantity: neededQty,
+        unitCost: ingCost,
+        totalCost: ingCost * neededQty,
+        date: nowIso,
+        note: `Bahan Olahan Batch: ${bp.name} (${multiplier}x batch)${notes ? ` - ${notes}` : ""}`,
+        createdBy: currentUser?.name || "Kitchen / Bar Staff",
+      });
+    });
+
+    // 4. Tambah stok hasil kondimen (IN) & update unit valuation HPP
+    if (targetIng) {
+      const existingValuation = targetIng.currentStock * (targetIng.costPerUnit || 0);
+      const newTotalValuation = existingValuation + totalCostSpent;
+      const newTotalQty = targetIng.currentStock + yieldedQty;
+      const weightedAvgCost = newTotalQty > 0 ? Math.round(newTotalValuation / newTotalQty) : batchUnitCost;
+
+      addStockMovement({
+        ingredientId: targetIng.id,
+        type: "IN",
+        quantity: yieldedQty,
+        unitCost: batchUnitCost,
+        totalCost: totalCostSpent,
+        date: nowIso,
+        note: `Hasil Olahan Batch: ${bp.name} (${yieldedQty} ${bp.yieldUnit})${notes ? ` - ${notes}` : ""}`,
+        createdBy: currentUser?.name || "Kitchen / Bar Staff",
+      });
+
+      // Update unit valuation di master
+      setIngredients((prev) =>
+        prev.map((i) => (i.id === targetIng!.id ? { ...i, costPerUnit: weightedAvgCost } : i))
+      );
+    } else {
+      const newIngId = bp.targetIngredientId || generateId();
+      const newIng: Ingredient = {
+        id: newIngId,
+        name: bp.targetIngredientName || bp.name,
+        unit: bp.yieldUnit,
+        currentStock: yieldedQty,
+        minStock: Math.round(bp.yieldQuantity * 0.5),
+        category: "Kondimen Olahan",
+        costPerUnit: batchUnitCost,
+      };
+      setIngredients((prev) => [...prev, newIng]);
+      writeAuditLog("CREATE", "ingredients", newIngId);
+
+      addStockMovement({
+        ingredientId: newIngId,
+        type: "IN",
+        quantity: yieldedQty,
+        unitCost: batchUnitCost,
+        totalCost: totalCostSpent,
+        date: nowIso,
+        note: `Hasil Olahan Batch: ${bp.name} (${yieldedQty} ${bp.yieldUnit})${notes ? ` - ${notes}` : ""}`,
+        createdBy: currentUser?.name || "Kitchen / Bar Staff",
+      });
+    }
+
+    // 5. Update lastPreparedDate di batch preparation
+    setBatchPreparations((prev) =>
+      prev.map((b) => (b.id === batchPrepId ? { ...b, lastPreparedDate: nowIso } : b))
+    );
+
+    writeAuditLog("CREATE", "batch_cook", batchPrepId);
+    markChanged();
+
+    return {
+      success: true,
+      message: `Sukses memasak ${multiplier} batch "${bp.name}". Menghasilkan +${yieldedQty} ${bp.yieldUnit} dengan HPP Rp ${batchUnitCost.toLocaleString("id-ID")}/${bp.yieldUnit}.`,
+    };
+  };
+
   const addSupplier = (supplier: Omit<Supplier, "id">) => {
     const id = generateId();
     setSuppliers((prev) => [...prev, { ...supplier, id }]);
@@ -1629,6 +2128,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addRecipe,
         updateRecipe,
         deleteRecipe,
+        products,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        batchPreparations,
+        addBatchPreparation,
+        updateBatchPreparation,
+        deleteBatchPreparation,
+        executeBatchCook,
         addStockMovement,
         addSupplier,
         updateSupplier,

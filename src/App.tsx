@@ -88,6 +88,9 @@ const PosCashierLogin = React.lazy(() =>
 const KitchenDisplaySystem = React.lazy(() =>
   import("./components/pos/KitchenDisplaySystem").then((m) => ({ default: m.KitchenDisplaySystem })),
 );
+const MenuManagement = React.lazy(() =>
+  import("./components/MenuManagement").then((m) => ({ default: m.MenuManagement })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -178,7 +181,7 @@ function AppContent() {
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
-    "attendance_clock", "hpp_calculator", "pos_cashier", "kitchen_display"
+    "attendance_clock", "menu_management", "hpp_calculator", "pos_cashier", "kitchen_display"
   ];
 
   const roleAllowedViews: Record<string, ViewState[]> = {
@@ -189,6 +192,7 @@ function AppContent() {
       "dashboard_manager",
       "cash_flow",
       "finance_reports",
+      "menu_management",
       "hpp_calculator",
       "pos_cashier",
       "kitchen_display",
@@ -202,6 +206,7 @@ function AppContent() {
       "shifts", "suppliers", "purchases",
       "users",
       "audit_log",
+      "menu_management",
       "hpp_calculator",
       "pos_cashier",
       "kitchen_display",
@@ -229,6 +234,7 @@ function AppContent() {
       "leader_checklist",
       "dashboard_inventory",
       "inventory",
+      "menu_management",
       "shifts",
       "suppliers", "purchases",
       "attendance_clock"
@@ -385,6 +391,8 @@ function AppContent() {
         return <EmployeeDashboard onNavigate={setCurrentView} />;
       case "hpp_calculator":
         return <HppCalculator onNavigate={setCurrentView} />;
+      case "menu_management":
+        return <MenuManagement onNavigate={setCurrentView} />;
       default:
         return <Dashboard view="FINANCE" />;
     }

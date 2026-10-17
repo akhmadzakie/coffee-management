@@ -454,3 +454,32 @@ export const posPrinters = pgTable("pos_printers", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+// ─── Menu Engineering, Products & Batch Preparations ────────────────────────
+export const products = pgTable("products", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  division: varchar("division", { length: 50 }).default("BAR").notNull(), // 'BAR' | 'KITCHEN' | 'BAKER'
+  description: text("description"),
+  imageUrl: text("image_url"),
+  isActive: boolean("is_active").default(true).notNull(),
+  variants: jsonb("variants").default([]).notNull(),
+  modifierGroups: jsonb("modifier_groups").default([]),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at"),
+});
+
+export const batchPreparations = pgTable("batch_preparations", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  name: text("name").notNull(),
+  division: varchar("division", { length: 50 }).default("BAR").notNull(),
+  targetIngredientId: varchar("target_ingredient_id", { length: 255 }).notNull(),
+  targetIngredientName: text("target_ingredient_name"),
+  yieldQuantity: real("yield_quantity").notNull(),
+  yieldUnit: varchar("yield_unit", { length: 50 }).notNull(),
+  ingredients: jsonb("ingredients").notNull(), // [{ ingredientId, quantity }]
+  notes: text("notes"),
+  lastPreparedDate: text("last_prepared_date"),
+});
+
