@@ -346,7 +346,7 @@ function AppContent() {
       case "dashboard_inventory":
         return <Dashboard view="INVENTORY" />;
       case "inventory":
-        return <Inventory />;
+        return <Inventory onNavigate={setCurrentView} />;
       case "import_sales":
         return <Sales />;
       case "cash_flow":

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { formatCurrency } from "../utils/format";
 import {
   Plus,
   Search,
@@ -10,13 +11,78 @@ import {
   ClipboardList,
   CheckCircle2,
   Edit2,
+  Coffee,
+  Droplets,
+  Sparkles,
+  Flame,
+  UtensilsCrossed,
+  Cake,
+  ShoppingBag,
+  Layers,
+  ArrowRight,
+  Calculator,
+  MapPin,
+  Check,
+  X,
+  RefreshCw,
+  Coins,
+  Sliders,
+  Info,
+  Building2,
+  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
-import { Recipe } from "../types";
+import { Recipe, Ingredient, ViewState } from "../types";
 
-export const Inventory = () => {
+interface InventoryProps {
+  onNavigate?: (view: ViewState) => void;
+}
+
+export const PRESET_CATEGORIES = [
+  { id: "ALL", name: "Semua Kategori", icon: Package },
+  { id: "Biji Kopi", name: "Biji Kopi & Espresso", icon: Coffee },
+  { id: "Susu & Dairy", name: "Susu & Plant-Based", icon: Droplets },
+  { id: "Sirup & Saus", name: "Sirup & Saus", icon: Sparkles },
+  { id: "Powder & Teh", name: "Powder & Teh", icon: Flame },
+  { id: "Kitchen & Makanan", name: "Kitchen & Makanan", icon: UtensilsCrossed },
+  { id: "Bakery & Pastry", name: "Bakery & Pastry", icon: Cake },
+  { id: "Kemasan & Cup", name: "Kemasan & Cup", icon: ShoppingBag },
+  { id: "Lainnya", name: "Lainnya", icon: Layers },
+];
+
+export const PRESET_LOCATIONS = [
+  { id: "ALL", label: "Semua Lokasi Simpan" },
+  { id: "BAR", label: "Bar Station (Meja Bar)" },
+  { id: "CHILLER", label: "Chiller / Kulkas Pendingin" },
+  { id: "DRY_STORAGE", label: "Gudang Kering (Dry Storage)" },
+  { id: "KITCHEN", label: "Kitchen / Dapur Makanan" },
+  { id: "BAKERY", label: "Bakery & Pastry Station" },
+];
+
+export const PURCHASE_UNIT_PRESETS = [
+  { unit: "Kg", base: "gr", defaultFactor: 1000, label: "Kilogram (1 Kg = 1.000 gram)" },
+  { unit: "Liter", base: "ml", defaultFactor: 1000, label: "Liter (1 Liter = 1.000 ml)" },
+  { unit: "Karton (12L)", base: "ml", defaultFactor: 12000, label: "Karton Susu (1 Karton = 12.000 ml / 12 Liter)" },
+  { unit: "Dus Cup (500pcs)", base: "pcs", defaultFactor: 500, label: "Dus Cup (1 Dus = 500 pcs)" },
+  { unit: "Pack Sedotan (100pcs)", base: "pcs", defaultFactor: 100, label: "Pack Sedotan (1 Pack = 100 pcs)" },
+  { unit: "Botol Sirup (700ml)", base: "ml", defaultFactor: 700, label: "Botol Sirup (1 Botol = 700 ml)" },
+  { unit: "Jerigen (5L)", base: "ml", defaultFactor: 5000, label: "Jerigen (1 Jerigen = 5.000 ml / 5 Liter)" },
+  { unit: "Pouch Powder (1Kg)", base: "gr", defaultFactor: 1000, label: "Pouch Powder (1 Pouch = 1.000 gram)" },
+  { unit: "Kustom / Lainnya", base: "pcs", defaultFactor: 1, label: "Satuan Lainnya (Kustom)" },
+];
+
+export const WASTE_REASONS = [
+  "Kalibrasi Grinder Pagi (Dialing Espresso)",
+  "Susu Tumpah / Overheat Steaming",
+  "Basi / Melewati Masa Expired",
+  "Salah Buat Pesanan (Barista Mistake)",
+  "Kemasan Rusak / Bocor",
+  "Bahan Menggumpal / Lembab",
+];
+
+export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const {
     ingredients,
     stockMovements,
@@ -34,114 +100,323 @@ export const Inventory = () => {
     updateRecipe,
     deleteRecipe,
   } = useStore();
+
   const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes">("ingredients");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+  const [selectedLocation, setSelectedLocation] = useState<string>("ALL");
+  const [selectedStockStatus, setSelectedStockStatus] = useState<"ALL" | "LOW_STOCK" | "SAFE">("ALL");
 
-  // Modals
-  const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false);
+  // Modals state
+  const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [isAddMovementOpen, setIsAddMovementOpen] = useState(false);
   const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [selectedIngredientForMove, setSelectedIngredientForMove] = useState<string>("");
   const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE">("OUT");
+  const [movementNote, setMovementNote] = useState<string>("");
+  const [movementQuantity, setMovementQuantity] = useState<number>(0);
 
-  const filteredIngredients = ingredients.filter(
-    (i) =>
-      i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.category.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  const filteredRecipes = recipes.filter(
-    (r) => r.menuName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredMovements = stockMovements
-    .filter((m) => {
-      const ingredient = ingredients.find((i) => i.id === m.ingredientId);
-      if (!ingredient) return false;
-      return ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Form State for Add / Edit Ingredient
+  const [ingredientForm, setIngredientForm] = useState({
+    code: "",
+    name: "",
+    category: "Biji Kopi",
+    storageLocation: "BAR",
+    unit: "gr",
+    usePurchaseUnit: true,
+    purchaseUnit: "Kg",
+    conversionFactor: 1000,
+    purchasePrice: 220000,
+    costPerUnit: 220,
+    initialStockUnit: "BASE" as "BASE" | "PURCHASE",
+    stockInput: 0,
+    minStock: 500,
+    notes: "",
+  });
 
   // OPNAME STATE
   const [isOpnameMode, setIsOpnameMode] = useState(false);
   const [opnameId, setOpnameId] = useState("");
   const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
 
-  const totalValuation = ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
-
-  const handleAddIngredient = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    addIngredient({
-      name: formData.get("name") as string,
-      unit: formData.get("unit") as string,
-      currentStock: Number(formData.get("currentStock")),
-      minStock: Number(formData.get("minStock")),
-      category: formData.get("category") as string,
-      costPerUnit: Number(formData.get("costPerUnit")),
+  // Open Modal for New Ingredient
+  const handleOpenAddIngredient = () => {
+    setEditingIngredient(null);
+    setIngredientForm({
+      code: `BB-${Math.floor(100 + Math.random() * 900)}`,
+      name: "",
+      category: "Biji Kopi",
+      storageLocation: "BAR",
+      unit: "gr",
+      usePurchaseUnit: true,
+      purchaseUnit: "Kg",
+      conversionFactor: 1000,
+      purchasePrice: 220000,
+      costPerUnit: 220,
+      initialStockUnit: "BASE",
+      stockInput: 1000,
+      minStock: 500,
+      notes: "",
     });
-    setIsAddIngredientOpen(false);
+    setIsIngredientModalOpen(true);
   };
 
+  // Open Modal for Editing Ingredient
+  const handleOpenEditIngredient = (ing: Ingredient) => {
+    setEditingIngredient(ing);
+    const hasPurchase = !!ing.purchaseUnit;
+    const factor = ing.conversionFactor || 1000;
+    const pPrice = ing.purchasePrice || (ing.costPerUnit * factor);
+
+    setIngredientForm({
+      code: ing.code || "",
+      name: ing.name,
+      category: ing.category,
+      storageLocation: (ing.storageLocation as any) || "BAR",
+      unit: ing.unit,
+      usePurchaseUnit: hasPurchase,
+      purchaseUnit: ing.purchaseUnit || "Kg",
+      conversionFactor: factor,
+      purchasePrice: pPrice,
+      costPerUnit: ing.costPerUnit || 0,
+      initialStockUnit: "BASE",
+      stockInput: ing.currentStock,
+      minStock: ing.minStock,
+      notes: ing.notes || "",
+    });
+    setIsIngredientModalOpen(true);
+  };
+
+  // Auto calculate costPerUnit when purchasePrice or conversionFactor changes
+  const computedCostPerUnit = useMemo(() => {
+    if (!ingredientForm.usePurchaseUnit) {
+      return Number(ingredientForm.costPerUnit) || 0;
+    }
+    if (ingredientForm.conversionFactor > 0 && ingredientForm.purchasePrice > 0) {
+      return Math.round(ingredientForm.purchasePrice / ingredientForm.conversionFactor);
+    }
+    return 0;
+  }, [ingredientForm.usePurchaseUnit, ingredientForm.purchasePrice, ingredientForm.conversionFactor, ingredientForm.costPerUnit]);
+
+  // Handle Preset Purchase Unit Change
+  const handlePurchasePresetSelect = (presetUnit: string) => {
+    const found = PURCHASE_UNIT_PRESETS.find((p) => p.unit === presetUnit);
+    if (found) {
+      setIngredientForm((prev) => ({
+        ...prev,
+        purchaseUnit: found.unit,
+        unit: found.base,
+        conversionFactor: found.defaultFactor,
+      }));
+    }
+  };
+
+  // Submit Add / Edit Ingredient
+  const handleSubmitIngredient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ingredientForm.name.trim()) {
+      alert("Nama bahan baku tidak boleh kosong.");
+      return;
+    }
+
+    const calculatedStock = ingredientForm.initialStockUnit === "PURCHASE" && ingredientForm.usePurchaseUnit
+      ? Number(ingredientForm.stockInput) * Number(ingredientForm.conversionFactor)
+      : Number(ingredientForm.stockInput);
+
+    const payload: Omit<Ingredient, "id"> = {
+      code: ingredientForm.code.trim() || undefined,
+      name: ingredientForm.name.trim(),
+      category: ingredientForm.category,
+      unit: ingredientForm.unit.trim().toLowerCase(),
+      currentStock: Math.max(0, calculatedStock),
+      minStock: Math.max(0, Number(ingredientForm.minStock) || 0),
+      costPerUnit: computedCostPerUnit,
+      purchaseUnit: ingredientForm.usePurchaseUnit ? ingredientForm.purchaseUnit : undefined,
+      conversionFactor: ingredientForm.usePurchaseUnit ? Number(ingredientForm.conversionFactor) : undefined,
+      purchasePrice: ingredientForm.usePurchaseUnit ? Number(ingredientForm.purchasePrice) : undefined,
+      storageLocation: ingredientForm.storageLocation,
+      notes: ingredientForm.notes.trim() || undefined,
+    };
+
+    if (editingIngredient) {
+      updateIngredient({
+        ...editingIngredient,
+        ...payload,
+      });
+    } else {
+      addIngredient(payload);
+    }
+
+    setIsIngredientModalOpen(false);
+  };
+
+  // Filtered ingredients
+  const filteredIngredients = useMemo(() => {
+    return ingredients.filter((i) => {
+      const matchSearch =
+        i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        i.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (i.code && i.code.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchCategory =
+        selectedCategory === "ALL" ||
+        i.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+        (selectedCategory === "Kemasan & Cup" && (i.category.includes("Kemasan") || i.category.includes("Gelas") || i.category.includes("Cup")));
+
+      const matchLocation =
+        selectedLocation === "ALL" ||
+        (i.storageLocation || "BAR") === selectedLocation;
+
+      const isLow = i.currentStock <= i.minStock;
+      const matchStatus =
+        selectedStockStatus === "ALL" ||
+        (selectedStockStatus === "LOW_STOCK" && isLow) ||
+        (selectedStockStatus === "SAFE" && !isLow);
+
+      return matchSearch && matchCategory && matchLocation && matchStatus;
+    });
+  }, [ingredients, searchTerm, selectedCategory, selectedLocation, selectedStockStatus]);
+
+  // Overall statistics
+  const totalValuation = useMemo(() => {
+    return ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
+  }, [ingredients]);
+
+  const lowStockCount = useMemo(() => {
+    return ingredients.filter((i) => i.currentStock <= i.minStock).length;
+  }, [ingredients]);
+
+  const outOfStockCount = useMemo(() => {
+    return ingredients.filter((i) => i.currentStock <= 0).length;
+  }, [ingredients]);
+
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter((r) => r.menuName.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [recipes, searchTerm]);
+
+  const filteredMovements = useMemo(() => {
+    return stockMovements
+      .filter((m) => {
+        const ingredient = ingredients.find((i) => i.id === m.ingredientId);
+        if (!ingredient) return false;
+        return ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [stockMovements, ingredients, searchTerm]);
+
+  // Import CSV / Excel
   const handleImportIngredients = (data: any[]) => {
     let imported = 0;
     let updated = 0;
-    data.forEach(row => {
-      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const code = row["Kode"] || row.code;
+
+    data.forEach((row) => {
+      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"] || row.id;
+      const code = row["Kode Bahan"] || row["Kode"] || row.code;
       const name = row["Nama Bahan"] || row.name;
-      const unit = row["Satuan"] || row.unit;
-      const currentStock = Number(row["Stok Saat Ini"]) || 0;
-      const minStock = Number(row["Stok Minimum"]) || 0;
-      const category = row["Kategori"] || row.category || "General";
-      const costPerUnit = Number(row["Harga per Satuan"]) || 0;
+      const category = row["Kategori"] || row.category || "Lainnya";
+      const storageLocation = row["Lokasi Simpan"] || row.storageLocation || "BAR";
+      const unit = (row["Satuan Resep (Terkecil)"] || row["Satuan"] || row.unit || "gr").toString().trim().toLowerCase();
+      const currentStock = Number(row["Stok Fisik Saat Ini"] ?? row["Stok Saat Ini"] ?? row.currentStock) || 0;
+      const minStock = Number(row["Batas Minimum (Alert)"] ?? row["Stok Minimum"] ?? row.minStock) || 0;
+
+      const purchaseUnit = row["Satuan Beli Supplier"] || row.purchaseUnit || undefined;
+      const conversionFactor = Number(row["Isi per Kemasan Beli"] || row.conversionFactor) || (purchaseUnit ? 1000 : undefined);
+      const purchasePrice = Number(row["Harga Beli per Kemasan"] || row.purchasePrice) || undefined;
+
+      let costPerUnit = Number(row["Harga per Satuan Resep (HPP)"] ?? row["Harga per Satuan"] ?? row.costPerUnit) || 0;
+      if (!costPerUnit && purchasePrice && conversionFactor && conversionFactor > 0) {
+        costPerUnit = Math.round(purchasePrice / conversionFactor);
+      }
+
+      const notes = row["Catatan Tambahan"] || row["Catatan"] || row.notes || undefined;
 
       if (name && unit) {
+        const payload: Omit<Ingredient, "id"> = {
+          code: code ? String(code).trim() : undefined,
+          name: String(name).trim(),
+          category: String(category).trim(),
+          storageLocation: String(storageLocation).trim(),
+          unit,
+          currentStock: Math.max(0, currentStock),
+          minStock: Math.max(0, minStock),
+          costPerUnit: Math.max(0, costPerUnit),
+          purchaseUnit: purchaseUnit ? String(purchaseUnit).trim() : undefined,
+          conversionFactor: conversionFactor && conversionFactor > 0 ? conversionFactor : undefined,
+          purchasePrice: purchasePrice && purchasePrice > 0 ? purchasePrice : undefined,
+          notes: notes ? String(notes).trim() : undefined,
+        };
+
         if (idSistem) {
-          // Edit
-          const existing = ingredients.find(i => i.id === idSistem);
+          const existing = ingredients.find((i) => i.id === idSistem);
           if (existing) {
             updateIngredient({
               ...existing,
-              code: code || existing.code,
-              name,
-              unit,
-              currentStock,
-              minStock,
-              category,
-              costPerUnit
+              ...payload,
             });
             updated++;
+          } else {
+            addIngredient(payload);
+            imported++;
           }
         } else {
-          // Insert
-          addIngredient({ code, name, unit, currentStock, minStock, category, costPerUnit });
+          addIngredient(payload);
           imported++;
         }
       }
     });
-    if (imported > 0 || updated > 0) alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
+
+    if (imported > 0 || updated > 0) {
+      alert(`Berhasil menambahkan ${imported} data bahan baru dan memperbarui ${updated} data.`);
+    } else {
+      alert("Tidak ada data valid yang diimpor. Pastikan file Excel/CSV berisi kolom 'Nama Bahan' dan 'Satuan Resep'.");
+    }
   };
 
-  const handleAddMovement = (e: React.FormEvent<HTMLFormElement>) => {
+  // Handle Add Movement
+  const handleAddMovement = (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    if (!selectedIngredientForMove || movementQuantity <= 0) {
+      alert("Pilih bahan baku dan masukkan jumlah yang valid.");
+      return;
+    }
+
+    const ing = ingredients.find((i) => i.id === selectedIngredientForMove);
+    const cost = (ing?.costPerUnit || 0) * movementQuantity;
 
     addStockMovement({
-      ingredientId: formData.get("ingredientId") as string,
-      type: movementType as any,
-      quantity: Number(formData.get("quantity")),
+      ingredientId: selectedIngredientForMove,
+      type: movementType,
+      quantity: movementQuantity,
       date: new Date().toISOString(),
-      note: formData.get("note") as string,
+      note: movementNote.trim() || (movementType === "WASTE" ? "Bahan Rusak / Terbuang" : "Mutasi Operasional"),
+      unitCost: ing?.costPerUnit || 0,
+      totalCost: cost,
       createdBy: currentUser?.name || "System",
-      location: currentUser?.department || "MAIN",
+      location: (ing?.storageLocation as any) || currentUser?.department || "MAIN",
     } as any);
 
+    // Auto update currentStock
+    if (ing) {
+      let newStock = ing.currentStock;
+      if (movementType === "IN" || movementType === "RETURN") {
+        newStock += movementQuantity;
+      } else {
+        newStock = Math.max(0, newStock - movementQuantity);
+      }
+      updateIngredient({
+        ...ing,
+        currentStock: newStock,
+      });
+    }
+
     setIsAddMovementOpen(false);
+    setMovementQuantity(0);
+    setMovementNote("");
   };
 
+  // Stock Opname
   const startOpname = () => {
     setOpnameId(crypto.randomUUID());
     setOpnameItems(
@@ -195,16 +470,22 @@ export const Inventory = () => {
         notes: item.notes,
       });
 
-      // Jika final, kita catat selisih
       if (status === "FINAL" && item.difference !== 0) {
         addStockMovement({
           ingredientId: item.ingredientId,
           type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
           quantity: Math.abs(item.difference),
           date: new Date().toISOString(),
-          note: `Opname Diff (Sys: ${ing?.currentStock}, Phys: ${item.physicalStock})`,
+          note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})`,
           createdBy: currentUser?.name || "System",
         });
+
+        if (ing) {
+          updateIngredient({
+            ...ing,
+            currentStock: item.physicalStock,
+          });
+        }
       }
     });
 
@@ -212,793 +493,1393 @@ export const Inventory = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-lg w-full xl:w-auto">
-          <button
-            onClick={() => setActiveTab("ingredients")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "ingredients"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Daftar Bahan Baku
-          </button>
-          <button
-            onClick={() => setActiveTab("movements")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "movements"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Pemakaian Harian
-          </button>
-          <button
-            onClick={() => setActiveTab("opnames")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "opnames"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Opname Stok
-          </button>
-          <button
-            onClick={() => setActiveTab("recipes")}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "recipes"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Resep (BOM)
-          </button>
+    <div className="space-y-6 pb-12">
+      {/* ── TOP EXECUTIVE KPI STATS ────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Valuasi Aset */}
+        <div className="p-5 rounded-3xl bg-white border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Total Valuasi Aset
+            </span>
+            <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100">
+              <Coins className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-black text-stone-900 tracking-tight font-mono">
+              {formatCurrency(totalValuation)}
+            </p>
+            <p className="text-[11px] text-stone-500 mt-1">
+              Dari <strong>{ingredients.length}</strong> bahan baku terdaftar
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end mt-2 sm:mt-0">
-          <div className="relative w-full sm:w-64">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Cari..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent w-full shadow-sm"
-            />
+        {/* Bahan Menipis / Perlu Reorder */}
+        <div className={`p-5 rounded-3xl bg-white border shadow-coffee flex flex-col justify-between ${
+          lowStockCount > 0 ? "border-amber-300 bg-amber-50/20" : "border-stone-200/80"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Perlu Reorder
+            </span>
+            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border ${
+              lowStockCount > 0 ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-stone-100 text-stone-600 border-stone-200"
+            }`}>
+              <AlertTriangle className="w-5 h-5" />
+            </div>
           </div>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2">
+              <p className={`text-2xl font-black tracking-tight font-mono ${
+                lowStockCount > 0 ? "text-amber-800" : "text-stone-900"
+              }`}>
+                {lowStockCount}
+              </p>
+              <span className="text-xs text-stone-500">bahan baku</span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1">
+              {lowStockCount > 0 ? "Stok di bawah batas minimum aman" : "Semua bahan di atas batas aman"}
+            </p>
+          </div>
+        </div>
 
-          {activeTab === "ingredients" ? (
-            !isReadOnly && currentUser?.role !== "LEADER" ? (
-              <>
-                <CsvImportExport
-                  onImport={handleImportIngredients}
-                  templateHeaders={[
-                    "Kode",
-                    "Nama Bahan",
-                    "Kategori",
-                    "Stok Saat Ini",
-                    "Satuan",
-                    "Stok Minimum",
-                    "Harga per Satuan",
-                  ]}
-                  templateExampleRow={[
-                    "BB-001",
-                    "Kopi Arabica",
-                    "Biji Kopi",
-                    "100",
-                    "Kg",
-                    "10",
-                    "150000",
-                  ]}
-                  currentData={ingredients.map(i => ({
-                    id: i.id,
-                    "Kode": i.code || "",
-                    "Nama Bahan": i.name,
-                    "Kategori": i.category,
-                    "Stok Saat Ini": i.currentStock,
-                    "Satuan": i.unit,
-                    "Stok Minimum": i.minStock,
-                    "Harga per Satuan": i.costPerUnit || 0
-                  }))}
-                  templateFilename="Template_Import_Bahan_Baku.csv"
-                  buttonLabel="Bahan Baku"
-                  templateDropdowns={{
-                    Kategori: Array.from(
-                      new Set([
-                        ...ingredients.map((i) => i.category).filter(Boolean),
-                        "Biji Kopi", "Susu & Dairy", "Sirup & Saus", "Teh", "Bubuk",
-                        "Makanan", "Kemasan", "Lainnya",
-                      ])
-                    ),
-                    Satuan: Array.from(
-                      new Set([
-                        ...ingredients.map((i) => i.unit).filter(Boolean),
-                        "Kg", "gram", "Liter", "ml", "pcs", "pack", "botol", "dus",
-                      ])
-                    ),
-                  }}
-                  templateColumnTypes={{
-                    "Stok Saat Ini": "number",
-                    "Stok Minimum": "number",
-                    "Harga per Satuan": "number",
-                  }}
-                />
-                <button
-                  onClick={() => setIsAddIngredientOpen(true)}
-                  className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0 shadow-sm"
-                >
-                  <Plus className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Tambah Bahan</span>
-                </button>
-              </>
-            ) : null
-          ) : activeTab === "movements" ? (
-            !isReadOnly ? (
+        {/* Bahan Habis / Kritis */}
+        <div className={`p-5 rounded-3xl bg-white border shadow-coffee flex flex-col justify-between ${
+          outOfStockCount > 0 ? "border-rose-300 bg-rose-50/20" : "border-stone-200/80"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Stok Habis (0)
+            </span>
+            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border ${
+              outOfStockCount > 0 ? "bg-rose-100 text-rose-800 border-rose-200" : "bg-stone-100 text-stone-600 border-stone-200"
+            }`}>
+              <Package className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2">
+              <p className={`text-2xl font-black tracking-tight font-mono ${
+                outOfStockCount > 0 ? "text-rose-700" : "text-stone-900"
+              }`}>
+                {outOfStockCount}
+              </p>
+              <span className="text-xs text-stone-500">bahan kosong</span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1">
+              {outOfStockCount > 0 ? "Mengunci menu terkait di POS" : "Tidak ada bahan yang habis total"}
+            </p>
+          </div>
+        </div>
+
+        {/* Hubungan ke HPP & Resep */}
+        <div className="p-5 rounded-3xl bg-white border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Integrasi HPP
+            </span>
+            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200">
+              <Calculator className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-black text-stone-900 tracking-tight font-mono">
+                {recipes.length}
+              </p>
+              <span className="text-xs text-stone-500">resep terdaftar</span>
+            </div>
+            {onNavigate ? (
               <button
-                onClick={() => {
-                  if (ingredients.length === 0) {
-                    alert("Tambahkan bahan baku terlebih dahulu");
-                    return;
-                  }
-                  setSelectedIngredientForMove(ingredients[0].id);
-                  setMovementType(currentUser?.role === "LEADER" ? "USAGE" : "OUT");
-                  setIsAddMovementOpen(true);
-                }}
-                className="flex items-center px-4 py-2 bg-accent text-white rounded-lg hover:bg-yellow-600 transition-colors shrink-0"
+                onClick={() => onNavigate("hpp_calculator")}
+                className="mt-1 text-[11px] font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Catat Pemakaian
+                Buka Kalkulator HPP <ChevronRight className="w-3 h-3" />
               </button>
-            ) : null
-          ) : activeTab === "opnames" ? (
-             !isReadOnly && !isOpnameMode && currentUser?.role !== "LEADER" ? (
-              <button
-                onClick={startOpname}
-                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
-              >
-                <ClipboardList className="w-4 h-4 mr-2" />
-                Mulai Opname
-              </button>
-             ) : null
-          ) : activeTab === "recipes" ? (
-            !isReadOnly && currentUser?.role !== "LEADER" ? (
-              <button
-                onClick={() => {
-                  setEditingRecipe(null);
-                  setIsAddRecipeOpen(true);
-                }}
-                className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Tambah Resep
-              </button>
-            ) : null
-          ) : null}
+            ) : (
+              <p className="text-[11px] text-stone-500 mt-1">Tersinkron dengan menu POS</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        {activeTab === "ingredients" ? (
-          <div>
-            <div className="p-4 bg-slate-50 border-b border-slate-200 rounded-t-xl flex justify-between items-center">
-                <h3 className="font-semibold text-slate-700">Total Nilai Persediaan (Valuation)</h3>
-                <span className="text-xl font-black text-emerald-600">
-                    Rp {totalValuation.toLocaleString("id-ID")}
-                </span>
+      {/* ── NAVIGATION & TOOLBAR ─────────────────────────────────────────── */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-3xl border border-stone-200/80 shadow-coffee-sm">
+        {/* Tab Switcher */}
+        <div className="flex p-1 bg-stone-100 rounded-2xl w-full xl:w-auto">
+          <button
+            onClick={() => setActiveTab("ingredients")}
+            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "ingredients"
+                ? "bg-white text-stone-900 shadow-coffee-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            Daftar Bahan Baku ({ingredients.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("movements")}
+            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "movements"
+                ? "bg-white text-stone-900 shadow-coffee-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            Mutasi & Pemakaian
+          </button>
+          <button
+            onClick={() => setActiveTab("opnames")}
+            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "opnames"
+                ? "bg-white text-stone-900 shadow-coffee-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            Stok Opname
+          </button>
+          <button
+            onClick={() => setActiveTab("recipes")}
+            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "recipes"
+                ? "bg-white text-stone-900 shadow-coffee-sm"
+                : "text-stone-500 hover:text-stone-800"
+            }`}
+          >
+            Resep Baku ({recipes.length})
+          </button>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
+          {activeTab === "ingredients" && !isReadOnly && currentUser?.role !== "LEADER" && (
+            <>
+              <CsvImportExport
+                onImport={handleImportIngredients}
+                templateFilename="Template_Master_Bahan_Baku.xlsx"
+                buttonLabel="Impor/Ekspor"
+                templateHeaders={[
+                  "Kode Bahan",
+                  "Nama Bahan",
+                  "Kategori",
+                  "Lokasi Simpan",
+                  "Satuan Resep (Terkecil)",
+                  "Stok Fisik Saat Ini",
+                  "Batas Minimum (Alert)",
+                  "Satuan Beli Supplier",
+                  "Isi per Kemasan Beli",
+                  "Harga Beli per Kemasan",
+                  "Harga per Satuan Resep (HPP)",
+                  "Catatan Tambahan",
+                ]}
+                templateExampleRow={[
+                  "BB-001",
+                  "Kopi Arabika Gayo House Blend",
+                  "Biji Kopi",
+                  "BAR",
+                  "gr",
+                  "5000",
+                  "1000",
+                  "Kg",
+                  "1000",
+                  "220000",
+                  "220",
+                  "Supplier: Toko Kopi Mandiri (Kemasan 1 Kg = 1000 gr)",
+                ]}
+                templateInstructions={[
+                  "1. 'Satuan Resep (Terkecil)' adalah takaran cangkir/porsi: gr, ml, atau pcs.",
+                  "2. 'Satuan Beli Supplier' adalah kemasan saat Anda belanja: Kg, Liter, Karton, Dus, Botol.",
+                  "3. 'Isi per Kemasan Beli' adalah rasio isi: 1 Kg = 1000 gr, 1 Karton Susu = 12000 ml, 1 Dus Cup = 500 pcs.",
+                  "4. 'Harga per Satuan Resep (HPP)' adalah modal per gr/ml/pcs. Jika kosong, sistem otomatis menghitung: Harga Beli Kemasan ÷ Isi Kemasan.",
+                  "5. 'Lokasi Simpan' pilih antara: BAR, CHILLER, DRY_STORAGE, KITCHEN, atau BAKERY.",
+                ]}
+                templateDropdowns={{
+                  Kategori: PRESET_CATEGORIES.filter((c) => c.id !== "ALL").map((c) => c.id),
+                  "Lokasi Simpan": ["BAR", "CHILLER", "DRY_STORAGE", "KITCHEN", "BAKERY"],
+                  "Satuan Resep (Terkecil)": ["gr", "ml", "pcs", "portion"],
+                  "Satuan Beli Supplier": [
+                    "Kg",
+                    "Liter",
+                    "Karton (12L)",
+                    "Dus Cup (500pcs)",
+                    "Pack Sedotan (100pcs)",
+                    "Botol Sirup (700ml)",
+                    "Jerigen (5L)",
+                    "Pouch Powder (1Kg)",
+                    "Pcs / Ecer",
+                  ],
+                }}
+                templateColumnTypes={{
+                  "Stok Fisik Saat Ini": "number",
+                  "Batas Minimum (Alert)": "number",
+                  "Isi per Kemasan Beli": "number",
+                  "Harga Beli per Kemasan": "number",
+                  "Harga per Satuan Resep (HPP)": "number",
+                }}
+                templateHints={{
+                  "Kode Bahan": "Kode SKU atau barcode unik (opsional, contoh: BB-001)",
+                  "Nama Bahan": "Nama lengkap bahan baku",
+                  "Kategori": "Pilih dari dropdown kategori",
+                  "Lokasi Simpan": "Pilih BAR, CHILLER, DRY_STORAGE, KITCHEN, atau BAKERY",
+                  "Satuan Resep (Terkecil)": "gr (gram), ml (mililiter), pcs (gelas/sedotan), portion (porsi)",
+                  "Stok Fisik Saat Ini": "Saldo fisik bahan dalam satuan resep (contoh: 5000 gr, bukan 5 kg)",
+                  "Batas Minimum (Alert)": "Batas peringatan stok menipis (contoh: 1000 gr)",
+                  "Satuan Beli Supplier": "Kemasan pengadaan dari supplier (Kg, Liter, Dus, Karton, Botol)",
+                  "Isi per Kemasan Beli": "Jumlah isi per kemasan dalam satuan resep (contoh: 1000 untuk 1 Kg -> 1000 gr)",
+                  "Harga Beli per Kemasan": "Harga beli per 1 kemasan supplier (contoh: 220000)",
+                  "Harga per Satuan Resep (HPP)": "Harga modal per gr/ml/pcs untuk integrasi HPP (contoh: 220)",
+                  "Catatan Tambahan": "Nama supplier langganan, merek dagang, atau masa simpan",
+                }}
+                currentData={ingredients.map((i) => ({
+                  id: i.id,
+                  "Kode Bahan": i.code || "",
+                  "Nama Bahan": i.name,
+                  "Kategori": i.category,
+                  "Lokasi Simpan": (i.storageLocation as any) || "BAR",
+                  "Satuan Resep (Terkecil)": i.unit,
+                  "Stok Fisik Saat Ini": i.currentStock,
+                  "Batas Minimum (Alert)": i.minStock,
+                  "Satuan Beli Supplier": i.purchaseUnit || "",
+                  "Isi per Kemasan Beli": i.conversionFactor || "",
+                  "Harga Beli per Kemasan": i.purchasePrice || (i.purchaseUnit && i.conversionFactor ? (i.costPerUnit * i.conversionFactor) : ""),
+                  "Harga per Satuan Resep (HPP)": i.costPerUnit || 0,
+                  "Catatan Tambahan": i.notes || "",
+                }))}
+              />
+              <button
+                onClick={handleOpenAddIngredient}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Bahan Baku</span>
+              </button>
+            </>
+          )}
+
+          {activeTab === "movements" && !isReadOnly && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (ingredients.length === 0) return alert("Tambahkan bahan baku terlebih dahulu.");
+                  setSelectedIngredientForMove(ingredients[0].id);
+                  setMovementType("WASTE");
+                  setMovementNote("Kalibrasi Grinder Pagi");
+                  setIsAddMovementOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Catat Bahan Rusak / Waste</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (ingredients.length === 0) return alert("Tambahkan bahan baku terlebih dahulu.");
+                  setSelectedIngredientForMove(ingredients[0].id);
+                  setMovementType(currentUser?.role === "LEADER" ? "USAGE" : "OUT");
+                  setMovementNote("");
+                  setIsAddMovementOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-stone-900 hover:bg-black text-white rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-coffee-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Catat Pemakaian Harian</span>
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-                <AnimatePresence>
-                  {filteredIngredients.map((item, index) => {
-                    const isLow = item.currentStock <= item.minStock;
+          )}
 
-                    const categoryColors: Record<string, string> = {
-                      "Biji Kopi": "bg-amber-100 text-amber-800 border-amber-200",
-                      Susu: "bg-blue-100 text-blue-800 border-blue-200",
-                      Sirup: "bg-pink-100 text-pink-800 border-pink-200",
-                      Gelas: "bg-slate-100 text-slate-800 border-slate-200",
-                    };
+          {activeTab === "opnames" && !isReadOnly && !isOpnameMode && currentUser?.role !== "LEADER" && (
+            <button
+              onClick={startOpname}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>Mulai Sesi Opname Fisik</span>
+            </button>
+          )}
 
-                    const catColor =
-                      categoryColors[item.category] ||
-                      "bg-slate-100 text-slate-700 border-slate-200";
+          {activeTab === "recipes" && !isReadOnly && currentUser?.role !== "LEADER" && (
+            <button
+              onClick={() => {
+                setEditingRecipe(null);
+                setIsAddRecipeOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Resep Baru</span>
+            </button>
+          )}
+        </div>
+      </div>
 
-                    return (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2, delay: index * 0.05 }}
-                        whileHover={{
-                          y: -4,
-                          boxShadow:
-                            "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-                        }}
-                        className={`relative bg-white rounded-2xl p-5 border shadow-sm transition-all flex flex-col justify-between overflow-hidden group ${isLow ? "border-rose-200" : "border-slate-200"}`}
-                      >
-                        {isLow && (
-                          <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500" />
-                        )}
+      {/* ── TAB 1: INGREDIENTS CATALOG ───────────────────────────────────── */}
+      {activeTab === "ingredients" && (
+        <div className="space-y-4">
+          {/* Filter Bar: Search, Category Pills, Location, Status */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200/80 shadow-coffee-sm space-y-4">
+            {/* Row 1: Search & Dropdowns */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  placeholder="Cari nama bahan, kode SKU, atau kategori..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-stone-200 text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800"
+                />
+              </div>
 
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <span
-                              className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${catColor} mb-2`}
-                            >
-                              {item.category}
+              {/* Filter Lokasi Simpan */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                <select
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value)}
+                  className="px-3 py-2.5 rounded-2xl border border-stone-200 text-xs bg-white text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-800/30"
+                >
+                  {PRESET_LOCATIONS.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter Status Stok */}
+              <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-2xl text-xs font-semibold w-full sm:w-auto">
+                <button
+                  onClick={() => setSelectedStockStatus("ALL")}
+                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    selectedStockStatus === "ALL" ? "bg-white text-stone-900 shadow-coffee-sm" : "text-stone-500"
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  onClick={() => setSelectedStockStatus("LOW_STOCK")}
+                  className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
+                    selectedStockStatus === "LOW_STOCK" ? "bg-white text-amber-800 shadow-coffee-sm" : "text-stone-500"
+                  }`}
+                >
+                  <AlertTriangle className="w-3 h-3 text-amber-600" />
+                  <span>Kritis / Menipis ({lowStockCount})</span>
+                </button>
+                <button
+                  onClick={() => setSelectedStockStatus("SAFE")}
+                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    selectedStockStatus === "SAFE" ? "bg-white text-emerald-800 shadow-coffee-sm" : "text-stone-500"
+                  }`}
+                >
+                  Aman
+                </button>
+              </div>
+            </div>
+
+            {/* Row 2: Category Horizontal Scrolling Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {PRESET_CATEGORIES.map((cat) => {
+                const IconComponent = cat.icon;
+                const isSelected = selectedCategory === cat.id;
+                const count = cat.id === "ALL"
+                  ? ingredients.length
+                  : ingredients.filter((i) => i.category.toLowerCase().includes(cat.id.toLowerCase())).length;
+
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border ${
+                      isSelected
+                        ? "bg-stone-900 text-white border-stone-900 shadow-coffee-sm"
+                        : "bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100"
+                    }`}
+                  >
+                    <IconComponent className={`w-3.5 h-3.5 ${isSelected ? "text-amber-400" : "text-stone-500"}`} />
+                    <span>{cat.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      isSelected ? "bg-stone-800 text-amber-300" : "bg-stone-200 text-stone-600"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <AnimatePresence>
+              {filteredIngredients.map((item, index) => {
+                const isOutOfStock = item.currentStock <= 0;
+                const isLow = item.currentStock <= item.minStock && !isOutOfStock;
+                const hasPurchaseConversion = !!item.purchaseUnit && !!item.conversionFactor;
+
+                return (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15, delay: index * 0.02 }}
+                    className={`relative bg-white rounded-3xl p-5 border shadow-coffee transition-all flex flex-col justify-between overflow-hidden group ${
+                      isOutOfStock
+                        ? "border-rose-300 ring-1 ring-rose-300"
+                        : isLow
+                        ? "border-amber-300 ring-1 ring-amber-300"
+                        : "border-stone-200/80 hover:border-amber-700/40"
+                    }`}
+                  >
+                    {/* Top Alert Bar */}
+                    {isOutOfStock && <div className="absolute top-0 left-0 right-0 h-1.5 bg-rose-500" />}
+                    {isLow && <div className="absolute top-0 left-0 right-0 h-1.5 bg-amber-500" />}
+
+                    <div>
+                      {/* Category & Action Buttons */}
+                      <div className="flex justify-between items-start gap-2 mb-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100/70 text-amber-900 border border-amber-200/60">
+                            {item.category}
+                          </span>
+                          {item.storageLocation && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-stone-500 bg-stone-100 flex items-center gap-0.5">
+                              <MapPin className="w-2.5 h-2.5" />
+                              {item.storageLocation}
                             </span>
-                            <h3 className="font-bold text-slate-800 text-lg leading-tight">
-                              {item.name}
-                            </h3>
-                          </div>
-                          {!isReadOnly && currentUser?.role !== "LEADER" && (
+                          )}
+                        </div>
+
+                        {!isReadOnly && currentUser?.role !== "LEADER" && (
+                          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleOpenEditIngredient(item)}
+                              className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                              title="Edit Bahan Baku"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => {
-                                if (
-                                  confirm("Yakin ingin menghapus bahan baku ini?")
-                                ) {
+                                if (confirm(`Hapus bahan baku "${item.name}"? Pastikan bahan tidak sedang dipakai di resep aktif.`)) {
                                   deleteIngredient(item.id);
                                 }
                               }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                              title="Hapus Bahan Baku"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                        </div>
-
-                        <div className="mt-2 pt-4 border-t border-slate-100 flex justify-between items-end">
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1 font-medium">
-                              Sisa Stok
-                            </p>
-                            <div className="flex items-baseline gap-1">
-                              <span
-                                className={`text-2xl font-black tracking-tight ${isLow ? "text-rose-600" : "text-slate-800"}`}
-                              >
-                                {item.currentStock}
-                              </span>
-                              <span className="text-sm text-slate-500 font-medium">
-                                {item.unit}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 mt-1">@ Rp {(item.costPerUnit || 0).toLocaleString('id-ID')}</p>
                           </div>
+                        )}
+                      </div>
 
-                          {isLow ? (
-                            <div className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-100 animate-pulse">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              <span className="text-xs font-bold">
-                                Stok Menipis!
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              <span className="text-[10px] font-bold">Aman</span>
-                            </div>
-                          )}
+                      {/* Name & SKU */}
+                      <div>
+                        {item.code && (
+                          <span className="text-[10px] font-mono font-bold text-stone-400">
+                            {item.code}
+                          </span>
+                        )}
+                        <h3 className="font-bold text-stone-900 text-base leading-tight mt-0.5">
+                          {item.name}
+                        </h3>
+                      </div>
+
+                      {/* Kemasan Pembelian Badge jika ada */}
+                      {hasPurchaseConversion && (
+                        <div className="mt-2.5 p-2 rounded-xl bg-stone-50 border border-stone-200/60 text-[11px] text-stone-600">
+                          <span className="font-semibold text-stone-800">Kemasan Beli:</span>{" "}
+                          1 {item.purchaseUnit} = {item.conversionFactor?.toLocaleString("id-ID")} {item.unit}
+                          {item.purchasePrice ? ` (@ ${formatCurrency(item.purchasePrice)})` : ""}
                         </div>
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
+                      )}
+                    </div>
 
-                {filteredIngredients.length === 0 && (
-                  <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    <Package className="w-12 h-12 mb-3 text-slate-300" />
-                    <p className="font-medium text-slate-500">
-                      Tidak ada bahan baku ditemukan.
-                    </p>
-                  </div>
-                )}
+                    {/* Bottom Stock & Valuation */}
+                    <div className="mt-4 pt-4 border-t border-stone-100 flex flex-col gap-3">
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[11px] text-stone-500 font-medium">Sisa Stok Fisik</p>
+                          <div className="flex items-baseline gap-1.5 mt-0.5">
+                            <span
+                              className={`text-2xl font-black font-mono tracking-tight ${
+                                isOutOfStock ? "text-rose-600" : isLow ? "text-amber-700" : "text-stone-900"
+                              }`}
+                            >
+                              {item.currentStock.toLocaleString("id-ID")}
+                            </span>
+                            <span className="text-xs text-stone-500 font-semibold">{item.unit}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-[10px] text-stone-400">Harga Modal Resep</p>
+                          <p className="text-xs font-mono font-bold text-stone-700 mt-0.5">
+                            {formatCurrency(item.costPerUnit || 0)} <span className="text-[10px] font-normal text-stone-400">/{item.unit}</span>
+                          </p>
+                          <p className="text-[10px] font-mono text-emerald-700 font-medium">
+                            Aset: {formatCurrency(item.currentStock * (item.costPerUnit || 0))}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Status & Quick Reorder Button */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {isOutOfStock ? (
+                          <div className="flex items-center gap-1 text-rose-700 text-xs font-bold">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Stok Habis!</span>
+                          </div>
+                        ) : isLow ? (
+                          <div className="flex items-center gap-1 text-amber-800 text-xs font-bold">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Menipis (Min: {item.minStock} {item.unit})</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-emerald-700 text-[11px] font-bold">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>Stok Aman</span>
+                          </div>
+                        )}
+
+                        {(isLow || isOutOfStock) && onNavigate && (
+                          <button
+                            onClick={() => onNavigate("purchases")}
+                            className="px-2.5 py-1 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-coffee-sm"
+                            title="Buka Pembelian untuk order bahan ini"
+                          >
+                            <span>+ Order PO</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
+            {filteredIngredients.length === 0 && (
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-stone-200">
+                <Package className="w-12 h-12 text-stone-300 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-stone-700">Tidak ada bahan baku yang cocok</h4>
+                <p className="text-xs text-stone-400 mt-1">
+                  Coba ubah kata kunci pencarian, kategori, atau filter status stok.
+                </p>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 2: STOCK MOVEMENTS & USAGE ──────────────────────────────── */}
+      {activeTab === "movements" && (
+        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
+          <div className="p-5 border-b border-stone-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h3 className="font-bold text-stone-900 text-sm">Riwayat Mutasi & Pemakaian Bahan</h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Audit otomatis setiap bahan yang keluar untuk order kasir, terbuang (waste), atau masuk dari PO.
+              </p>
             </div>
           </div>
-        ) : activeTab === "movements" ? (
+
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="p-4 font-semibold text-slate-600">Tanggal</th>
-                  <th className="p-4 font-semibold text-slate-600">Bahan Baku</th>
-                  <th className="p-4 font-semibold text-slate-600">Jenis</th>
-                  <th className="p-4 font-semibold text-slate-600">Lokasi</th>
-                  <th className="p-4 font-semibold text-slate-600">Jumlah</th>
-                  <th className="p-4 font-semibold text-slate-600">Catatan</th>
-                  <th className="p-4 font-semibold text-slate-600">Operator</th>
+                <tr className="bg-stone-50 border-b border-stone-200/80 text-stone-600 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="p-4">Waktu</th>
+                  <th className="p-4">Bahan Baku</th>
+                  <th className="p-4">Jenis Mutasi</th>
+                  <th className="p-4">Lokasi</th>
+                  <th className="p-4 text-right">Jumlah</th>
+                  <th className="p-4 text-right">Nilai Rupiah</th>
+                  <th className="p-4">Catatan / Alasan</th>
+                  <th className="p-4">Operator</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-stone-100">
                 {filteredMovements.map((mov) => {
                   const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
+                  const isPositive = mov.type === "IN" || mov.type === "RETURN";
+                  const isWaste = mov.type === "WASTE";
+
                   return (
-                    <tr key={mov.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="p-4 text-slate-800">
+                    <tr key={mov.id} className="hover:bg-stone-50/70 transition-colors">
+                      <td className="p-4 text-stone-500 whitespace-nowrap">
                         {new Date(mov.date).toLocaleDateString("id-ID", {
-                          year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
                       </td>
-                      <td className="p-4 font-medium text-slate-800">{ingredient?.name || "Unknown"}</td>
+                      <td className="p-4 font-bold text-stone-900">
+                        {ingredient?.name || "Bahan Terhapus"}
+                      </td>
                       <td className="p-4">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            mov.type === "IN" ? "bg-emerald-100 text-emerald-800"
-                              : mov.type === "RETURN" ? "bg-blue-100 text-blue-800"
-                              : mov.type === "WASTE" ? "bg-rose-100 text-rose-800"
-                              : mov.type === "USAGE" ? "bg-indigo-100 text-indigo-800"
-                              : mov.type === "TRANSFER" ? "bg-purple-100 text-purple-800"
-                              : "bg-orange-100 text-orange-800"
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            mov.type === "IN"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : mov.type === "USAGE"
+                              ? "bg-blue-100 text-blue-800"
+                              : mov.type === "WASTE"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-stone-100 text-stone-700"
                           }`}
                         >
-                          {mov.type}
+                          {mov.type === "USAGE" ? "Kasir (Order)" : mov.type === "WASTE" ? "Terbuang / Rusak" : mov.type}
                         </span>
                       </td>
-                      <td className="p-4 text-slate-600 font-medium">{(mov as any).location || "MAIN"}</td>
-                      <td className={`p-4 font-medium ${mov.type === "IN" || mov.type === "RETURN" || mov.type === "TRANSFER" ? "text-emerald-600" : "text-rose-600"}`}>
-                        {mov.type === "IN" || mov.type === "RETURN" ? "+" : "-"}{mov.quantity} {ingredient?.unit}
+                      <td className="p-4 text-stone-600">{(mov as any).location || "BAR"}</td>
+                      <td className={`p-4 font-mono font-bold text-right ${isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-stone-800"}`}>
+                        {isPositive ? "+" : "-"}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
                       </td>
-                      <td className="p-4 text-slate-600">{mov.note || "-"}</td>
-                      <td className="p-4 text-slate-600">{mov.createdBy}</td>
+                      <td className="p-4 font-mono text-stone-600 text-right">
+                        {mov.totalCost ? formatCurrency(mov.totalCost) : "-"}
+                      </td>
+                      <td className="p-4 text-stone-600 max-w-xs truncate">{mov.note || "-"}</td>
+                      <td className="p-4 text-stone-500">{mov.createdBy}</td>
                     </tr>
                   );
                 })}
+
                 {filteredMovements.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500">
-                      Tidak ada riwayat pergerakan stok.
+                    <td colSpan={8} className="p-8 text-center text-stone-400">
+                      Belum ada catatan mutasi pergerakan stok.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        ) : activeTab === "opnames" ? (
-          <div className="p-6">
-            {isOpnameMode ? (
-              <div className="space-y-6">
-                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">
-                    <div>
-                        <h3 className="font-bold text-slate-800">Sesi Opname Baru</h3>
-                        <p className="text-sm text-slate-500">Sesuaikan stok fisik dengan stok sistem.</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => setIsOpnameMode(false)} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">Batal</button>
-                        <button onClick={() => saveOpname("DRAFT")} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Simpan Draft</button>
-                        <button onClick={() => saveOpname("FINAL")} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800 flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4" />
-                            Finalisasi
-                        </button>
-                    </div>
-                 </div>
+        </div>
+      )}
 
-                 <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="p-3 font-semibold text-slate-600">Bahan Baku</th>
-                                <th className="p-3 font-semibold text-slate-600 text-center">Stok Sistem</th>
-                                <th className="p-3 font-semibold text-slate-600 text-center">Stok Fisik</th>
-                                <th className="p-3 font-semibold text-slate-600 text-center">Selisih</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {opnameItems.map((item) => {
-                                const ing = ingredients.find(i => i.id === item.ingredientId);
-                                if (!ing) return null;
-                                return (
-                                    <tr key={item.ingredientId} className="border-b border-slate-100">
-                                        <td className="p-3 font-medium">{ing.name} <span className="text-xs text-slate-400">({ing.unit})</span></td>
-                                        <td className="p-3 text-center text-slate-600">{ing.currentStock}</td>
-                                        <td className="p-3 text-center">
-                                            <input 
-                                                type="number" 
-                                                className="w-24 px-2 py-1 border border-slate-300 rounded text-center mx-auto"
-                                                value={item.physicalStock}
-                                                onChange={(e) => handleOpnameChange(ing.id, Number(e.target.value))}
-                                                min="0"
-                                            />
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <span className={`px-2 py-1 rounded-lg text-sm font-bold ${item.difference > 0 ? "bg-emerald-100 text-emerald-700" : item.difference < 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}>
-                                                {item.difference > 0 ? "+" : ""}{item.difference}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                 </div>
+      {/* ── TAB 3: STOCK OPNAME ─────────────────────────────────────────── */}
+      {activeTab === "opnames" && (
+        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6">
+          {isOpnameMode ? (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/70">
+                <div>
+                  <h3 className="font-bold text-amber-900 text-sm">Sesi Stok Opname Fisik Aktif</h3>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Masukkan jumlah fisik bahan yang dihitung nyata di bar dan gudang.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsOpnameMode(false)}
+                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-700 text-xs font-bold hover:bg-stone-50 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={() => saveOpname("DRAFT")}
+                    className="px-4 py-2 bg-stone-200 text-stone-800 rounded-xl text-xs font-bold hover:bg-stone-300 cursor-pointer"
+                  >
+                    Simpan Draft
+                  </button>
+                  <button
+                    onClick={() => saveOpname("FINAL")}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer shadow-coffee-sm"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Finalisasi & Sesuaikan Stok</span>
+                  </button>
+                </div>
               </div>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="p-4 font-semibold text-slate-600">Tanggal</th>
-                        <th className="p-4 font-semibold text-slate-600">Status</th>
-                        <th className="p-4 font-semibold text-slate-600">Catatan</th>
-                        <th className="p-4 font-semibold text-slate-600">Dibuat Oleh</th>
-                        <th className="p-4 font-semibold text-slate-600">Aksi</th>
+
+              <div className="overflow-x-auto border border-stone-200 rounded-2xl">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                      <th className="p-3">Bahan Baku</th>
+                      <th className="p-3 text-center">Stok Sistem</th>
+                      <th className="p-3 text-center">Stok Fisik Nyata</th>
+                      <th className="p-3 text-center">Selisih</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {opnameItems.map((item) => {
+                      const ing = ingredients.find((i) => i.id === item.ingredientId);
+                      if (!ing) return null;
+                      return (
+                        <tr key={item.ingredientId} className="hover:bg-stone-50">
+                          <td className="p-3 font-bold text-stone-900">
+                            {ing.name} <span className="text-stone-400 font-normal">({ing.unit})</span>
+                          </td>
+                          <td className="p-3 text-center font-mono text-stone-600">
+                            {ing.currentStock.toLocaleString("id-ID")}
+                          </td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              className="w-24 px-2 py-1.5 border border-stone-300 rounded-xl text-center mx-auto text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
+                              value={item.physicalStock}
+                              onChange={(e) => handleOpnameChange(item.ingredientId, Number(e.target.value))}
+                            />
+                          </td>
+                          <td className={`p-3 text-center font-mono font-bold ${
+                            item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-stone-500"
+                          }`}>
+                            {item.difference > 0 ? `+${item.difference}` : item.difference} {ing.unit}
+                          </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {stockOpnames.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((opname) => (
-                            <tr key={opname.id} className="border-b border-slate-100">
-                                <td className="p-4 text-slate-800">{new Date(opname.date).toLocaleDateString('id-ID')}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${opname.status === 'FINAL' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                                        {opname.status}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-slate-600">{opname.notes}</td>
-                                <td className="p-4 text-slate-600">{opname.createdBy}</td>
-                                <td className="p-4">
-                                    <button className="text-primary hover:underline text-sm font-medium">Lihat Detail</button>
-                                </td>
-                            </tr>
-                        ))}
-                        {stockOpnames.length === 0 && (
-                            <tr><td colSpan={5} className="p-8 text-center text-slate-500">Belum ada riwayat Opname Stok.</td></tr>
-                        )}
-                    </tbody>
-                    </table>
-                </div>
-            )}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-stone-400">
+              <ClipboardList className="w-12 h-12 text-stone-300 mx-auto mb-3" />
+              <h4 className="text-sm font-bold text-stone-700">Audit Fisik Stok (Stok Opname)</h4>
+              <p className="text-xs text-stone-500 mt-1 max-w-md mx-auto">
+                Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di bar dengan catatan sistem kasir.
+              </p>
+              {!isReadOnly && currentUser?.role !== "LEADER" && (
+                <button
+                  onClick={startOpname}
+                  className="mt-4 px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold cursor-pointer shadow-coffee-sm"
+                >
+                  Mulai Stok Opname Sekarang
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 4: RECIPES (BOM) ─────────────────────────────────────────── */}
+      {activeTab === "recipes" && (
+        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
+          <div className="p-5 border-b border-stone-100 flex justify-between items-center">
+            <div>
+              <h3 className="font-bold text-stone-900 text-sm">Resep Takaran Menu (Bill of Materials)</h3>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Setiap resep menentukan bahan apa saja yang otomatis dipotong saat pesanan dibuat di kasir POS.
+              </p>
+            </div>
           </div>
-            ) : activeTab === "recipes" ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="p-4 font-semibold text-slate-600">Nama Menu</th>
-                                <th className="p-4 font-semibold text-slate-600">Bahan & Takaran</th>
-                                <th className="p-4 font-semibold text-slate-600">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredRecipes.map((recipe) => (
-                                <tr key={recipe.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                    <td className="p-4 text-slate-800 font-medium">{recipe.menuName}</td>
-                                    <td className="p-4">
-                                        <ul className="list-disc list-inside text-slate-600 text-sm">
-                                            {recipe.ingredients.map((ri, idx) => {
-                                                const ing = ingredients.find(i => i.id === ri.ingredientId);
-                                                return (
-                                                    <li key={idx}>
-                                                        {ing ? ing.name : "Bahan tidak ditemukan"} - {ri.quantity} {ing ? ing.unit : ""}
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </td>
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2">
-                                            {!isReadOnly && currentUser?.role !== "LEADER" && (
-                                                <>
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingRecipe(recipe);
-                                                            setIsAddRecipeOpen(true);
-                                                        }}
-                                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                                        title="Edit Resep"
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            if(confirm(`Hapus resep untuk ${recipe.menuName}?`)) {
-                                                                deleteRecipe(recipe.id);
-                                                            }
-                                                        }}
-                                                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                                                        title="Hapus Resep"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {filteredRecipes.length === 0 && (
-                                <tr>
-                                    <td colSpan={3} className="p-8 text-center text-slate-500">
-                                        Belum ada data resep.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            ) : null}
-      </div>
 
-      <RecipeModal 
-        isOpen={isAddRecipeOpen}
-        onClose={() => setIsAddRecipeOpen(false)}
-        editingRecipe={editingRecipe}
-        ingredients={ingredients}
-        onSave={(recipeData) => {
-            if (editingRecipe) {
-                updateRecipe(editingRecipe.id, recipeData);
-            } else {
-                addRecipe(recipeData);
-            }
-        }}
-      />
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                  <th className="p-4">Nama Menu</th>
+                  <th className="p-4">Komposisi Bahan & Takaran</th>
+                  <th className="p-4 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {filteredRecipes.map((recipe) => (
+                  <tr key={recipe.id} className="hover:bg-stone-50">
+                    <td className="p-4 font-bold text-stone-900">{recipe.menuName}</td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {recipe.ingredients.map((ri, idx) => {
+                          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                          return (
+                            <span
+                              key={idx}
+                              className="px-2.5 py-1 rounded-xl bg-stone-100 text-stone-700 text-[11px] font-medium border border-stone-200"
+                            >
+                              <strong>{ing?.name || "Bahan"}</strong>: {ri.quantity} {ing?.unit || "unit"}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td className="p-4 text-right">
+                      {!isReadOnly && currentUser?.role !== "LEADER" && (
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingRecipe(recipe);
+                              setIsAddRecipeOpen(true);
+                            }}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-xl"
+                            title="Edit Resep"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Hapus resep untuk menu "${recipe.menuName}"?`)) {
+                                deleteRecipe(recipe.id);
+                              }
+                            }}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl"
+                            title="Hapus Resep"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
 
-      {isAddIngredientOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-800">
-                Tambah Bahan Baku
-              </h2>
+                {filteredRecipes.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="p-8 text-center text-stone-400">
+                      Belum ada data resep terdaftar.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
+      {isIngredientModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl shadow-coffee-lg w-full max-w-xl overflow-hidden max-h-[92vh] overflow-y-auto my-auto border border-stone-200"
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-5 sm:p-6 border-b border-stone-100 bg-stone-50/80">
+              <div>
+                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-800" />
+                  {editingIngredient ? "Edit Bahan Baku" : "Tambah Bahan Baku Baru"}
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Lengkapi satuan pakai resep dan satuan beli supplier untuk integrasi HPP otomatis.
+                </p>
+              </div>
               <button
-                onClick={() => setIsAddIngredientOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                onClick={() => setIsIngredientModalOpen(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full cursor-pointer"
               >
-                &times;
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddIngredient} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nama Bahan
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. Kopi Arabika Gayo"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Kategori
+            <form onSubmit={handleSubmitIngredient} className="p-5 sm:p-6 space-y-4 text-xs">
+              {/* Row 1: Kode & Nama Bahan */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
+                  <label className="block font-bold text-stone-700 mb-1">
+                    Kode SKU / Barcode
                   </label>
                   <input
                     type="text"
-                    name="category"
-                    required
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. Biji Kopi"
+                    value={ingredientForm.code}
+                    onChange={(e) => setIngredientForm({ ...ingredientForm, code: e.target.value })}
+                    placeholder="BB-001"
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono focus:outline-none focus:ring-2 focus:ring-amber-800"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Satuan (Unit)
+                <div className="col-span-2">
+                  <label className="block font-bold text-stone-700 mb-1">
+                    Nama Bahan Baku <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    name="unit"
                     required
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. Kg, Gr, Liter"
+                    value={ingredientForm.name}
+                    onChange={(e) => setIngredientForm({ ...ingredientForm, name: e.target.value })}
+                    placeholder="e.g. Biji Kopi Arabika Gayo, Susu Fresh Milk"
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
                   />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Stok Awal
-                  </label>
-                  <input
-                    type="number"
-                    name="currentStock"
-                    required
-                    min="0"
-                    step="any"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Batas Minimum (Alert)
-                  </label>
-                  <input
-                    type="number"
-                    name="minStock"
-                    required
-                    min="0"
-                    step="any"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Harga per Satuan (Cost / Unit)
-                </label>
-                <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">Rp</span>
-                    <input
-                        type="number"
-                        name="costPerUnit"
-                        required
-                        min="0"
-                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg"
-                        placeholder="0"
-                    />
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+              {/* Row 2: Kategori & Lokasi Simpan */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">Kategori</label>
+                  <select
+                    value={ingredientForm.category}
+                    onChange={(e) => setIngredientForm({ ...ingredientForm, category: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
+                  >
+                    {PRESET_CATEGORIES.filter((c) => c.id !== "ALL").map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">Lokasi Simpan</label>
+                  <select
+                    value={ingredientForm.storageLocation}
+                    onChange={(e) => setIngredientForm({ ...ingredientForm, storageLocation: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
+                  >
+                    {PRESET_LOCATIONS.filter((l) => l.id !== "ALL").map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ── SECTION KONVERSI BELI KE RESEP (SMART FEATURE) ─────────── */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calculator className="w-4 h-4 text-amber-800" />
+                    <span className="font-bold text-amber-950 text-xs">
+                      Konversi Satuan Kemasan Supplier & Harga Modal HPP
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-amber-900">
+                    <input
+                      type="checkbox"
+                      checked={ingredientForm.usePurchaseUnit}
+                      onChange={(e) => setIngredientForm({ ...ingredientForm, usePurchaseUnit: e.target.checked })}
+                      className="rounded text-amber-800 focus:ring-amber-800"
+                    />
+                    <span>Beli dalam Kemasan (Dus/Kg/Liter)</span>
+                  </label>
+                </div>
+
+                {ingredientForm.usePurchaseUnit ? (
+                  <div className="space-y-3 pt-2 border-t border-amber-200/60">
+                    {/* Preset selection buttons */}
+                    <div>
+                      <span className="text-[10px] text-amber-900 font-semibold block mb-1">
+                        Pilih Cepat Tipe Kemasan:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PURCHASE_UNIT_PRESETS.slice(0, 5).map((p) => (
+                          <button
+                            type="button"
+                            key={p.unit}
+                            onClick={() => handlePurchasePresetSelect(p.unit)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                              ingredientForm.purchaseUnit === p.unit
+                                ? "bg-amber-800 text-white border-amber-800"
+                                : "bg-white text-stone-700 border-amber-200 hover:bg-amber-100/50"
+                            }`}
+                          >
+                            {p.unit}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                          Satuan Beli Supplier
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={ingredientForm.purchaseUnit}
+                          onChange={(e) => setIngredientForm({ ...ingredientForm, purchaseUnit: e.target.value })}
+                          placeholder="e.g. Kg, Karton, Dus"
+                          className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold text-stone-800"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                          Isi per Kemasan
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            value={ingredientForm.conversionFactor}
+                            onChange={(e) => setIngredientForm({ ...ingredientForm, conversionFactor: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                          />
+                          <span className="text-xs font-bold text-amber-900 shrink-0">
+                            {ingredientForm.unit}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                          Harga Beli Kemasan
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-bold">
+                            Rp
+                          </span>
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            value={ingredientForm.purchasePrice}
+                            onChange={(e) => setIngredientForm({ ...ingredientForm, purchasePrice: Number(e.target.value) })}
+                            className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Formula Preview Box */}
+                    <div className="p-2.5 rounded-xl bg-white border border-amber-200 flex items-center justify-between text-[11px]">
+                      <div>
+                        <span className="text-stone-500">Harga Modal Resep (HPP):</span>
+                        <p className="font-bold text-stone-800 mt-0.5">
+                          {formatCurrency(ingredientForm.purchasePrice)} ÷ {ingredientForm.conversionFactor.toLocaleString("id-ID")} {ingredientForm.unit}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-stone-400 text-[10px]">Otomatis ke HPP:</span>
+                        <p className="font-mono font-black text-amber-900 text-sm">
+                          {formatCurrency(computedCostPerUnit)} <span className="text-[10px] font-normal text-stone-500">/{ingredientForm.unit}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/60">
+                    <div>
+                      <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                        Satuan Resep Dasar
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={ingredientForm.unit}
+                        onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
+                        placeholder="gr, ml, pcs, portion"
+                        className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold text-stone-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                        Harga Modal Satuan (Rp/{ingredientForm.unit})
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        value={ingredientForm.costPerUnit}
+                        onChange={(e) => setIngredientForm({ ...ingredientForm, costPerUnit: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 3: Stok Fisik & Batas Minimum */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="font-bold text-stone-700">
+                      {editingIngredient ? "Stok Saat Ini" : "Stok Awal Fisik"}
+                    </label>
+                    {ingredientForm.usePurchaseUnit && (
+                      <div className="flex gap-1 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "BASE" })}
+                          className={`px-1.5 py-0.5 rounded ${
+                            ingredientForm.initialStockUnit === "BASE" ? "bg-stone-800 text-white font-bold" : "text-stone-500"
+                          }`}
+                        >
+                          {ingredientForm.unit}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "PURCHASE" })}
+                          className={`px-1.5 py-0.5 rounded ${
+                            ingredientForm.initialStockUnit === "PURCHASE" ? "bg-stone-800 text-white font-bold" : "text-stone-500"
+                          }`}
+                        >
+                          {ingredientForm.purchaseUnit}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="any"
+                      value={ingredientForm.stockInput}
+                      onChange={(e) => setIngredientForm({ ...ingredientForm, stockInput: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    />
+                    <span className="font-bold text-stone-500 shrink-0 text-xs">
+                      {ingredientForm.initialStockUnit === "PURCHASE" ? ingredientForm.purchaseUnit : ingredientForm.unit}
+                    </span>
+                  </div>
+                  {ingredientForm.initialStockUnit === "PURCHASE" && ingredientForm.usePurchaseUnit && (
+                    <p className="text-[10px] text-stone-500 mt-1">
+                      Setara dengan <strong>{(Number(ingredientForm.stockInput) * Number(ingredientForm.conversionFactor)).toLocaleString("id-ID")} {ingredientForm.unit}</strong>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    Batas Minimum Aman (Alert Reorder)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="any"
+                      value={ingredientForm.minStock}
+                      onChange={(e) => setIngredientForm({ ...ingredientForm, minStock: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    />
+                    <span className="font-bold text-stone-500 shrink-0 text-xs">
+                      {ingredientForm.unit}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-stone-500 mt-1">
+                    Notifikasi muncul jika stok &le; batas ini.
+                  </p>
+                </div>
+              </div>
+
+              {/* Catatan / Keterangan */}
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Catatan Tambahan (Merek, Supplier, dsb)
+                </label>
+                <input
+                  type="text"
+                  value={ingredientForm.notes}
+                  onChange={(e) => setIngredientForm({ ...ingredientForm, notes: e.target.value })}
+                  placeholder="e.g. Beli di Toko Kopi Mandiri, kadaluwarsa 6 bulan"
+                  className="w-full px-3 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-800"
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-stone-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddIngredientOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  onClick={() => setIsIngredientModalOpen(false)}
+                  className="px-4 py-2.5 text-stone-600 hover:bg-stone-100 rounded-2xl font-bold cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800"
+                  className="px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl font-bold shadow-coffee-sm cursor-pointer flex items-center gap-1.5"
                 >
-                  Simpan
+                  <Check className="w-4 h-4" />
+                  <span>{editingIngredient ? "Simpan Perubahan" : "Simpan Bahan Baku"}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>,
         document.body
       )}
 
+      {/* ── MODAL: CATAT PEMAKAIAN & WASTE ───────────────────────────────── */}
       {isAddMovementOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h2 className="text-xl font-bold text-slate-800">Catat Pemakaian Harian</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl shadow-coffee-lg w-full max-w-md overflow-hidden border border-stone-200"
+          >
+            <div className="flex justify-between items-center p-5 border-b border-stone-100 bg-stone-50/80">
+              <div>
+                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  {movementType === "WASTE" ? (
+                    <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  ) : (
+                    <Plus className="w-5 h-5 text-amber-800" />
+                  )}
+                  {movementType === "WASTE" ? "Catat Bahan Rusak / Terbuang (Waste)" : "Catat Pemakaian Harian"}
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Setiap mutasi akan mengurangi saldo stok dan tercatat dalam audit log.
+                </p>
+              </div>
               <button
                 onClick={() => setIsAddMovementOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full cursor-pointer"
               >
-                &times;
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddMovement} className="p-6 space-y-4">
-              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg flex-wrap">
+            <form onSubmit={handleAddMovement} className="p-5 space-y-4 text-xs">
+              {/* Type Switcher */}
+              <div className="flex gap-1.5 p-1 bg-stone-100 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setMovementType("USAGE")}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    movementType === "USAGE" ? "bg-white text-stone-900 shadow-coffee-sm" : "text-stone-500"
+                  }`}
+                >
+                  Pemakaian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementType("WASTE")}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    movementType === "WASTE" ? "bg-white text-rose-700 shadow-coffee-sm" : "text-stone-500"
+                  }`}
+                >
+                  Waste (Rusak)
+                </button>
                 {currentUser?.role !== "LEADER" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setMovementType("OUT")}
-                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
-                        movementType === "OUT"
-                          ? "bg-white text-orange-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      Keluar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovementType("WASTE")}
-                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
-                        movementType === "WASTE"
-                          ? "bg-white text-rose-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      Terbuang
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovementType("IN")}
-                      className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition-colors ${
-                        movementType === "IN"
-                          ? "bg-white text-emerald-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      Masuk/PO
-                    </button>
-                  </>
-                )}
-                {currentUser?.role === "LEADER" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setMovementType("USAGE")}
-                      className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                        movementType === "USAGE"
-                          ? "bg-white text-blue-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      Pemakaian {currentUser?.department ? `(${currentUser.department})` : ""}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovementType("TRANSFER")}
-                      className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                        movementType === "TRANSFER"
-                          ? "bg-white text-purple-700 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      Minta/Mutasi
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => setMovementType("IN")}
+                    className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                      movementType === "IN" ? "bg-white text-emerald-700 shadow-coffee-sm" : "text-stone-500"
+                    }`}
+                  >
+                    Masuk Manual
+                  </button>
                 )}
               </div>
 
+              {/* Select Ingredient */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Pilih Bahan Baku
-                </label>
+                <label className="block font-bold text-stone-700 mb-1">Pilih Bahan Baku</label>
                 <select
-                  name="ingredientId"
                   required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
                   value={selectedIngredientForMove}
                   onChange={(e) => setSelectedIngredientForMove(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
                 >
                   {ingredients.map((ing) => (
                     <option key={ing.id} value={ing.id}>
-                      {ing.name} (Stok: {ing.currentStock} {ing.unit})
+                      {ing.name} (Sisa: {ing.currentStock.toLocaleString("id-ID")} {ing.unit})
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* Quantity */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Jumlah
+                <label className="block font-bold text-stone-700 mb-1">
+                  Jumlah {movementType === "IN" ? "Masuk" : "Keluar / Terbuang"}
                 </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  required
-                  min="0.01"
-                  step="any"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    required
+                    min="0.01"
+                    step="any"
+                    value={movementQuantity || ""}
+                    onChange={(e) => setMovementQuantity(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    placeholder="0"
+                  />
+                  <span className="font-bold text-stone-500 shrink-0 text-xs">
+                    {ingredients.find((i) => i.id === selectedIngredientForMove)?.unit || "unit"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Waste Reason Quick Select */}
+              {movementType === "WASTE" && (
+                <div>
+                  <span className="block font-bold text-rose-900 mb-1 text-[11px]">
+                    Pilih Alasan Bahan Terbuang:
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {WASTE_REASONS.map((r) => (
+                      <button
+                        type="button"
+                        key={r}
+                        onClick={() => setMovementNote(r)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
+                          movementNote === r
+                            ? "bg-rose-100 text-rose-900 border-rose-300"
+                            : "bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Estimated Loss Display */}
+                  {movementQuantity > 0 && selectedIngredientForMove && (
+                    <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex justify-between items-center text-[11px]">
+                      <span className="text-rose-800 font-semibold">Taksiran Nilai Kerugian:</span>
+                      <span className="font-mono font-black text-rose-700">
+                        {formatCurrency(
+                          movementQuantity * (ingredients.find((i) => i.id === selectedIngredientForMove)?.costPerUnit || 0)
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Note input */}
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">Catatan Tambahan</label>
+                <textarea
+                  rows={2}
+                  value={movementNote}
+                  onChange={(e) => setMovementNote(e.target.value)}
+                  placeholder="Keterangan mutasi (opsional)..."
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Catatan
-                </label>
-                <textarea
-                  name="note"
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="Opsional (misal: Tumpah, Kadaluarsa)"
-                ></textarea>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+              {/* Footer */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setIsAddMovementOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-xl font-bold cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-slate-800"
+                  className={`px-4 py-2 rounded-xl text-white font-bold cursor-pointer shadow-coffee-sm ${
+                    movementType === "WASTE" ? "bg-rose-600 hover:bg-rose-700" : "bg-stone-900 hover:bg-black"
+                  }`}
                 >
                   Simpan Transaksi
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>,
         document.body
       )}
+
+      {/* Recipe Modal */}
+      <RecipeModal
+        isOpen={isAddRecipeOpen}
+        onClose={() => setIsAddRecipeOpen(false)}
+        editingRecipe={editingRecipe}
+        ingredients={ingredients}
+        onSave={(recipeData) => {
+          if (editingRecipe) {
+            updateRecipe(editingRecipe.id, recipeData);
+          } else {
+            addRecipe(recipeData);
+          }
+        }}
+      />
     </div>
   );
 };

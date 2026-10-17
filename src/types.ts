@@ -401,12 +401,18 @@ export interface CashTransaction {
 
 export interface Ingredient {
   id: string;
+  code?: string;
   name: string;
-  unit: string;
+  unit: string; // Base unit untuk resep (gr, ml, pcs, portion)
   currentStock: number;
   minStock: number;
   category: string;
-  costPerUnit: number; // Fase 3: untuk valuation stok
+  costPerUnit: number; // Harga per base unit (Rupiah)
+  purchaseUnit?: string; // Satuan beli (Kg, Liter, Karton, Dus, Pack, Botol)
+  conversionFactor?: number; // 1 purchaseUnit = X unit (misal 1000 untuk Kg->gr)
+  purchasePrice?: number; // Harga beli per purchaseUnit
+  storageLocation?: "BAR" | "CHILLER" | "DRY_STORAGE" | "KITCHEN" | "BAKERY" | string;
+  notes?: string;
 }
 
 export interface StockMovement {
