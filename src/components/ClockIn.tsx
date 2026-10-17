@@ -262,19 +262,34 @@ export function ClockIn() {
     const now = new Date().toISOString();
     
     try {
-      addDailyAttendance({
-        employeeId: activeEmployeeId,
-        date: todayStr,
-        clockInTime: now,
-        clockOutTime: now,
-        clockInLocation: location || { lat: 0, lng: 0 },
-        clockOutLocation: location || { lat: 0, lng: 0 },
-        clockInPhotoUrl: photoDataUrl || "",
-        clockOutPhotoUrl: photoDataUrl || "",
-        status: leaveStatus,
-        approvalStatus: "PENDING",
-        notes: notes.trim()
-      });
+      if (todayAttendance) {
+        updateDailyAttendance({
+          ...todayAttendance,
+          clockInTime: now,
+          clockOutTime: now,
+          clockInLocation: location || { lat: 0, lng: 0 },
+          clockOutLocation: location || { lat: 0, lng: 0 },
+          clockInPhotoUrl: photoDataUrl || "",
+          clockOutPhotoUrl: photoDataUrl || "",
+          status: leaveStatus,
+          approvalStatus: "PENDING",
+          notes: notes.trim(),
+        });
+      } else {
+        addDailyAttendance({
+          employeeId: activeEmployeeId,
+          date: todayStr,
+          clockInTime: now,
+          clockOutTime: now,
+          clockInLocation: location || { lat: 0, lng: 0 },
+          clockOutLocation: location || { lat: 0, lng: 0 },
+          clockInPhotoUrl: photoDataUrl || "",
+          clockOutPhotoUrl: photoDataUrl || "",
+          status: leaveStatus,
+          approvalStatus: "PENDING",
+          notes: notes.trim(),
+        });
+      }
       setFeedback({ type: "success", message: `Pengajuan ${leaveStatus} berhasil dikirim ke Manager!` });
       setPhotoDataUrl(null);
       setNotes("");

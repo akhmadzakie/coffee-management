@@ -17,6 +17,7 @@ export const KPI: React.FC = () => {
     updateKpiBonusRule,
     deleteKpiBonusRule,
     deleteKpiTask, 
+    isReadOnly,
     currentUser, 
     user,
     settings,
@@ -30,7 +31,7 @@ export const KPI: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<"guide" | "target" | "tasks" | "rules">("guide");
   const isIndo = true;
   const loggedInUser = currentUser || user;
-  const canEditHR = loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER" || loggedInUser?.role === "SUPER_ADMIN";
+  const canEditHR = (loggedInUser?.role === "OWNER" || loggedInUser?.role === "MANAGER" || loggedInUser?.role === "SUPER_ADMIN") && !isReadOnly;
 
   // State for new/edit task
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);

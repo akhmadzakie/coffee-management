@@ -99,7 +99,8 @@ export function Payroll() {
 
     return uniqueEmpIds.map((empId: any) => {
         const emp = employees.find((e: any) => e.id === empId) || users.find((u: any) => u.id === empId) || { id: empId, name: "Unknown Karyawan" };
-        const contract = contracts.find((c: any) => c.employeeId === empId && c.status === "ACTIVE");
+        const contract = contracts.find((c: any) => c.employeeId === empId && (c.status === "ACTIVE" || c.isActive))
+          || contracts.find((c: any) => c.employeeId === empId);
         
         // Auto-calculate from daily attendances (Opsi B: dihitung hadir kecuali ditolak Manager atau berstatus Alpha)
         const dailyLogs = dailyAttendances.filter((a: any) => a.employeeId === emp.id && a.date.startsWith(period));

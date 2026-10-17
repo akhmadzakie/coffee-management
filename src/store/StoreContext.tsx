@@ -1023,15 +1023,34 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
-    const id = generateId();
-    const newAtt: DailyAttendance = {
-      approvalStatus: "PENDING",
-      ...att,
-      id,
-    };
-    setDailyAttendances((prev) => [...prev, newAtt]);
-    writeAuditLog("CREATE", "daily_attendances", id);
-    markChanged();
+    setDailyAttendances((prev) => {
+      const existing = prev.find(
+        (a) => a.employeeId === att.employeeId && a.date === att.date
+      );
+      if (existing) {
+        const updated = prev.map((a) =>
+          a.id === existing.id
+            ? {
+                ...existing,
+                ...att,
+                approvalStatus: att.approvalStatus || existing.approvalStatus || "PENDING",
+              }
+            : a
+        );
+        writeAuditLog("UPDATE", "daily_attendances", existing.id);
+        markChanged();
+        return updated;
+      }
+      const id = generateId();
+      const newAtt: DailyAttendance = {
+        approvalStatus: "PENDING",
+        ...att,
+        id,
+      };
+      writeAuditLog("CREATE", "daily_attendances", id);
+      markChanged();
+      return [...prev, newAtt];
+    });
   };
 
   const updateDailyAttendance = (att: DailyAttendance) => {
