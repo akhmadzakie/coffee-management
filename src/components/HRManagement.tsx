@@ -510,6 +510,13 @@ export function HRManagement() {
     if (editingContract) {
       updateContract({ ...editingContract, ...contractForm });
     } else {
+      if (contractForm.status === "ACTIVE") {
+        contracts.forEach((c) => {
+          if (c.employeeId === contractForm.employeeId && c.status === "ACTIVE") {
+            updateContract({ ...c, status: "INACTIVE" });
+          }
+        });
+      }
       addContract(contractForm);
     }
     
@@ -1043,20 +1050,20 @@ export function HRManagement() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <motion.div
                   whileHover={{ y: -4 }}
-                  className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 shadow-sm"
+                  className="bg-gradient-to-br from-brand-50 to-white p-6 rounded-2xl border border-brand-100 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-indigo-900 text-sm font-semibold">
+                    <h3 className="text-brand-900 text-sm font-semibold">
                       {isIndo ? "Total Karyawan" : "Total Employees"}
                     </h3>
-                    <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl">
+                    <div className="p-2.5 bg-brand-100 text-brand-600 rounded-xl">
                       <Users className="w-5 h-5" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold text-indigo-900">
-                    {employees.filter((e) => e.status === "ACTIVE").length}
+                  <p className="text-3xl font-bold text-brand-900">
+                    {employees.filter(isEmpActive).length}
                   </p>
-                  <p className="text-sm text-indigo-600 mt-2">
+                  <p className="text-sm text-brand-600 mt-2">
                     {isIndo ? "Karyawan Aktif" : "Active Employees"}
                   </p>
                 </motion.div>
@@ -1083,24 +1090,24 @@ export function HRManagement() {
 
                 <motion.div
                   whileHover={{ y: -4 }}
-                  className="bg-gradient-to-br from-amber-50 to-white p-6 rounded-2xl border border-amber-100 shadow-sm"
+                  className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-amber-900 text-sm font-semibold">
+                    <h3 className="text-indigo-900 text-sm font-semibold">
                       {isIndo ? "Total Gaji Pokok" : "Total Basic Salary"}
                     </h3>
-                    <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl">
+                    <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl">
                       <FileText className="w-5 h-5" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold text-amber-900">
+                  <p className="text-2xl font-bold text-indigo-900">
                     {formatRupiah(
                       contracts
-                        .filter((c) => c.isActive)
-                        .reduce((sum, c) => sum + c.basicSalary, 0),
+                        .filter((c) => c.status === "ACTIVE" || (c as any).isActive)
+                        .reduce((sum, c) => sum + (c.basicSalary || 0), 0),
                     )}
                   </p>
-                  <p className="text-sm text-amber-600 mt-2">
+                  <p className="text-sm text-indigo-600 mt-2">
                     {isIndo ? "Kontrak Aktif" : "Active Contracts"}
                   </p>
                 </motion.div>
@@ -1119,7 +1126,13 @@ export function HRManagement() {
                   </div>
                   <p className="text-2xl font-bold text-blue-900">
                     {formatRupiah(
-                      payrollData.reduce((sum, p) => sum + p.total, 0),
+                      (() => {
+                        const calculated = payrollData.reduce((sum, p) => sum + (p ? p.total : 0), 0);
+                        if (calculated > 0) return calculated;
+                        return contracts
+                          .filter((c) => c.status === "ACTIVE" || (c as any).isActive)
+                          .reduce((sum, c) => sum + (c.basicSalary || 0) + (c.mealAllowance || 0) + (c.positionAllowance || 0) + (c.transportAllowance || 0), 0);
+                      })()
                     )}
                   </p>
                   <p className="text-sm text-blue-600 mt-2">
@@ -1229,7 +1242,7 @@ export function HRManagement() {
                     />
                     <button
                       onClick={() => handleOpenEmployeeModal()}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+                      className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs"
                     >
                       <Plus className="w-4 h-4" />{" "}
                       {isIndo ? "Tambah Karyawan" : "Add Employee"}
@@ -1371,7 +1384,7 @@ export function HRManagement() {
                         "Selesai Kontrak": "Format YYYY-MM-DD",
                       }}
                     />
-                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
+                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs">
                       <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
                     </button>
                   </div>
@@ -1558,10 +1571,10 @@ export function HRManagement() {
                           setShowShiftConfigModal(true);
                         }}
                         disabled={isReadOnly}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors shadow-2xs border border-indigo-200"
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 transition-colors shadow-2xs border border-brand-200"
                         title="Atur jam operasional, toleransi keterlambatan, dan daftar shift kedai"
                       >
-                        <SettingsIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        <SettingsIcon className="w-3.5 h-3.5 text-brand-600" />
                         <span>Atur Jam Shift</span>
                       </button>
                     )}
@@ -1586,7 +1599,7 @@ export function HRManagement() {
                         className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs ${
                           isWeekPending
                             ? "bg-amber-500 hover:bg-amber-600 text-white"
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            : "bg-brand-600 hover:bg-brand-700 text-white"
                         }`}
                         title="Ajukan jadwal shift tim minggu ini kepada Manajer untuk disahkan"
                       >
@@ -1663,7 +1676,7 @@ export function HRManagement() {
                       onClick={() => setScheduleDivisionFilter(leaderDivision)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         scheduleDivisionFilter === leaderDivision
-                          ? "bg-indigo-600 text-white shadow-xs"
+                          ? "bg-brand-600 text-white shadow-xs"
                           : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
                       }`}
                     >
@@ -1674,7 +1687,7 @@ export function HRManagement() {
                       onClick={() => setScheduleDivisionFilter("ALL")}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         scheduleDivisionFilter === "ALL"
-                          ? "bg-indigo-600 text-white shadow-xs"
+                          ? "bg-brand-600 text-white shadow-xs"
                           : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
                       }`}
                     >
@@ -1693,7 +1706,7 @@ export function HRManagement() {
                       onClick={() => setScheduleDivisionFilter(tab.id)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         scheduleDivisionFilter === tab.id
-                          ? "bg-indigo-600 text-white shadow-xs"
+                          ? "bg-brand-600 text-white shadow-xs"
                           : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
                       }`}
                     >
