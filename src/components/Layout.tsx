@@ -70,12 +70,28 @@ export const Layout: React.FC<LayoutProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const getPrimaryDashboard = (role?: string): ViewState => {
+    switch (role?.toUpperCase()) {
+      case "OWNER":
+        return "dashboard_owner";
+      case "FINANCE":
+        return "dashboard_finance";
+      case "MANAGER":
+      case "SUPER_ADMIN":
+        return "dashboard_manager";
+      default:
+        return "dashboard_employee";
+    }
+  };
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Dasbor: true,
-    Operasi: true,
-    SDM: true,
-    Keuangan: false,
-    Admin: false,
+    "Menu & Produk": true,
+    "Penjualan & Kasir": true,
+    "Stok & Pengadaan": true,
+    "Keuangan & Kas": true,
+    "SDM & Tim": true,
+    "Sistem & Admin": false,
   });
 
   const toggleGroup = (group: string) => {
@@ -115,232 +131,233 @@ export const Layout: React.FC<LayoutProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ─── Semua item navigasi dengan grup visual ─────────────────────────────
+  // ─── Semua item navigasi dengan grup visual terstruktur & mengalir ─────────────
   const allNavigation = [
-    // ─── Dashboard Group ─────────────────────────────────────────
+    // ─── 1. Dasbor Pintar (1 Item Adaptif per Role) ─────────────
     { 
       group: "Dasbor",
-      name: "Dashboard Eksekutif",
-      view: "dashboard_owner" as ViewState,
-      icon: TrendingUp,
-    },
-    { 
-      group: "Dasbor",
-      name: "Dashboard Karyawan",
-      view: "dashboard_employee" as ViewState,
+      name: "Dasbor Utama",
+      view: getPrimaryDashboard(currentUser?.role),
       icon: LayoutDashboard,
     },
+
+    // ─── 2. Menu & Produk (Dikelola Manager & Super Admin) ───────
     { 
-      group: "Dasbor",
-      name: "Dashboard Manajer",
-      view: "dashboard_manager" as ViewState,
-      icon: Store,
-    },
-    { 
-      group: "Dasbor",
-      name: "Dashboard Keuangan",
-      view: "dashboard_finance" as ViewState,
-      icon: Wallet,
-    },
-    { 
-      group: "Dasbor",
-      name: "Dashboard Inventori",
-      view: "dashboard_inventory" as ViewState,
-      icon: Package,
-    },
-    // ─── Operations Group (POS & KDS run standalone on /pos & /kds) ───
-    { 
-      group: "Operasi",
-      name: t("shifts") || "Shift & Kasir",
-      view: "shifts" as ViewState,
-      icon: Coffee,
-    },
-    { 
-      group: "Operasi",
-      name: t("import_sales") || "Impor Penjualan",
-      view: "import_sales" as ViewState,
-      icon: ReceiptText,
-    },
-    { 
-      group: "Operasi",
-      name: t("inventory") || "Inventori & Stok",
-      view: "inventory" as ViewState,
-      icon: Warehouse,
-    },
-    { 
-      group: "Operasi",
-      name: t("purchases") || "Pembelian (PO)",
-      view: "purchases" as ViewState,
-      icon: ShoppingBag,
-    },
-    { 
-      group: "Operasi",
-      name: t("suppliers") || "Pemasok / Supplier",
-      view: "suppliers" as ViewState,
-      icon: Truck,
-    },
-    { 
-      group: "Operasi",
-      name: "Menu & Katalog Produk",
+      group: "Menu & Produk",
+      name: "Katalog & Menu",
       view: "menu_management" as ViewState,
       icon: UtensilsCrossed,
     },
     { 
-      group: "Operasi",
-      name: "Kalkulator & Simulasi HPP",
+      group: "Menu & Produk",
+      name: "Kalkulator & HPP",
       view: "hpp_calculator" as ViewState,
       icon: Calculator,
     },
-    // ─── HR & Team Group ─────────────────────────────────────────
+
+    // ─── 3. Penjualan & Kasir (Tugas Finance, Kasir, Manager) ────
     { 
-      group: "SDM",
-      name: currentUser?.role === "LEADER" ? "Jadwal Shift Tim" : "SDM & HRD",
-      view: "hr" as ViewState,
-      icon: UserCheck,
+      group: "Penjualan & Kasir",
+      name: "Shift & Kas Laci",
+      view: "shifts" as ViewState,
+      icon: Coffee,
     },
     { 
-      group: "SDM",
-      name: "Clock In / Absensi",
-      view: "attendance_clock" as ViewState,
-      icon: Calendar,
+      group: "Penjualan & Kasir",
+      name: "Rekap Penjualan",
+      view: "import_sales" as ViewState,
+      icon: ReceiptText,
+    },
+
+    // ─── 4. Stok & Pengadaan (Tugas Leader & Manager) ───────────
+    { 
+      group: "Stok & Pengadaan",
+      name: "Stok Bahan Baku",
+      view: "inventory" as ViewState,
+      icon: Warehouse,
     },
     { 
-      group: "SDM",
-      name: (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER")
-        ? "Jobdesk Leader"
-        : "Checklist Supervisi",
-      view: "leader_checklist" as ViewState,
-      icon: ClipboardCheck,
+      group: "Stok & Pengadaan",
+      name: "Pembelian Bahan (PO)",
+      view: "purchases" as ViewState,
+      icon: ShoppingBag,
     },
     { 
-      group: "SDM",
-      name: "Penggajian (Payroll)",
-      view: "payroll" as ViewState,
-      icon: Calculator,
+      group: "Stok & Pengadaan",
+      name: "Pemasok / Supplier",
+      view: "suppliers" as ViewState,
+      icon: Truck,
     },
-    // ─── Finance Group ───────────────────────────────────────────
+
+    // ─── 5. Keuangan & Kas (Tugas Finance, Manager, Owner) ──────
     { 
-      group: "Keuangan",
-      name: t("cash_flow") || "Arus Kas",
+      group: "Keuangan & Kas",
+      name: "Buku Kas & Arus Kas",
       view: "cash_flow" as ViewState,
       icon: Wallet,
     },
     { 
-      group: "Keuangan",
-      name: "Kategori Keuangan",
-      view: "expense_categories" as ViewState,
-      icon: Tag,
-    },
-    { 
-      group: "Keuangan",
-      name: "Laporan Keuangan",
+      group: "Keuangan & Kas",
+      name: "Laporan Laba Rugi",
       view: "finance_reports" as ViewState,
       icon: BarChart3,
     },
     { 
-      group: "Keuangan",
+      group: "Keuangan & Kas",
       name: "Rekonsiliasi Bank",
       view: "bank_reconciliation" as ViewState,
       icon: CreditCard,
     },
-    // ─── Admin Group ─────────────────────────────────────────────
     { 
-      group: "Admin",
-      name: t("users") || "Pengguna",
+      group: "Keuangan & Kas",
+      name: "Kategori Beban",
+      view: "expense_categories" as ViewState,
+      icon: Tag,
+    },
+
+    // ─── 6. SDM & Tim (Manager, Finance untuk Gaji, Leader & Staf) ─
+    { 
+      group: "SDM & Tim",
+      name: "Presensi & Clock In",
+      view: "attendance_clock" as ViewState,
+      icon: Calendar,
+    },
+    { 
+      group: "SDM & Tim",
+      name: "Checklist Supervisi",
+      view: "leader_checklist" as ViewState,
+      icon: ClipboardCheck,
+    },
+    { 
+      group: "SDM & Tim",
+      name: "Data Karyawan & Kontrak",
+      view: "hr" as ViewState,
+      icon: UserCheck,
+    },
+    { 
+      group: "SDM & Tim",
+      name: "Penggajian (Payroll)",
+      view: "payroll" as ViewState,
+      icon: Calculator,
+    },
+
+    // ─── 7. Sistem & Admin (Super Admin & Manager) ───────────────
+    { 
+      group: "Sistem & Admin",
+      name: "Manajemen Pengguna",
       view: "users" as ViewState,
       icon: Users,
     },
     { 
-      group: "Admin",
-      name: t("audit_log") || "Audit Log",
+      group: "Sistem & Admin",
+      name: "Audit Log Aktivitas",
       view: "audit_log" as ViewState,
       icon: ShieldCheck,
     },
     { 
-      group: "Admin",
-      name: t("settings") || "Pengaturan",
+      group: "Sistem & Admin",
+      name: "Pengaturan Sistem",
       view: "settings" as ViewState,
       icon: Settings,
     },
   ];
 
-  // ─── Role Access Matrix ───────────────────────────────────────────────────
-  const ALL_VIEWS: ViewState[] = allNavigation.map((n) => n.view);
+  // ─── Role Access Matrix (Tepat Sesuai SOP Julia's Coffee) ─────────
+  const ALL_VIEWS: ViewState[] = [
+    "dashboard_owner", "dashboard_finance", "dashboard_manager", "dashboard_inventory", "dashboard_employee",
+    "menu_management", "hpp_calculator",
+    "shifts", "import_sales",
+    "inventory", "purchases", "suppliers",
+    "cash_flow", "finance_reports", "bank_reconciliation", "expense_categories",
+    "attendance_clock", "leader_checklist", "hr", "payroll",
+    "users", "audit_log", "settings",
+  ];
 
   const roleAccess: Record<string, ViewState[]> = {
+    // Super Admin: Akses penuh teknis & manajerial
     SUPER_ADMIN: ALL_VIEWS,
+
+    // Owner: Pemilik usaha (fokus performa bisnis, omzet, profit, rekap, & pantau payroll)
     OWNER: [
       "dashboard_owner",
       "dashboard_finance",
       "dashboard_manager",
       "cash_flow",
       "finance_reports",
+      "import_sales",
       "menu_management",
       "hpp_calculator",
-      "pos_cashier",
-      "kitchen_display",
+      "payroll",
+      "inventory",
     ],
+
+    // Manager: Mengelola seluruh operasional harian toko, stok, tim, menu & shift
     MANAGER: [
       "dashboard_manager",
       "dashboard_owner",
       "dashboard_inventory",
-      "inventory",
-      "import_sales",
-      "hr",
-      "leader_checklist",
-      "shifts",
-      "suppliers",
-      "purchases",
-      "users",
-      "audit_log",
+      "dashboard_finance",
       "menu_management",
       "hpp_calculator",
-      "pos_cashier",
-      "kitchen_display",
+      "inventory",
+      "purchases",
+      "suppliers",
+      "shifts",
+      "import_sales",
+      "hr",
+      "leader_checklist",
+      "attendance_clock",
+      "payroll",
+      "cash_flow",
+      "finance_reports",
+      "users",
     ],
+
+    // Finance: Kasir, shift, penjualan, arus kas, laba rugi, nota belanja, payroll
     FINANCE: [
       "dashboard_finance",
-      "dashboard_owner",
+      "shifts",
+      "import_sales",
       "cash_flow",
-      "expense_categories",
       "finance_reports",
       "bank_reconciliation",
-      "payroll",
+      "expense_categories",
       "purchases",
+      "payroll",
       "audit_log",
-      "pos_cashier",
     ],
+
+    // Kasir: Shift kasir, rekap penjualan, presensi
     KASIR: [
-      "pos_cashier",
-      "kitchen_display",
       "dashboard_employee",
       "shifts",
       "import_sales",
       "attendance_clock",
     ],
+
+    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, presensi
     LEADER: [
-      "kitchen_display",
       "dashboard_employee",
-      "hr",
       "leader_checklist",
-      "dashboard_inventory",
+      "attendance_clock",
       "inventory",
+      "purchases",
+      "suppliers",
       "menu_management",
       "shifts",
-      "suppliers",
-      "purchases",
-      "attendance_clock",
     ],
-    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock"],
-    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock"],
-    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+
+    // Barista, Kitchen, Baker: Portal karyawan & presensi masuk
+    BAR: ["dashboard_employee", "attendance_clock"],
+    KITCHEN: ["dashboard_employee", "attendance_clock"],
+    BAKER: ["dashboard_employee", "attendance_clock"],
   };
 
   const isEmployeeLeader = Boolean(
     currentUser &&
       (currentUser.role === "LEADER" ||
         employees?.some(
-          (e: any) =>
+          (e) =>
             (e.username === currentUser.username || e.id === currentUser.employeeId) &&
             ((e.position || "").toUpperCase().includes("LEADER") ||
               (e.position || "").toUpperCase().includes("HEAD"))
@@ -483,14 +500,18 @@ export const Layout: React.FC<LayoutProps> = ({
 
             return Object.entries(groupedNav).map(([group, items]) => {
               const isExpanded = expandedGroups[group] ?? true;
-              const isActiveGroup = items.some((i) => i.view === currentView);
+              const isActiveGroup = items.some(
+                (i) => i.view === currentView || (i.group === "Dasbor" && currentView.startsWith("dashboard_"))
+              );
 
               if (isSidebarCollapsed) {
                 return (
                   <div key={group} className="py-1">
                     {items.map((item) => {
                       const Icon = item.icon;
-                      const isActive = currentView === item.view;
+                      const isActive =
+                        currentView === item.view ||
+                        (item.group === "Dasbor" && currentView.startsWith("dashboard_"));
                       return (
                         <button
                           key={item.view}
@@ -530,7 +551,9 @@ export const Layout: React.FC<LayoutProps> = ({
                     <div className="mt-0.5 space-y-0.5">
                       {items.map((item) => {
                         const Icon = item.icon;
-                        const isActive = currentView === item.view;
+                        const isActive =
+                          currentView === item.view ||
+                          (item.group === "Dasbor" && currentView.startsWith("dashboard_"));
                         return (
                           <button
                             key={item.view}
@@ -655,25 +678,72 @@ export const Layout: React.FC<LayoutProps> = ({
                   dashboard_finance: "Dashboard Keuangan",
                   dashboard_inventory: "Dashboard Inventori",
                   cash_flow: "Buku Kas & Arus Kas",
-                  expense_categories: "Kategori Pengeluaran",
-                  finance_reports: "Laporan Keuangan & Laba Rugi",
-                  bank_reconciliation: "Rekonsiliasi Bank",
-                  inventory: "Inventori & Resep",
-                  import_sales: "Penjualan & Kasir POS",
-                  users: "Manajemen Pengguna",
-                  audit_log: "Audit Log & Keamanan",
-                  shifts: "Manajemen Shift & Kasir",
-                  suppliers: "Supplier & Pemasok",
+                  expense_categories: "Kategori Beban Keuangan",
+                  finance_reports: "Laporan Laba Rugi & Keuangan",
+                  bank_reconciliation: "Rekonsiliasi Bank & QRIS",
+                  inventory: "Stok Bahan Baku & Opname",
+                  import_sales: "Rekap & Impor Penjualan",
+                  users: "Manajemen Pengguna & PIN",
+                  audit_log: "Audit Log Aktivitas",
+                  shifts: "Shift & Kas Laci Kasir",
+                  suppliers: "Pemasok / Supplier",
                   purchases: "Pembelian Bahan Baku (PO)",
                   settings: "Pengaturan Sistem",
-                  hr: "SDM, Jadwal & Kontrak",
+                  hr: "Data Karyawan & Kontrak",
                   payroll: "Penggajian (Payroll)",
                   attendance_clock: "Presensi & Clock In",
-                  leader_checklist: "Checklist Jobdesk Harian",
-                  hpp_calculator: "Kalkulator & Simulasi HPP Menu",
+                  leader_checklist: "Checklist Supervisi Leader",
+                  hpp_calculator: "Kalkulator & HPP Menu",
+                  menu_management: "Katalog & Menu Produk",
                 }[currentView] || currentView}
               </h2>
             </div>
+
+            {/* Quick Switcher for Dashboards (For Manager, Super Admin, Owner) */}
+            {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "MANAGER", "OWNER"].includes(currentUser?.role || "") && (
+              <div className="hidden xl:flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 text-[11px] font-semibold ml-2">
+                <button
+                  onClick={() => onViewChange("dashboard_manager")}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    currentView === "dashboard_manager"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Operasional
+                </button>
+                <button
+                  onClick={() => onViewChange("dashboard_owner")}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    currentView === "dashboard_owner"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Bisnis & Omzet
+                </button>
+                <button
+                  onClick={() => onViewChange("dashboard_finance")}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    currentView === "dashboard_finance"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Keuangan
+                </button>
+                <button
+                  onClick={() => onViewChange("dashboard_inventory")}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    currentView === "dashboard_inventory"
+                      ? "bg-white text-slate-900 shadow-2xs font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Inventori
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Right Header: AI, Export, Clock, Profile Capsule */}
@@ -854,28 +924,46 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
 
               {/* Mobile Navigation List */}
-              <nav className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-                {navigation.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = currentView === item.view;
-                  return (
-                    <button
-                      key={item.view}
-                      onClick={() => {
-                        onViewChange(item.view);
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        isActive
-                          ? "bg-brand-50 text-brand-900 font-bold border-l-3 border-brand-600"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
-                      <span>{item.name}</span>
-                    </button>
-                  );
-                })}
+              <nav className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                {(() => {
+                  const groupedNav = navigation.reduce((acc, item) => {
+                    const g = item.group || "Lainnya";
+                    if (!acc[g]) acc[g] = [];
+                    acc[g].push(item);
+                    return acc;
+                  }, {} as Record<string, typeof navigation>);
+
+                  return Object.entries(groupedNav).map(([group, items]) => (
+                    <div key={group} className="space-y-1">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {group}
+                      </div>
+                      {items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive =
+                          currentView === item.view ||
+                          (item.group === "Dasbor" && currentView.startsWith("dashboard_"));
+                        return (
+                          <button
+                            key={item.view}
+                            onClick={() => {
+                              onViewChange(item.view);
+                              setIsMobileMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-brand-50 text-brand-900 font-bold border-l-3 border-brand-600 shadow-2xs"
+                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
+                          >
+                            <Icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
+                            <span>{item.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
               </nav>
 
               {/* Mobile Drawer Footer */}

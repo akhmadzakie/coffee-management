@@ -161,15 +161,15 @@ function AppContent() {
 
   // Halaman default saat pertama login atau saat view tidak diizinkan
   const roleDefaultView: Record<string, ViewState> = {
-    SUPER_ADMIN: "dashboard_owner",
+    SUPER_ADMIN: "dashboard_manager",
     OWNER:       "dashboard_owner",
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
-    KASIR:       "pos_cashier",
+    KASIR:       "shifts",
     LEADER:      "leader_checklist",
-    BAR:         "dashboard_employee",
-    KITCHEN:     "dashboard_employee",
-    BAKER:       "dashboard_employee",
+    BAR:         "attendance_clock",
+    KITCHEN:     "attendance_clock",
+    BAKER:       "attendance_clock",
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
@@ -192,8 +192,11 @@ function AppContent() {
       "dashboard_manager",
       "cash_flow",
       "finance_reports",
+      "import_sales",
       "menu_management",
       "hpp_calculator",
+      "payroll",
+      "inventory",
       "pos_cashier",
       "kitchen_display",
     ],
@@ -201,47 +204,60 @@ function AppContent() {
       "dashboard_manager",
       "dashboard_owner",
       "dashboard_inventory",
-      "inventory", "import_sales",
-      "hr", "leader_checklist",
-      "shifts", "suppliers", "purchases",
-      "users",
-      "audit_log",
+      "dashboard_finance",
       "menu_management",
       "hpp_calculator",
+      "inventory",
+      "purchases",
+      "suppliers",
+      "shifts",
+      "import_sales",
+      "hr",
+      "leader_checklist",
+      "attendance_clock",
+      "payroll",
+      "cash_flow",
+      "finance_reports",
+      "users",
+      "audit_log",
       "pos_cashier",
       "kitchen_display",
     ],
     FINANCE: [
       "dashboard_finance",
-      "dashboard_owner",
-      "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
-      "payroll", "purchases",
+      "shifts",
+      "import_sales",
+      "cash_flow",
+      "expense_categories",
+      "finance_reports",
+      "bank_reconciliation",
+      "purchases",
+      "payroll",
       "audit_log",
       "pos_cashier",
     ],
     KASIR: [
-      "pos_cashier",
-      "kitchen_display",
       "dashboard_employee",
       "shifts",
       "import_sales",
-      "attendance_clock"
+      "attendance_clock",
+      "pos_cashier",
+      "kitchen_display",
     ],
     LEADER: [
-      "kitchen_display",
       "dashboard_employee",
-      "hr",
       "leader_checklist",
-      "dashboard_inventory",
+      "attendance_clock",
       "inventory",
+      "purchases",
+      "suppliers",
       "menu_management",
       "shifts",
-      "suppliers", "purchases",
-      "attendance_clock"
+      "kitchen_display",
     ],
-    BAR: ["kitchen_display", "dashboard_employee", "attendance_clock"],
-    KITCHEN: ["kitchen_display", "dashboard_employee", "attendance_clock"],
-    BAKER: ["kitchen_display", "dashboard_employee", "attendance_clock"],
+    BAR: ["dashboard_employee", "attendance_clock", "kitchen_display"],
+    KITCHEN: ["dashboard_employee", "attendance_clock", "kitchen_display"],
+    BAKER: ["dashboard_employee", "attendance_clock", "kitchen_display"],
   };
 
   React.useEffect(() => {
@@ -304,17 +320,6 @@ function AppContent() {
   // ─── 3. WEB MANAJEMEN BACK-OFFICE (URL UMUM /) ────────────────────────────────
   if (!currentUser) {
     return <Login />;
-  }
-
-  // Jika user yang login di web manajemen adalah kasir murni, kunci di Terminal Kasir tanpa akses web
-  if (currentUser.role === "KASIR") {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          <PosTerminal onNavigateBack={undefined} />
-        </ErrorBoundary>
-      </Suspense>
-    );
   }
 
   // Jika Owner/Manager sedang menguji atau membuka Terminal Kasir dari web manajemen
