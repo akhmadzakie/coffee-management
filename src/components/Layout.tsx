@@ -87,7 +87,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Dasbor: true,
     "Menu & Produk": true,
-    "Penjualan & Kasir": true,
+    Penjualan: true,
     "Stok & Pengadaan": true,
     "Keuangan & Kas": true,
     "SDM & Tim": true,
@@ -155,15 +155,9 @@ export const Layout: React.FC<LayoutProps> = ({
       icon: Calculator,
     },
 
-    // ─── 3. Penjualan & Kasir (Tugas Finance, Kasir, Manager) ────
+    // ─── 3. Penjualan (Tugas Finance, Kasir, Manager) ────────────
     { 
-      group: "Penjualan & Kasir",
-      name: "Shift & Kas Laci",
-      view: "shifts" as ViewState,
-      icon: Coffee,
-    },
-    { 
-      group: "Penjualan & Kasir",
+      group: "Penjualan",
       name: "Rekap Penjualan",
       view: "import_sales" as ViewState,
       icon: ReceiptText,
@@ -266,7 +260,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const ALL_VIEWS: ViewState[] = [
     "dashboard_owner", "dashboard_finance", "dashboard_manager", "dashboard_inventory", "dashboard_employee",
     "menu_management", "hpp_calculator",
-    "shifts", "import_sales",
+    "import_sales",
     "inventory", "purchases", "suppliers",
     "cash_flow", "finance_reports", "bank_reconciliation", "expense_categories",
     "attendance_clock", "leader_checklist", "hr", "payroll",
@@ -291,7 +285,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "inventory",
     ],
 
-    // Manager: Mengelola seluruh operasional harian toko, stok, tim, menu & shift
+    // Manager: Mengelola seluruh operasional harian toko, stok, tim, menu & penjualan
     MANAGER: [
       "dashboard_manager",
       "dashboard_owner",
@@ -302,7 +296,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "inventory",
       "purchases",
       "suppliers",
-      "shifts",
       "import_sales",
       "hr",
       "leader_checklist",
@@ -313,10 +306,9 @@ export const Layout: React.FC<LayoutProps> = ({
       "users",
     ],
 
-    // Finance: Kasir, shift, penjualan, arus kas, laba rugi, nota belanja, payroll
+    // Finance: Penjualan, arus kas, laba rugi, nota belanja, payroll
     FINANCE: [
       "dashboard_finance",
-      "shifts",
       "import_sales",
       "cash_flow",
       "finance_reports",
@@ -327,10 +319,9 @@ export const Layout: React.FC<LayoutProps> = ({
       "audit_log",
     ],
 
-    // Kasir: Shift kasir, rekap penjualan, presensi
+    // Kasir: Rekap penjualan, presensi
     KASIR: [
       "dashboard_employee",
-      "shifts",
       "import_sales",
       "attendance_clock",
     ],
@@ -344,7 +335,6 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "suppliers",
       "menu_management",
-      "shifts",
     ],
 
     // Barista, Kitchen, Baker: Portal karyawan & presensi masuk

@@ -236,6 +236,13 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     return () => clearInterval(interval);
   }, []);
 
+  // Otomatis buka popup Buka Shift saat kasir membuka POS jika belum ada shift aktif
+  useEffect(() => {
+    if (!activeShift) {
+      setIsShiftModalOpen(true);
+    }
+  }, [activeShift]);
+
   // Filtered menu
   const filteredMenu = useMemo(() => {
     return menuList.filter((item) => {
