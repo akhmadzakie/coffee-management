@@ -36,6 +36,9 @@ import {
   Copy,
   Info,
   Send,
+  Search,
+  AlertTriangle,
+  UserX,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -83,6 +86,7 @@ export function HRManagement() {
     deleteEmployee,
     addContract,
     updateContract,
+    deleteContract,
     addAttendance,
     updateAttendance,
     addUser,
@@ -201,6 +205,14 @@ export function HRManagement() {
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
   const [attendanceApprovalFilter, setAttendanceApprovalFilter] = useState<string>("ALL");
   const [selectedAttIds, setSelectedAttIds] = useState<string[]>([]);
+
+  // --- Employee & Contract Search / Filter State ---
+  const [empSearch, setEmpSearch] = useState("");
+  const [empDeptFilter, setEmpDeptFilter] = useState("ALL");
+  const [empStatusFilter, setEmpStatusFilter] = useState("ALL");
+
+  const [contractSearch, setContractSearch] = useState("");
+  const [contractStatusFilter, setContractStatusFilter] = useState("ALL");
 
   // --- Shift Configuration State & Handlers ---
   const [showShiftConfigModal, setShowShiftConfigModal] = useState(false);
@@ -342,6 +354,29 @@ export function HRManagement() {
   const handleSaveEmployee = () => {
     if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
     
+    const cleanUsername = empForm.username.toLowerCase().trim();
+    if (!editingEmployee) {
+      const dupEmp = employees.find(
+        (e) => (e.username || "").toLowerCase().trim() === cleanUsername
+      );
+      if (dupEmp) {
+        return alert(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}. Harap gunakan username unik.`);
+      }
+      const dupUser = users.find(
+        (u) => (u.username || "").toLowerCase().trim() === cleanUsername
+      );
+      if (dupUser) {
+        return alert(`Username "${empForm.username}" sudah terdaftar sebagai akun pengguna sistem.`);
+      }
+    } else {
+      const dupEmp = employees.find(
+        (e) => e.id !== editingEmployee.id && (e.username || "").toLowerCase().trim() === cleanUsername
+      );
+      if (dupEmp) {
+        return alert(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}.`);
+      }
+    }
+
     const posUpper = (empForm.position || "").toUpperCase();
     const deptUpper = (empForm.department || "").toUpperCase();
 
@@ -374,7 +409,7 @@ export function HRManagement() {
         (u) =>
           (u.employeeId && u.employeeId === editingEmployee.id) ||
           u.username.toLowerCase() === editingEmployee.username.toLowerCase() ||
-          u.username.toLowerCase() === empForm.username.toLowerCase()
+          u.username.toLowerCase() === cleanUsername
       );
 
       if (relatedUser) {
@@ -384,7 +419,7 @@ export function HRManagement() {
         } else {
           updateUser({
             ...relatedUser,
-            username: empForm.username.toLowerCase().trim(),
+            username: cleanUsername,
             name: empForm.name.trim(),
             role: calculatedRole,
             department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
@@ -397,16 +432,46 @@ export function HRManagement() {
       if (autoCreateUser && newEmpId) {
         addUser({
           name: empForm.name.trim(),
-          username: empForm.username.toLowerCase().trim(),
+          username: cleanUsername,
           pin: "123456",
           role: calculatedRole,
           department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
           employeeId: newEmpId
         });
-        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${empForm.username.toLowerCase().trim()}\nPIN: 123456\nRole: ${calculatedRole}`);
+        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${cleanUsername}\nPIN: 123456\nRole: ${calculatedRole}`);
       }
     }
     setIsEmployeeModalOpen(false);
+  };
+
+  const handleDeleteEmployee = (emp: any) => {
+    if (isReadOnly || !canEditHR) return;
+    const relatedUser = users.find(
+      (u) =>
+        (u.employeeId && u.employeeId === emp.id) ||
+        u.username.toLowerCase() === (emp.username || "").toLowerCase()
+    );
+    const confirmMsg = `Hapus data karyawan "${emp.name}" (@${emp.username})?\n\n` +
+      `Perhatian:\n- Data kontrak dan penugasan shift terkait akan otomatis dibersihkan.\n` +
+      (relatedUser ? `- Akun login sistem "${relatedUser.username}" akan dicabut.\n` : "") +
+      `Tindakan ini tidak dapat dibatalkan. Lanjutkan?`;
+    
+    if (confirm(confirmMsg)) {
+      deleteEmployee(emp.id);
+      if (relatedUser) {
+        deleteUser(relatedUser.id);
+      }
+      alert(`Data karyawan "${emp.name}" berhasil dihapus.`);
+    }
+  };
+
+  const handleDeleteContract = (c: any) => {
+    if (isReadOnly || !canEditHR) return;
+    const empName = getEmployeeName(c.employeeId);
+    if (confirm(`Hapus kontrak kerja karyawan "${empName}"?\n\nTindakan ini akan menghapus data gaji pokok dan tunjangan kontrak ini.`)) {
+      deleteContract(c.id);
+      alert(`Kontrak kerja berhasil dihapus.`);
+    }
   };
 
   const handleImportEmployees = (data: any[]) => {
@@ -844,15 +909,127 @@ export function HRManagement() {
     }
   };
 
-  // --- Chart Data ---
+  // --- Chart Data & Overview Computations ---
+  const todayStr = getLocalDateString();
+
   const attendanceChartData = useMemo(() => {
-    return attendances.map((a) => ({
-      name: getEmployeeName(a.employeeId).substring(0, 10),
-      Hadir: a.presentDays,
-      Alpha: a.alphaDays,
-      Izin: a.sickDays + a.permissionDays,
+    if (attendances && attendances.length > 0) {
+      return attendances.map((a) => ({
+        name: getEmployeeName(a.employeeId).substring(0, 10),
+        Hadir: a.presentDays,
+        Alpha: a.alphaDays,
+        Izin: a.sickDays + a.permissionDays,
+      }));
+    }
+
+    // Fallback dinamis dari presensi harian (dailyAttendances) bulan berjalan
+    const currentMonthPrefix = todayStr.substring(0, 7);
+    const currentMonthDaily = (dailyAttendances || []).filter((d) => (d.date || "").startsWith(currentMonthPrefix));
+
+    const empMap: Record<string, { Hadir: number; Alpha: number; Izin: number }> = {};
+    currentMonthDaily.forEach((d) => {
+      if (!empMap[d.employeeId]) {
+        empMap[d.employeeId] = { Hadir: 0, Alpha: 0, Izin: 0 };
+      }
+      if (d.status === "HADIR" || d.status === "TERLAMBAT") {
+        empMap[d.employeeId].Hadir++;
+      } else if (d.status === "ALPHA") {
+        empMap[d.employeeId].Alpha++;
+      } else if (d.status === "IZIN" || d.status === "SAKIT") {
+        empMap[d.employeeId].Izin++;
+      }
+    });
+
+    return Object.entries(empMap).map(([empId, stats]) => ({
+      name: getEmployeeName(empId).substring(0, 10),
+      Hadir: stats.Hadir,
+      Alpha: stats.Alpha,
+      Izin: stats.Izin,
     }));
-  }, [attendances]);
+  }, [attendances, dailyAttendances, employees, users, todayStr]);
+
+  // Roster Staf Bertugas Hari Ini
+  const todayShifts = useMemo(() => {
+    const operationalList = employees.filter((e) => isEmpActive(e) && isOperationalStaff(e));
+    return operationalList.map((emp) => {
+      const shiftAssigned = employeeShifts.find((s) => s.employeeId === emp.id && s.date === todayStr)?.shiftType || "OFF";
+      const att = dailyAttendances.find((a) => a.employeeId === emp.id && a.date === todayStr);
+      return {
+        emp,
+        shift: shiftAssigned,
+        attendance: att,
+      };
+    });
+  }, [employees, employeeShifts, dailyAttendances, todayStr]);
+
+  // Kontrak Mendekati Jatuh Tempo (< 30 hari atau overdue)
+  const expiringContractsList = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const thirtyDays = new Date(today);
+    thirtyDays.setDate(today.getDate() + 30);
+
+    return contracts
+      .filter((c) => {
+        if (c.status !== "ACTIVE" && !(c as any).isActive) return false;
+        if (!c.endDate) return false;
+        const end = new Date(c.endDate);
+        return end <= thirtyDays;
+      })
+      .map((c) => {
+        const end = new Date(c.endDate);
+        const daysRemaining = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          ...c,
+          daysRemaining,
+          isOverdue: daysRemaining < 0,
+        };
+      })
+      .sort((a, b) => a.daysRemaining - b.daysRemaining);
+  }, [contracts]);
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      const q = empSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        emp.name.toLowerCase().includes(q) ||
+        (emp.username || "").toLowerCase().includes(q) ||
+        (emp.position || "").toLowerCase().includes(q);
+      const matchDept =
+        empDeptFilter === "ALL" || (emp.department || "").toUpperCase() === empDeptFilter.toUpperCase();
+      const matchStatus =
+        empStatusFilter === "ALL" ||
+        (empStatusFilter === "AKTIF" ? isEmpActive(emp) : !isEmpActive(emp));
+      return matchSearch && matchDept && matchStatus;
+    });
+  }, [employees, empSearch, empDeptFilter, empStatusFilter]);
+
+  const filteredContracts = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const thirtyDays = new Date(today);
+    thirtyDays.setDate(today.getDate() + 30);
+
+    return contracts.filter((c) => {
+      const empName = getEmployeeName(c.employeeId).toLowerCase();
+      const q = contractSearch.toLowerCase().trim();
+      const matchSearch = !q || empName.includes(q);
+      if (!matchSearch) return false;
+
+      if (contractStatusFilter === "ALL") return true;
+      const isActive = c.status === "ACTIVE" || (c as any).isActive;
+      const endDate = c.endDate ? new Date(c.endDate) : null;
+      const isExpired = endDate ? endDate < today : false;
+      const isExpiring = isActive && endDate ? endDate >= today && endDate <= thirtyDays : false;
+
+      if (contractStatusFilter === "ACTIVE") return isActive && !isExpired;
+      if (contractStatusFilter === "EXPIRING") return isExpiring;
+      if (contractStatusFilter === "EXPIRED") return isExpired;
+      if (contractStatusFilter === "INACTIVE") return !isActive;
+      return true;
+    });
+  }, [contracts, contractSearch, contractStatusFilter, employees, users]);
 
   // --- PDF Generation ---
   const generatePDF = async () => {
@@ -1046,6 +1223,38 @@ export function HRManagement() {
               animate={{ opacity: 1 }}
               className="space-y-6"
             >
+              {/* Expiring Contracts Warning Banner */}
+              {expiringContractsList.length > 0 && (
+                <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0 mt-0.5">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-amber-950">
+                        Perhatian: {expiringContractsList.length} Kontrak Karyawan Mendekati Jatuh Tempo
+                      </p>
+                      <p className="text-amber-800/90 mt-0.5">
+                        {expiringContractsList.slice(0, 3).map((c) => {
+                          const empName = getEmployeeName(c.employeeId);
+                          return c.isOverdue
+                            ? `${empName} (Lewat ${Math.abs(c.daysRemaining)} hari)`
+                            : `${empName} (Sisa ${c.daysRemaining} hari)`;
+                        }).join(", ")}
+                        {expiringContractsList.length > 3 ? ` dan ${expiringContractsList.length - 3} lainnya` : ""}.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("contracts")}
+                    className="px-3.5 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold text-xs rounded-xl shadow-2xs shrink-0 transition-colors cursor-pointer"
+                  >
+                    Tinjau Kontrak →
+                  </button>
+                </div>
+              )}
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <motion.div
@@ -1139,6 +1348,89 @@ export function HRManagement() {
                     {isIndo ? "Periode Berjalan" : "Current Period"}
                   </p>
                 </motion.div>
+              </div>
+
+              {/* Today's Shift Roster Widget */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-brand-50 text-brand-600 rounded-xl">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">
+                        {isIndo ? "Roster Staf Bertugas Hari Ini" : "Today's On-Duty Staff"}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("schedule")}
+                    className="text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                  >
+                    Buka Matriks Shift Mingguan →
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { key: "PAGI", label: "Shift Pagi", time: "07:00 – 15:00", bg: "bg-emerald-50/50 border-emerald-200/70", badge: "bg-emerald-100 text-emerald-800" },
+                    { key: "MIDDLE", label: "Shift Middle", time: "11:00 – 19:00", bg: "bg-blue-50/50 border-blue-200/70", badge: "bg-blue-100 text-blue-800" },
+                    { key: "SORE", label: "Shift Sore", time: "15:00 – 23:00", bg: "bg-amber-50/50 border-amber-200/70", badge: "bg-amber-100 text-amber-800" },
+                    { key: "OFF", label: "Libur (OFF)", time: "Jadwal Istirahat", bg: "bg-slate-50/70 border-slate-200/70", badge: "bg-slate-200 text-slate-700" },
+                  ].map((group) => {
+                    const staffInShift = todayShifts.filter((s) => s.shift === group.key);
+                    return (
+                      <div key={group.key} className={`p-4 rounded-xl border ${group.bg} flex flex-col justify-between`}>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs text-slate-800">{group.label}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${group.badge}`}>
+                              {staffInShift.length} Staf
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mb-3">{group.time}</p>
+                          
+                          {staffInShift.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic py-2">Tidak ada staf</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {staffInShift.map(({ emp, attendance }) => {
+                                const hasClockIn = !!attendance?.clockInTime;
+                                const isLate = attendance?.status === "TERLAMBAT";
+                                return (
+                                  <div key={emp.id} className="bg-white/90 p-2.5 rounded-xl border border-slate-200/60 flex items-center justify-between gap-2 shadow-2xs">
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-slate-800 truncate">{emp.name}</p>
+                                      <span className="text-[10px] text-slate-500">{emp.department || emp.position}</span>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                      {hasClockIn ? (
+                                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                          isLate ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                                        }`}>
+                                          <span className={`w-1.5 h-1.5 rounded-full ${isLate ? "bg-amber-500" : "bg-emerald-500"}`} />
+                                          {isLate ? "Terlambat" : "Hadir"}
+                                        </span>
+                                      ) : group.key === "OFF" ? (
+                                        <span className="text-[10px] text-slate-400 font-medium">Libur</span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 font-medium">Belum Hadir</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Attendance Chart */}
@@ -1251,6 +1543,53 @@ export function HRManagement() {
                 )}
               </div>
 
+              {/* Search & Filter Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={empSearch}
+                    onChange={(e) => setEmpSearch(e.target.value)}
+                    placeholder="Cari nama, username, atau posisi..."
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all"
+                  />
+                  {empSearch && (
+                    <button
+                      onClick={() => setEmpSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={empDeptFilter}
+                    onChange={(e) => setEmpDeptFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="ALL">Semua Departemen</option>
+                    <option value="BAR">Bar & Kasir</option>
+                    <option value="KITCHEN">Kitchen</option>
+                    <option value="BAKER">Baker</option>
+                    <option value="MANAGEMENT">Manajemen</option>
+                    <option value="FINANCE">Keuangan</option>
+                  </select>
+
+                  <select
+                    value={empStatusFilter}
+                    onChange={(e) => setEmpStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="ALL">Semua Status</option>
+                    <option value="AKTIF">Hanya Aktif</option>
+                    <option value="NON-AKTIF">Non-Aktif / Resign</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -1272,22 +1611,22 @@ export function HRManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {employees.length === 0 ? (
+                    {filteredEmployees.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={canEditHR ? 6 : 5}
                           className="py-8 text-center text-slate-500 italic"
                         >
-                          {isIndo
-                            ? "Belum ada data karyawan."
-                            : "No employees data yet."}
+                          {employees.length === 0
+                            ? (isIndo ? "Belum ada data karyawan." : "No employees data yet.")
+                            : (isIndo ? "Tidak ditemukan karyawan yang sesuai pencarian/filter." : "No matching employees found.")}
                         </td>
                       </tr>
                     ) : (
-                      employees.map((emp) => (
+                      filteredEmployees.map((emp) => (
                         <tr
                           key={emp.id}
-                          className="border-b border-slate-100 hover:bg-slate-50"
+                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                         >
                           <td className="py-3 px-4 text-slate-600 font-mono text-sm">
                             {emp.username}
@@ -1304,18 +1643,26 @@ export function HRManagement() {
                           <td className="py-3 px-4">
                             <span
                               className={`px-2 py-1 text-xs font-semibold rounded-full 
-                              ${emp.status === "AKTIF" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}
+                              ${isEmpActive(emp) ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}
                             >
                               {emp.status}
                             </span>
                           </td>
                           {canEditHR && (
-                            <td className="py-3 px-4 flex justify-end gap-2">
+                            <td className="py-3 px-4 flex justify-end gap-1.5">
                               <button 
                                 onClick={() => handleOpenEmployeeModal(emp)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Data Karyawan"
                               >
                                 <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteEmployee(emp)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Karyawan"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </td>
                           )}
@@ -1390,6 +1737,42 @@ export function HRManagement() {
                   </div>
                 )}
               </div>
+              {/* Search & Filter Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={contractSearch}
+                    onChange={(e) => setContractSearch(e.target.value)}
+                    placeholder="Cari nama karyawan..."
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all"
+                  />
+                  {contractSearch && (
+                    <button
+                      onClick={() => setContractSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={contractStatusFilter}
+                    onChange={(e) => setContractStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="ALL">Semua Status Kontrak</option>
+                    <option value="ACTIVE">Kontrak Aktif</option>
+                    <option value="EXPIRING">Segera Berakhir (&lt; 30 Hari)</option>
+                    <option value="EXPIRED">Sudah Berakhir (Lewat)</option>
+                    <option value="INACTIVE">Non-Aktif / Diarsipkan</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -1417,21 +1800,28 @@ export function HRManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {contracts.length === 0 ? (
+                    {filteredContracts.length === 0 ? (
                       <tr>
                         <td
                           colSpan={canEditHR ? 6 : 5}
                           className="py-8 text-center text-slate-500 italic"
                         >
-                          {isIndo
-                            ? "Belum ada data kontrak."
-                            : "No contract data yet."}
+                          {contracts.length === 0
+                            ? (isIndo ? "Belum ada data kontrak." : "No contract data yet.")
+                            : (isIndo ? "Tidak ditemukan kontrak yang sesuai pencarian/filter." : "No matching contracts found.")}
                         </td>
                       </tr>
                     ) : (
-                      contracts.map((c) => {
+                      filteredContracts.map((c) => {
+                        const isExpired = (() => {
+                          if (!c.endDate) return false;
+                          const end = new Date(c.endDate);
+                          end.setHours(23, 59, 59, 999);
+                          return end < new Date();
+                        })();
+
                         const isExpiring = (() => {
-                          if (!c.endDate || c.status !== 'ACTIVE') return false;
+                          if (!c.endDate || isExpired || (c.status !== 'ACTIVE' && !(c as any).isActive)) return false;
                           const end = new Date(c.endDate);
                           const thirtyDays = new Date();
                           thirtyDays.setDate(new Date().getDate() + 30);
@@ -1441,7 +1831,9 @@ export function HRManagement() {
                         return (
                           <tr
                             key={c.id}
-                            className={`border-b border-slate-100 hover:bg-slate-50 ${isExpiring ? 'bg-amber-50/50' : ''}`}
+                            className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
+                              isExpired ? 'bg-rose-50/40' : isExpiring ? 'bg-amber-50/50' : ''
+                            }`}
                           >
                             <td className="py-3 px-4 font-medium text-slate-800">
                               {getEmployeeName(c.employeeId)}
@@ -1452,8 +1844,13 @@ export function HRManagement() {
                                   <span className="text-slate-600 font-medium">
                                     {new Date(c.endDate).toLocaleDateString("id-ID")}
                                   </span>
-                                  {isExpiring && (
-                                    <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full inline-block w-max">
+                                  {isExpired && (
+                                    <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full inline-block w-max">
+                                      {isIndo ? "Sudah Berakhir" : "Expired"}
+                                    </span>
+                                  )}
+                                  {isExpiring && !isExpired && (
+                                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full inline-block w-max">
                                       {isIndo ? "Segera Berakhir" : "Expiring Soon"}
                                     </span>
                                   )}
@@ -1474,12 +1871,20 @@ export function HRManagement() {
                               {formatRupiah(c.positionAllowance)}
                             </td>
                             {canEditHR && (
-                              <td className="py-3 px-4 flex justify-end gap-2">
+                              <td className="py-3 px-4 flex justify-end gap-1.5">
                                 <button 
                                   onClick={() => handleOpenContractModal(c)}
-                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Edit Kontrak"
                                 >
                                   <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteContract(c)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Hapus Kontrak"
+                                >
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </td>
                             )}
@@ -2848,14 +3253,14 @@ export function HRManagement() {
               <button 
                 type="button"
                 onClick={() => setIsEmployeeModalOpen(false)} 
-                className="px-4 py-1.5 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors"
+                className="px-4 py-1.5 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm transition-colors cursor-pointer"
               >
                 Batal
               </button>
               <button 
                 type="button"
                 onClick={handleSaveEmployee} 
-                className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm shadow-xs transition-colors"
+                className="px-5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-medium text-sm shadow-xs transition-colors cursor-pointer"
               >
                 Simpan
               </button>
@@ -2872,7 +3277,7 @@ export function HRManagement() {
               <h3 className="text-lg font-bold text-slate-800">
                 {editingContract ? "Edit Kontrak" : "Tambah Kontrak"}
               </h3>
-              <button onClick={() => setIsContractModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setIsContractModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2896,7 +3301,7 @@ export function HRManagement() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tnj. Jabatan</label>
                   <input type="number" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.positionAllowance || ""} onChange={e => setContractForm({...contractForm, positionAllowance: Number(e.target.value)})} />
-                  <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                  <p className="text-[11px] text-brand-600 font-medium mt-1">
                     👑 Khusus Leader: Dicairkan otomatis bertingkat (Grade A-D) berbasis capaian jobdesk & supervisi shift.
                   </p>
                 </div>
@@ -2921,8 +3326,8 @@ export function HRManagement() {
               </div>
             </div>
             <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
-              <button onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
-              <button onClick={handleSaveContract} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
+              <button onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
+              <button onClick={handleSaveContract} className="px-5 py-2 bg-brand-600 text-white font-medium rounded-xl hover:bg-brand-700 shadow-xs cursor-pointer">Simpan</button>
             </div>
           </div>
         </div>,

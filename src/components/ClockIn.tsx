@@ -212,7 +212,8 @@ export function ClockIn() {
         }
 
         const lateNote = lateMinutes > 0 ? `[Terlambat ${lateMinutes} menit]` : "";
-        const combinedNotes = [notes.trim(), lateNote].filter(Boolean).join(" • ");
+        const offNote = scheduledShift === "OFF" ? "[Shift Libur / Pengganti]" : "";
+        const combinedNotes = [notes.trim(), lateNote, offNote].filter(Boolean).join(" • ");
 
         addDailyAttendance({
           employeeId: activeEmployeeId as string,
@@ -360,13 +361,17 @@ export function ClockIn() {
         </div>
 
         {/* Jadwal Shift Banner */}
-        <div className="bg-gradient-to-r from-slate-50 to-indigo-50/40 p-4 rounded-2xl border border-slate-200/80 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className={`p-4 rounded-2xl border mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          scheduledShift === "OFF"
+            ? "bg-amber-50/80 border-amber-200"
+            : "bg-gradient-to-r from-slate-50 to-brand-50/40 border-slate-200/80"
+        }`}>
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
               scheduledShift === "PAGI" ? "bg-emerald-100 text-emerald-800" :
               scheduledShift === "MIDDLE" ? "bg-blue-100 text-blue-800" :
               scheduledShift === "SORE" ? "bg-amber-100 text-amber-800" :
-              "bg-slate-200 text-slate-700"
+              "bg-amber-200 text-amber-900"
             }`}>
               {scheduledShift === "PAGI" ? "PGI" : scheduledShift === "MIDDLE" ? "MID" : scheduledShift === "SORE" ? "SRE" : "OFF"}
             </div>
@@ -382,10 +387,16 @@ export function ClockIn() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200/60 self-start sm:self-auto">
-            <Clock className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Toleransi keterlambatan 15 mnt</span>
-          </div>
+          {scheduledShift === "OFF" ? (
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-white/90 px-3 py-1.5 rounded-xl border border-amber-300 self-start sm:self-auto">
+              <span>⚠️ Jadwal Libur: Presensi akan dicatat sebagai lembur / shift pengganti</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200/60 self-start sm:self-auto">
+              <Clock className="w-3.5 h-3.5 text-brand-600" />
+              <span>Toleransi keterlambatan 15 mnt</span>
+            </div>
+          )}
         </div>
 
         {/* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */}

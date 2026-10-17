@@ -133,6 +133,7 @@ interface StoreContextType {
 
   addContract: (contract: Omit<EmployeeContract, "id">) => void;
   updateContract: (contract: EmployeeContract) => void;
+  deleteContract: (id: string) => void;
 
   addAttendance: (
     att: Omit<AttendanceRecord, "id" | "createdAt" | "createdBy">,
@@ -971,6 +972,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setUsers((prev) =>
       prev.map((u) => (u.employeeId === id ? { ...u, employeeId: null } : u))
     );
+    setContracts((prev) => prev.filter((c) => c.employeeId !== id));
+    setEmployeeShifts((prev) => prev.filter((s) => s.employeeId !== id));
     writeAuditLog("DELETE", "employees", id);
     markChanged();
   };
@@ -987,6 +990,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((c) => (c.id === contract.id ? contract : c)),
     );
     writeAuditLog("UPDATE", "contracts", contract.id);
+    markChanged();
+  };
+
+  const deleteContract = (id: string) => {
+    setContracts((prev) => prev.filter((c) => c.id !== id));
+    writeAuditLog("DELETE", "contracts", id);
     markChanged();
   };
 
@@ -1582,6 +1591,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         deleteEmployee,
         addContract,
         updateContract,
+        deleteContract,
         addAttendance,
         updateAttendance,
         addDailyAttendance,
