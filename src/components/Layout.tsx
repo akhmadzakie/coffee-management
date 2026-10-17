@@ -87,7 +87,6 @@ export const Layout: React.FC<LayoutProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Dasbor: true,
     "Menu & Produk": true,
-    Penjualan: true,
     "Stok & Pengadaan": true,
     "Keuangan & Kas": true,
     "SDM & Tim": true,
@@ -155,15 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({
       icon: Calculator,
     },
 
-    // ─── 3. Penjualan (Tugas Finance, Kasir, Manager) ────────────
-    { 
-      group: "Penjualan",
-      name: "Rekap Penjualan",
-      view: "import_sales" as ViewState,
-      icon: ReceiptText,
-    },
-
-    // ─── 4. Stok & Pengadaan (Tugas Leader & Manager) ───────────
+    // ─── 3. Stok & Pengadaan (Tugas Leader & Manager) ───────────
     { 
       group: "Stok & Pengadaan",
       name: "Stok Bahan Baku",
@@ -183,7 +174,13 @@ export const Layout: React.FC<LayoutProps> = ({
       icon: Truck,
     },
 
-    // ─── 5. Keuangan & Kas (Tugas Finance, Manager, Owner) ──────
+    // ─── 4. Keuangan & Kas (Tugas Finance & Owner) ───────────────
+    { 
+      group: "Keuangan & Kas",
+      name: "Rekap Penjualan",
+      view: "import_sales" as ViewState,
+      icon: ReceiptText,
+    },
     { 
       group: "Keuangan & Kas",
       name: "Buku Kas & Arus Kas",
@@ -285,24 +282,18 @@ export const Layout: React.FC<LayoutProps> = ({
       "inventory",
     ],
 
-    // Manager: Mengelola seluruh operasional harian toko, stok, tim, menu & penjualan
+    // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama)
     MANAGER: [
       "dashboard_manager",
-      "dashboard_owner",
       "dashboard_inventory",
-      "dashboard_finance",
       "menu_management",
       "hpp_calculator",
       "inventory",
       "purchases",
       "suppliers",
-      "import_sales",
       "hr",
       "leader_checklist",
       "attendance_clock",
-      "payroll",
-      "cash_flow",
-      "finance_reports",
       "users",
     ],
 
@@ -689,8 +680,8 @@ export const Layout: React.FC<LayoutProps> = ({
               </h2>
             </div>
 
-            {/* Quick Switcher for Dashboards (For Manager, Super Admin, Owner) */}
-            {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "MANAGER", "OWNER"].includes(currentUser?.role || "") && (
+            {/* Quick Switcher for Dashboards (For Super Admin & Owner) */}
+            {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER"].includes(currentUser?.role || "") && (
               <div className="hidden xl:flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 text-[11px] font-semibold ml-2">
                 <button
                   onClick={() => onViewChange("dashboard_manager")}
