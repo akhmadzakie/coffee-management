@@ -102,6 +102,12 @@ export function HRManagement() {
       e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
   );
 
+  const isHRD =
+    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
+  const isFinance =
+    currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
+  const canEditHR = isHRD && !isReadOnly;
+
   // Klasifikasi staf: hanya staf operasional (Bar, Kasir, Kitchen, Baker) yang masuk jadwal shift mingguan
   const isOperationalStaff = (emp: { department?: string | null; position?: string | null }): boolean => {
     const dept = (emp.department || "").toUpperCase();
@@ -352,6 +358,7 @@ export function HRManagement() {
   };
 
   const handleSaveEmployee = () => {
+    if (isReadOnly || !canEditHR) return;
     if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
     
     const cleanUsername = empForm.username.toLowerCase().trim();
@@ -571,8 +578,16 @@ export function HRManagement() {
   };
 
   const handleSaveContract = () => {
+    if (isReadOnly || !canEditHR) return;
     if (!contractForm.employeeId) return alert("Pilih karyawan terlebih dahulu");
     if (editingContract) {
+      if (contractForm.status === "ACTIVE") {
+        contracts.forEach((c) => {
+          if (c.id !== editingContract.id && c.employeeId === contractForm.employeeId && c.status === "ACTIVE") {
+            updateContract({ ...c, status: "INACTIVE" });
+          }
+        });
+      }
       updateContract({ ...editingContract, ...contractForm });
     } else {
       if (contractForm.status === "ACTIVE") {
@@ -595,13 +610,6 @@ export function HRManagement() {
     
     setIsContractModalOpen(false);
   };
-
-
-  const isHRD =
-    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
-  const isFinance =
-    currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
-  const canEditHR = isHRD && !isReadOnly;
 
   const formatRupiah = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -1058,7 +1066,8 @@ export function HRManagement() {
     return attendances
       .map((att) => {
         const emp = employees.find((e) => e.id === att.employeeId);
-        const contract = contracts.find((c) => c.employeeId === att.employeeId);
+        const contract = contracts.find((c) => c.employeeId === att.employeeId && (c.status === "ACTIVE" || (c as any).isActive)) 
+          || contracts.find((c) => c.employeeId === att.employeeId);
 
         if (!emp || !contract) return null;
 
@@ -1993,6 +2002,16 @@ export function HRManagement() {
                     >
                       <Copy className="w-3.5 h-3.5 text-slate-500" />
                       <span>Salin Minggu Lalu</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-2xs border border-slate-200"
+                      title="Cetak jadwal shift mingguan tim untuk ditempel di area barista/dapur"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Cetak Roster</span>
                     </button>
 
                     {/* Leader Submit Button when not approved */}
