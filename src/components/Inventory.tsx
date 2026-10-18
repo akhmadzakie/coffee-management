@@ -148,6 +148,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [opnameSearch, setOpnameSearch] = useState("");
   const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
   const [opnameCategoryFilter, setOpnameCategoryFilter] = useState("ALL");
+  const [opnameInputMode, setOpnameInputMode] = useState<"BASE" | "PURCHASE">("PURCHASE");
   const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
 
   // Open Modal for New Ingredient
@@ -1097,6 +1098,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             </span>
                             <span className="text-xs text-stone-500 font-semibold">{item.unit}</span>
                           </div>
+                          {hasPurchaseConversion && item.conversionFactor && item.conversionFactor > 1 && (
+                            <div className="text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2 py-0.5 rounded-md mt-1 border border-amber-200/50 inline-block">
+                              ≈ {(item.currentStock / item.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {item.purchaseUnit}
+                            </div>
+                          )}
                         </div>
 
                         <div className="text-right">
@@ -1393,7 +1399,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       <th className="p-3">Bahan Baku</th>
                       <th className="p-3">Kategori & Lokasi</th>
                       <th className="p-3 text-center">Stok Sistem</th>
-                      <th className="p-3 text-center">Stok Fisik Nyata</th>
+                      <th className="p-3 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span>Stok Fisik Nyata</span>
+                          <button
+                            type="button"
+                            onClick={() => setOpnameInputMode((prev) => (prev === "PURCHASE" ? "BASE" : "PURCHASE"))}
+                            className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-all cursor-pointer whitespace-nowrap"
+                            title="Klik untuk beralih antara hitung per Kemasan (Kotak/Kg/Dus) atau Satuan Resep (gr/ml)"
+                          >
+                            Mode: {opnameInputMode === "PURCHASE" ? "📦 Kemasan (Kotak/Kg)" : "⚖️ Satuan (gr/ml)"} ⇄
+                          </button>
+                        </div>
+                      </th>
                       <th className="p-3 text-center">Selisih</th>
                       <th className="p-3">Keterangan / Alasan Selisih</th>
                     </tr>
@@ -1461,20 +1479,51 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                               )}
                             </td>
                             <td className="p-3 text-center font-mono font-semibold text-stone-700">
-                              {ing.currentStock.toLocaleString("id-ID")} {ing.unit}
+                              <div>{ing.currentStock.toLocaleString("id-ID")} {ing.unit}</div>
+                              {ing.purchaseUnit && ing.conversionFactor && ing.conversionFactor > 1 && (
+                                <div className="text-[10px] text-stone-400 font-sans font-medium">
+                                  ≈ {(ing.currentStock / ing.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {ing.purchaseUnit}
+                                </div>
+                              )}
                             </td>
                             <td className="p-3 text-center">
-                              <div className="inline-flex items-center gap-1.5">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="any"
-                                  className="w-28 px-3 py-1.5 border border-stone-300 rounded-xl text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 bg-white shadow-inner"
-                                  value={item.physicalStock}
-                                  onChange={(e) => handleOpnameChange(item.ingredientId, Number(e.target.value))}
-                                />
-                                <span className="text-stone-400 text-[11px] font-mono">{ing.unit}</span>
-                              </div>
+                              {(() => {
+                                const hasConversion = !!ing.purchaseUnit && !!ing.conversionFactor && ing.conversionFactor > 1;
+                                const isPurchaseMode = opnameInputMode === "PURCHASE" && hasConversion;
+                                const factor = ing.conversionFactor || 1;
+                                const displayValue = isPurchaseMode
+                                  ? parseFloat((item.physicalStock / factor).toFixed(3))
+                                  : item.physicalStock;
+
+                                return (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="any"
+                                        className="w-24 px-2.5 py-1.5 border border-stone-300 rounded-xl text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 bg-white shadow-inner"
+                                        value={displayValue}
+                                        onChange={(e) => {
+                                          const num = Number(e.target.value);
+                                          const finalBaseQty = isPurchaseMode ? Math.round(num * factor) : num;
+                                          handleOpnameChange(item.ingredientId, finalBaseQty);
+                                        }}
+                                      />
+                                      <span className="text-stone-700 text-[11px] font-bold font-mono">
+                                        {isPurchaseMode ? ing.purchaseUnit : ing.unit}
+                                      </span>
+                                    </div>
+                                    {hasConversion && (
+                                      <span className="text-[10px] text-stone-400 font-mono">
+                                        {isPurchaseMode
+                                          ? `= ${(displayValue * factor).toLocaleString("id-ID")} ${ing.unit}`
+                                          : `≈ ${(item.physicalStock / factor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${ing.purchaseUnit}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className={`p-3 text-center font-mono font-bold text-xs ${
                               item.difference < 0
