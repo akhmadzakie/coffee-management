@@ -430,6 +430,20 @@ export interface StockMovement {
   location?: LocationType | null; // Tempat mutasi/pemakaian
 }
 
+export interface DailySalesRecap {
+  id: string;
+  date: string; // YYYY-MM-DD
+  shift?: "ALL" | "PAGI" | "SORE" | "MALAM";
+  cashAmount: number;
+  qrisAmount: number;
+  edcAmount: number;
+  transferAmount: number;
+  totalAmount: number;
+  notes?: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
 export interface SalesTransaction {
   id: string;
   date: string; // ISO string

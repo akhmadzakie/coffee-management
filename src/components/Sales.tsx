@@ -19,6 +19,11 @@ import {
   X,
   Printer,
   ChevronDown,
+  Plus,
+  Trash2,
+  Smartphone,
+  Building2,
+  TrendingUp,
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -66,13 +71,16 @@ export const Sales = () => {
   const {
     salesTransactions,
     salesImportLogs,
+    dailySalesRecaps = [],
+    addDailySalesRecap,
+    deleteDailySalesRecap,
     syncData,
     currentUser,
     settings,
     products,
     addSalesTransactions,
   } = useStore();
-  const [activeTab, setActiveTab] = useState<"pos_orders" | "sales" | "logs">("pos_orders");
+  const [activeTab, setActiveTab] = useState<"daily_recap" | "sales" | "logs" | "pos_orders">("daily_recap");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
@@ -80,6 +88,19 @@ export const Sales = () => {
     message: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State untuk Input Omzet Harian
+  const [isAddRecapOpen, setIsAddRecapOpen] = useState(false);
+  const [recapForm, setRecapForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    shift: "ALL" as "ALL" | "PAGI" | "SORE" | "MALAM",
+    cashAmount: "",
+    qrisAmount: "",
+    edcAmount: "",
+    transferAmount: "",
+    notes: "",
+  });
+  const [recapDateFilter, setRecapDateFilter] = useState<string>("");
 
   // State untuk Tab Transaksi Kasir POS
   const [posOrders, setPosOrders] = useState<PosOrderDetail[]>([]);
@@ -89,6 +110,88 @@ export const Sales = () => {
   const [posEndDate, setPosEndDate] = useState<string>("");
   const [posSearchQuery, setPosSearchQuery] = useState<string>("");
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<PosOrderDetail | null>(null);
+
+  // Perhitungan Rekap Omzet Harian
+  const filteredRecaps = useMemo(() => {
+    let list = [...dailySalesRecaps];
+    if (recapDateFilter) {
+      list = list.filter((r) => r.date.startsWith(recapDateFilter));
+    }
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [dailySalesRecaps, recapDateFilter]);
+
+  const recapSummary = useMemo(() => {
+    let totalRevenue = 0;
+    let totalCash = 0;
+    let totalQris = 0;
+    let totalEdc = 0;
+    let totalTransfer = 0;
+
+    dailySalesRecaps.forEach((r) => {
+      totalRevenue += Number(r.totalAmount) || 0;
+      totalCash += Number(r.cashAmount) || 0;
+      totalQris += Number(r.qrisAmount) || 0;
+      totalEdc += Number(r.edcAmount) || 0;
+      totalTransfer += Number(r.transferAmount) || 0;
+    });
+
+    return {
+      totalRevenue,
+      totalCash,
+      totalQris,
+      totalEdc,
+      totalTransfer,
+      count: dailySalesRecaps.length,
+    };
+  }, [dailySalesRecaps]);
+
+  const currentFormTotal =
+    (Number(recapForm.cashAmount) || 0) +
+    (Number(recapForm.qrisAmount) || 0) +
+    (Number(recapForm.edcAmount) || 0) +
+    (Number(recapForm.transferAmount) || 0);
+
+  const handleSaveRecap = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentFormTotal <= 0) {
+      alert("Total omzet harus lebih besar dari Rp 0.");
+      return;
+    }
+
+    addDailySalesRecap({
+      date: recapForm.date,
+      shift: recapForm.shift,
+      cashAmount: Number(recapForm.cashAmount) || 0,
+      qrisAmount: Number(recapForm.qrisAmount) || 0,
+      edcAmount: Number(recapForm.edcAmount) || 0,
+      transferAmount: Number(recapForm.transferAmount) || 0,
+      totalAmount: currentFormTotal,
+      notes: recapForm.notes.trim() || undefined,
+      recordedBy: currentUser?.name || "Kasir / Finance",
+    });
+
+    setIsAddRecapOpen(false);
+    setRecapForm({
+      date: new Date().toISOString().slice(0, 10),
+      shift: "ALL",
+      cashAmount: "",
+      qrisAmount: "",
+      edcAmount: "",
+      transferAmount: "",
+      notes: "",
+    });
+
+    setUploadStatus({
+      type: "success",
+      message: `Omzet harian tanggal ${recapForm.date} sebesar ${formatCurrency(currentFormTotal)} berhasil dicatat & otomatis masuk ke Buku Kas!`,
+    });
+  };
+
+  const handleDeleteRecap = (id: string, date: string, amount: number) => {
+    if (window.confirm(`Yakin ingin menghapus rekap omzet tanggal ${date} (${formatCurrency(amount)})?`)) {
+      deleteDailySalesRecap(id);
+    }
+  };
 
   // Fetch POS orders dari API backend
   const fetchPosOrders = async () => {
@@ -214,103 +317,133 @@ export const Sales = () => {
     <div className="space-y-6">
       {/* ── Top Bar & Tab Navigasi ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
           <button
-            onClick={() => setActiveTab("pos_orders")}
+            onClick={() => setActiveTab("daily_recap")}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-              activeTab === "pos_orders"
+              activeTab === "daily_recap"
                 ? "bg-brand-600 text-white shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Store className="w-4 h-4" />
-            <span>Transaksi Kasir POS</span>
-            {posOrders.length > 0 && (
+            <DollarSign className="w-4 h-4" />
+            <span>Rekap & Input Omzet Harian</span>
+            {dailySalesRecaps.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-slate-900/10 text-[11px] font-bold">
-                {posOrders.length}
+                {dailySalesRecaps.length}
               </span>
             )}
           </button>
           <button
             onClick={() => setActiveTab("sales")}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "sales"
-                ? "bg-white text-primary shadow-sm"
+                ? "bg-white text-primary shadow-sm font-semibold"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Data Item Penjualan
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Data Item Penjualan</span>
           </button>
           <button
             onClick={() => setActiveTab("logs")}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === "logs"
-                ? "bg-white text-primary shadow-sm"
+                ? "bg-white text-primary shadow-sm font-semibold"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Riwayat Import CSV
+            <RotateCcw className="w-4 h-4" />
+            <span>Riwayat Import CSV</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("pos_orders")}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "pos_orders"
+                ? "bg-white text-primary shadow-sm font-semibold"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Store className="w-4 h-4" />
+            <span>Arsip Struk POS</span>
+            {posOrders.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 text-[11px] font-bold">
+                {posOrders.length}
+              </span>
+            )}
           </button>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          {activeTab === "sales" && (
-            <div className="relative flex-1 sm:flex-none">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari Menu..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent w-full text-sm"
-              />
-            </div>
+          {activeTab === "daily_recap" && (
+            <button
+              onClick={() => setIsAddRecapOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm shadow-xs transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Catat Omzet Harian</span>
+            </button>
           )}
 
-          <div className="flex items-center gap-2">
-            <CsvImportExport
-              onImport={handleSalesImport}
-              templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
-              templateExampleRow={[
-                new Date().toISOString().slice(0, 10),
-                products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
-                "45",
-                "990000",
-              ]}
-              templateFilename="Template_Import_Penjualan_Menu.xlsx"
-              buttonLabel="Import Excel / CSV Penjualan"
-              currentData={salesTransactions.slice(0, 50).map((s) => ({
-                id: s.id,
-                Tanggal: s.date.slice(0, 10),
-                "Nama Menu": s.menuName,
-                Quantity: s.quantitySold,
-                "Total Penjualan": s.totalPrice,
-              }))}
-              templateDropdowns={{
-                "Nama Menu":
-                  products && products.length > 0
-                    ? Array.from(new Set(products.map((p) => p.name)))
-                    : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
-              }}
-              templateColumnTypes={{
-                Tanggal: "date",
-                Quantity: "integer",
-                "Total Penjualan": "number",
-              }}
-              templateHints={{
-                Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
-                "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
-                Quantity: "Jumlah cup / porsi yang terjual",
-                "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
-              }}
-              templateInstructions={[
-                "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
-                "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
-                "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
-                "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
-              ]}
-            />
-          </div>
+          {activeTab === "sales" && (
+            <>
+              <div className="relative flex-1 sm:flex-none">
+                <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari Menu..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent w-full text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <CsvImportExport
+                  onImport={handleSalesImport}
+                  templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
+                  templateExampleRow={[
+                    new Date().toISOString().slice(0, 10),
+                    products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
+                    "45",
+                    "990000",
+                  ]}
+                  templateFilename="Template_Import_Penjualan_Menu.xlsx"
+                  buttonLabel="Import Excel / CSV Penjualan"
+                  currentData={salesTransactions.slice(0, 50).map((s) => ({
+                    id: s.id,
+                    Tanggal: s.date.slice(0, 10),
+                    "Nama Menu": s.menuName,
+                    Quantity: s.quantitySold,
+                    "Total Penjualan": s.totalPrice,
+                  }))}
+                  templateDropdowns={{
+                    "Nama Menu":
+                      products && products.length > 0
+                        ? Array.from(new Set(products.map((p) => p.name)))
+                        : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
+                  }}
+                  templateColumnTypes={{
+                    Tanggal: "date",
+                    Quantity: "integer",
+                    "Total Penjualan": "number",
+                  }}
+                  templateHints={{
+                    Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
+                    "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
+                    Quantity: "Jumlah cup / porsi yang terjual",
+                    "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
+                  }}
+                  templateInstructions={[
+                    "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
+                    "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
+                    "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
+                    "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
+                  ]}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -331,7 +464,237 @@ export const Sales = () => {
         </div>
       )}
 
-      {/* ── TAB 1: TRANSAKSI KASIR POS ───────────────────────────────────── */}
+      {/* ── TAB UTAMA: REKAP OMZET HARIAN ─────────────────────────────────── */}
+      {activeTab === "daily_recap" && (
+        <div className="space-y-5">
+          {/* 4 Kartu Metrik Ringkasan Omzet */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  Total Omzet Tercatat
+                </p>
+                <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+                {formatCurrency(recapSummary.totalRevenue)}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {recapSummary.count} Hari Entri Omzet
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  Omzet Tunai (Cash)
+                </p>
+                <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                  <DollarSign className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-emerald-600">
+                {formatCurrency(recapSummary.totalCash)}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Masuk ke Kas Fisik Toko
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                  <QrCode className="w-4 h-4 text-sky-600" />
+                  Omzet QRIS
+                </p>
+                <span className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <Smartphone className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-sky-600">
+                {formatCurrency(recapSummary.totalQris)}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Masuk ke Rekening Bank
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-indigo-600" />
+                  Mesin EDC & Transfer
+                </p>
+                <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                  <Building2 className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-indigo-600">
+                {formatCurrency(recapSummary.totalEdc + recapSummary.totalTransfer)}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                EDC: {formatCurrency(recapSummary.totalEdc)} • TF: {formatCurrency(recapSummary.totalTransfer)}
+              </p>
+            </div>
+          </div>
+
+          {/* Banner Informasi Sinkronisasi */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-brand-500/10 to-orange-500/10 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-600 text-white shadow-xs shrink-0">
+                <DollarSign className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">
+                  Sistem Pencatatan Omzet Harian Fleksibel
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Setiap kali Anda mencatat omzet di sini, sistem secara otomatis memasukkan saldo tunai ke <strong>Buku Kas</strong> dan non-tunai ke <strong>Rekening Bank</strong> sehingga Laporan Laba Rugi langsung terhitung.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsAddRecapOpen(true)}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs shrink-0 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Input Omzet Hari Ini</span>
+            </button>
+          </div>
+
+          {/* Filter & Kontrol Tabel */}
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Filter Bulan / Tanggal:</span>
+              <input
+                type="month"
+                value={recapDateFilter}
+                onChange={(e) => setRecapDateFilter(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:border-brand-500"
+              />
+              {recapDateFilter && (
+                <button
+                  onClick={() => setRecapDateFilter("")}
+                  className="px-2 py-1 text-slate-500 hover:text-slate-800 text-[11px] underline"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <div className="text-xs text-slate-500">
+              Menampilkan <strong>{filteredRecaps.length}</strong> catatan omzet
+            </div>
+          </div>
+
+          {/* Tabel Riwayat Rekap Omzet Harian */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th className="p-3">Tanggal</th>
+                    <th className="p-3">Shift</th>
+                    <th className="p-3 text-right">Tunai (Cash)</th>
+                    <th className="p-3 text-right">QRIS</th>
+                    <th className="p-3 text-right">Mesin EDC</th>
+                    <th className="p-3 text-right">Transfer Bank</th>
+                    <th className="p-3 text-right">Total Omzet</th>
+                    <th className="p-3">Keterangan & Dicatat Oleh</th>
+                    <th className="p-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredRecaps.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-slate-400">
+                        <div className="max-w-sm mx-auto space-y-2">
+                          <DollarSign className="w-8 h-8 text-slate-300 mx-auto" />
+                          <p className="font-medium text-slate-600">Belum ada catatan omzet harian</p>
+                          <p className="text-[11px] text-slate-400">
+                            Klik tombol "Catat Omzet Harian" di atas untuk mulai memasukkan omzet kasir harian Anda.
+                          </p>
+                          <button
+                            onClick={() => setIsAddRecapOpen(true)}
+                            className="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg shadow-xs"
+                          >
+                            ➕ Catat Sekarang
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRecaps.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-medium text-slate-800 whitespace-nowrap">
+                          {new Date(item.date).toLocaleDateString("id-ID", {
+                            weekday: "short",
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.shift === "PAGI"
+                                ? "bg-amber-100 text-amber-800"
+                                : item.shift === "SORE"
+                                ? "bg-orange-100 text-orange-800"
+                                : item.shift === "MALAM"
+                                ? "bg-indigo-100 text-indigo-800"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {item.shift || "ALL"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-medium text-slate-700">
+                          {formatCurrency(item.cashAmount)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-sky-600">
+                          {formatCurrency(item.qrisAmount)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-indigo-600">
+                          {formatCurrency(item.edcAmount)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-purple-600">
+                          {formatCurrency(item.transferAmount)}
+                        </td>
+                        <td className="p-3 text-right font-bold text-slate-900 text-sm">
+                          {formatCurrency(item.totalAmount)}
+                        </td>
+                        <td className="p-3 text-slate-600">
+                          <div className="truncate max-w-[200px]" title={item.notes || "-"}>
+                            {item.notes || "-"}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            Oleh: {item.recordedBy || "Kasir"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                            title="Hapus Rekap Omzet"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB ARSIP: TRANSAKSI KASIR POS ───────────────────────────────────── */}
       {activeTab === "pos_orders" && (
         <div className="space-y-4">
           {/* 4 Kartu Metrik Ringkasan POS */}
@@ -883,6 +1246,191 @@ export const Sales = () => {
                 Tutup
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL CATAT OMZET HARIAN ────────────────────────────────────── */}
+      {isAddRecapOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Catat Omzet Harian Toko
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Input total penerimaan kasir per metode pembayaran
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddRecapOpen(false)}
+                className="p-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-600 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRecap} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Tanggal Penjualan
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={recapForm.date}
+                    onChange={(e) => setRecapForm({ ...recapForm, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Shift Operasional
+                  </label>
+                  <select
+                    value={recapForm.shift}
+                    onChange={(e) => setRecapForm({ ...recapForm, shift: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-medium"
+                  >
+                    <option value="ALL">Semua Shift (Full Day)</option>
+                    <option value="PAGI">Shift Pagi</option>
+                    <option value="SORE">Shift Sore</option>
+                    <option value="MALAM">Shift Malam</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">
+                  Rincian Nominal per Metode Pembayaran
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-slate-700 font-semibold mb-1">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Uang Tunai (Cash Fisik)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={recapForm.cashAmount}
+                        onChange={(e) => setRecapForm({ ...recapForm, cashAmount: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-semibold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-slate-700 font-semibold mb-1">
+                      <QrCode className="w-3.5 h-3.5 text-sky-600" />
+                      <span>QRIS (Statis / Dinamis)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={recapForm.qrisAmount}
+                        onChange={(e) => setRecapForm({ ...recapForm, qrisAmount: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-semibold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-slate-700 font-semibold mb-1">
+                      <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Mesin EDC (Debit / Kredit)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={recapForm.edcAmount}
+                        onChange={(e) => setRecapForm({ ...recapForm, edcAmount: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-semibold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-slate-700 font-semibold mb-1">
+                      <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Transfer Bank Langsung</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={recapForm.transferAmount}
+                        onChange={(e) => setRecapForm({ ...recapForm, transferAmount: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-semibold text-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Kalkulasi Live */}
+              <div className="p-3.5 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-500 font-medium">Total Omzet Masuk:</span>
+                  <p className="text-[11px] text-brand-700">Otomatis dicatat ke Kas & Bank</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-black text-brand-700">
+                    {formatCurrency(currentFormTotal)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Catatan / Keterangan (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Ramai promo weekend, ada selisih kas fisik +Rp 2.000"
+                  value={recapForm.notes}
+                  onChange={(e) => setRecapForm({ ...recapForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsAddRecapOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={currentFormTotal <= 0}
+                  className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold transition shadow-sm flex items-center gap-1.5"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Simpan & Masukkan ke Kas</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

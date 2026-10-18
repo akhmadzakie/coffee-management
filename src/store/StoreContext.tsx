@@ -16,6 +16,7 @@ import {
   Ingredient,
   StockMovement,
   SalesTransaction,
+  DailySalesRecap,
   SalesImportLog,
   AuditLog,
   Supplier,
@@ -355,6 +356,9 @@ interface StoreContextType {
   batchPreparations: BatchPreparation[];
   stockMovements: StockMovement[];
   salesTransactions: SalesTransaction[];
+  dailySalesRecaps: DailySalesRecap[];
+  addDailySalesRecap: (recap: Omit<DailySalesRecap, "id" | "createdAt">) => void;
+  deleteDailySalesRecap: (id: string) => void;
   salesImportLogs: SalesImportLog[];
   auditLogs: AuditLog[];
 
@@ -603,6 +607,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     SalesTransaction[]
   >([]);
   const [salesImportLogs, setSalesImportLogs] = useState<SalesImportLog[]>([]);
+  const [dailySalesRecaps, setDailySalesRecaps] = useState<DailySalesRecap[]>(() => {
+    try {
+      const saved = localStorage.getItem("app_daily_sales_recaps");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -2110,6 +2122,75 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const addDailySalesRecap = (recap: Omit<DailySalesRecap, "id" | "createdAt">) => {
+    const newId = generateId();
+    const newRecord: DailySalesRecap = {
+      ...recap,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setDailySalesRecaps((prev) => {
+      const updated = [newRecord, ...prev];
+      try {
+        localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Otomatis catat ke Buku Kas agar sinkron ke Keuangan & Laba Rugi
+    if (newRecord.cashAmount > 0) {
+      const cashAcc = cashAccounts.find((a) => a.type === "CASH") || cashAccounts[0];
+      if (cashAcc) {
+        addCashTransaction({
+          accountId: cashAcc.id,
+          type: "CASH_IN",
+          amount: newRecord.cashAmount,
+          category: "cat-penjualan",
+          description: `Omzet Penjualan Tunai (${newRecord.date})${newRecord.notes ? ` - ${newRecord.notes}` : ""}`,
+          date: newRecord.date,
+          referenceId: newId,
+          createdBy: newRecord.recordedBy || currentUser?.name || "Finance",
+        });
+      }
+    }
+    const nonCashTotal = newRecord.qrisAmount + newRecord.edcAmount + newRecord.transferAmount;
+    if (nonCashTotal > 0) {
+      const bankAcc = cashAccounts.find((a) => a.type === "BANK") || cashAccounts[0];
+      if (bankAcc) {
+        const parts = [
+          newRecord.qrisAmount > 0 ? `QRIS: ${newRecord.qrisAmount.toLocaleString("id-ID")}` : null,
+          newRecord.edcAmount > 0 ? `EDC: ${newRecord.edcAmount.toLocaleString("id-ID")}` : null,
+          newRecord.transferAmount > 0 ? `Transfer: ${newRecord.transferAmount.toLocaleString("id-ID")}` : null,
+        ].filter(Boolean).join(", ");
+
+        addCashTransaction({
+          accountId: bankAcc.id,
+          type: "CASH_IN",
+          amount: nonCashTotal,
+          category: "cat-penjualan",
+          description: `Omzet Non-Tunai (${parts}) - ${newRecord.date}`,
+          date: newRecord.date,
+          referenceId: newId,
+          createdBy: newRecord.recordedBy || currentUser?.name || "Finance",
+        });
+      }
+    }
+    writeAuditLog("CREATE", "daily_sales_recap", newId);
+    markChanged();
+  };
+
+  const deleteDailySalesRecap = (id: string) => {
+    setDailySalesRecaps((prev) => {
+      const updated = prev.filter((r) => r.id !== id);
+      try {
+        localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    writeAuditLog("DELETE", "daily_sales_recap", id);
+    markChanged();
+  };
+
   if (!isAuthLoaded) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -2131,6 +2212,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         recipes,
         stockMovements,
         salesTransactions,
+        dailySalesRecaps,
+        addDailySalesRecap,
+        deleteDailySalesRecap,
         salesImportLogs,
         auditLogs,
         suppliers,

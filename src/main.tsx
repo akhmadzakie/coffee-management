@@ -15,6 +15,15 @@ window.addEventListener("vite:preloadError", () => {
   }
 });
 
+// Register PWA Service Worker for offline capability & mobile installation
+if ("serviceWorker" in navigator && !window.location.host.startsWith("localhost:")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.log("PWA Service Worker registration skipped:", err);
+    });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -22,4 +31,5 @@ createRoot(document.getElementById("root")!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
 

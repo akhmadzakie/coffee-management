@@ -1,13 +1,13 @@
 {
   "name": "Julia's • Specialty Room • Coffee • Eatery",
   "short_name": "Julia's",
-  "description": "Julia's Specialty Room • Coffee • Eatery - Terminal Kasir POS & Sistem Manajemen Terpadu",
-  "start_url": "/pos",
+  "description": "Julia's Specialty Room • Coffee • Eatery - Sistem Manajemen Outlet & Operasional Terpadu",
+  "start_url": "/",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone", "minimal-ui"],
-  "orientation": "landscape-primary",
-  "background_color": "#0a1040",
-  "theme_color": "#1b2cc0",
+  "orientation": "any",
+  "background_color": "#fafaf9",
+  "theme_color": "#1c1917",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -24,17 +24,31 @@
   ],
   "shortcuts": [
     {
-      "name": "Terminal POS Kasir",
-      "short_name": "POS Kasir",
-      "description": "Buka Terminal Kasir Layar Sentuh Tablet",
-      "url": "/pos",
+      "name": "Presensi & Clock In",
+      "short_name": "Presensi",
+      "description": "Clock In / Clock Out Kehadiran Karyawan",
+      "url": "/",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Layar Dapur & Bar (KDS)",
-      "short_name": "KDS Barista",
-      "description": "Buka Layar Antrean Barista & Dapur",
-      "url": "/kds",
+      "name": "Checklist Supervisi",
+      "short_name": "Checklist",
+      "description": "Checklist Pembukaan & Penutupan Outlet",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Stok Opname Fisik",
+      "short_name": "Opname",
+      "description": "Audit & Timbang Stok Bahan Riil",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Buku Kas & Keuangan",
+      "short_name": "Keuangan",
+      "description": "Arus Kas, Omzet & Laporan",
+      "url": "/",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]

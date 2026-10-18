@@ -286,6 +286,7 @@ export const Layout: React.FC<LayoutProps> = ({
     MANAGER: [
       "dashboard_manager",
       "dashboard_inventory",
+      "import_sales",
       "menu_management",
       "hpp_calculator",
       "inventory",
@@ -316,11 +317,12 @@ export const Layout: React.FC<LayoutProps> = ({
       "attendance_clock",
     ],
 
-    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, presensi
+    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, presensi, rekap omzet
     LEADER: [
       "dashboard_employee",
       "leader_checklist",
       "attendance_clock",
+      "import_sales",
       "inventory",
       "purchases",
       "suppliers",
