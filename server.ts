@@ -48,6 +48,179 @@ const initialUsers = [
   },
 ];
 
+const initialIngredients = [
+  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250 },
+  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5 },
+  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Kondimen Olahan", costPerUnit: 38 },
+  { id: "ing-ice-cube", name: "Es Batu Kristal Tube", unit: "gr", currentStock: 25000, minStock: 5000, category: "Air & Es", costPerUnit: 2 },
+  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Pemanis", costPerUnit: 35 },
+  { id: "ing-air", name: "Air Bersih Galon RO", unit: "ml", currentStock: 50000, minStock: 10000, category: "Air & Es", costPerUnit: 0.5 },
+  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Pemanis", costPerUnit: 16 },
+  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Kondimen Olahan", costPerUnit: 12 },
+  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Kitchen", costPerUnit: 16 },
+  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Kitchen", costPerUnit: 58 },
+  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48 },
+  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500 },
+  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140 },
+];
+
+const initialRecipes = [
+  {
+    id: "rec-kopsu-aren",
+    menuName: "Kopi Susu Gula Aren",
+    ingredients: JSON.stringify([
+      { ingredientId: "ing-coffee-beans", quantity: 18 },
+      { ingredientId: "ing-fresh-milk", quantity: 120 },
+      { ingredientId: "ing-aren-cair", quantity: 25 },
+      { ingredientId: "ing-ice-cube", quantity: 120 },
+    ]),
+  },
+  {
+    id: "rec-cafe-latte",
+    menuName: "Cafe Latte",
+    ingredients: JSON.stringify([
+      { ingredientId: "ing-coffee-beans", quantity: 18 },
+      { ingredientId: "ing-fresh-milk", quantity: 150 },
+    ]),
+  },
+  {
+    id: "rec-iced-americano",
+    menuName: "Iced Americano",
+    ingredients: JSON.stringify([
+      { ingredientId: "ing-coffee-beans", quantity: 18 },
+      { ingredientId: "ing-air", quantity: 150 },
+      { ingredientId: "ing-ice-cube", quantity: 120 },
+    ]),
+  },
+  {
+    id: "rec-butter-croissant",
+    menuName: "Butter Croissant",
+    ingredients: JSON.stringify([
+      { ingredientId: "ing-adonan-croissant", quantity: 1 },
+      { ingredientId: "ing-butter", quantity: 10 },
+    ]),
+  },
+  {
+    id: "rec-ricebowl-matah",
+    menuName: "Rice Bowl Ayam Sambal Matah",
+    ingredients: JSON.stringify([
+      { ingredientId: "ing-beras", quantity: 120 },
+      { ingredientId: "ing-ayam-fillet", quantity: 100 },
+      { ingredientId: "ing-sambal-matah", quantity: 30 },
+    ]),
+  },
+];
+
+const initialProducts = [
+  {
+    id: "prod-kopsu-aren",
+    name: "Kopi Susu Gula Aren",
+    category: "COFFEE",
+    division: "BAR",
+    description: "Signature blend espresso dengan susu segar creamy dan siraman saus gula aren racikan Julia's.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-kopsu-iced",
+        productId: "prod-kopsu-aren",
+        name: "Iced 16oz",
+        sku: "JUL-BAR-001",
+        price: 22000,
+        packagingCost: 1000,
+        recipeId: "rec-kopsu-aren",
+        estimatedHpp: 7250,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 120 },
+          { ingredientId: "ing-aren-cair", quantity: 25 },
+          { ingredientId: "ing-ice-cube", quantity: 120 },
+        ],
+      },
+      {
+        id: "var-kopsu-hot",
+        productId: "prod-kopsu-aren",
+        name: "Hot 8oz",
+        sku: "JUL-BAR-002",
+        price: 20000,
+        packagingCost: 850,
+        recipeId: "rec-kopsu-aren",
+        estimatedHpp: 6900,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 140 },
+          { ingredientId: "ing-aren-cair", quantity: 20 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "prod-cafe-latte",
+    name: "Cafe Latte",
+    category: "COFFEE",
+    division: "BAR",
+    description: "Espresso klasik berpadu dengan steamed fresh milk bertekstur microfoam sutra.",
+    isActive: true,
+    variants: [
+      {
+        id: "var-latte-hot",
+        productId: "prod-cafe-latte",
+        name: "Hot 8oz",
+        sku: "JUL-BAR-010",
+        price: 25000,
+        packagingCost: 850,
+        recipeId: "rec-cafe-latte",
+        estimatedHpp: 6500,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 150 },
+        ],
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+];
+
+const defaultCategories = [
+  { id: "cat-pendapatan", name: "Pendapatan", type: "PENDAPATAN", parentId: null, color: "#10B981", icon: "trending-up", isActive: true, sortOrder: 1 },
+  { id: "cat-pengeluaran", name: "Pengeluaran Operasional", type: "PENGELUARAN", parentId: null, color: "#EF4444", icon: "trending-down", isActive: true, sortOrder: 2 },
+  { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "#F59E0B", icon: "package", isActive: true, sortOrder: 3 },
+  { id: "cat-utilitas", name: "Utilitas", type: "UTILITAS", parentId: null, color: "#3B82F6", icon: "zap", isActive: true, sortOrder: 4 },
+  { id: "cat-hrd", name: "HRD & Personalia", type: "HRD", parentId: null, color: "#8B5CF6", icon: "users", isActive: true, sortOrder: 5 },
+  { id: "cat-aset", name: "Pembelian Aset", type: "ASET", parentId: null, color: "#6366F1", icon: "briefcase", isActive: true, sortOrder: 6 },
+  { id: "cat-lainnya", name: "Lainnya", type: "LAINNYA", parentId: null, color: "#6B7280", icon: "more-horizontal", isActive: true, sortOrder: 7 },
+  // Children: Pendapatan
+  { id: "cat-penjualan", name: "Penjualan Minuman", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
+  { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
+  { id: "cat-pendapatan-lain", name: "Pendapatan Lain", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 3 },
+  // Children: Pengeluaran
+  { id: "cat-sewa", name: "Sewa Tempat", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "home", isActive: true, sortOrder: 1 },
+  { id: "cat-kebersihan", name: "Kebersihan & Sanitasi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "trash-2", isActive: true, sortOrder: 2 },
+  { id: "cat-marketing-ops", name: "Marketing & Promosi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "megaphone", isActive: true, sortOrder: 3 },
+  { id: "cat-opex-lain", name: "Operasional Lainnya", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "settings", isActive: true, sortOrder: 4 },
+  // Children: Bahan Baku
+  { id: "cat-kopi", name: "Kopi & Espresso", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "coffee", isActive: true, sortOrder: 1 },
+  { id: "cat-susu", name: "Susu & Dairy", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "droplets", isActive: true, sortOrder: 2 },
+  { id: "cat-minuman", name: "Minuman & Sirup", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "cup-soda", isActive: true, sortOrder: 3 },
+  { id: "cat-packaging", name: "Packaging & Kemasan", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "box", isActive: true, sortOrder: 4 },
+  { id: "cat-bahan-lain", name: "Bahan Baku Lainnya", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "shopping-cart", isActive: true, sortOrder: 5 },
+  // Children: Utilitas
+  { id: "cat-listrik", name: "Listrik", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "zap", isActive: true, sortOrder: 1 },
+  { id: "cat-air", name: "Air & PDAM", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "droplets", isActive: true, sortOrder: 2 },
+  { id: "cat-internet", name: "Internet & Telepon", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "wifi", isActive: true, sortOrder: 3 },
+  { id: "cat-gas", name: "Gas", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "flame", isActive: true, sortOrder: 4 },
+  // Children: HRD
+  { id: "cat-gaji", name: "Gaji Karyawan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "wallet", isActive: true, sortOrder: 1 },
+  { id: "cat-bpjs", name: "BPJS & Asuransi", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "shield", isActive: true, sortOrder: 2 },
+  { id: "cat-tunjangan", name: "Tunjangan & Bonus", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "gift", isActive: true, sortOrder: 3 },
+  { id: "cat-pelatihan", name: "Pelatihan Karyawan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "book-open", isActive: true, sortOrder: 4 },
+];
+
+let isDbConnected = false;
+
 async function ensureTables() {
   try {
     // Quick test if database is reachable (1.5s timeout)
@@ -59,8 +232,10 @@ async function ensureTables() {
     ]);
     if (client) {
       client.release();
+      isDbConnected = true;
     }
   } catch (err: any) {
+    isDbConnected = false;
     console.warn(
       "⚠️  Database PostgreSQL tidak terhubung / offline. Server akan berjalan dalam mode in-memory fallback:",
       err?.message
@@ -374,6 +549,14 @@ async function startServer() {
     message: { error: "Too many requests from this IP, please try again later." }
   });
   app.use("/api/sync", syncLimiter);
+
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
+      isDbConnected,
+      timestamp: new Date().toISOString(),
+    });
+  });
 
 
   const getTable = (tableName: string) => {
@@ -820,10 +1003,59 @@ async function startServer() {
   });
 
   // In-memory fallback state for offline usage
-  let offlineState: any = null;
+  let offlineState: any = {
+    users: initialUsers,
+    settings: initialSettings,
+    ingredients: JSON.parse(JSON.stringify(initialIngredients)),
+    recipes: JSON.parse(JSON.stringify(initialRecipes)),
+    products: JSON.parse(JSON.stringify(initialProducts)),
+    cash_accounts: [{ id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true }],
+    stock_movements: [],
+    sales_transactions: [],
+    orders: [],
+    order_items: [],
+    payments: [],
+    shifts: [],
+    device_sessions: [],
+    expense_categories: defaultCategories,
+    budgets: [],
+    bank_reconciliations: [],
+    bank_statement_lines: [],
+    stock_opnames: [],
+    stock_opname_items: [],
+    payroll_records: [],
+    closed_periods: [],
+    batch_preparations: [],
+    suppliers: [],
+    purchase_orders: [],
+    employees: [],
+    contracts: [],
+    employeeShifts: [],
+    attendances: [],
+    dailyAttendances: [],
+    dailyChecklists: [],
+    kpiRecords: [],
+  };
 
   app.get("/api/sync", async (req, res) => {
     try {
+      if (!isDbConnected) {
+        const rawSettings = offlineState.settings && offlineState.settings.length > 0 ? (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) : initialSettings;
+        const effectiveApiKey =
+          rawSettings?.gemini_api_key ||
+          rawSettings?.geminiApiKey ||
+          process.env.GEMINI_API_KEY ||
+          "";
+        return res.json({
+          ...offlineState,
+          settings: {
+            ...rawSettings,
+            geminiApiKey: effectiveApiKey,
+            gemini_api_key: effectiveApiKey,
+          },
+          serverTime: new Date().toISOString(),
+        });
+      }
       let cash_accounts: any[] = [];
       let cash_transactions: any[] = [];
       let settings: any[] = [];
@@ -985,6 +1217,51 @@ async function startServer() {
             console.warn("Auto seed skipped or failed:", seedErr);
           }
         }
+
+        // Auto seed default cash drawer account if empty
+        if (cash_accounts.length === 0) {
+          try {
+            const defaultCash = { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true };
+            await db.insert(schema.cashAccounts).values(sanitizeCashAccount(defaultCash));
+            cash_accounts = [defaultCash] as any;
+          } catch (seedErr) {
+            console.warn("Cash accounts seed skipped:", seedErr);
+          }
+        }
+
+        // Auto seed ingredients, recipes, and products if ingredients is empty
+        if (ingredients.length === 0) {
+          try {
+            await db.transaction(async (tx) => {
+              for (const ing of initialIngredients) {
+                await tx.insert(schema.ingredients).values(sanitizeIngredient(ing));
+              }
+              for (const rec of initialRecipes) {
+                await tx.insert(schema.recipes).values(sanitizeRecipe(rec));
+              }
+              for (const prod of initialProducts) {
+                await tx.insert(schema.products).values({
+                  id: String(prod.id),
+                  name: String(prod.name),
+                  category: String(prod.category || "COFFEE"),
+                  division: String(prod.division || "BAR"),
+                  description: prod.description || null,
+                  imageUrl: prod.imageUrl || null,
+                  isActive: Boolean(prod.isActive !== false),
+                  variants: prod.variants || [],
+                  modifierGroups: prod.modifierGroups || [],
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            });
+            ingredients = await db.select().from(schema.ingredients);
+            recipes = await db.select().from(schema.recipes);
+            products = await db.select().from(schema.products);
+          } catch (seedErr) {
+            console.warn("Ingredients and recipes seed skipped:", seedErr);
+          }
+        }
       } catch (dbErr) {
         console.error(
           "Database connection failed, using fallback data in memory:",
@@ -1140,7 +1417,15 @@ async function startServer() {
         status: "ACTIVE",
       };
       
-      await db.insert(schema.deviceSessions).values(newSession);
+      if (isDbConnected) {
+        try {
+          await db.insert(schema.deviceSessions).values(newSession);
+        } catch {}
+      }
+      if (offlineState) {
+        offlineState.device_sessions = offlineState.device_sessions || [];
+        offlineState.device_sessions.push(newSession);
+      }
       
       const { pin: _, ...userWithoutPin } = user;
       res.json({ success: true, token: sessionId, user: userWithoutPin });
@@ -1159,14 +1444,29 @@ async function startServer() {
         return res.status(401).json({ error: "Unauthorized: No token provided" });
       }
 
-      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
-      const session = sessions[0];
-      if (!session) {
-        return res.status(401).json({ error: "Unauthorized: Invalid session" });
+      let session: any = null;
+      let requestUser: any = null;
+
+      if (isDbConnected) {
+        try {
+          const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
+          session = sessions[0];
+          if (session) {
+            const currentUsersDB = await db.select().from(schema.users);
+            requestUser = currentUsersDB.find(u => u.id === session.userId);
+          }
+        } catch {}
       }
 
-      const currentUsersDB = await db.select().from(schema.users);
-      const requestUser = currentUsersDB.find(u => u.id === session.userId);
+      if (!session && offlineState) {
+        session = (offlineState.device_sessions || []).find((s: any) => s.id === token);
+        if (session) {
+          requestUser = (offlineState.users || []).find((u: any) => u.id === session.userId);
+        } else {
+          requestUser = offlineState.users?.[0] || initialUsers[0];
+          session = { id: token, userId: requestUser.id };
+        }
+      }
 
       if (!requestUser) {
         return res.status(401).json({ error: "Unauthorized: User not found" });
@@ -1174,6 +1474,24 @@ async function startServer() {
 
       if (requestUser.role === "OWNER") {
          return res.status(403).json({ error: "Forbidden: Read-only access" });
+      }
+
+      if (!isDbConnected && offlineState) {
+        const b = req.body;
+        if (b.ingredients !== undefined) offlineState.ingredients = b.ingredients;
+        if (b.recipes !== undefined) offlineState.recipes = b.recipes;
+        if (b.products !== undefined) offlineState.products = b.products;
+        if (b.cash_accounts !== undefined) offlineState.cash_accounts = b.cash_accounts;
+        if (b.cash_transactions !== undefined) offlineState.cash_transactions = b.cash_transactions;
+        if (b.stock_movements !== undefined) offlineState.stock_movements = b.stock_movements;
+        if (b.sales_transactions !== undefined) offlineState.sales_transactions = b.sales_transactions;
+        if (b.shifts !== undefined) offlineState.shifts = b.shifts;
+        if (b.users !== undefined) offlineState.users = b.users;
+        if (b.settings !== undefined) offlineState.settings = Array.isArray(b.settings) ? b.settings : [b.settings];
+        if (b.expense_categories !== undefined) offlineState.expense_categories = b.expense_categories;
+        if (b.budgets !== undefined) offlineState.budgets = b.budgets;
+        if (b.payroll_records !== undefined) offlineState.payroll_records = b.payroll_records;
+        return res.json({ success: true, serverTime: new Date().toISOString() });
       }
 
       const {
@@ -1528,6 +1846,11 @@ async function startServer() {
   // Session management endpoints for Connected Devices & Force Logout
   app.get("/api/sessions", async (req, res) => {
     try {
+      if (!isDbConnected && offlineState) {
+        const activeSessions = (offlineState.device_sessions || []).filter((s: any) => s.status === "ACTIVE");
+        return res.json({ sessions: activeSessions });
+      }
+
       const allSessions = await db.select().from(schema.deviceSessions);
       // Filter active sessions and sort by lastActive descending
       const activeSessions = allSessions
@@ -1539,6 +1862,9 @@ async function startServer() {
 
       res.json({ sessions: activeSessions });
     } catch (err) {
+      if (offlineState) {
+        return res.json({ sessions: (offlineState.device_sessions || []).filter((s: any) => s.status === "ACTIVE") });
+      }
       console.error("Fetch sessions error:", err);
       res.status(500).json({ error: "Failed to fetch sessions" });
     }
@@ -1559,6 +1885,29 @@ async function startServer() {
       } = req.body;
       if (!sessionId || !userId) {
         return res.status(400).json({ error: "Missing required session info" });
+      }
+
+      if (!isDbConnected && offlineState) {
+        offlineState.device_sessions = offlineState.device_sessions || [];
+        const existing = offlineState.device_sessions.find((s: any) => s.id === sessionId);
+        if (existing) {
+          existing.lastActive = new Date().toISOString();
+        } else {
+          offlineState.device_sessions.push({
+            id: sessionId,
+            userId,
+            username,
+            userName,
+            deviceName: deviceName || "Unknown",
+            browser: browser || "Web",
+            os: os || "Unknown",
+            deviceType: deviceType || "desktop",
+            location: location || null,
+            lastActive: new Date().toISOString(),
+            status: "ACTIVE",
+          });
+        }
+        return res.json({ success: true });
       }
 
       // Check if session was explicitly REVOKED or expired
@@ -2249,10 +2598,28 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   // 1. Get POS Menu & Live Stock Availability
   app.get("/api/pos/menu", async (req, res) => {
     try {
-      const allRecipes = await db.select().from(schema.recipes);
-      const allIngredients = await db.select().from(schema.ingredients);
-      const allProducts = await db.select().from(schema.products);
-      const settings = (await db.select().from(schema.settings).limit(1))[0];
+      let allRecipes: any[] = [];
+      let allIngredients: any[] = [];
+      let allProducts: any[] = [];
+      let settings: any = null;
+
+      if (isDbConnected) {
+        try {
+          allRecipes = await db.select().from(schema.recipes);
+          allIngredients = await db.select().from(schema.ingredients);
+          allProducts = await db.select().from(schema.products);
+          settings = (await db.select().from(schema.settings).limit(1))[0];
+        } catch (dbErr) {
+          console.warn("DB query failed in /api/pos/menu, using fallback state");
+        }
+      }
+
+      if (allRecipes.length === 0 && offlineState) {
+        allRecipes = offlineState.recipes || [];
+        allIngredients = offlineState.ingredients || [];
+        allProducts = offlineState.products || [];
+        settings = (offlineState.settings && offlineState.settings.length > 0 ? (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) : initialSettings);
+      }
 
       const ingredientMap = new Map(allIngredients.map((ing) => [ing.id, ing]));
       const productPriceMap = new Map<string, number>();
@@ -2369,26 +2736,42 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
       // Idempotency check: prevent duplicate orders
       if (idempotencyKey) {
-        const existing = await db
-          .select()
-          .from(schema.orders)
-          .where(eq(schema.orders.idempotencyKey, idempotencyKey))
-          .limit(1);
-        if (existing.length > 0) {
-          const existingItems = await db
-            .select()
-            .from(schema.orderItems)
-            .where(eq(schema.orderItems.orderId, existing[0].id));
-          const existingPayments = await db
-            .select()
-            .from(schema.payments)
-            .where(eq(schema.payments.orderId, existing[0].id));
-          return res.json({
-            order: existing[0],
-            items: existingItems,
-            payments: existingPayments,
-            isDuplicate: true,
-          });
+        if (isDbConnected) {
+          try {
+            const existing = await db
+              .select()
+              .from(schema.orders)
+              .where(eq(schema.orders.idempotencyKey, idempotencyKey))
+              .limit(1);
+            if (existing.length > 0) {
+              const existingItems = await db
+                .select()
+                .from(schema.orderItems)
+                .where(eq(schema.orderItems.orderId, existing[0].id));
+              const existingPayments = await db
+                .select()
+                .from(schema.payments)
+                .where(eq(schema.payments.orderId, existing[0].id));
+              return res.json({
+                order: existing[0],
+                items: existingItems,
+                payments: existingPayments,
+                isDuplicate: true,
+              });
+            }
+          } catch {}
+        } else if (offlineState) {
+          const existing = (offlineState.orders || []).find((o: any) => o.idempotencyKey === idempotencyKey);
+          if (existing) {
+            const existingItems = (offlineState.order_items || []).filter((it: any) => it.orderId === existing.id);
+            const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === existing.id);
+            return res.json({
+              order: existing,
+              items: existingItems,
+              payments: existingPayments,
+              isDuplicate: true,
+            });
+          }
         }
       }
 
@@ -2398,6 +2781,144 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const receiptNo = `ORD-${dateStr}-${randomSuffix}`;
       const orderId = crypto.randomUUID();
       const nowIso = new Date().toISOString();
+
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = offlineState.orders || [];
+        offlineState.order_items = offlineState.order_items || [];
+        offlineState.payments = offlineState.payments || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+
+        const newOrder = {
+          id: orderId,
+          receiptNo,
+          shiftId: shiftId || null,
+          outletId: "OUTLET-MAIN",
+          orderType,
+          tableNumber: tableNumber || null,
+          customerName: customerName || null,
+          status,
+          subtotal: Number(subtotal),
+          discountPercent: Number(discountPercent),
+          discountAmount: Number(discountAmount),
+          discountReason: discountReason || null,
+          taxPercent: Number(taxPercent),
+          taxAmount: Number(taxAmount),
+          taxMode: taxMode || "EXCLUSIVE",
+          totalAmount: Number(totalAmount),
+          notes: notes || null,
+          idempotencyKey: idempotencyKey || null,
+          cashierId: cashierId || null,
+          cashierName: cashierName || null,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          paidAt: status === "PAID" ? nowIso : null,
+        };
+        offlineState.orders.push(newOrder);
+
+        const insertedItems = [];
+        for (const item of items) {
+          const newItem = {
+            id: crypto.randomUUID(),
+            orderId,
+            menuName: item.menuName,
+            recipeId: item.recipeId || null,
+            variantName: item.variantName || null,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            subtotal: Number(item.subtotal) || 0,
+            modifiers: item.modifiers || [],
+            notes: item.notes || null,
+            printDestination: item.printDestination || "BAR",
+            isPrinted: false,
+            createdAt: nowIso,
+          };
+          offlineState.order_items.push(newItem);
+          insertedItems.push(newItem);
+        }
+
+        const insertedPayments = [];
+        if (status === "PAID" && payment) {
+          const newPayment = {
+            id: crypto.randomUUID(),
+            orderId,
+            shiftId: shiftId || null,
+            paymentMethod: payment.paymentMethod || "CASH",
+            amount: Number(payment.amount) || Number(totalAmount),
+            cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : null,
+            changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : null,
+            referenceNo: payment.referenceNo || null,
+            cashAccountId: payment.cashAccountId || null,
+            createdAt: nowIso,
+          };
+          offlineState.payments.push(newPayment);
+          insertedPayments.push(newPayment);
+
+          if (payment.cashAccountId) {
+            offlineState.cash_transactions.push({
+              id: crypto.randomUUID(),
+              accountId: payment.cashAccountId,
+              type: "CASH_IN",
+              date: nowIso,
+              amount: Number(totalAmount),
+              description: `Penjualan POS #${receiptNo} (${payment.paymentMethod})`,
+              category: "PENDAPATAN",
+              referenceId: orderId,
+            });
+          }
+
+          for (const item of items) {
+            offlineState.sales_transactions.push({
+              id: crypto.randomUUID(),
+              date: nowIso,
+              menuName: item.menuName,
+              quantitySold: Number(item.quantity) || 1,
+              totalPrice: Number(item.subtotal) || 0,
+              importLogId: `POS-${receiptNo}`,
+            });
+
+            let rec = (offlineState.recipes || []).find((r: any) =>
+              (item.recipeId && r.id === item.recipeId) ||
+              (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+            );
+
+            if (rec) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch {}
+
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (usedQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
+                    createdBy: cashierName || "Kasir",
+                    referenceId: orderId,
+                  });
+
+                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                  if (ing) {
+                    ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        return res.status(201).json({
+          order: newOrder,
+          items: insertedItems,
+          payments: insertedPayments,
+        });
+      }
 
       await db.transaction(async (tx) => {
         // Insert order
@@ -2580,6 +3101,106 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         cashierName,
       } = req.body;
 
+      const nowIso = new Date().toISOString();
+
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = offlineState.orders || [];
+        offlineState.payments = offlineState.payments || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+
+        const currentOrder = offlineState.orders.find((o: any) => o.id === orderId);
+        if (!currentOrder) {
+          return res.status(404).json({ error: "Order tidak ditemukan" });
+        }
+        if (currentOrder.status === "PAID") {
+          return res.status(400).json({ error: "Order sudah lunas" });
+        }
+        if (currentOrder.status === "CANCELLED" || currentOrder.status === "VOID") {
+          return res.status(400).json({ error: `Order dalam status ${currentOrder.status}` });
+        }
+
+        const finalAmount = Number(amount) || currentOrder.totalAmount;
+        currentOrder.status = "PAID";
+        currentOrder.paidAt = nowIso;
+        currentOrder.updatedAt = nowIso;
+
+        const newPayment = {
+          id: crypto.randomUUID(),
+          orderId,
+          shiftId: shiftId || currentOrder.shiftId || null,
+          paymentMethod,
+          amount: finalAmount,
+          cashReceived: cashReceived != null ? Number(cashReceived) : null,
+          changeAmount: changeAmount != null ? Number(changeAmount) : null,
+          referenceNo: referenceNo || null,
+          cashAccountId: cashAccountId || null,
+          createdAt: nowIso,
+        };
+        offlineState.payments.push(newPayment);
+
+        if (cashAccountId) {
+          offlineState.cash_transactions.push({
+            id: crypto.randomUUID(),
+            accountId: cashAccountId,
+            type: "CASH_IN",
+            date: nowIso,
+            amount: finalAmount,
+            description: `Pelunasan POS #${currentOrder.receiptNo} (${paymentMethod})`,
+            category: "PENDAPATAN",
+            referenceId: orderId,
+          });
+        }
+
+        const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
+        for (const item of items) {
+          offlineState.sales_transactions.push({
+            id: crypto.randomUUID(),
+            date: nowIso,
+            menuName: item.menuName,
+            quantitySold: Number(item.quantity) || 1,
+            totalPrice: Number(item.subtotal) || 0,
+            importLogId: `POS-${currentOrder.receiptNo}`,
+          });
+
+          let rec = (offlineState.recipes || []).find((r: any) =>
+            (item.recipeId && r.id === item.recipeId) ||
+            (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+          );
+
+          if (rec) {
+            let recIngredients: { ingredientId: string; quantity: number }[] = [];
+            try {
+              recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+            } catch {}
+
+            for (const rIng of recIngredients) {
+              const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+              if (usedQty > 0) {
+                offlineState.stock_movements.push({
+                  id: crypto.randomUUID(),
+                  ingredientId: rIng.ingredientId,
+                  type: "USAGE",
+                  quantity: usedQty,
+                  date: nowIso,
+                  note: `Pelunasan #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
+                  createdBy: cashierName || "Kasir",
+                  referenceId: orderId,
+                });
+
+                const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                if (ing) {
+                  ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                }
+              }
+            }
+          }
+        }
+
+        return res.json({ success: true, order: currentOrder, payment: newPayment });
+      }
+
       const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
       if (orderList.length === 0) {
         return res.status(404).json({ error: "Order tidak ditemukan" });
@@ -2592,7 +3213,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: `Order dalam status ${currentOrder.status}` });
       }
 
-      const nowIso = new Date().toISOString();
       const finalAmount = Number(amount) || currentOrder.totalAmount;
 
       await db.transaction(async (tx) => {

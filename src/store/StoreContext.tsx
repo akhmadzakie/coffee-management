@@ -813,8 +813,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setUsers(data.users);
         if (Array.isArray(data.device_sessions))
           setSessions(data.device_sessions);
-        if (Array.isArray(data.ingredients)) setIngredients(data.ingredients);
-        if (Array.isArray(data.recipes)) setRecipes(data.recipes);
+        if (Array.isArray(data.ingredients) && data.ingredients.length > 0)
+          setIngredients(data.ingredients);
+        if (Array.isArray(data.recipes) && data.recipes.length > 0)
+          setRecipes(data.recipes);
         if (Array.isArray(data.stock_movements))
           setStockMovements(data.stock_movements);
         if (Array.isArray(data.sales_transactions))
