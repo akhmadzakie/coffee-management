@@ -83,7 +83,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       return;
     }
 
-    onSuccess(authorizedUser, reasonRef.current.trim());
+    onSuccess({ ...authorizedUser, pin: currentPin }, reasonRef.current.trim());
   };
 
   // Listener input keyboard fisik (angka 0-9, backspace, escape, enter)

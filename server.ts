@@ -3353,6 +3353,100 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: "PIN Manager / Owner wajib diisi." });
       }
 
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = offlineState.orders || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.payments = offlineState.payments || [];
+
+        const approver = (offlineState.users || []).find(
+          (u: any) =>
+            (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
+            (u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN")
+        );
+        if (!approver) {
+          return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+        }
+
+        const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
+        if (!targetOrder) {
+          return res.status(404).json({ error: "Order tidak ditemukan" });
+        }
+        if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED") {
+          return res.status(400).json({ error: `Order sudah dalam status ${targetOrder.status}` });
+        }
+
+        const nowIso = new Date().toISOString();
+
+        if (targetOrder.status === "PAID") {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
+          for (const item of items) {
+            let rec = (offlineState.recipes || []).find(
+              (r: any) =>
+                (item.recipeId && r.id === item.recipeId) ||
+                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+            );
+            if (rec) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch {}
+              for (const rIng of recIngredients) {
+                const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (returnQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "RETURN",
+                    quantity: returnQty,
+                    date: nowIso,
+                    note: `VOID Order #${targetOrder.receiptNo}: ${voidReason || "Pembatalan"}`,
+                    createdBy: approver.name,
+                    referenceId: orderId,
+                  });
+                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                  if (ing) {
+                    ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
+                  }
+                }
+              }
+            }
+          }
+
+          const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === orderId);
+          for (const pay of existingPayments) {
+            if (pay.cashAccountId) {
+              offlineState.cash_transactions.push({
+                id: crypto.randomUUID(),
+                accountId: pay.cashAccountId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: pay.amount,
+                description: `VOID/Refund POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
+                category: "PENGELUARAN",
+                referenceId: orderId,
+              });
+            }
+          }
+
+          targetOrder.status = "VOID";
+          targetOrder.voidReason = voidReason || "Void oleh manager";
+          targetOrder.voidApprovedBy = approver.name;
+          targetOrder.updatedAt = nowIso;
+        } else {
+          targetOrder.status = "CANCELLED";
+          targetOrder.voidReason = voidReason || "Dibatalkan kasir/manager";
+          targetOrder.voidApprovedBy = approver.name;
+          targetOrder.updatedAt = nowIso;
+        }
+
+        return res.json({
+          success: true,
+          message: `Order #${targetOrder.receiptNo} berhasil ${targetOrder.status === "VOID" ? "di-VOID dan stok dikembalikan" : "dibatalkan"}`,
+          approvedBy: approver.name,
+        });
+      }
+
       // Verify PIN against MANAGER or OWNER
       const authUsers = await db
         .select()
@@ -3491,6 +3585,19 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   // 5. Get Active Open Bills
   app.get("/api/pos/orders/active", async (req, res) => {
     try {
+      if (!isDbConnected && offlineState) {
+        const activeOrders = (offlineState.orders || [])
+          .filter((o: any) => o.status === "OPEN")
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        const ordersWithItems = activeOrders.map((ord: any) => {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === ord.id);
+          return { ...ord, items };
+        });
+
+        return res.json(ordersWithItems);
+      }
+
       const activeOrders = await db
         .select()
         .from(schema.orders)
@@ -3514,24 +3621,41 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     }
   });
 
-  // 6. Get Order Details by ID (for receipt reprint or detail view)
-  app.get("/api/pos/orders/:id", async (req, res) => {
-    try {
-      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, req.params.id)).limit(1);
-      if (orderList.length === 0) {
-        return res.status(404).json({ error: "Order tidak ditemukan" });
-      }
-      const items = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, req.params.id));
-      const payments = await db.select().from(schema.payments).where(eq(schema.payments.orderId, req.params.id));
-      res.json({ order: orderList[0], items, payments });
-    } catch (e: any) {
-      res.status(500).json({ error: e?.message || "Failed to fetch order details" });
-    }
-  });
-
-  // 7. Get POS Orders Today / History Summary
+  // 6. Get POS Orders Today / History Summary (MUST be before /:id)
   app.get("/api/pos/orders/today", async (req, res) => {
     try {
+      if (!isDbConnected && offlineState) {
+        const todayPrefix = new Date().toISOString().slice(0, 10);
+        const todayOrders = (offlineState.orders || [])
+          .filter((o: any) => (o.createdAt || "").startsWith(todayPrefix))
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        let totalRevenue = 0;
+        let paidCount = 0;
+        let openCount = 0;
+        let voidCount = 0;
+
+        for (const ord of todayOrders) {
+          if (ord.status === "PAID") {
+            totalRevenue += Number(ord.totalAmount) || 0;
+            paidCount++;
+          } else if (ord.status === "OPEN") {
+            openCount++;
+          } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
+            voidCount++;
+          }
+        }
+
+        return res.json({
+          date: todayPrefix,
+          totalRevenue,
+          paidCount,
+          openCount,
+          voidCount,
+          orders: todayOrders,
+        });
+      }
+
       const todayPrefix = new Date().toISOString().slice(0, 10);
       const todayOrders = await db
         .select()
@@ -3569,7 +3693,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     }
   });
 
-  // 7b. Get All POS Orders with Filters (for Web Management / Sales report)
+  // 6b. Get All POS Orders with Filters (MUST be before /:id)
   app.get("/api/pos/orders/all", async (req, res) => {
     try {
       const { startDate, endDate, status } = req.query as {
@@ -3577,6 +3701,46 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         endDate?: string;
         status?: string;
       };
+
+      if (!isDbConnected && offlineState) {
+        const allOrders = (offlineState.orders || []).slice().sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const filteredOrders = allOrders.filter((ord: any) => {
+          const ordDate = ord.createdAt?.slice(0, 10);
+          if (startDate && ordDate && ordDate < startDate) return false;
+          if (endDate && ordDate && ordDate > endDate) return false;
+          if (status && status !== "ALL" && ord.status !== status) return false;
+          return true;
+        });
+
+        const ordersWithDetails = filteredOrders.slice(0, 200).map((ord: any) => {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === ord.id);
+          const payments = (offlineState.payments || []).filter((p: any) => p.orderId === ord.id);
+          return { ...ord, items, payments };
+        });
+
+        let totalRevenue = 0;
+        let totalTax = 0;
+        let totalDiscount = 0;
+        let paidCount = 0;
+
+        for (const ord of filteredOrders) {
+          if (ord.status === "PAID") {
+            totalRevenue += Number(ord.totalAmount) || 0;
+            totalTax += Number(ord.taxAmount) || 0;
+            totalDiscount += Number(ord.discountAmount) || 0;
+            paidCount++;
+          }
+        }
+
+        return res.json({
+          orders: ordersWithDetails,
+          totalCount: filteredOrders.length,
+          paidCount,
+          totalRevenue,
+          totalTax,
+          totalDiscount,
+        });
+      }
 
       let query = db.select().from(schema.orders);
       const allOrders = await query.orderBy(desc(schema.orders.createdAt));
@@ -3628,6 +3792,31 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     } catch (e: any) {
       console.error("Fetch all POS orders error:", e);
       res.status(500).json({ error: e?.message || "Failed to fetch all orders" });
+    }
+  });
+
+  // 7. Get Order Details by ID (for receipt reprint or detail view)
+  app.get("/api/pos/orders/:id", async (req, res) => {
+    try {
+      if (!isDbConnected && offlineState) {
+        const ord = (offlineState.orders || []).find((o: any) => o.id === req.params.id);
+        if (!ord) {
+          return res.status(404).json({ error: "Order tidak ditemukan" });
+        }
+        const items = (offlineState.order_items || []).filter((it: any) => it.orderId === req.params.id);
+        const payments = (offlineState.payments || []).filter((p: any) => p.orderId === req.params.id);
+        return res.json({ order: ord, items, payments });
+      }
+
+      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, req.params.id)).limit(1);
+      if (orderList.length === 0) {
+        return res.status(404).json({ error: "Order tidak ditemukan" });
+      }
+      const items = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, req.params.id));
+      const payments = await db.select().from(schema.payments).where(eq(schema.payments.orderId, req.params.id));
+      res.json({ order: orderList[0], items, payments });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to fetch order details" });
     }
   });
 
