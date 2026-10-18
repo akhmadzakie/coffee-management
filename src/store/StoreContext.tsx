@@ -491,6 +491,7 @@ interface StoreContextType {
   executeBatchCook: (batchPrepId: string, multiplier?: number, notes?: string) => { success: boolean; message: string };
 
   addStockMovement: (movement: Omit<StockMovement, "id">) => void;
+  addSalesTransactions: (transactions: Omit<SalesTransaction, "id">[], fileName?: string) => void;
 
   // Sync Status
   isSyncing: boolean;
@@ -2060,6 +2061,32 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const addSalesTransactions = (
+    transactions: Omit<SalesTransaction, "id">[],
+    fileName: string = "Import Penjualan Excel"
+  ) => {
+    const logId = generateId();
+    const newTxs: SalesTransaction[] = transactions.map((t) => ({
+      ...t,
+      id: generateId(),
+      importLogId: logId,
+    }));
+
+    const newLog: SalesImportLog = {
+      id: logId,
+      importDate: new Date().toISOString(),
+      fileName: fileName,
+      rowCount: newTxs.length,
+      status: "SUCCESS",
+      createdBy: currentUser?.name || "Finance",
+    };
+
+    setSalesTransactions((prev) => [...newTxs, ...prev]);
+    setSalesImportLogs((prev) => [newLog, ...prev]);
+    writeAuditLog("CREATE", "sales_transactions", logId);
+    markChanged();
+  };
+
   if (!isAuthLoaded) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -2142,6 +2169,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         deleteBatchPreparation,
         executeBatchCook,
         addStockMovement,
+        addSalesTransactions,
         addSupplier,
         updateSupplier,
         deleteSupplier,

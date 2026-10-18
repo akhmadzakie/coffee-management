@@ -21,6 +21,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
+import { CsvImportExport } from "./common/CsvImportExport";
 
 interface PosOrderDetail {
   id: string;
@@ -62,8 +63,15 @@ interface PosOrderDetail {
 }
 
 export const Sales = () => {
-  const { salesTransactions, salesImportLogs, syncData, currentUser, settings } =
-    useStore();
+  const {
+    salesTransactions,
+    salesImportLogs,
+    syncData,
+    currentUser,
+    settings,
+    products,
+    addSalesTransactions,
+  } = useStore();
   const [activeTab, setActiveTab] = useState<"pos_orders" | "sales" | "logs">("pos_orders");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -163,48 +171,43 @@ export const Sales = () => {
       new Date(b.importDate).getTime() - new Date(a.importDate).getTime()
   );
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleSalesImport = (parsedData: any[]) => {
+    if (!parsedData || parsedData.length === 0) return;
 
-    setIsUploading(true);
-    setUploadStatus(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("userId", currentUser?.id || "");
+    const newTransactions = parsedData
+      .map((row) => {
+        const rawDate = row["Tanggal"] || new Date().toISOString().slice(0, 10);
+        let dateStr = "";
+        if (typeof rawDate === "object" && rawDate instanceof Date) {
+          dateStr = rawDate.toISOString().slice(0, 10);
+        } else {
+          dateStr = String(rawDate).trim();
+        }
 
-    try {
-      const response = await fetch("/api/import/sales", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("node_session_id")}`,
-        },
-        body: formData,
-      });
+        const menuName = String(row["Nama Menu"] || "").trim();
+        const quantitySold = parseInt(row["Quantity"], 10) || 1;
+        const totalPrice = parseFloat(row["Total Penjualan"]) || 0;
 
-      const data = await response.json();
+        return {
+          date: dateStr,
+          menuName,
+          quantitySold,
+          totalPrice,
+          importLogId: "",
+        };
+      })
+      .filter((t) => t.menuName.length > 0 && t.totalPrice >= 0);
 
-      if (response.ok) {
-        setUploadStatus({
-          type: "success",
-          message: `Berhasil import ${data.insertedCount} baris data penjualan.`,
-        });
-        await syncData();
-      } else {
-        setUploadStatus({
-          type: "error",
-          message: data.error || "Gagal import data.",
-        });
-      }
-    } catch (err) {
-      setUploadStatus({
-        type: "error",
-        message: "Terjadi kesalahan jaringan.",
-      });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    if (newTransactions.length === 0) {
+      alert("Tidak ada baris data penjualan yang valid untuk diimpor. Pastikan kolom 'Nama Menu' terisi.");
+      return;
     }
+
+    addSalesTransactions(newTransactions, `Import Penjualan Excel (${newTransactions.length} baris)`);
+    setUploadStatus({
+      type: "success",
+      message: `Berhasil mengimpor ${newTransactions.length} baris penjualan menu ke sistem.`,
+    });
   };
 
   return (
@@ -264,30 +267,50 @@ export const Sales = () => {
             </div>
           )}
 
-          {activeTab !== "pos_orders" && (
-            <div>
-              <input
-                type="file"
-                accept=".csv"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                disabled={isUploading}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shrink-0 disabled:opacity-50 text-sm font-medium"
-              >
-                {isUploading ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" />
-                )}
-                Import CSV Kasir
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <CsvImportExport
+              onImport={handleSalesImport}
+              templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
+              templateExampleRow={[
+                new Date().toISOString().slice(0, 10),
+                products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
+                "45",
+                "990000",
+              ]}
+              templateFilename="Template_Import_Penjualan_Menu.xlsx"
+              buttonLabel="Import Excel / CSV Penjualan"
+              currentData={salesTransactions.slice(0, 50).map((s) => ({
+                id: s.id,
+                Tanggal: s.date.slice(0, 10),
+                "Nama Menu": s.menuName,
+                Quantity: s.quantitySold,
+                "Total Penjualan": s.totalPrice,
+              }))}
+              templateDropdowns={{
+                "Nama Menu":
+                  products && products.length > 0
+                    ? Array.from(new Set(products.map((p) => p.name)))
+                    : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
+              }}
+              templateColumnTypes={{
+                Tanggal: "date",
+                Quantity: "integer",
+                "Total Penjualan": "number",
+              }}
+              templateHints={{
+                Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
+                "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
+                Quantity: "Jumlah cup / porsi yang terjual",
+                "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
+              }}
+              templateInstructions={[
+                "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
+                "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
+                "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
+                "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -368,6 +391,29 @@ export const Sales = () => {
                 Total {posOrders.length} Pesanan Terdaftar
               </p>
             </div>
+          </div>
+
+          {/* Info panduan jika belum pakai POS internal */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-800 shrink-0">
+                <Store className="w-4 h-4 text-amber-700" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-amber-950">
+                  Coffee Shop Baru Belum Menggunakan POS Tablet?
+                </h4>
+                <p className="text-[11px] text-amber-800/80 mt-0.5">
+                  Anda bisa unduh template & impor rekap penjualan menu lewat tombol <strong>"Import Excel / CSV Penjualan"</strong> di atas, atau rekap total omzet harian langsung di menu <strong>Buku Kas & Arus Kas</strong>.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab("sales")}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs shrink-0"
+            >
+              Lihat Data Menu Penjualan ➡️
+            </button>
           </div>
 
           {/* Filter Bar */}
