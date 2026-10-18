@@ -1469,13 +1469,14 @@ async function startServer() {
 
       let session: any = null;
       let requestUser: any = null;
+      let currentUsersDB: any[] = [];
 
       if (isDbConnected) {
         try {
           const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
           session = sessions[0];
+          currentUsersDB = await db.select().from(schema.users);
           if (session) {
-            const currentUsersDB = await db.select().from(schema.users);
             requestUser = currentUsersDB.find(u => u.id === session.userId);
           }
         } catch {}
@@ -1631,6 +1632,9 @@ async function startServer() {
           await tx.delete(schema.expenseCategories);
         }
         if (users !== undefined) {
+          if (currentUsersDB.length === 0) {
+            currentUsersDB = await tx.select().from(schema.users);
+          }
           await tx.delete(schema.users);
         }
         if (cash_accounts !== undefined) {
