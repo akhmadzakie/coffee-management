@@ -401,6 +401,12 @@ interface StoreContextType {
   // Fase 3: Inventory
   stockOpnames: StockOpname[];
   stockOpnameItems: StockOpnameItem[];
+  addStockOpname: (o: StockOpname) => void;
+  updateStockOpname: (o: StockOpname) => void;
+  deleteStockOpname: (id: string) => void;
+  addStockOpnameItem: (i: StockOpnameItem) => void;
+  bulkAddStockOpnameItems: (items: StockOpnameItem[]) => void;
+  updateStockOpnameItem: (i: StockOpnameItem) => void;
 
   // Fase 4: Payroll
   payrollRecords: PayrollRecord[];
@@ -689,12 +695,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       case "BULK_ADD_PAYROLL_RECORDS":
         setPayrollRecords((prev) => [...prev, ...action.payload]);
         break;
-      case "ADD_CLOSED_PERIOD":
-        setClosedPeriods((prev) => [...prev, action.payload]);
-        break;
-      case "REMOVE_CLOSED_PERIOD":
-        setClosedPeriods((prev) => prev.filter((p) => p.period !== action.payload));
-        break;
       case "ADD_BUDGET":
         setBudgets((prev) => [...prev, action.payload]);
         break;
@@ -724,6 +724,59 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       case "SET_BANK_STATEMENT_LINES":
         setBankStatementLines(action.payload);
+        break;
+      case "ADD_STOCK_OPNAME":
+        setStockOpnames((prev) => {
+          const exists = prev.some((o) => o.id === action.payload.id);
+          if (exists) {
+            return prev.map((o) => (o.id === action.payload.id ? action.payload : o));
+          }
+          return [...prev, action.payload];
+        });
+        break;
+      case "UPDATE_STOCK_OPNAME":
+        setStockOpnames((prev) => prev.map((o) => (o.id === action.payload.id ? action.payload : o)));
+        break;
+      case "DELETE_STOCK_OPNAME":
+        setStockOpnames((prev) => prev.filter((o) => o.id !== action.payload));
+        setStockOpnameItems((prev) => prev.filter((i) => i.opnameId !== action.payload));
+        break;
+      case "ADD_STOCK_OPNAME_ITEM":
+        setStockOpnameItems((prev) => {
+          const exists = prev.some((i) => i.id === action.payload.id || (i.opnameId === action.payload.opnameId && i.ingredientId === action.payload.ingredientId));
+          if (exists) {
+            return prev.map((i) => (i.id === action.payload.id || (i.opnameId === action.payload.opnameId && i.ingredientId === action.payload.ingredientId) ? action.payload : i));
+          }
+          return [...prev, action.payload];
+        });
+        break;
+      case "UPDATE_STOCK_OPNAME_ITEM":
+        setStockOpnameItems((prev) => prev.map((i) => (i.id === action.payload.id ? action.payload : i)));
+        break;
+      case "BULK_ADD_STOCK_OPNAME_ITEMS":
+        setStockOpnameItems((prev) => {
+          const incomingIds = new Set(action.payload.map((i: any) => i.id));
+          const incomingPairs = new Set(action.payload.map((i: any) => `${i.opnameId}_${i.ingredientId}`));
+          const filtered = prev.filter((i) => !incomingIds.has(i.id) && !incomingPairs.has(`${i.opnameId}_${i.ingredientId}`));
+          return [...filtered, ...action.payload];
+        });
+        break;
+      case "ADD_CLOSED_PERIOD":
+      case "CLOSE_PERIOD":
+        setClosedPeriods((prev) => [
+          ...prev.filter((p) => p.period !== action.payload.period),
+          {
+            id: action.payload.id || "cp_" + Date.now(),
+            period: action.payload.period,
+            closedAt: action.payload.closedAt || new Date().toISOString(),
+            closedBy: action.payload.user || action.payload.closedBy || "Manager",
+            notes: action.payload.notes || "",
+          },
+        ]);
+        break;
+      case "REMOVE_CLOSED_PERIOD":
+      case "REOPEN_PERIOD":
+        setClosedPeriods((prev) => prev.filter((p) => p.period !== (action.payload?.period || action.payload)));
         break;
       case "SET_STOCK_OPNAMES":
         setStockOpnames(action.payload);
@@ -2346,6 +2399,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         stockOpnames,
         addStockOpname: (o: StockOpname) => dispatch({ type: "ADD_STOCK_OPNAME", payload: o }),
         updateStockOpname: (o: StockOpname) => dispatch({ type: "UPDATE_STOCK_OPNAME", payload: o }),
+        deleteStockOpname: (id: string) => dispatch({ type: "DELETE_STOCK_OPNAME", payload: id }),
         stockOpnameItems,
         addStockOpnameItem: (i: StockOpnameItem) => dispatch({ type: "ADD_STOCK_OPNAME_ITEM", payload: i }),
         bulkAddStockOpnameItems: (items: StockOpnameItem[]) => dispatch({ type: "BULK_ADD_STOCK_OPNAME_ITEMS", payload: items }),

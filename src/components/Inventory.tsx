@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -31,11 +31,12 @@ import {
   Building2,
   ChevronRight,
   Eye,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
-import { Recipe, Ingredient, ViewState, StockOpname } from "../types";
+import { Recipe, Ingredient, ViewState, StockOpname, StockOpnameItem } from "../types";
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
@@ -161,21 +162,163 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     deleteIngredient,
     addStockMovement,
     addStockOpname,
+    updateStockOpname,
+    deleteStockOpname,
     addStockOpnameItem,
+    bulkAddStockOpnameItems,
     currentUser,
     isReadOnly,
     recipes,
     addRecipe,
     updateRecipe,
     deleteRecipe,
+    employees,
   } = useStore();
+
+  // User division resolution
+  const userRole = (currentUser?.role || "").toUpperCase();
+  const isManagerOrAdmin =
+    userRole === "SUPER_ADMIN" ||
+    userRole === "MANAGER" ||
+    userRole === "OWNER" ||
+    userRole === "FINANCE";
+
+  const userEmployee = useMemo(() => {
+    if (!currentUser) return null;
+    return (
+      employees.find(
+        (e) =>
+          e.username?.toLowerCase() === currentUser.username?.toLowerCase() ||
+          (currentUser.employeeId && e.id === currentUser.employeeId) ||
+          e.id === currentUser.id
+      ) || null
+    );
+  }, [currentUser, employees]);
+
+  // Determine user's assigned station division:
+  // "ALL" (for Manager/Admin/Finance/Owner) or "BAR" | "KITCHEN" | "BAKER"
+  const userDivision = useMemo<"ALL" | "BAR" | "KITCHEN" | "BAKER">(() => {
+    if (isManagerOrAdmin) return "ALL";
+
+    // 1. Check user.department
+    const userDept = (currentUser?.department || "").toUpperCase();
+    if (userDept.includes("KITCHEN") || userDept.includes("DAPUR") || userDept.includes("COOK")) return "KITCHEN";
+    if (userDept.includes("BAKER") || userDept.includes("PASTRY") || userDept.includes("ROTI")) return "BAKER";
+    if (userDept.includes("BAR")) return "BAR";
+
+    // 2. Check user.role
+    if (userRole === "KITCHEN") return "KITCHEN";
+    if (userRole === "BAKER") return "BAKER";
+    if (userRole === "BAR" || userRole === "KASIR") return "BAR";
+
+    // 3. Check matched employee department & position
+    if (userEmployee) {
+      const empDept = (userEmployee.department || "").toUpperCase();
+      const empPos = (userEmployee.position || "").toUpperCase();
+      if (empDept.includes("KITCHEN") || empPos.includes("KITCHEN") || empPos.includes("DAPUR") || empPos.includes("COOK")) return "KITCHEN";
+      if (empDept.includes("BAKER") || empPos.includes("BAKER") || empPos.includes("PASTRY") || empPos.includes("ROTI")) return "BAKER";
+      if (empDept.includes("BAR") || empPos.includes("BAR") || empPos.includes("BARISTA")) return "BAR";
+    }
+
+    // 4. Check name / username
+    const nameOrUser = `${currentUser?.name || ""} ${currentUser?.username || ""}`.toUpperCase();
+    if (nameOrUser.includes("KITCHEN") || nameOrUser.includes("DAPUR") || nameOrUser.includes("COOK")) return "KITCHEN";
+    if (nameOrUser.includes("BAKER") || nameOrUser.includes("PASTRY") || nameOrUser.includes("ROTI")) return "BAKER";
+
+    return "BAR";
+  }, [currentUser, userEmployee, userRole, isManagerOrAdmin]);
+
+  // Division classification helpers
+  const isBarItem = (ing: Ingredient) =>
+    ing.storageLocation === "BAR" ||
+    ing.storageLocation === "CHILLER" ||
+    ["coffee", "dairy", "pemanis", "air & es", "kondimen", "sirup", "powder", "kemasan", "biji kopi", "susu", "cup"].some((c) =>
+      ing.category.toLowerCase().includes(c)
+    );
+
+  const isKitchenItem = (ing: Ingredient) =>
+    ing.storageLocation === "KITCHEN" ||
+    ["kitchen", "makanan", "bumbu", "daging", "beras", "ayam", "sambal", "sayur", "minyak", "telur"].some((c) =>
+      ing.category.toLowerCase().includes(c)
+    );
+
+  const isBakeryItem = (ing: Ingredient) =>
+    ing.storageLocation === "BAKERY" ||
+    ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant", "keju", "yeast", "ragi"].some((c) =>
+      ing.category.toLowerCase().includes(c)
+    );
+
+  const isOperationalItem = (ing: Ingredient) =>
+    ing.storageLocation === "OPERATIONAL" ||
+    ["kebersihan", "operasional", "supplies", "sabun", "plastik", "tissue", "tisu", "cleaner", "sanitizer", "sponge"].some((c) =>
+      ing.category.toLowerCase().includes(c)
+    );
+
+  // Checks whether a given user division is permitted to view/audit this item
+  // Kebersihan & Operasional is shared across all stations so each division can clean their own station
+  const isIngredientAllowedForUser = (ing: Ingredient, div: "ALL" | "BAR" | "KITCHEN" | "BAKER") => {
+    if (div === "ALL") return true;
+    if (isOperationalItem(ing)) return true; // Shared supplies
+    if (div === "BAR") return isBarItem(ing);
+    if (div === "KITCHEN") return isKitchenItem(ing);
+    if (div === "BAKER") return isBakeryItem(ing);
+    return false;
+  };
+
+  // Division tabs allowed for current user
+  const allowedDivisionTabs = useMemo(() => {
+    if (isManagerOrAdmin) {
+      return [
+        { id: "ALL", label: "Semua Divisi", icon: Package },
+        { id: "BAR", label: "Divisi Bar", icon: Coffee },
+        { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
+        { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
+        { id: "OPERATIONAL", label: "Kebersihan & Operasional", icon: Sparkles },
+      ];
+    }
+    if (userDivision === "BAR") {
+      return [
+        { id: "BAR", label: "Divisi Bar", icon: Coffee },
+        { id: "OPERATIONAL", label: "Kebersihan & Operasional (Shared)", icon: Sparkles },
+      ];
+    }
+    if (userDivision === "KITCHEN") {
+      return [
+        { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
+        { id: "OPERATIONAL", label: "Kebersihan & Operasional (Shared)", icon: Sparkles },
+      ];
+    }
+    if (userDivision === "BAKER") {
+      return [
+        { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
+        { id: "OPERATIONAL", label: "Kebersihan & Operasional (Shared)", icon: Sparkles },
+      ];
+    }
+    return [
+      { id: "BAR", label: "Divisi Bar", icon: Coffee },
+      { id: "OPERATIONAL", label: "Kebersihan & Operasional (Shared)", icon: Sparkles },
+    ];
+  }, [isManagerOrAdmin, userDivision]);
+
+  const defaultDivisionFilter = useMemo<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(() => {
+    if (userDivision === "BAR") return "BAR";
+    if (userDivision === "KITCHEN") return "KITCHEN";
+    if (userDivision === "BAKER") return "BAKERY";
+    return "ALL";
+  }, [userDivision]);
 
   const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes">("ingredients");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDivision, setSelectedDivision] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
+  const [selectedDivision, setSelectedDivision] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(defaultDivisionFilter);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedLocation, setSelectedLocation] = useState<string>("ALL");
   const [selectedStockStatus, setSelectedStockStatus] = useState<"ALL" | "LOW_STOCK" | "SAFE">("ALL");
+
+  // Keep division filters synchronized with user station on mount/login change
+  useEffect(() => {
+    setSelectedDivision(defaultDivisionFilter);
+    setOpnameDivisionFilter(defaultDivisionFilter);
+  }, [defaultDivisionFilter]);
 
   // Modals state
   const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
@@ -211,12 +354,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [opnameId, setOpnameId] = useState("");
   const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
   const [opnameSearch, setOpnameSearch] = useState("");
-  const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
+  const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(defaultDivisionFilter);
   const [opnameCategoryFilter, setOpnameCategoryFilter] = useState("ALL");
   const [opnameInputMode, setOpnameInputMode] = useState<"BASE" | "PURCHASE">("PURCHASE");
   const [rowUnitModes, setRowUnitModes] = useState<Record<string, "PURCHASE" | "BASE">>({});
   const [opnameInputDrafts, setOpnameInputDrafts] = useState<Record<string, string>>({});
   const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
+
+  // Accessible ingredients according to user's station
+  const accessibleIngredients = useMemo(() => {
+    if (isManagerOrAdmin) return ingredients;
+    return ingredients.filter((i) => isIngredientAllowedForUser(i, userDivision));
+  }, [ingredients, isManagerOrAdmin, userDivision]);
+
+  const activeDrafts = useMemo(() => {
+    return stockOpnames.filter((op) => op.status === "DRAFT");
+  }, [stockOpnames]);
+
+  const latestDraft = activeDrafts.length > 0 ? activeDrafts[activeDrafts.length - 1] : null;
 
   // Open Modal for New Ingredient
   const handleOpenAddIngredient = () => {
@@ -332,6 +487,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   // Filtered ingredients
   const filteredIngredients = useMemo(() => {
     return ingredients.filter((i) => {
+      // Station division isolation for non-manager/admin
+      if (!isIngredientAllowedForUser(i, userDivision)) {
+        return false;
+      }
+
       const matchSearch =
         i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         i.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -339,30 +499,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       let matchDivision = true;
       if (selectedDivision === "BAR") {
-        matchDivision =
-          i.storageLocation === "BAR" ||
-          i.storageLocation === "CHILLER" ||
-          ["coffee", "dairy", "pemanis", "air & es", "kondimen", "sirup", "powder", "kemasan", "biji kopi", "susu"].some((c) =>
-            i.category.toLowerCase().includes(c)
-          );
+        matchDivision = isBarItem(i);
       } else if (selectedDivision === "KITCHEN") {
-        matchDivision =
-          i.storageLocation === "KITCHEN" ||
-          ["kitchen", "makanan", "bumbu", "daging", "beras", "ayam", "sambal"].some((c) =>
-            i.category.toLowerCase().includes(c)
-          );
+        matchDivision = isKitchenItem(i);
       } else if (selectedDivision === "BAKERY") {
-        matchDivision =
-          i.storageLocation === "BAKERY" ||
-          ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant"].some((c) =>
-            i.category.toLowerCase().includes(c)
-          );
+        matchDivision = isBakeryItem(i);
       } else if (selectedDivision === "OPERATIONAL") {
-        matchDivision =
-          i.storageLocation === "OPERATIONAL" ||
-          ["kebersihan", "operasional", "supplies", "sabun", "plastik"].some((c) =>
-            i.category.toLowerCase().includes(c)
-          );
+        matchDivision = isOperationalItem(i);
       }
 
       const matchCategory =
@@ -382,20 +525,20 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       return matchSearch && matchDivision && matchCategory && matchLocation && matchStatus;
     });
-  }, [ingredients, searchTerm, selectedDivision, selectedCategory, selectedLocation, selectedStockStatus]);
+  }, [ingredients, searchTerm, selectedDivision, selectedCategory, selectedLocation, selectedStockStatus, userDivision]);
 
-  // Overall statistics
+  // Overall statistics (scoped to accessible ingredients for station staff)
   const totalValuation = useMemo(() => {
-    return ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
-  }, [ingredients]);
+    return accessibleIngredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
+  }, [accessibleIngredients]);
 
   const lowStockCount = useMemo(() => {
-    return ingredients.filter((i) => i.currentStock <= i.minStock).length;
-  }, [ingredients]);
+    return accessibleIngredients.filter((i) => i.currentStock <= i.minStock).length;
+  }, [accessibleIngredients]);
 
   const outOfStockCount = useMemo(() => {
-    return ingredients.filter((i) => i.currentStock <= 0).length;
-  }, [ingredients]);
+    return accessibleIngredients.filter((i) => i.currentStock <= 0).length;
+  }, [accessibleIngredients]);
 
   const filteredRecipes = useMemo(() => {
     return recipes.filter((r) => r.menuName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -523,20 +666,28 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
   // Stock Opname
   const startOpname = () => {
-    const newId = typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+    const newId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
     setOpnameId(newId);
+
+    // Filter relevant ingredients according to user's division permissions
+    const relevantIngredients = isManagerOrAdmin
+      ? ingredients
+      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
+
     setOpnameItems(
-      ingredients.map((ing) => ({
+      relevantIngredients.map((ing) => ({
         ingredientId: ing.id,
         physicalStock: ing.currentStock,
         difference: 0,
         notes: "",
       }))
     );
+
     const initialDrafts: Record<string, string> = {};
-    ingredients.forEach((ing) => {
+    relevantIngredients.forEach((ing) => {
       const conv = getIngredientUnitConversion(ing);
       const isPurchase = opnameInputMode === "PURCHASE" && conv.hasConversion;
       const displayVal = isPurchase
@@ -544,11 +695,72 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         : ing.currentStock.toString();
       initialDrafts[ing.id] = displayVal;
     });
+
     setOpnameInputDrafts(initialDrafts);
     setRowUnitModes({});
     setOpnameSearch("");
     setOpnameCategoryFilter("ALL");
+    setOpnameDivisionFilter(defaultDivisionFilter);
     setIsOpnameMode(true);
+  };
+
+  const handleResumeDraft = (draft: StockOpname) => {
+    setOpnameId(draft.id);
+    const draftItems = stockOpnameItems.filter((i) => i.opnameId === draft.id);
+
+    const relevantIngredients = isManagerOrAdmin
+      ? ingredients
+      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
+
+    const populatedItems = relevantIngredients.map((ing) => {
+      const foundDraftItem = draftItems.find((di) => di.ingredientId === ing.id);
+      if (foundDraftItem) {
+        return {
+          ingredientId: ing.id,
+          physicalStock: foundDraftItem.physicalStock,
+          difference: foundDraftItem.difference,
+          notes: foundDraftItem.notes || "",
+        };
+      }
+      return {
+        ingredientId: ing.id,
+        physicalStock: ing.currentStock,
+        difference: 0,
+        notes: "",
+      };
+    });
+
+    setOpnameItems(populatedItems);
+
+    const populatedDrafts: Record<string, string> = {};
+    populatedItems.forEach((item) => {
+      const ing = ingredients.find((i) => i.id === item.ingredientId);
+      if (!ing) return;
+      const conv = getIngredientUnitConversion(ing);
+      const isPurchase = opnameInputMode === "PURCHASE" && conv.hasConversion;
+      const displayVal = isPurchase
+        ? (Math.round((item.physicalStock / conv.conversionFactor) * 1000) / 1000).toString()
+        : item.physicalStock.toString();
+      populatedDrafts[item.ingredientId] = displayVal;
+    });
+
+    setOpnameInputDrafts(populatedDrafts);
+    setRowUnitModes({});
+    setOpnameSearch("");
+    setOpnameCategoryFilter("ALL");
+    setOpnameDivisionFilter(defaultDivisionFilter);
+    setIsOpnameMode(true);
+    setSelectedOpnameForView(null);
+  };
+
+  const handleDeleteDraft = (draftId: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus draf stok opname ini? Data draf yang belum difinalisasi akan dihapus permanen.")) {
+      return;
+    }
+    deleteStockOpname(draftId);
+    if (selectedOpnameForView?.id === draftId) {
+      setSelectedOpnameForView(null);
+    }
   };
 
   const handleToggleGlobalOpnameMode = () => {
@@ -643,22 +855,34 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   };
 
   const saveOpname = (status: "DRAFT" | "FINAL") => {
+    const existingOp = stockOpnames.find((op) => op.id === opnameId);
+    const currentTimestamp = new Date().toISOString();
+
     const opname: StockOpname = {
       id: opnameId,
-      date: new Date().toISOString(),
+      date: currentTimestamp,
       status,
-      notes: "Stock Opname Periodik",
-      createdBy: currentUser?.name || "System",
-      createdAt: new Date().toISOString(),
+      notes: existingOp?.notes || (status === "DRAFT" ? "Draf Stok Opname" : "Stock Opname Periodik"),
+      createdBy: existingOp?.createdBy || currentUser?.name || "System",
+      createdAt: existingOp?.createdAt || currentTimestamp,
     };
-    addStockOpname(opname);
 
-    opnameItems.forEach((item) => {
+    if (existingOp) {
+      updateStockOpname(opname);
+    } else {
+      addStockOpname(opname);
+    }
+
+    const itemsToSave: StockOpnameItem[] = opnameItems.map((item) => {
       const ing = ingredients.find((i) => i.id === item.ingredientId);
-      const itemId = typeof crypto !== "undefined" && crypto.randomUUID
+      const existingItem = stockOpnameItems.find((oi) => oi.opnameId === opnameId && oi.ingredientId === item.ingredientId);
+      const itemId = existingItem
+        ? existingItem.id
+        : typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : "opi_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
-      addStockOpnameItem({
+
+      return {
         id: itemId,
         opnameId: opname.id,
         ingredientId: item.ingredientId,
@@ -666,26 +890,36 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         physicalStock: item.physicalStock,
         difference: item.difference,
         notes: item.notes || null,
-      });
-
-      if (status === "FINAL" && item.difference !== 0) {
-        addStockMovement({
-          ingredientId: item.ingredientId,
-          type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
-          quantity: Math.abs(item.difference),
-          date: new Date().toISOString(),
-          note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
-          createdBy: currentUser?.name || "System",
-        });
-
-        if (ing) {
-          updateIngredient({
-            ...ing,
-            currentStock: item.physicalStock,
-          });
-        }
-      }
+      };
     });
+
+    bulkAddStockOpnameItems(itemsToSave);
+
+    if (status === "FINAL") {
+      opnameItems.forEach((item) => {
+        const ing = ingredients.find((i) => i.id === item.ingredientId);
+        if (item.difference !== 0) {
+          addStockMovement({
+            ingredientId: item.ingredientId,
+            type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
+            quantity: Math.abs(item.difference),
+            date: currentTimestamp,
+            note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
+            createdBy: currentUser?.name || "System",
+          });
+
+          if (ing) {
+            updateIngredient({
+              ...ing,
+              currentStock: item.physicalStock,
+            });
+          }
+        }
+      });
+      alert("✅ Stok opname berhasil difinalisasi! Penyesuaian stok telah dicatat ke kartu stok bahan baku.");
+    } else {
+      alert("💾 Draf stok opname berhasil disimpan! Anda dapat melanjutkan kembali perhitungan kapan saja melalui tombol 'Lanjutkan Draf'.");
+    }
 
     setIsOpnameMode(false);
   };
@@ -709,7 +943,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               {formatCurrency(totalValuation)}
             </p>
             <p className="text-[11px] text-stone-500 mt-1">
-              Dari <strong>{ingredients.length}</strong> bahan baku terdaftar
+              Dari <strong>{accessibleIngredients.length}</strong> bahan baku {!isManagerOrAdmin ? "stasiun Anda" : "terdaftar"}
             </p>
           </div>
         </div>
@@ -959,8 +1193,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  if (ingredients.length === 0) return alert("Tambahkan bahan baku terlebih dahulu.");
-                  setSelectedIngredientForMove(ingredients[0].id);
+                  if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+                  setSelectedIngredientForMove(accessibleIngredients[0].id);
                   setMovementType("WASTE");
                   setMovementNote("Kalibrasi Grinder Pagi");
                   setIsAddMovementOpen(true);
@@ -973,8 +1207,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
               <button
                 onClick={() => {
-                  if (ingredients.length === 0) return alert("Tambahkan bahan baku terlebih dahulu.");
-                  setSelectedIngredientForMove(ingredients[0].id);
+                  if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+                  setSelectedIngredientForMove(accessibleIngredients[0].id);
                   setMovementType(currentUser?.role === "LEADER" ? "USAGE" : "OUT");
                   setMovementNote("");
                   setIsAddMovementOpen(true);
@@ -1018,34 +1252,36 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
           {/* Filter Bar: Search, Category Pills, Location, Status */}
           <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200/80 shadow-coffee-sm space-y-4">
             {/* Division Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-stone-100 scrollbar-none">
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
-                Divisi:
-              </span>
-              {[
-                { id: "ALL", label: "Semua Divisi", icon: Package },
-                { id: "BAR", label: "Divisi Bar", icon: Coffee },
-                { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
-                { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
-                { id: "OPERATIONAL", label: "Kebersihan & Operasional", icon: Sparkles },
-              ].map((div) => {
-                const Icon = div.icon;
-                const isSelected = selectedDivision === div.id;
-                return (
-                  <button
-                    key={div.id}
-                    onClick={() => setSelectedDivision(div.id as any)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      isSelected
-                        ? "bg-amber-800 text-white shadow-coffee-sm"
-                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{div.label}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center justify-between pb-2 border-b border-stone-100 gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
+                  Divisi:
+                </span>
+                {allowedDivisionTabs.map((div) => {
+                  const Icon = div.icon;
+                  const isSelected = selectedDivision === div.id;
+                  return (
+                    <button
+                      key={div.id}
+                      onClick={() => setSelectedDivision(div.id as any)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        isSelected
+                          ? "bg-amber-800 text-white shadow-coffee-sm"
+                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{div.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {!isManagerOrAdmin && (
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] font-bold text-amber-900 shrink-0">
+                  <Sparkles className="w-3 h-3 text-amber-700" />
+                  <span>Stasiun: {userDivision === "BAR" ? "Bar" : userDivision === "KITCHEN" ? "Kitchen" : "Bakery"} & Kebersihan Bersama</span>
+                </div>
+              )}
             </div>
 
             {/* Row 1: Search & Dropdowns */}
@@ -1471,13 +1707,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   <span className="text-[10px] font-bold text-amber-900/60 uppercase tracking-wider shrink-0 mr-1">
                     Filter Divisi Opname:
                   </span>
-                  {[
-                    { id: "ALL", label: "Semua Divisi", icon: Package },
-                    { id: "BAR", label: "Divisi Bar", icon: Coffee },
-                    { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
-                    { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
-                    { id: "OPERATIONAL", label: "Operasional & Kebersihan", icon: Sparkles },
-                  ].map((div) => {
+                  {allowedDivisionTabs.map((div) => {
                     const Icon = div.icon;
                     const isSelected = opnameDivisionFilter === div.id;
                     return (
@@ -1571,6 +1801,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       .filter((item) => {
                         const ing = ingredients.find((i) => i.id === item.ingredientId);
                         if (!ing) return false;
+
+                        // Strict station isolation: non-managers cannot view or touch other stations
+                        if (!isIngredientAllowedForUser(ing, userDivision)) return false;
+
                         const matchSearch =
                           ing.name.toLowerCase().includes(opnameSearch.toLowerCase()) ||
                           (ing.code && ing.code.toLowerCase().includes(opnameSearch.toLowerCase()));
@@ -1579,30 +1813,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                         let matchDivision = true;
                         if (opnameDivisionFilter === "BAR") {
-                          matchDivision =
-                            ing.storageLocation === "BAR" ||
-                            ing.storageLocation === "CHILLER" ||
-                            ["coffee", "dairy", "pemanis", "air & es", "kondimen", "sirup", "powder", "kemasan", "biji kopi", "susu"].some((c) =>
-                              ing.category.toLowerCase().includes(c)
-                            );
+                          matchDivision = isBarItem(ing);
                         } else if (opnameDivisionFilter === "KITCHEN") {
-                          matchDivision =
-                            ing.storageLocation === "KITCHEN" ||
-                            ["kitchen", "makanan", "bumbu", "daging", "beras", "ayam", "sambal"].some((c) =>
-                              ing.category.toLowerCase().includes(c)
-                            );
+                          matchDivision = isKitchenItem(ing);
                         } else if (opnameDivisionFilter === "BAKERY") {
-                          matchDivision =
-                            ing.storageLocation === "BAKERY" ||
-                            ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant"].some((c) =>
-                              ing.category.toLowerCase().includes(c)
-                            );
+                          matchDivision = isBakeryItem(ing);
                         } else if (opnameDivisionFilter === "OPERATIONAL") {
-                          matchDivision =
-                            ing.storageLocation === "OPERATIONAL" ||
-                            ["kebersihan", "operasional", "supplies", "sabun", "plastik"].some((c) =>
-                              ing.category.toLowerCase().includes(c)
-                            );
+                          matchDivision = isOperationalItem(ing);
                         }
 
                         return matchSearch && matchCategory && matchDivision;
@@ -1736,6 +1953,49 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Active Draft Alert Banner */}
+              {activeDrafts.length > 0 && latestDraft && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl p-5 shadow-coffee-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-800 text-white flex items-center justify-center shadow-coffee-sm shrink-0">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-950 bg-amber-200/90 px-2.5 py-0.5 rounded-md">
+                          Draf Aktif Tersimpan
+                        </span>
+                        <span className="text-xs font-semibold text-stone-500">
+                          {activeDrafts.length} sesi belum difinalisasi
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-stone-900 mt-1">
+                        Draf terakhir oleh <strong className="text-amber-900 font-extrabold">{latestDraft.createdBy}</strong> ({new Date(latestDraft.date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WIB)
+                      </h4>
+                      <p className="text-[11px] text-stone-600 mt-0.5">
+                        Hitungan fisik sebelumnya telah tersimpan di sistem. Anda dapat langsung melanjutkan pengisian tanpa harus mengulang dari nol.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+                    <button
+                      onClick={() => handleResumeDraft(latestDraft)}
+                      className="flex-1 md:flex-initial px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02]"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Lanjutkan Draf Terakhir</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDraft(latestDraft.id)}
+                      className="p-2.5 bg-white border border-stone-200 hover:bg-rose-50 text-stone-600 hover:text-rose-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                      title="Hapus draf ini"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Card Utama Stok Opname */}
               <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-gradient-to-r from-stone-50 via-amber-50/30 to-stone-50 rounded-2xl border border-amber-100">
@@ -1746,7 +2006,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     <div>
                       <h4 className="text-base font-bold text-stone-900">Audit Fisik Stok (Stok Opname)</h4>
                       <p className="text-xs text-stone-600 mt-1 max-w-xl leading-relaxed">
-                        Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di bar dengan catatan sistem kasir. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
+                        Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di stasiun dengan catatan sistem kasir. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
                       </p>
                     </div>
                   </div>
@@ -1769,7 +2029,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     </div>
                     <div className="text-xs font-bold text-stone-800">Hitung Riil Bahan Baku</div>
                     <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
-                      Barista / Leader menimbang biji kopi, volume susu, atau bahan di bar dan masukkan jumlah fisik ke sistem.
+                      Barista / Leader menimbang biji kopi, volume susu, atau bahan di stasiun dan masukkan jumlah fisik ke sistem.
                     </p>
                   </div>
                   <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
@@ -1800,7 +2060,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     <div>
                       <h3 className="font-bold text-stone-900 text-sm">Riwayat Sesi Stok Opname</h3>
                       <p className="text-xs text-stone-500 mt-0.5">
-                        Daftar seluruh audit fisik berkala yang pernah dilakukan tim bar & supervisor.
+                        Daftar seluruh audit fisik berkala yang pernah dilakukan tim stasiun & supervisor.
                       </p>
                     </div>
                     <span className="px-3 py-1 bg-stone-100 rounded-full text-stone-700 text-xs font-bold">
@@ -1869,13 +2129,34 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                   )}
                                 </td>
                                 <td className="p-3.5 text-center">
-                                  <button
-                                    onClick={() => setSelectedOpnameForView(op)}
-                                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    <span>Lihat Rincian</span>
-                                  </button>
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {op.status === "DRAFT" && (
+                                      <>
+                                        <button
+                                          onClick={() => handleResumeDraft(op)}
+                                          className="px-2.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs hover:scale-105"
+                                          title="Lanjutkan pengisian draf ini"
+                                        >
+                                          <Edit2 className="w-3 h-3" />
+                                          <span>Lanjutkan</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteDraft(op.id)}
+                                          className="p-1.5 bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
+                                          title="Hapus draf ini"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                    <button
+                                      onClick={() => setSelectedOpnameForView(op)}
+                                      className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>{op.status === "DRAFT" ? "Rincian" : "Lihat Rincian"}</span>
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2395,7 +2676,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   onChange={(e) => setSelectedIngredientForMove(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
                 >
-                  {ingredients.map((ing) => (
+                  {accessibleIngredients.map((ing) => (
                     <option key={ing.id} value={ing.id}>
                       {ing.name} (Sisa: {ing.currentStock.toLocaleString("id-ID")} {ing.unit})
                     </option>
@@ -2584,13 +2865,35 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-stone-100 bg-stone-50/50 flex justify-end">
-              <button
-                onClick={() => setSelectedOpnameForView(null)}
-                className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Tutup
-              </button>
+            <div className="p-4 border-t border-stone-100 bg-stone-50/50 flex justify-between items-center">
+              <div>
+                {selectedOpnameForView.status === "DRAFT" && (
+                  <button
+                    onClick={() => handleDeleteDraft(selectedOpnameForView.id)}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 border border-rose-200 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Draf</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedOpnameForView.status === "DRAFT" && (
+                  <button
+                    onClick={() => handleResumeDraft(selectedOpnameForView)}
+                    className="px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-coffee-sm transition-all"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Lanjutkan Draf Ini</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedOpnameForView(null)}
+                  className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>,
