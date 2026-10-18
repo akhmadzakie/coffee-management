@@ -837,6 +837,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             leaderKitchenTasks: parseArr(s.leaderKitchenTasks),
             leaderBakerTasks: parseArr(s.leaderBakerTasks),
             managerTasks: parseArr(s.managerTasks),
+            leaderJobdeskAllowanceRules: parseArr(s.leaderJobdeskAllowanceRules).length > 0
+              ? parseArr(s.leaderJobdeskAllowanceRules)
+              : (settings?.leaderJobdeskAllowanceRules && settings.leaderJobdeskAllowanceRules.length > 0
+                  ? settings.leaderJobdeskAllowanceRules
+                  : DEFAULT_LEADER_ALLOWANCE_RULES),
             shiftDefinitions: parseArr(s.shiftDefinitions).length > 0 ? parseArr(s.shiftDefinitions) : DEFAULT_SHIFT_DEFINITIONS,
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
@@ -1192,6 +1197,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
     } catch {}
     markChanged();
+
+    // Kirim sinkronisasi langsung ke server agar tidak ter-rollback oleh background polling
+    const token = localStorage.getItem("node_session_id");
+    if (token) {
+      fetch("/api/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          settings: newSettings,
+        }),
+      }).then((res) => {
+        if (res.ok) {
+          hasLocalChanges.current = false;
+        }
+      }).catch((err) => console.warn("Direct settings sync failed:", err));
+    }
   };
 
   const login = async (username: string, pin: string) => {

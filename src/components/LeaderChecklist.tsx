@@ -278,6 +278,7 @@ export const LeaderChecklist: React.FC = () => {
   const [inspectedDivision, setInspectedDivision] = useState<Division>("BAR");
   // Setting template state for supervisor
   const [editingDivision, setEditingDivision] = useState<Division>("BAR");
+  const [isTasksDirty, setIsTasksDirty] = useState(false);
   const [barCategories, setBarCategories] = useState<TaskCategoryGroup[]>(() =>
     ensureCategoryArray(settings?.leaderBarTasks, DEFAULT_BAR_CATEGORIES)
   );
@@ -438,12 +439,22 @@ export const LeaderChecklist: React.FC = () => {
     setOperationalRoleFilter(isLeaderRole ? "LEADER" : "STAFF");
   }, [isLeaderRole]);
 
-  // Synchronize tasks when settings change
+  // Synchronize tasks when settings change, but never overwrite while user is editing
   React.useEffect(() => {
-    setBarCategories(ensureCategoryArray(settings?.leaderBarTasks, DEFAULT_BAR_CATEGORIES));
-    setKitchenCategories(ensureCategoryArray(settings?.leaderKitchenTasks, DEFAULT_KITCHEN_CATEGORIES));
-    setBakerCategories(ensureCategoryArray(settings?.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES));
-  }, [settings]);
+    if (isTasksDirty) return;
+    if (settings?.leaderBarTasks) {
+      setBarCategories(ensureCategoryArray(settings.leaderBarTasks, DEFAULT_BAR_CATEGORIES));
+    }
+    if (settings?.leaderKitchenTasks) {
+      setKitchenCategories(ensureCategoryArray(settings.leaderKitchenTasks, DEFAULT_KITCHEN_CATEGORIES));
+    }
+    if (settings?.leaderBakerTasks) {
+      setBakerCategories(ensureCategoryArray(settings.leaderBakerTasks, DEFAULT_BAKER_CATEGORIES));
+    }
+    if (settings?.leaderJobdeskAllowanceRules && settings.leaderJobdeskAllowanceRules.length > 0) {
+      setAllowanceRules(settings.leaderJobdeskAllowanceRules);
+    }
+  }, [settings, isTasksDirty]);
 
 
   // Master categories getter by division
@@ -697,6 +708,7 @@ export const LeaderChecklist: React.FC = () => {
     editingDivision === "KITCHEN" ? kitchenCategories : bakerCategories;
 
   const setCurrentEditingCategories = (newCats: TaskCategoryGroup[]) => {
+    setIsTasksDirty(true);
     if (editingDivision === "BAR") setBarCategories(newCats);
     else if (editingDivision === "KITCHEN") setKitchenCategories(newCats);
     else setBakerCategories(newCats);
@@ -805,17 +817,20 @@ export const LeaderChecklist: React.FC = () => {
 
   const handleResetToDefault = () => {
     if (!window.confirm("Kembalikan daftar kategori & sub-tugas divisi ini ke standar sistem?")) return;
+    setIsTasksDirty(true);
     if (editingDivision === "BAR") setBarCategories(DEFAULT_BAR_CATEGORIES);
     else if (editingDivision === "KITCHEN") setKitchenCategories(DEFAULT_KITCHEN_CATEGORIES);
     else setBakerCategories(DEFAULT_BAKER_CATEGORIES);
   };
 
   const handleSaveSettings = () => {
+    setIsTasksDirty(false);
     updateSettings({
       ...settings,
       leaderBarTasks: barCategories,
       leaderKitchenTasks: kitchenCategories,
       leaderBakerTasks: bakerCategories,
+      leaderJobdeskAllowanceRules: allowanceRules,
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 3000);

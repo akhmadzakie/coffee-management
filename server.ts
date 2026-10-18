@@ -792,32 +792,39 @@ async function startServer() {
     isDefault: Boolean(a.isDefault),
   });
 
-  const sanitizeSettings = (st: any) => ({
-    id: "1",
-    logoDataUrl: st?.logoDataUrl || null,
-    brandName: String(st?.brandName || "Julia's Management System"),
-    companyAddress: String(st?.companyAddress || ""),
-    bankDetails: String(st?.bankDetails || ""),
-    salesPerson: String(st?.salesPerson || ""),
-    footerMessage: String(st?.footerMessage || ""),
-    language: String(st?.language || "id"),
-    leaderBarTasks: Array.isArray(st?.leaderBarTasks) ? JSON.stringify(st.leaderBarTasks) : (st?.leaderBarTasks || "[]"),
-    leaderKitchenTasks: Array.isArray(st?.leaderKitchenTasks) ? JSON.stringify(st.leaderKitchenTasks) : (st?.leaderKitchenTasks || "[]"),
-    leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
-    managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
-    gemini_api_key: st?.gemini_api_key || st?.geminiApiKey || process.env.GEMINI_API_KEY || null,
-    taxEnabled: Boolean(st?.taxEnabled ?? false),
-    taxRate: Number(st?.taxRate ?? 10),
-    taxMode: String(st?.taxMode || "EXCLUSIVE"),
-    maxCashierDiscount: Number(st?.maxCashierDiscount ?? 10),
-    monthlyRevenueTarget: Number(st?.monthlyRevenueTarget !== undefined ? st.monthlyRevenueTarget : 150000000),
-    targetBonusAmount: Number(st?.targetBonusAmount !== undefined ? st.targetBonusAmount : 0),
-    divisionKpiBonusTarget: typeof st?.divisionKpiBonusTarget === "object" ? JSON.stringify(st.divisionKpiBonusTarget) : String(st?.divisionKpiBonusTarget || "{}"),
-    scheduleApprovals: typeof st?.scheduleApprovals === "object" ? JSON.stringify(st.scheduleApprovals) : String(st?.scheduleApprovals || "{}"),
-    enableStoreSalesBonus: st?.enableStoreSalesBonus !== false,
-    enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
-    enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
-  });
+  const sanitizeSettings = (st: any) => {
+    const divTarget = typeof st?.divisionKpiBonusTarget === "object" ? { ...st.divisionKpiBonusTarget } : {};
+    if (st?.leaderJobdeskAllowanceRules && Array.isArray(st.leaderJobdeskAllowanceRules)) {
+      divTarget.__leaderAllowanceRules = st.leaderJobdeskAllowanceRules;
+    }
+
+    return {
+      id: "1",
+      logoDataUrl: st?.logoDataUrl || null,
+      brandName: String(st?.brandName || "Julia's Management System"),
+      companyAddress: String(st?.companyAddress || ""),
+      bankDetails: String(st?.bankDetails || ""),
+      salesPerson: String(st?.salesPerson || ""),
+      footerMessage: String(st?.footerMessage || ""),
+      language: String(st?.language || "id"),
+      leaderBarTasks: Array.isArray(st?.leaderBarTasks) ? JSON.stringify(st.leaderBarTasks) : (st?.leaderBarTasks || "[]"),
+      leaderKitchenTasks: Array.isArray(st?.leaderKitchenTasks) ? JSON.stringify(st.leaderKitchenTasks) : (st?.leaderKitchenTasks || "[]"),
+      leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
+      managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
+      gemini_api_key: st?.gemini_api_key || st?.geminiApiKey || process.env.GEMINI_API_KEY || null,
+      taxEnabled: Boolean(st?.taxEnabled ?? false),
+      taxRate: Number(st?.taxRate ?? 10),
+      taxMode: String(st?.taxMode || "EXCLUSIVE"),
+      maxCashierDiscount: Number(st?.maxCashierDiscount ?? 10),
+      monthlyRevenueTarget: Number(st?.monthlyRevenueTarget !== undefined ? st.monthlyRevenueTarget : 150000000),
+      targetBonusAmount: Number(st?.targetBonusAmount !== undefined ? st.targetBonusAmount : 0),
+      divisionKpiBonusTarget: JSON.stringify(divTarget),
+      scheduleApprovals: typeof st?.scheduleApprovals === "object" ? JSON.stringify(st.scheduleApprovals) : String(st?.scheduleApprovals || "{}"),
+      enableStoreSalesBonus: st?.enableStoreSalesBonus !== false,
+      enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
+      enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
+    };
+  };
 
   const sanitizeUser = (u: any) => {
     let role = String(u.role || "MANAGER");
@@ -1304,6 +1311,12 @@ async function startServer() {
         }
       };
 
+      const rawDivTarget = parseObjSafe(rawSettings.divisionKpiBonusTarget);
+      const allowanceRules = Array.isArray(rawDivTarget.__leaderAllowanceRules)
+        ? rawDivTarget.__leaderAllowanceRules
+        : (Array.isArray(rawSettings.leaderJobdeskAllowanceRules) ? rawSettings.leaderJobdeskAllowanceRules : []);
+      delete rawDivTarget.__leaderAllowanceRules;
+
       const formattedSettings = {
         ...rawSettings,
         geminiApiKey: effectiveApiKey,
@@ -1312,9 +1325,10 @@ async function startServer() {
         leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
         leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
         managerTasks: parseTasksJson(rawSettings.managerTasks),
+        leaderJobdeskAllowanceRules: allowanceRules,
         monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
-        divisionKpiBonusTarget: parseObjSafe(rawSettings.divisionKpiBonusTarget),
+        divisionKpiBonusTarget: rawDivTarget,
         scheduleApprovals: parseObjSafe(rawSettings.scheduleApprovals),
         enableStoreSalesBonus: rawSettings.enableStoreSalesBonus !== false,
         enableLeaderAllowanceBonus: rawSettings.enableLeaderAllowanceBonus !== false,
@@ -1470,10 +1484,6 @@ async function startServer() {
 
       if (!requestUser) {
         return res.status(401).json({ error: "Unauthorized: User not found" });
-      }
-
-      if (requestUser.role === "OWNER") {
-         return res.status(403).json({ error: "Forbidden: Read-only access" });
       }
 
       if (!isDbConnected && offlineState) {
