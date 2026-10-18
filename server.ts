@@ -1256,10 +1256,10 @@ async function startServer() {
                   category: String(prod.category || "COFFEE"),
                   division: String(prod.division || "BAR"),
                   description: prod.description || null,
-                  imageUrl: prod.imageUrl || null,
+                  imageUrl: (prod as any).imageUrl || null,
                   isActive: Boolean(prod.isActive !== false),
                   variants: prod.variants || [],
-                  modifierGroups: prod.modifierGroups || [],
+                  modifierGroups: (prod as any).modifierGroups || [],
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 });

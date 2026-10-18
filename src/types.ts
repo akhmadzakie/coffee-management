@@ -397,6 +397,7 @@ export interface CashTransaction {
   category: string; // kept for backward compat
   categoryId?: string | null; // FK to ExpenseCategory
   referenceId?: string;
+  createdBy?: string;
 }
 
 export interface Ingredient {

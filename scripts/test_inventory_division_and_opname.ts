@@ -87,7 +87,7 @@ function runTests() {
   const testIng = ingredients.find((i) => i.id === "ing-fresh-milk") || ingredients[0];
   const systemStock = testIng.currentStock; // e.g. 18000 ml
   const physicalCount = 17500; // 500 ml deficit (tumpah/steaming)
-  const difference = physicalCount - systemStock; // -500
+  const difference: number = physicalCount - systemStock; // -500
 
   console.log(`- Item Audited: ${testIng.name}`);
   console.log(`- System Stock: ${systemStock} ${testIng.unit}`);
@@ -127,7 +127,7 @@ function runTests() {
   });
 
   // Apply finalization movement
-  if (difference !== 0) {
+  if ((difference as number) !== 0) {
     movements.push({
       id: "mov_1",
       ingredientId: testIng.id,

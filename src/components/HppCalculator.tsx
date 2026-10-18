@@ -1215,7 +1215,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             className="w-full text-xs font-medium px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-700"
                           >
                             <option value="">-- Input Bahan Kustom --</option>
-                            {Object.entries(groupedIngredients).map(([cat, list]) => (
+                            {(Object.entries(groupedIngredients) as [string, Ingredient[]][]).map(([cat, list]) => (
                               <optgroup key={cat} label={`📂 ${cat}`}>
                                 {list.map((ing) => {
                                   const isLow = ing.currentStock <= ing.minStock;
