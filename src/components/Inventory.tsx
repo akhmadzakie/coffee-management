@@ -50,6 +50,7 @@ export const PRESET_CATEGORIES = [
   { id: "Kitchen & Makanan", name: "Kitchen & Makanan", icon: UtensilsCrossed },
   { id: "Bakery & Pastry", name: "Bakery & Pastry", icon: Cake },
   { id: "Kemasan & Cup", name: "Kemasan & Cup", icon: ShoppingBag },
+  { id: "Kebersihan & Operasional", name: "Kebersihan & Operasional", icon: Sparkles },
   { id: "Lainnya", name: "Lainnya", icon: Layers },
 ];
 
@@ -60,6 +61,7 @@ export const PRESET_LOCATIONS = [
   { id: "DRY_STORAGE", label: "Gudang Kering (Dry Storage)" },
   { id: "KITCHEN", label: "Kitchen / Dapur Makanan" },
   { id: "BAKERY", label: "Bakery & Pastry Station" },
+  { id: "OPERATIONAL", label: "Gudang Operasional & Kebersihan" },
 ];
 
 export const PURCHASE_UNIT_PRESETS = [
@@ -105,6 +107,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
   const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes">("ingredients");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDivision, setSelectedDivision] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedLocation, setSelectedLocation] = useState<string>("ALL");
   const [selectedStockStatus, setSelectedStockStatus] = useState<"ALL" | "LOW_STOCK" | "SAFE">("ALL");
@@ -143,6 +146,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [opnameId, setOpnameId] = useState("");
   const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
   const [opnameSearch, setOpnameSearch] = useState("");
+  const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
   const [opnameCategoryFilter, setOpnameCategoryFilter] = useState("ALL");
   const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
 
@@ -265,6 +269,34 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         i.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (i.code && i.code.toLowerCase().includes(searchTerm.toLowerCase()));
 
+      let matchDivision = true;
+      if (selectedDivision === "BAR") {
+        matchDivision =
+          i.storageLocation === "BAR" ||
+          i.storageLocation === "CHILLER" ||
+          ["coffee", "dairy", "pemanis", "air & es", "kondimen", "sirup", "powder", "kemasan", "biji kopi", "susu"].some((c) =>
+            i.category.toLowerCase().includes(c)
+          );
+      } else if (selectedDivision === "KITCHEN") {
+        matchDivision =
+          i.storageLocation === "KITCHEN" ||
+          ["kitchen", "makanan", "bumbu", "daging", "beras", "ayam", "sambal"].some((c) =>
+            i.category.toLowerCase().includes(c)
+          );
+      } else if (selectedDivision === "BAKERY") {
+        matchDivision =
+          i.storageLocation === "BAKERY" ||
+          ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant"].some((c) =>
+            i.category.toLowerCase().includes(c)
+          );
+      } else if (selectedDivision === "OPERATIONAL") {
+        matchDivision =
+          i.storageLocation === "OPERATIONAL" ||
+          ["kebersihan", "operasional", "supplies", "sabun", "plastik"].some((c) =>
+            i.category.toLowerCase().includes(c)
+          );
+      }
+
       const matchCategory =
         selectedCategory === "ALL" ||
         i.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
@@ -280,9 +312,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         (selectedStockStatus === "LOW_STOCK" && isLow) ||
         (selectedStockStatus === "SAFE" && !isLow);
 
-      return matchSearch && matchCategory && matchLocation && matchStatus;
+      return matchSearch && matchDivision && matchCategory && matchLocation && matchStatus;
     });
-  }, [ingredients, searchTerm, selectedCategory, selectedLocation, selectedStockStatus]);
+  }, [ingredients, searchTerm, selectedDivision, selectedCategory, selectedLocation, selectedStockStatus]);
 
   // Overall statistics
   const totalValuation = useMemo(() => {
@@ -840,6 +872,37 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         <div className="space-y-4">
           {/* Filter Bar: Search, Category Pills, Location, Status */}
           <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200/80 shadow-coffee-sm space-y-4">
+            {/* Division Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-stone-100 scrollbar-none">
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
+                Divisi:
+              </span>
+              {[
+                { id: "ALL", label: "Semua Divisi", icon: Package },
+                { id: "BAR", label: "Divisi Bar", icon: Coffee },
+                { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
+                { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
+                { id: "OPERATIONAL", label: "Kebersihan & Operasional", icon: Sparkles },
+              ].map((div) => {
+                const Icon = div.icon;
+                const isSelected = selectedDivision === div.id;
+                return (
+                  <button
+                    key={div.id}
+                    onClick={() => setSelectedDivision(div.id as any)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      isSelected
+                        ? "bg-amber-800 text-white shadow-coffee-sm"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{div.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Row 1: Search & Dropdowns */}
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="relative flex-1 w-full">
@@ -1251,41 +1314,74 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
 
               {/* Filter & Search Bar */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Cari bahan baku opname..."
-                    className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800 focus:bg-white transition-all"
-                    value={opnameSearch}
-                    onChange={(e) => setOpnameSearch(e.target.value)}
-                  />
+              <div className="space-y-3">
+                {/* Division Filter for Opname */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  <span className="text-[10px] font-bold text-amber-900/60 uppercase tracking-wider shrink-0 mr-1">
+                    Filter Divisi Opname:
+                  </span>
+                  {[
+                    { id: "ALL", label: "Semua Divisi", icon: Package },
+                    { id: "BAR", label: "Divisi Bar", icon: Coffee },
+                    { id: "KITCHEN", label: "Divisi Kitchen", icon: UtensilsCrossed },
+                    { id: "BAKERY", label: "Divisi Bakery & Pastry", icon: Cake },
+                    { id: "OPERATIONAL", label: "Operasional & Kebersihan", icon: Sparkles },
+                  ].map((div) => {
+                    const Icon = div.icon;
+                    const isSelected = opnameDivisionFilter === div.id;
+                    return (
+                      <button
+                        key={div.id}
+                        onClick={() => setOpnameDivisionFilter(div.id as any)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          isSelected
+                            ? "bg-amber-800 text-white shadow-coffee-sm"
+                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{div.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-                  <button
-                    onClick={() => setOpnameCategoryFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      opnameCategoryFilter === "ALL"
-                        ? "bg-amber-800 text-white"
-                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                    }`}
-                  >
-                    Semua ({ingredients.length})
-                  </button>
-                  {Array.from(new Set(ingredients.map((i) => i.category))).map((cat) => (
+
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Cari bahan baku opname..."
+                      className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800 focus:bg-white transition-all"
+                      value={opnameSearch}
+                      onChange={(e) => setOpnameSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
                     <button
-                      key={cat}
-                      onClick={() => setOpnameCategoryFilter(cat)}
+                      onClick={() => setOpnameCategoryFilter("ALL")}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                        opnameCategoryFilter === cat
-                          ? "bg-amber-800 text-white"
+                        opnameCategoryFilter === "ALL"
+                          ? "bg-stone-900 text-white"
                           : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                       }`}
                     >
-                      {cat}
+                      Semua Kategori
                     </button>
-                  ))}
+                    {Array.from(new Set(ingredients.map((i) => i.category))).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setOpnameCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          opnameCategoryFilter === cat
+                            ? "bg-stone-900 text-white"
+                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1312,7 +1408,36 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           (ing.code && ing.code.toLowerCase().includes(opnameSearch.toLowerCase()));
                         const matchCategory =
                           opnameCategoryFilter === "ALL" || ing.category === opnameCategoryFilter;
-                        return matchSearch && matchCategory;
+
+                        let matchDivision = true;
+                        if (opnameDivisionFilter === "BAR") {
+                          matchDivision =
+                            ing.storageLocation === "BAR" ||
+                            ing.storageLocation === "CHILLER" ||
+                            ["coffee", "dairy", "pemanis", "air & es", "kondimen", "sirup", "powder", "kemasan", "biji kopi", "susu"].some((c) =>
+                              ing.category.toLowerCase().includes(c)
+                            );
+                        } else if (opnameDivisionFilter === "KITCHEN") {
+                          matchDivision =
+                            ing.storageLocation === "KITCHEN" ||
+                            ["kitchen", "makanan", "bumbu", "daging", "beras", "ayam", "sambal"].some((c) =>
+                              ing.category.toLowerCase().includes(c)
+                            );
+                        } else if (opnameDivisionFilter === "BAKERY") {
+                          matchDivision =
+                            ing.storageLocation === "BAKERY" ||
+                            ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant"].some((c) =>
+                              ing.category.toLowerCase().includes(c)
+                            );
+                        } else if (opnameDivisionFilter === "OPERATIONAL") {
+                          matchDivision =
+                            ing.storageLocation === "OPERATIONAL" ||
+                            ["kebersihan", "operasional", "supplies", "sabun", "plastik"].some((c) =>
+                              ing.category.toLowerCase().includes(c)
+                            );
+                        }
+
+                        return matchSearch && matchCategory && matchDivision;
                       })
                       .map((item) => {
                         const ing = ingredients.find((i) => i.id === item.ingredientId);

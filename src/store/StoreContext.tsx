@@ -78,8 +78,10 @@ export const DEFAULT_INITIAL_INGREDIENTS: Ingredient[] = [
   { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Kitchen", costPerUnit: 32 },
   { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48 },
   { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Kitchen", costPerUnit: 18 },
-  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500 },
-  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140 },
+  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500, storageLocation: "BAKERY" },
+  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140, storageLocation: "CHILLER" },
+  { id: "ing-sabun-cuci", name: "Sunlight Sabun Cuci Piring (Jerigen 5L)", unit: "jerigen", currentStock: 2, minStock: 1, category: "Kebersihan & Operasional", costPerUnit: 45000, storageLocation: "OPERATIONAL" },
+  { id: "ing-plastik-sampah", name: "Plastik Sampah Hitam 80x100 (Pack)", unit: "pack", currentStock: 5, minStock: 2, category: "Kebersihan & Operasional", costPerUnit: 18000, storageLocation: "OPERATIONAL" },
 ];
 
 export const DEFAULT_BATCH_PREPARATIONS: BatchPreparation[] = [
