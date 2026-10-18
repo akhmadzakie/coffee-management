@@ -268,7 +268,7 @@ export const LeaderChecklist: React.FC = () => {
   } = useStore();
 
   const isSupervisor = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
-  const [activeTab, setActiveTab] = useState<"monitoring" | "settings">("monitoring");
+  const [activeTab, setActiveTab] = useState<"monitoring" | "monthly" | "settings">("monitoring");
 
   // Selected date for monitoring (defaults to today)
   const today = getLocalDateString();
@@ -702,6 +702,187 @@ export const LeaderChecklist: React.FC = () => {
     return Math.round(total / divisionStats.length);
   }, [divisionStats]);
 
+  // ─── STATE & COMPUTATION UNTUK REKAP PROGRESS BULANAN ────────────────────
+  const currentYearMonth = today.slice(0, 7); // e.g. "2026-10"
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
+  const [monthlyDivisionFilter, setMonthlyDivisionFilter] = useState<Division | "ALL">("ALL");
+
+  const daysInSelectedMonth = useMemo(() => {
+    const parts = selectedMonth.split("-").map(Number);
+    const year = parts[0] || new Date().getFullYear();
+    const month = parts[1] || new Date().getMonth() + 1;
+    return new Date(year, month, 0).getDate();
+  }, [selectedMonth]);
+
+  const daysArray = useMemo(() => {
+    return Array.from({ length: daysInSelectedMonth }, (_, i) => {
+      const dayNum = i + 1;
+      const dateStr = `${selectedMonth}-${String(dayNum).padStart(2, "0")}`;
+      return {
+        dayNum,
+        dateStr,
+        isFuture: dateStr > today,
+        isToday: dateStr === today,
+      };
+    });
+  }, [selectedMonth, daysInSelectedMonth, today]);
+
+  const monthlyDivisionStats = useMemo(() => {
+    const divisions: {
+      key: Division;
+      label: string;
+      icon: any;
+      color: string;
+      badgeBg: string;
+      badgeText: string;
+    }[] = [
+      { key: "BAR", label: "Head Bar & Kasir", icon: Coffee, color: "amber", badgeBg: "bg-amber-100", badgeText: "text-amber-800" },
+      { key: "KITCHEN", label: "Head Kitchen", icon: Utensils, color: "orange", badgeBg: "bg-orange-100", badgeText: "text-orange-800" },
+      { key: "BAKER", label: "Head Baker", icon: Croissant, color: "emerald", badgeBg: "bg-emerald-100", badgeText: "text-emerald-800" },
+    ];
+
+    const activeRules = allowanceRules.filter((r) => r.isActive !== false);
+
+    return divisions.map((div) => {
+      const categories = getCategoriesForDivision(div.key);
+      const activeCategories = categories
+        .map((cat) => ({
+          ...cat,
+          items: (cat.items || []).filter((it) => {
+            const norm = normalizeTaskItem(it);
+            if (!norm.isActive) return false;
+            if (norm.targetRole === "STAFF") return false;
+            return true;
+          }),
+        }))
+        .filter((cat) => cat.items.length > 0);
+
+      const totalTasksPerDay = activeCategories.reduce((acc, cat) => acc + cat.items.length, 0);
+
+      // Checklists untuk divisi ini di bulan terpilih
+      const monthChecklists = dailyChecklists.filter(
+        (c) => c.date.startsWith(selectedMonth) && getDivisionForChecklist(c) === div.key
+      );
+
+      // Map per tanggal: YYYY-MM-DD -> { checklist, completedCount, percentage, submitterName, notes }
+      const dayRecordsMap: Record<
+        string,
+        { checklist: any; completedCount: number; percentage: number; submitterName?: string; notes?: string }
+      > = {};
+
+      monthChecklists.forEach((c) => {
+        const dateKey = c.date.slice(0, 10);
+        const leaderTasks = c.leaderTasks || [];
+        let completed = 0;
+        activeCategories.forEach((cat) => {
+          (cat.items || []).forEach((item) => {
+            if (isTaskChecked(leaderTasks, cat.category, item)) {
+              completed++;
+            }
+          });
+        });
+        const pct = totalTasksPerDay > 0 ? Math.round((completed / totalTasksPerDay) * 100) : 0;
+
+        const u = users.find((user) => user.id === c.employeeId);
+        const emp = employees.find((e) => e.id === c.employeeId || e.username === u?.username);
+        const submitterName = u?.name || emp?.name;
+        const cleanNotes = c.notes?.replace(/^\[(BAR|KITCHEN|BAKER)\]\s*/, "") || "";
+
+        if (!dayRecordsMap[dateKey] || pct > dayRecordsMap[dateKey].percentage) {
+          dayRecordsMap[dateKey] = { checklist: c, completedCount: completed, percentage: pct, submitterName, notes: cleanNotes };
+        }
+      });
+
+      const submittedDaysCount = Object.keys(dayRecordsMap).length;
+      const pastOrTodayDays = daysArray.filter((d) => !d.isFuture);
+      const elapsedDaysCount = Math.max(1, pastOrTodayDays.length);
+
+      // Rata-rata skor saat checklist diserahkan
+      const totalScoreSubmitted = Object.values(dayRecordsMap).reduce((sum, r) => sum + r.percentage, 0);
+      const avgScoreOnSubmittedDays =
+        submittedDaysCount > 0 ? Math.round(totalScoreSubmitted / submittedDaysCount) : 0;
+
+      // Skor Kepatuhan Efektif Bulanan
+      const monthlyEffectiveScore = Math.min(
+        100,
+        Math.round((submittedDaysCount / elapsedDaysCount) * avgScoreOnSubmittedDays)
+      );
+
+      // Grade dan batas pencairan tunjangan
+      const matchedGrade =
+        activeRules.find(
+          (r) => monthlyEffectiveScore >= r.minScore && monthlyEffectiveScore <= r.maxScore
+        ) ||
+        activeRules[activeRules.length - 1] || {
+          grade: "Grade D",
+          payoutPercentage: 0,
+          label: "Kurang (0%)",
+        };
+
+      // Identifikasi nama Leader
+      const sampleChecklist = monthChecklists[0];
+      const leaderUser = sampleChecklist ? users.find((u) => u.id === sampleChecklist.employeeId) : null;
+      const leaderEmpFromChecklist = sampleChecklist ? employees.find((e) => e.id === sampleChecklist.employeeId || e.username === leaderUser?.username) : null;
+
+      const officialLeaderEmp = employees.find((e) => {
+        const dept = (e.department || "").toUpperCase();
+        const pos = (e.position || "").toUpperCase();
+        const matchesDiv =
+          div.key === "BAR"
+            ? dept.includes("BAR") || pos.includes("BAR") || pos.includes("KASIR")
+            : div.key === "KITCHEN"
+            ? dept.includes("KITCHEN") || pos.includes("KITCHEN") || pos.includes("COOK")
+            : dept.includes("BAKER") || pos.includes("BAKER") || pos.includes("PASTRY");
+        const isLead =
+          pos.includes("LEADER") || pos.includes("HEAD") || pos.includes("SPV") || pos.includes("SUPERVISOR");
+        return matchesDiv && isLead && e.status === "AKTIF";
+      });
+
+      const leaderName = officialLeaderEmp?.name || leaderEmpFromChecklist?.name || leaderUser?.name || `Leader ${div.label}`;
+
+      return {
+        ...div,
+        totalTasksPerDay,
+        submittedDaysCount,
+        elapsedDaysCount,
+        daysInMonth: daysInSelectedMonth,
+        submissionRate: Math.min(100, Math.round((submittedDaysCount / elapsedDaysCount) * 100)),
+        avgScoreOnSubmittedDays,
+        monthlyEffectiveScore,
+        matchedGrade,
+        leaderName,
+        dayRecordsMap,
+      };
+    });
+  }, [
+    selectedMonth,
+    daysArray,
+    daysInSelectedMonth,
+    dailyChecklists,
+    allowanceRules,
+    barCategories,
+    kitchenCategories,
+    bakerCategories,
+    users,
+    employees,
+  ]);
+
+  const overallMonthlyScore = useMemo(() => {
+    if (monthlyDivisionStats.length === 0) return 0;
+    const total = monthlyDivisionStats.reduce((acc, d) => acc + d.monthlyEffectiveScore, 0);
+    return Math.round(total / monthlyDivisionStats.length);
+  }, [monthlyDivisionStats]);
+
+  const totalMonthlySubmissions = useMemo(() => {
+    return monthlyDivisionStats.reduce((acc, d) => acc + d.submittedDaysCount, 0);
+  }, [monthlyDivisionStats]);
+
+  // Monthly progress untuk Leader yang sedang login
+  const leaderPersonalMonthly = useMemo(() => {
+    if (!isLeaderRole) return null;
+    return monthlyDivisionStats.find((d) => d.key === leaderActiveDivision) || null;
+  }, [isLeaderRole, monthlyDivisionStats, leaderActiveDivision]);
+
   // ─── SUPERVISOR TASK CONFIGURATION HANDLERS ───────────────────────────────
   const currentEditingCategories = 
     editingDivision === "BAR" ? barCategories : 
@@ -864,25 +1045,36 @@ export const LeaderChecklist: React.FC = () => {
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setActiveTab("monitoring")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === "monitoring"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
+              <Calendar className="w-4 h-4 text-amber-500" />
+              Pantau Harian
+            </button>
+            <button
+              onClick={() => setActiveTab("monthly")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                activeTab === "monthly"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
               <TrendingUp className="w-4 h-4 text-blue-600" />
-              Laporan & Pantau Progress
+              Rekap Bulanan
             </button>
             <button
               onClick={() => setActiveTab("settings")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === "settings"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <Sliders className="w-4 h-4 text-emerald-600" />
-              Atur Kategori & Rincian Tugas
+              Atur SOP & Grade
             </button>
           </div>
         </div>
@@ -911,6 +1103,18 @@ export const LeaderChecklist: React.FC = () => {
                         Hari Ini
                       </button>
                     )}
+                    <button
+                      onClick={() => {
+                        const ym = selectedDate.slice(0, 7);
+                        setSelectedMonth(ym);
+                        setActiveTab("monthly");
+                      }}
+                      className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors flex items-center gap-1.5"
+                      title="Beralih ke tampilan rekapitulasi satu bulan penuh"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Rekap 1 Bulan</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1168,6 +1372,394 @@ export const LeaderChecklist: React.FC = () => {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: REKAP & PROGRESS BULANAN */}
+        {activeTab === "monthly" && (
+          <div className="space-y-6">
+            {/* Filter Bulan & Overview Kartu Atas */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-900 text-white p-5 rounded-2xl shadow-sm">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs shrink-0">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 font-medium">Bulan Periode Evaluasi</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-slate-800 border border-slate-700 text-white text-sm font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                      {selectedMonth !== currentYearMonth && (
+                        <button
+                          onClick={() => setSelectedMonth(currentYearMonth)}
+                          className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors"
+                        >
+                          Bulan Ini
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Divisi */}
+                <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 sm:ml-4 mt-2 sm:mt-0 text-xs">
+                  <button
+                    onClick={() => setMonthlyDivisionFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      monthlyDivisionFilter === "ALL"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Semua Divisi
+                  </button>
+                  <button
+                    onClick={() => setMonthlyDivisionFilter("BAR")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      monthlyDivisionFilter === "BAR"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Bar
+                  </button>
+                  <button
+                    onClick={() => setMonthlyDivisionFilter("KITCHEN")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      monthlyDivisionFilter === "KITCHEN"
+                        ? "bg-orange-600 text-white shadow-xs"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Kitchen
+                  </button>
+                  <button
+                    onClick={() => setMonthlyDivisionFilter("BAKER")}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      monthlyDivisionFilter === "BAKER"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Baker
+                  </button>
+                </div>
+              </div>
+
+              {/* Stat Ringkasan Rata-rata Bulanan */}
+              <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-slate-800 pt-3 lg:pt-0 lg:pl-6 w-full lg:w-auto justify-between lg:justify-start">
+                <div>
+                  <p className="text-xs text-slate-400">Total Checklist Masuk</p>
+                  <p className="text-xl font-black text-white font-mono">
+                    {totalMonthlySubmissions} <span className="text-xs font-normal text-slate-400">checklist</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Rata-rata Skor Efektif</p>
+                  <p className="text-2xl font-black text-amber-400 font-mono">{overallMonthlyScore}%</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 3 Kartu Progress Bulanan Per Divisi */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {monthlyDivisionStats
+                .filter((d) => monthlyDivisionFilter === "ALL" || monthlyDivisionFilter === d.key)
+                .map((div) => {
+                  const Icon = div.icon;
+                  const isHigh = div.monthlyEffectiveScore >= 85;
+                  const isMedium = div.monthlyEffectiveScore >= 70;
+
+                  return (
+                    <div
+                      key={div.key}
+                      className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all space-y-4"
+                    >
+                      <div>
+                        {/* Header Divisi */}
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl ${
+                              div.key === "BAR" ? "bg-amber-100 text-amber-700" :
+                              div.key === "KITCHEN" ? "bg-orange-100 text-orange-700" :
+                              "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              <Icon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-slate-800 text-base">{div.label}</h3>
+                              <p className="text-xs text-slate-500 font-medium">
+                                Leader: <span className="font-semibold text-slate-700">{div.leaderName}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-black border ${
+                            div.monthlyEffectiveScore >= 90
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                              : div.monthlyEffectiveScore >= 80
+                              ? "bg-blue-50 text-blue-700 border-blue-300"
+                              : div.monthlyEffectiveScore >= 70
+                              ? "bg-amber-50 text-amber-700 border-amber-300"
+                              : "bg-rose-50 text-rose-700 border-rose-300"
+                          }`}>
+                            {div.matchedGrade.grade}
+                          </span>
+                        </div>
+
+                        {/* Metrik Utama 1 Bulan */}
+                        <div className="mt-4 grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">Hari Terisi</span>
+                            <p className="text-sm font-black text-slate-800 font-mono">
+                              {div.submittedDaysCount} <span className="text-xs text-slate-500 font-normal">/ {div.elapsedDaysCount} hari</span>
+                            </p>
+                            <span className="text-[11px] text-slate-500">
+                              Disiplin: {div.submissionRate}%
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">Rata-rata Skor</span>
+                            <p className="text-sm font-black text-amber-600 font-mono">
+                              {div.avgScoreOnSubmittedDays}%
+                            </p>
+                            <span className="text-[11px] text-slate-500">
+                              Kualitas checklist
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar Skor Efektif Bulanan */}
+                        <div className="mt-4">
+                          <div className="flex justify-between items-baseline mb-1.5">
+                            <span className="text-xs font-semibold text-slate-600">
+                              Skor Kepatuhan Efektif
+                            </span>
+                            <span className="text-lg font-black font-mono text-slate-900">
+                              {div.monthlyEffectiveScore}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+                            <div
+                              className={`h-full transition-all duration-500 ${
+                                isHigh ? "bg-emerald-500" : isMedium ? "bg-amber-500" : "bg-rose-500"
+                              }`}
+                              style={{ width: `${div.monthlyEffectiveScore}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Estimasi Tunjangan Jabatan */}
+                      <div className="pt-3 border-t border-slate-100">
+                        <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-black uppercase text-amber-800">
+                              👑 Proyeksi Payroll
+                            </span>
+                            <p className="text-xs font-bold text-amber-950">
+                              Tunjangan Cair: {div.matchedGrade.payoutPercentage}%
+                            </p>
+                          </div>
+                          <span className="text-[11px] font-semibold text-amber-800 bg-white px-2 py-1 rounded-md border border-amber-300">
+                            {div.matchedGrade.label}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Kalender Matriks Kepatuhan Harian Sepanjang Bulan */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-blue-600" />
+                    Matriks Pengisian Checklist Harian ({new Date(selectedMonth + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })})
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Klik kotak tanggal mana pun untuk langsung memeriksa rincian tugas yang diselesaikan pada tanggal tersebut.
+                  </p>
+                </div>
+
+                {/* Legenda Warna */}
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    ≥90% (Lengkap)
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    50–89% (Sebagian)
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    &lt;50% / Belum
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-500">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                    Masa Depan
+                  </div>
+                </div>
+              </div>
+
+              {/* Baris per Divisi */}
+              <div className="space-y-4 overflow-x-auto pb-2">
+                {monthlyDivisionStats
+                  .filter((d) => monthlyDivisionFilter === "ALL" || monthlyDivisionFilter === d.key)
+                  .map((div) => {
+                    const Icon = div.icon;
+
+                    return (
+                      <div key={div.key} className="space-y-2 min-w-[700px]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`p-1.5 rounded-lg ${div.badgeBg} ${div.badgeText}`}>
+                              <Icon className="w-3.5 h-3.5" />
+                            </span>
+                            <span className="text-xs font-bold text-slate-800">{div.label}</span>
+                            <span className="text-[11px] text-slate-400">({div.leaderName})</span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {div.submittedDaysCount} dari {div.elapsedDaysCount} hari ({div.submissionRate}%) • Skor {div.monthlyEffectiveScore}%
+                          </span>
+                        </div>
+
+                        {/* Grid Tanggal 1 s/d 31 */}
+                        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${daysInSelectedMonth}, minmax(0, 1fr))` }}>
+                          {daysArray.map((day) => {
+                            const record = div.dayRecordsMap[day.dateStr];
+                            const isSubmitted = !!record;
+                            const pct = record?.percentage ?? 0;
+
+                            let bgClass = "bg-slate-100 border-slate-200 text-slate-400";
+                            if (day.isFuture) {
+                              bgClass = "bg-slate-50 border-slate-100 text-slate-300 opacity-60";
+                            } else if (isSubmitted) {
+                              if (pct >= 90) {
+                                bgClass = "bg-emerald-500 border-emerald-600 text-white font-bold shadow-2xs hover:bg-emerald-600";
+                              } else if (pct >= 50) {
+                                bgClass = "bg-amber-400 border-amber-500 text-amber-950 font-bold shadow-2xs hover:bg-amber-500";
+                              } else {
+                                bgClass = "bg-rose-400 border-rose-500 text-white font-bold shadow-2xs hover:bg-rose-500";
+                              }
+                            } else {
+                              bgClass = "bg-rose-50 border-rose-200 text-rose-400 hover:bg-rose-100";
+                            }
+
+                            return (
+                              <button
+                                key={day.dayNum}
+                                type="button"
+                                disabled={day.isFuture}
+                                onClick={() => {
+                                  setSelectedDate(day.dateStr);
+                                  setInspectedDivision(div.key);
+                                  setActiveTab("monitoring");
+                                }}
+                                title={
+                                  day.isFuture
+                                    ? `Tgl ${day.dayNum}: Belum berjalan`
+                                    : isSubmitted
+                                    ? `Tgl ${day.dayNum}: Selesai ${pct}% (${record.completedCount}/${div.totalTasksPerDay} tugas)${record.notes ? `\nCatatan: ${record.notes}` : ""}\nKlik untuk lihat detail`
+                                    : `Tgl ${day.dayNum}: Belum diisi oleh Leader`
+                                }
+                                className={`h-9 rounded-lg border text-[11px] flex flex-col items-center justify-center transition-all ${bgClass} ${
+                                  !day.isFuture ? "cursor-pointer hover:scale-105" : "cursor-default"
+                                } ${day.isToday ? "ring-2 ring-blue-500 ring-offset-1" : ""}`}
+                              >
+                                <span>{day.dayNum}</span>
+                                {isSubmitted && (
+                                  <span className="text-[8px] leading-none opacity-90">
+                                    {pct}%
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Tabel Rangkuman Dampak Evaluasi & Payroll */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <Award className="w-5 h-5 text-amber-600" />
+                <h4 className="font-bold text-slate-800 text-sm">
+                  Rekapitulasi Evaluasi & Integrasi Payroll (Bulan {selectedMonth})
+                </h4>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">Divisi & Stasiun</th>
+                      <th className="py-3 px-4">Leader Bertanggung Jawab</th>
+                      <th className="py-3 px-4 text-center">Hari Terisi</th>
+                      <th className="py-3 px-4 text-center">Tingkat Disiplin</th>
+                      <th className="py-3 px-4 text-center">Rata-rata Skor</th>
+                      <th className="py-3 px-4 text-center">Skor Efektif</th>
+                      <th className="py-3 px-4 text-center">Grade Jobdesk</th>
+                      <th className="py-3 px-4 text-center">Pencairan Tunjangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {monthlyDivisionStats.map((div) => (
+                      <tr key={div.key} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-800">{div.label}</td>
+                        <td className="py-3 px-4 text-slate-600">{div.leaderName}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-800">
+                          {div.submittedDaysCount} / {div.elapsedDaysCount} hari
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-slate-600">
+                          {div.submissionRate}%
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-amber-600 font-bold">
+                          {div.avgScoreOnSubmittedDays}%
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-black text-slate-900 text-sm">
+                          {div.monthlyEffectiveScore}%
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                            div.monthlyEffectiveScore >= 90
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                              : div.monthlyEffectiveScore >= 80
+                              ? "bg-blue-50 text-blue-700 border-blue-300"
+                              : div.monthlyEffectiveScore >= 70
+                              ? "bg-amber-50 text-amber-700 border-amber-300"
+                              : "bg-rose-50 text-rose-700 border-rose-300"
+                          }`}>
+                            {div.matchedGrade.grade}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-emerald-700">
+                          Cair {div.matchedGrade.payoutPercentage}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Otomatis Terkoneksi ke Modul Payroll:</strong> Persentase pencairan tunjangan di atas langsung digunakan saat Anda meng-generate penggajian bulanan di menu <strong>HR &amp; Payroll</strong>. Tidak perlu lagi menghitung manual satu per satu!
+                </span>
               </div>
             </div>
           </div>
@@ -1821,6 +2413,46 @@ export const LeaderChecklist: React.FC = () => {
             <p className="text-indigo-700 mt-0.5">
               Anda tidak dibebani kewajiban checklist tugas shift hari ini, sehingga persentase KPI dan bonus Anda tetap aman terlindungi.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Kartu Rangkuman Akumulasi 1 Bulan untuk Leader */}
+      {leaderPersonalMonthly && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-500 text-white shadow-2xs">
+                <Award className="w-4 h-4" />
+              </span>
+              <h4 className="text-sm font-bold text-slate-800">
+                Akumulasi Jobdesk Anda Bulan Ini ({new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })})
+              </h4>
+            </div>
+            <p className="text-xs text-slate-600">
+              Disiplin pengisian checklist harian Anda langsung menentukan pencairan Tunjangan Jabatan di slip gaji bulanan.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            <div className="bg-white px-3 py-2 rounded-xl border border-amber-200 text-center shadow-2xs">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Hari Terisi</p>
+              <p className="text-sm font-black text-slate-800 font-mono">
+                {leaderPersonalMonthly.submittedDaysCount} / {leaderPersonalMonthly.elapsedDaysCount} hari
+              </p>
+            </div>
+            <div className="bg-white px-3 py-2 rounded-xl border border-amber-200 text-center shadow-2xs">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Rata-rata Skor</p>
+              <p className="text-sm font-black text-amber-600 font-mono">
+                {leaderPersonalMonthly.avgScoreOnSubmittedDays}%
+              </p>
+            </div>
+            <div className="bg-white px-3.5 py-2 rounded-xl border border-amber-300 text-center shadow-2xs">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Proyeksi Grade</p>
+              <p className="text-sm font-black text-emerald-700">
+                {leaderPersonalMonthly.matchedGrade.grade} ({leaderPersonalMonthly.matchedGrade.payoutPercentage}%)
+              </p>
+            </div>
           </div>
         </div>
       )}
