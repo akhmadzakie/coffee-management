@@ -85,6 +85,71 @@ export const WASTE_REASONS = [
   "Bahan Menggumpal / Lembab",
 ];
 
+export interface UnitConversionInfo {
+  hasConversion: boolean;
+  purchaseUnit: string;
+  conversionFactor: number;
+  baseUnit: string;
+  displayLabel: string;
+}
+
+export function getIngredientUnitConversion(ing: Ingredient): UnitConversionInfo {
+  // If explicitly configured with a purchaseUnit and conversionFactor > 1
+  if (ing.purchaseUnit && ing.conversionFactor && ing.conversionFactor > 1) {
+    return {
+      hasConversion: true,
+      purchaseUnit: ing.purchaseUnit,
+      conversionFactor: ing.conversionFactor,
+      baseUnit: ing.unit,
+      displayLabel: `1 ${ing.purchaseUnit} = ${ing.conversionFactor.toLocaleString("id-ID")} ${ing.unit}`,
+    };
+  }
+
+  // Automatic smart fallback for common coffee shop units
+  const baseLower = (ing.unit || "").toLowerCase().trim();
+  if (baseLower === "gr" || baseLower === "g" || baseLower === "gram") {
+    const factor = ing.conversionFactor && ing.conversionFactor > 1 ? ing.conversionFactor : 1000;
+    const pUnit = ing.purchaseUnit || "Kg";
+    return {
+      hasConversion: true,
+      purchaseUnit: pUnit,
+      conversionFactor: factor,
+      baseUnit: ing.unit,
+      displayLabel: `1 ${pUnit} = ${factor.toLocaleString("id-ID")} ${ing.unit}`,
+    };
+  }
+
+  if (baseLower === "ml" || baseLower === "mili" || baseLower === "mililiter") {
+    const factor = ing.conversionFactor && ing.conversionFactor > 1 ? ing.conversionFactor : 1000;
+    const pUnit = ing.purchaseUnit || "Liter";
+    return {
+      hasConversion: true,
+      purchaseUnit: pUnit,
+      conversionFactor: factor,
+      baseUnit: ing.unit,
+      displayLabel: `1 ${pUnit} = ${factor.toLocaleString("id-ID")} ${ing.unit}`,
+    };
+  }
+
+  if (ing.purchaseUnit && ing.purchaseUnit !== ing.unit && ing.conversionFactor && ing.conversionFactor > 0) {
+    return {
+      hasConversion: true,
+      purchaseUnit: ing.purchaseUnit,
+      conversionFactor: ing.conversionFactor,
+      baseUnit: ing.unit,
+      displayLabel: `1 ${ing.purchaseUnit} = ${ing.conversionFactor.toLocaleString("id-ID")} ${ing.unit}`,
+    };
+  }
+
+  return {
+    hasConversion: false,
+    purchaseUnit: ing.purchaseUnit || ing.unit,
+    conversionFactor: 1,
+    baseUnit: ing.unit,
+    displayLabel: `1 ${ing.unit}`,
+  };
+}
+
 export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const {
     ingredients,
@@ -149,6 +214,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">("ALL");
   const [opnameCategoryFilter, setOpnameCategoryFilter] = useState("ALL");
   const [opnameInputMode, setOpnameInputMode] = useState<"BASE" | "PURCHASE">("PURCHASE");
+  const [rowUnitModes, setRowUnitModes] = useState<Record<string, "PURCHASE" | "BASE">>({});
+  const [opnameInputDrafts, setOpnameInputDrafts] = useState<Record<string, string>>({});
   const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
 
   // Open Modal for New Ingredient
@@ -468,9 +535,67 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         notes: "",
       }))
     );
+    const initialDrafts: Record<string, string> = {};
+    ingredients.forEach((ing) => {
+      const conv = getIngredientUnitConversion(ing);
+      const isPurchase = opnameInputMode === "PURCHASE" && conv.hasConversion;
+      const displayVal = isPurchase
+        ? (Math.round((ing.currentStock / conv.conversionFactor) * 1000) / 1000).toString()
+        : ing.currentStock.toString();
+      initialDrafts[ing.id] = displayVal;
+    });
+    setOpnameInputDrafts(initialDrafts);
+    setRowUnitModes({});
     setOpnameSearch("");
     setOpnameCategoryFilter("ALL");
     setIsOpnameMode(true);
+  };
+
+  const handleToggleGlobalOpnameMode = () => {
+    const nextMode: "BASE" | "PURCHASE" = opnameInputMode === "PURCHASE" ? "BASE" : "PURCHASE";
+    setOpnameInputMode(nextMode);
+    setRowUnitModes({});
+    setOpnameInputDrafts(() => {
+      const nextDrafts: Record<string, string> = {};
+      opnameItems.forEach((item) => {
+        const ing = ingredients.find((i) => i.id === item.ingredientId);
+        if (!ing) return;
+        const conv = getIngredientUnitConversion(ing);
+        const isPurchase = nextMode === "PURCHASE" && conv.hasConversion;
+        const val = isPurchase
+          ? (Math.round((item.physicalStock / conv.conversionFactor) * 1000) / 1000).toString()
+          : item.physicalStock.toString();
+        nextDrafts[item.ingredientId] = val;
+      });
+      return nextDrafts;
+    });
+  };
+
+  const handleToggleRowUnit = (ingredientId: string) => {
+    const ing = ingredients.find((i) => i.id === ingredientId);
+    if (!ing) return;
+    const conv = getIngredientUnitConversion(ing);
+    if (!conv.hasConversion) return;
+
+    const currentMode = rowUnitModes[ingredientId] || opnameInputMode;
+    const nextRowMode: "BASE" | "PURCHASE" = currentMode === "PURCHASE" ? "BASE" : "PURCHASE";
+
+    setRowUnitModes((prev) => ({
+      ...prev,
+      [ingredientId]: nextRowMode,
+    }));
+
+    const item = opnameItems.find((i) => i.ingredientId === ingredientId);
+    if (item) {
+      const isPurchase = nextRowMode === "PURCHASE";
+      const val = isPurchase
+        ? (Math.round((item.physicalStock / conv.conversionFactor) * 1000) / 1000).toString()
+        : item.physicalStock.toString();
+      setOpnameInputDrafts((prev) => ({
+        ...prev,
+        [ingredientId]: val,
+      }));
+    }
   };
 
   const handleOpnameChange = (ingredientId: string, physicalStock: number) => {
@@ -488,6 +613,25 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         return item;
       })
     );
+  };
+
+  const handleOpnameInputChange = (ingredientId: string, typedText: string, isPurchase: boolean, factor: number) => {
+    setOpnameInputDrafts((prev) => ({
+      ...prev,
+      [ingredientId]: typedText,
+    }));
+
+    const clean = typedText.trim().replace(",", ".");
+    if (clean === "") {
+      handleOpnameChange(ingredientId, 0);
+      return;
+    }
+
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num >= 0) {
+      const finalBaseQty = isPurchase ? Math.round(num * factor) : Math.round(num);
+      handleOpnameChange(ingredientId, finalBaseQty);
+    }
   };
 
   const handleOpnameNoteChange = (ingredientId: string, notes: string) => {
@@ -1001,7 +1145,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               {filteredIngredients.map((item, index) => {
                 const isOutOfStock = item.currentStock <= 0;
                 const isLow = item.currentStock <= item.minStock && !isOutOfStock;
-                const hasPurchaseConversion = !!item.purchaseUnit && !!item.conversionFactor;
+                const conv = getIngredientUnitConversion(item);
+                const hasPurchaseConversion = conv.hasConversion;
 
                 return (
                   <motion.div
@@ -1077,7 +1222,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       {hasPurchaseConversion && (
                         <div className="mt-2.5 p-2 rounded-xl bg-stone-50 border border-stone-200/60 text-[11px] text-stone-600">
                           <span className="font-semibold text-stone-800">Kemasan Beli:</span>{" "}
-                          1 {item.purchaseUnit} = {item.conversionFactor?.toLocaleString("id-ID")} {item.unit}
+                          1 {conv.purchaseUnit} = {conv.conversionFactor.toLocaleString("id-ID")} {item.unit}
                           {item.purchasePrice ? ` (@ ${formatCurrency(item.purchasePrice)})` : ""}
                         </div>
                       )}
@@ -1098,9 +1243,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             </span>
                             <span className="text-xs text-stone-500 font-semibold">{item.unit}</span>
                           </div>
-                          {hasPurchaseConversion && item.conversionFactor && item.conversionFactor > 1 && (
+                          {hasPurchaseConversion && conv.conversionFactor > 1 && (
                             <div className="text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2 py-0.5 rounded-md mt-1 border border-amber-200/50 inline-block">
-                              ≈ {(item.currentStock / item.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {item.purchaseUnit}
+                              ≈ {(item.currentStock / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {conv.purchaseUnit}
                             </div>
                           )}
                         </div>
@@ -1404,11 +1549,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           <span>Stok Fisik Nyata</span>
                           <button
                             type="button"
-                            onClick={() => setOpnameInputMode((prev) => (prev === "PURCHASE" ? "BASE" : "PURCHASE"))}
-                            className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-all cursor-pointer whitespace-nowrap"
-                            title="Klik untuk beralih antara hitung per Kemasan (Kotak/Kg/Dus) atau Satuan Resep (gr/ml)"
+                            onClick={handleToggleGlobalOpnameMode}
+                            className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border transition-all cursor-pointer whitespace-nowrap shadow-xs flex items-center gap-1 ${
+                              opnameInputMode === "PURCHASE"
+                                ? "bg-amber-800 text-white border-amber-900 shadow-coffee-sm hover:bg-amber-900"
+                                : "bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200"
+                            }`}
+                            title="Klik untuk beralih mode hitung: Kemasan Beli (Kg/Liter/Dus) vs Satuan Resep (gr/ml/pcs)"
                           >
-                            Mode: {opnameInputMode === "PURCHASE" ? "📦 Kemasan (Kotak/Kg)" : "⚖️ Satuan (gr/ml)"} ⇄
+                            <span>Mode: {opnameInputMode === "PURCHASE" ? "📦 Kemasan (Kotak/Kg)" : "⚖️ Satuan (gr/ml)"}</span>
+                            <span className={opnameInputMode === "PURCHASE" ? "text-amber-300" : "text-stone-500"}>⇄</span>
                           </button>
                         </div>
                       </th>
@@ -1460,6 +1610,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       .map((item) => {
                         const ing = ingredients.find((i) => i.id === item.ingredientId);
                         if (!ing) return null;
+                        const conv = getIngredientUnitConversion(ing);
                         return (
                           <tr key={item.ingredientId} className="hover:bg-stone-50/80 transition-colors">
                             <td className="p-3">
@@ -1479,46 +1630,61 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                               )}
                             </td>
                             <td className="p-3 text-center font-mono font-semibold text-stone-700">
-                              <div>{ing.currentStock.toLocaleString("id-ID")} {ing.unit}</div>
-                              {ing.purchaseUnit && ing.conversionFactor && ing.conversionFactor > 1 && (
-                                <div className="text-[10px] text-stone-400 font-sans font-medium">
-                                  ≈ {(ing.currentStock / ing.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {ing.purchaseUnit}
+                              <div className="font-bold text-stone-900">{ing.currentStock.toLocaleString("id-ID")} {ing.unit}</div>
+                              {conv.hasConversion && (
+                                <div className="text-[10px] text-amber-800 font-sans font-bold bg-amber-50/80 px-1.5 py-0.5 rounded-md border border-amber-200/60 inline-block mt-0.5">
+                                  ≈ {(ing.currentStock / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 2 })} {conv.purchaseUnit}
                                 </div>
                               )}
                             </td>
                             <td className="p-3 text-center">
                               {(() => {
-                                const hasConversion = !!ing.purchaseUnit && !!ing.conversionFactor && ing.conversionFactor > 1;
-                                const isPurchaseMode = opnameInputMode === "PURCHASE" && hasConversion;
-                                const factor = ing.conversionFactor || 1;
-                                const displayValue = isPurchaseMode
-                                  ? parseFloat((item.physicalStock / factor).toFixed(3))
-                                  : item.physicalStock;
+                                const isRowPurchase = (rowUnitModes[item.ingredientId] || opnameInputMode) === "PURCHASE" && conv.hasConversion;
+                                const factor = conv.conversionFactor || 1;
+                                const currentDraft = opnameInputDrafts[item.ingredientId] !== undefined
+                                  ? opnameInputDrafts[item.ingredientId]
+                                  : (isRowPurchase
+                                      ? (Math.round((item.physicalStock / factor) * 1000) / 1000).toString()
+                                      : item.physicalStock.toString());
 
                                 return (
                                   <div className="flex flex-col items-center gap-1">
-                                    <div className="inline-flex items-center gap-1.5">
+                                    <div className="inline-flex items-center gap-1 bg-stone-50 p-1 rounded-xl border border-stone-200 shadow-inner">
                                       <input
-                                        type="number"
-                                        min={0}
-                                        step="any"
-                                        className="w-24 px-2.5 py-1.5 border border-stone-300 rounded-xl text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 bg-white shadow-inner"
-                                        value={displayValue}
-                                        onChange={(e) => {
-                                          const num = Number(e.target.value);
-                                          const finalBaseQty = isPurchaseMode ? Math.round(num * factor) : num;
-                                          handleOpnameChange(item.ingredientId, finalBaseQty);
-                                        }}
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0"
+                                        className="w-20 px-2 py-1 bg-white border border-stone-300 rounded-lg text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 shadow-xs"
+                                        value={currentDraft}
+                                        onChange={(e) => handleOpnameInputChange(item.ingredientId, e.target.value, isRowPurchase, factor)}
                                       />
-                                      <span className="text-stone-700 text-[11px] font-bold font-mono">
-                                        {isPurchaseMode ? ing.purchaseUnit : ing.unit}
-                                      </span>
+                                      {conv.hasConversion ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleRowUnit(item.ingredientId)}
+                                          title={`Klik untuk ubah satuan baris ini ke ${isRowPurchase ? ing.unit : conv.purchaseUnit}`}
+                                          className="px-2 py-1 rounded-lg text-[10px] font-bold font-mono bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300/80 flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                                        >
+                                          <span>{isRowPurchase ? conv.purchaseUnit : ing.unit}</span>
+                                          <span className="text-[9px] text-amber-700">⇄</span>
+                                        </button>
+                                      ) : (
+                                        <span className="px-2 py-1 text-stone-700 text-[11px] font-bold font-mono shrink-0">
+                                          {ing.unit}
+                                        </span>
+                                      )}
                                     </div>
-                                    {hasConversion && (
-                                      <span className="text-[10px] text-stone-400 font-mono">
-                                        {isPurchaseMode
-                                          ? `= ${(displayValue * factor).toLocaleString("id-ID")} ${ing.unit}`
-                                          : `≈ ${(item.physicalStock / factor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} ${ing.purchaseUnit}`}
+                                    {conv.hasConversion && (
+                                      <span className="text-[10px] font-mono">
+                                        {isRowPurchase ? (
+                                          <span className="text-stone-500 font-medium">
+                                            = <strong className="text-stone-800 font-bold">{item.physicalStock.toLocaleString("id-ID")}</strong> {ing.unit}
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-800 font-medium">
+                                            ≈ <strong className="text-amber-900 font-bold">{(item.physicalStock / factor).toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong> {conv.purchaseUnit}
+                                          </span>
+                                        )}
                                       </span>
                                     )}
                                   </div>
@@ -1532,7 +1698,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                 ? "text-emerald-600 bg-emerald-50/50"
                                 : "text-stone-500"
                             }`}>
-                              {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")} {ing.unit}
+                              <div>
+                                {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")} {ing.unit}
+                              </div>
+                              {conv.hasConversion && item.difference !== 0 && (
+                                <div className="text-[10px] font-sans font-medium opacity-80">
+                                  ({(item.difference / conv.conversionFactor) > 0 ? "+" : ""}{(item.difference / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 2 })} {conv.purchaseUnit})
+                                </div>
+                              )}
                               {item.difference < 0 && (
                                 <div className="text-[10px] font-sans font-medium text-rose-500">Defisit</div>
                               )}

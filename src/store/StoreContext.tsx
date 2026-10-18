@@ -63,25 +63,25 @@ const generateId = () => {
 };
 
 export const DEFAULT_INITIAL_INGREDIENTS: Ingredient[] = [
-  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250 },
-  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5 },
-  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Pemanis", costPerUnit: 35 },
-  { id: "ing-air", name: "Air Bersih Galon RO", unit: "ml", currentStock: 50000, minStock: 10000, category: "Air & Es", costPerUnit: 0.5 },
-  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Pemanis", costPerUnit: 16 },
-  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Kondimen Olahan", costPerUnit: 38 },
-  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Kondimen Olahan", costPerUnit: 12 },
-  { id: "ing-ice-cube", name: "Es Batu Kristal Tube", unit: "gr", currentStock: 25000, minStock: 5000, category: "Air & Es", costPerUnit: 2 },
-  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Kitchen", costPerUnit: 16 },
-  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Kitchen", costPerUnit: 58 },
-  { id: "ing-bawang-merah", name: "Bawang Merah Kupas", unit: "gr", currentStock: 3000, minStock: 1000, category: "Kitchen", costPerUnit: 38 },
-  { id: "ing-cabai-rawit", name: "Cabai Rawit Merah Segar", unit: "gr", currentStock: 2000, minStock: 800, category: "Kitchen", costPerUnit: 60 },
-  { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Kitchen", costPerUnit: 32 },
-  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48 },
-  { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Kitchen", costPerUnit: 18 },
-  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500, storageLocation: "BAKERY" },
-  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140, storageLocation: "CHILLER" },
-  { id: "ing-sabun-cuci", name: "Sunlight Sabun Cuci Piring (Jerigen 5L)", unit: "jerigen", currentStock: 2, minStock: 1, category: "Kebersihan & Operasional", costPerUnit: 45000, storageLocation: "OPERATIONAL" },
-  { id: "ing-plastik-sampah", name: "Plastik Sampah Hitam 80x100 (Pack)", unit: "pack", currentStock: 5, minStock: 2, category: "Kebersihan & Operasional", costPerUnit: 18000, storageLocation: "OPERATIONAL" },
+  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 250000, storageLocation: "BAR" },
+  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 18500, storageLocation: "CHILLER" },
+  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Pemanis", costPerUnit: 35, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 35000, storageLocation: "DRY_STORAGE" },
+  { id: "ing-air", name: "Air Bersih Galon RO", unit: "ml", currentStock: 50000, minStock: 10000, category: "Air & Es", costPerUnit: 0.5, purchaseUnit: "Galon (19L)", conversionFactor: 19000, purchasePrice: 9500, storageLocation: "BAR" },
+  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Pemanis", costPerUnit: 16, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 16000, storageLocation: "DRY_STORAGE" },
+  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Kondimen Olahan", costPerUnit: 38, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "BAR" },
+  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Kondimen Olahan", costPerUnit: 12, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 12000, storageLocation: "BAR" },
+  { id: "ing-ice-cube", name: "Es Batu Kristal Tube", unit: "gr", currentStock: 25000, minStock: 5000, category: "Air & Es", costPerUnit: 2, purchaseUnit: "Plastik (10Kg)", conversionFactor: 10000, purchasePrice: 20000, storageLocation: "BAR" },
+  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Kitchen", costPerUnit: 16, purchaseUnit: "Karung (25Kg)", conversionFactor: 25000, purchasePrice: 400000, storageLocation: "KITCHEN" },
+  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Kitchen", costPerUnit: 58, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 58000, storageLocation: "KITCHEN" },
+  { id: "ing-bawang-merah", name: "Bawang Merah Kupas", unit: "gr", currentStock: 3000, minStock: 1000, category: "Kitchen", costPerUnit: 38, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "KITCHEN" },
+  { id: "ing-cabai-rawit", name: "Cabai Rawit Merah Segar", unit: "gr", currentStock: 2000, minStock: 800, category: "Kitchen", costPerUnit: 60, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 60000, storageLocation: "KITCHEN" },
+  { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Kitchen", costPerUnit: 32, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 32000, storageLocation: "KITCHEN" },
+  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 48000, storageLocation: "KITCHEN" },
+  { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Kitchen", costPerUnit: 18, purchaseUnit: "Jerigen (5L)", conversionFactor: 5000, purchasePrice: 90000, storageLocation: "KITCHEN" },
+  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500, purchaseUnit: "Dus (20pcs)", conversionFactor: 20, purchasePrice: 130000, storageLocation: "BAKERY" },
+  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140, purchaseUnit: "Pack (250g)", conversionFactor: 250, purchasePrice: 35000, storageLocation: "CHILLER" },
+  { id: "ing-sabun-cuci", name: "Sunlight Sabun Cuci Piring (Jerigen 5L)", unit: "jerigen", currentStock: 2, minStock: 1, category: "Kebersihan & Operasional", costPerUnit: 45000, purchaseUnit: "Jerigen (5L)", conversionFactor: 1, purchasePrice: 45000, storageLocation: "OPERATIONAL" },
+  { id: "ing-plastik-sampah", name: "Plastik Sampah Hitam 80x100 (Pack)", unit: "pack", currentStock: 5, minStock: 2, category: "Kebersihan & Operasional", costPerUnit: 18000, purchaseUnit: "Pack", conversionFactor: 1, purchasePrice: 18000, storageLocation: "OPERATIONAL" },
 ];
 
 export const DEFAULT_BATCH_PREPARATIONS: BatchPreparation[] = [
@@ -553,7 +553,30 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
     try {
       const saved = localStorage.getItem("app_ingredients_cache");
-      return saved ? JSON.parse(saved) : DEFAULT_INITIAL_INGREDIENTS;
+      if (saved) {
+        const parsed: Ingredient[] = JSON.parse(saved);
+        // Enrich any existing cached items with purchaseUnit & conversionFactor if missing
+        return parsed.map((item) => {
+          const matchDefault = DEFAULT_INITIAL_INGREDIENTS.find((d) => d.id === item.id);
+          if (matchDefault && (!item.purchaseUnit || !item.conversionFactor)) {
+            return {
+              ...item,
+              purchaseUnit: item.purchaseUnit || matchDefault.purchaseUnit,
+              conversionFactor: item.conversionFactor || matchDefault.conversionFactor,
+              purchasePrice: item.purchasePrice || matchDefault.purchasePrice,
+              storageLocation: item.storageLocation || matchDefault.storageLocation,
+            };
+          }
+          if (!item.purchaseUnit && (item.unit === "gr" || item.unit === "gram")) {
+            return { ...item, purchaseUnit: "Kg", conversionFactor: 1000 };
+          }
+          if (!item.purchaseUnit && (item.unit === "ml" || item.unit === "mililiter")) {
+            return { ...item, purchaseUnit: "Liter", conversionFactor: 1000 };
+          }
+          return item;
+        });
+      }
+      return DEFAULT_INITIAL_INGREDIENTS;
     } catch {
       return DEFAULT_INITIAL_INGREDIENTS;
     }
