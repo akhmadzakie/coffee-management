@@ -842,7 +842,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               : (settings?.leaderJobdeskAllowanceRules && settings.leaderJobdeskAllowanceRules.length > 0
                   ? settings.leaderJobdeskAllowanceRules
                   : DEFAULT_LEADER_ALLOWANCE_RULES),
-            shiftDefinitions: parseArr(s.shiftDefinitions).length > 0 ? parseArr(s.shiftDefinitions) : DEFAULT_SHIFT_DEFINITIONS,
+            shiftDefinitions: parseArr(s.shiftDefinitions).length > 0
+              ? parseArr(s.shiftDefinitions)
+              : (settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+                  ? settings.shiftDefinitions
+                  : DEFAULT_SHIFT_DEFINITIONS),
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
             enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),

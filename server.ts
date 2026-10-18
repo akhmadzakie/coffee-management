@@ -797,6 +797,9 @@ async function startServer() {
     if (st?.leaderJobdeskAllowanceRules && Array.isArray(st.leaderJobdeskAllowanceRules)) {
       divTarget.__leaderAllowanceRules = st.leaderJobdeskAllowanceRules;
     }
+    if (st?.shiftDefinitions && Array.isArray(st.shiftDefinitions)) {
+      divTarget.__shiftDefinitions = st.shiftDefinitions;
+    }
 
     return {
       id: "1",
@@ -1317,6 +1320,11 @@ async function startServer() {
         : (Array.isArray(rawSettings.leaderJobdeskAllowanceRules) ? rawSettings.leaderJobdeskAllowanceRules : []);
       delete rawDivTarget.__leaderAllowanceRules;
 
+      const shiftDefs = Array.isArray(rawDivTarget.__shiftDefinitions)
+        ? rawDivTarget.__shiftDefinitions
+        : (Array.isArray(rawSettings.shiftDefinitions) ? rawSettings.shiftDefinitions : []);
+      delete rawDivTarget.__shiftDefinitions;
+
       const formattedSettings = {
         ...rawSettings,
         geminiApiKey: effectiveApiKey,
@@ -1326,6 +1334,7 @@ async function startServer() {
         leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
         managerTasks: parseTasksJson(rawSettings.managerTasks),
         leaderJobdeskAllowanceRules: allowanceRules,
+        shiftDefinitions: shiftDefs,
         monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
         divisionKpiBonusTarget: rawDivTarget,

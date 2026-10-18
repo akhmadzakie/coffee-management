@@ -234,10 +234,12 @@ export function HRManagement() {
   });
 
   useEffect(() => {
+    // Jangan overwrite draft saat modal konfigurasi sedang dibuka oleh user
+    if (showShiftConfigModal) return;
     if (settings?.shiftDefinitions && settings.shiftDefinitions.length > 0) {
       setShiftDefsForm(settings.shiftDefinitions);
     }
-  }, [settings?.shiftDefinitions]);
+  }, [settings?.shiftDefinitions, showShiftConfigModal]);
 
   const activeShiftDefs = useMemo(() => {
     const list = settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
