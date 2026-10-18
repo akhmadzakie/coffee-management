@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportXlsx";
 
 interface PosOrderDetail {
   id: string;
@@ -79,7 +80,10 @@ export const Sales = () => {
     settings,
     products,
     addSalesTransactions,
+    isReadOnly,
   } = useStore();
+
+  const isOwner = currentUser?.role === "OWNER" || isReadOnly;
   const [activeTab, setActiveTab] = useState<"daily_recap" | "sales" | "logs" | "pos_orders">("daily_recap");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -313,6 +317,22 @@ export const Sales = () => {
     });
   };
 
+  const handleExportDailyRecap = () => {
+    exportDailySalesRecapToXlsx({
+      recaps: filteredRecaps,
+      settings,
+      periodLabel: recapDateFilter || "Semua_Tanggal",
+    });
+  };
+
+  const handleExportSales = () => {
+    exportSalesToXlsx({
+      sales: filteredSales,
+      settings,
+      periodLabel: "Item_Penjualan",
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Top Bar & Tab Navigasi ────────────────────────────────────────── */}
@@ -327,7 +347,7 @@ export const Sales = () => {
             }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>Rekap & Input Omzet Harian</span>
+            <span>{isOwner ? "Rekap Penjualan Harian" : "Rekap & Input Omzet Harian"}</span>
             {dailySalesRecaps.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-slate-900/10 text-[11px] font-bold">
                 {dailySalesRecaps.length}
@@ -376,13 +396,24 @@ export const Sales = () => {
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           {activeTab === "daily_recap" && (
-            <button
-              onClick={() => setIsAddRecapOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm shadow-xs transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Catat Omzet Harian</span>
-            </button>
+            isOwner ? (
+              <button
+                onClick={handleExportDailyRecap}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-xs transition cursor-pointer"
+                title="Unduh Rekap Omzet ke Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Ekspor Excel (.xlsx)</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsAddRecapOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm shadow-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Catat Omzet Harian</span>
+              </button>
+            )
           )}
 
           {activeTab === "sales" && (
@@ -398,50 +429,61 @@ export const Sales = () => {
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <CsvImportExport
-                  onImport={handleSalesImport}
-                  templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
-                  templateExampleRow={[
-                    new Date().toISOString().slice(0, 10),
-                    products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
-                    "45",
-                    "990000",
-                  ]}
-                  templateFilename="Template_Import_Penjualan_Menu.xlsx"
-                  buttonLabel="Import Excel / CSV Penjualan"
-                  currentData={salesTransactions.slice(0, 50).map((s) => ({
-                    id: s.id,
-                    Tanggal: s.date.slice(0, 10),
-                    "Nama Menu": s.menuName,
-                    Quantity: s.quantitySold,
-                    "Total Penjualan": s.totalPrice,
-                  }))}
-                  templateDropdowns={{
-                    "Nama Menu":
-                      products && products.length > 0
-                        ? Array.from(new Set(products.map((p) => p.name)))
-                        : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
-                  }}
-                  templateColumnTypes={{
-                    Tanggal: "date",
-                    Quantity: "integer",
-                    "Total Penjualan": "number",
-                  }}
-                  templateHints={{
-                    Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
-                    "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
-                    Quantity: "Jumlah cup / porsi yang terjual",
-                    "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
-                  }}
-                  templateInstructions={[
-                    "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
-                    "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
-                    "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
-                    "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
-                  ]}
-                />
-              </div>
+              {isOwner ? (
+                <button
+                  onClick={handleExportSales}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-xs transition cursor-pointer shrink-0"
+                  title="Unduh Data Penjualan Menu ke Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Ekspor Excel (.xlsx)</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <CsvImportExport
+                    onImport={handleSalesImport}
+                    templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
+                    templateExampleRow={[
+                      new Date().toISOString().slice(0, 10),
+                      products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
+                      "45",
+                      "990000",
+                    ]}
+                    templateFilename="Template_Import_Penjualan_Menu.xlsx"
+                    buttonLabel="Import Excel / CSV Penjualan"
+                    currentData={salesTransactions.slice(0, 50).map((s) => ({
+                      id: s.id,
+                      Tanggal: s.date.slice(0, 10),
+                      "Nama Menu": s.menuName,
+                      Quantity: s.quantitySold,
+                      "Total Penjualan": s.totalPrice,
+                    }))}
+                    templateDropdowns={{
+                      "Nama Menu":
+                        products && products.length > 0
+                          ? Array.from(new Set(products.map((p) => p.name)))
+                          : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
+                    }}
+                    templateColumnTypes={{
+                      Tanggal: "date",
+                      Quantity: "integer",
+                      "Total Penjualan": "number",
+                    }}
+                    templateHints={{
+                      Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
+                      "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
+                      Quantity: "Jumlah cup / porsi yang terjual",
+                      "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
+                    }}
+                    templateInstructions={[
+                      "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
+                      "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
+                      "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
+                      "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
+                    ]}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
@@ -557,13 +599,19 @@ export const Sales = () => {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setIsAddRecapOpen(true)}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs shrink-0 flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Input Omzet Hari Ini</span>
-            </button>
+            {!isOwner ? (
+              <button
+                onClick={() => setIsAddRecapOpen(true)}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs shrink-0 flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Input Omzet Hari Ini</span>
+              </button>
+            ) : (
+              <span className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300/80 shrink-0">
+                Mode Pantau: Terhubung Otomatis ke Laporan
+              </span>
+            )}
           </div>
 
           {/* Filter & Kontrol Tabel */}
@@ -604,25 +652,29 @@ export const Sales = () => {
                     <th className="p-3 text-right">Transfer Bank</th>
                     <th className="p-3 text-right">Total Omzet</th>
                     <th className="p-3">Keterangan & Dicatat Oleh</th>
-                    <th className="p-3 text-center">Aksi</th>
+                    {!isOwner && <th className="p-3 text-center">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRecaps.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-400">
+                      <td colSpan={isOwner ? 8 : 9} className="p-8 text-center text-slate-400">
                         <div className="max-w-sm mx-auto space-y-2">
                           <DollarSign className="w-8 h-8 text-slate-300 mx-auto" />
                           <p className="font-medium text-slate-600">Belum ada catatan omzet harian</p>
                           <p className="text-[11px] text-slate-400">
-                            Klik tombol "Catat Omzet Harian" di atas untuk mulai memasukkan omzet kasir harian Anda.
+                            {isOwner
+                              ? "Belum ada catatan omzet yang dimasukkan kasir untuk filter periode ini."
+                              : 'Klik tombol "Catat Omzet Harian" di atas untuk mulai memasukkan omzet kasir harian Anda.'}
                           </p>
-                          <button
-                            onClick={() => setIsAddRecapOpen(true)}
-                            className="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg shadow-xs"
-                          >
-                            ➕ Catat Sekarang
-                          </button>
+                          {!isOwner && (
+                            <button
+                              onClick={() => setIsAddRecapOpen(true)}
+                              className="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg shadow-xs"
+                            >
+                              ➕ Catat Sekarang
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -675,15 +727,17 @@ export const Sales = () => {
                             Oleh: {item.recordedBy || "Kasir"}
                           </span>
                         </td>
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                            title="Hapus Rekap Omzet"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+                        {!isOwner && (
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                              title="Hapus Rekap Omzet"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

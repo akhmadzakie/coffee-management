@@ -89,6 +89,7 @@ export const Layout: React.FC<LayoutProps> = ({
     "Menu & Produk": true,
     "Stok & Pengadaan": true,
     "Keuangan & Kas": true,
+    "Laporan & Keuangan": true,
     "SDM & Tim": true,
     "Sistem & Admin": false,
   });
@@ -268,18 +269,13 @@ export const Layout: React.FC<LayoutProps> = ({
     // Super Admin: Akses penuh teknis & manajerial
     SUPER_ADMIN: ALL_VIEWS,
 
-    // Owner: Pemilik usaha (fokus performa bisnis, omzet, profit, rekap, & pantau payroll)
+    // Owner: Pemilik usaha (murni laporan eksekutif, rekap penjualan, arus kas, laba rugi, & payroll)
     OWNER: [
       "dashboard_owner",
-      "dashboard_finance",
-      "dashboard_manager",
-      "cash_flow",
-      "finance_reports",
       "import_sales",
-      "menu_management",
-      "hpp_calculator",
+      "finance_reports",
+      "cash_flow",
       "payroll",
-      "inventory",
     ],
 
     // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama, tidak perlu clock in)
@@ -350,7 +346,28 @@ export const Layout: React.FC<LayoutProps> = ({
   const allowedViews = isEmployeeLeader && !baseAllowed.includes("leader_checklist")
     ? [...baseAllowed, "leader_checklist" as ViewState]
     : baseAllowed;
-  const navigation = allNavigation.filter((nav) => allowedViews.includes(nav.view));
+  const navigation = allNavigation
+    .filter((nav) => allowedViews.includes(nav.view))
+    .map((nav) => {
+      if (currentUser?.role === "OWNER") {
+        if (nav.view === "dashboard_owner") {
+          return { ...nav, name: "Dasbor Eksekutif", group: "Dasbor" };
+        }
+        if (nav.view === "import_sales") {
+          return { ...nav, name: "Laporan Penjualan", group: "Laporan & Keuangan" };
+        }
+        if (nav.view === "finance_reports") {
+          return { ...nav, name: "Laporan Laba Rugi (P&L)", group: "Laporan & Keuangan" };
+        }
+        if (nav.view === "cash_flow") {
+          return { ...nav, name: "Buku Kas & Arus Kas", group: "Laporan & Keuangan" };
+        }
+        if (nav.view === "payroll") {
+          return { ...nav, name: "Laporan Payroll & SDM", group: "Laporan & Keuangan" };
+        }
+      }
+      return nav;
+    });
   const canAccessBusinessReports = Boolean(
     currentUser &&
       ["OWNER", "MANAGER", "FINANCE", "SUPER_ADMIN"].includes(currentUser.role)

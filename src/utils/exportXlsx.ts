@@ -10,6 +10,7 @@ import {
   DailyAttendance,
   KPIRecord,
   Employee,
+  DailySalesRecap,
 } from "../types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -924,4 +925,103 @@ export const exportMasterExecutiveReportXlsx = ({
   const periodSlug = periodLabel.replace(/\s+/g, "_");
   XLSX.writeFile(wb, `Laporan_Komprehensif_${storeSlug}_${periodSlug}.xlsx`);
 };
+
+// ─── Export Daily Sales Recap to XLSX ──────────────────────────────────────────
+
+export const exportDailySalesRecapToXlsx = ({
+  recaps,
+  settings,
+  periodLabel = "Semua_Tanggal",
+}: {
+  recaps: DailySalesRecap[];
+  settings: Settings;
+  periodLabel?: string;
+}) => {
+  const wb = XLSX.utils.book_new();
+
+  const totalCash = recaps.reduce((acc, r) => acc + (r.cashAmount || 0), 0);
+  const totalQris = recaps.reduce((acc, r) => acc + (r.qrisAmount || 0), 0);
+  const totalEdc = recaps.reduce((acc, r) => acc + (r.edcAmount || 0), 0);
+  const totalTransfer = recaps.reduce((acc, r) => acc + (r.transferAmount || 0), 0);
+  const grandTotal = recaps.reduce((acc, r) => acc + (r.totalAmount || 0), 0);
+
+  const summaryData = [
+    ["LAPORAN REKAP PENJUALAN HARIAN", ""],
+    ["Unit Usaha", settings.brandName || "Julia Coffee"],
+    ["Periode / Filter", periodLabel],
+    ["Tanggal Unduh", new Date().toLocaleString("id-ID")],
+    ["Total Catatan", recaps.length],
+    ["Total Tunai (Cash)", totalCash],
+    ["Total QRIS", totalQris],
+    ["Total Mesin EDC", totalEdc],
+    ["Total Transfer Bank", totalTransfer],
+    ["Grand Total Omzet", grandTotal],
+  ];
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary["!cols"] = [{ wch: 25 }, { wch: 30 }];
+  boldFirstRow(wsSummary, 2);
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+
+  const headers = [
+    "No",
+    "Tanggal",
+    "Shift",
+    "Tunai (Cash)",
+    "QRIS",
+    "Mesin EDC",
+    "Transfer Bank",
+    "Total Omzet",
+    "Keterangan",
+    "Dicatat Oleh",
+  ];
+
+  const rows: any[][] = recaps.map((r, i) => [
+    i + 1,
+    r.date,
+    r.shift || "ALL",
+    r.cashAmount || 0,
+    r.qrisAmount || 0,
+    r.edcAmount || 0,
+    r.transferAmount || 0,
+    r.totalAmount || 0,
+    r.notes || "-",
+    r.recordedBy || "Kasir",
+  ]);
+
+  // Baris Total di bagian akhir
+  rows.push([
+    "",
+    "TOTAL KESELURUHAN",
+    "",
+    totalCash,
+    totalQris,
+    totalEdc,
+    totalTransfer,
+    grandTotal,
+    "",
+    "",
+  ]);
+
+  const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  wsData["!cols"] = [
+    { wch: 6 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 28 },
+    { wch: 16 },
+  ];
+
+  boldFirstRow(wsData, headers.length);
+  styleDataRows(wsData, 1, rows.length, headers.length);
+  XLSX.utils.book_append_sheet(wb, wsData, "Rekap Penjualan");
+
+  downloadXlsx(wb, `Rekap_Penjualan_Harian_${periodLabel.replace(/\s+/g, "_")}`);
+};
+
 
