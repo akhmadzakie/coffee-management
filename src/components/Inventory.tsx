@@ -30,11 +30,12 @@ import {
   Info,
   Building2,
   ChevronRight,
+  Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
-import { Recipe, Ingredient, ViewState } from "../types";
+import { Recipe, Ingredient, ViewState, StockOpname } from "../types";
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
@@ -87,6 +88,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     ingredients,
     stockMovements,
     stockOpnames,
+    stockOpnameItems,
     addIngredient,
     updateIngredient,
     deleteIngredient,
@@ -140,6 +142,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [isOpnameMode, setIsOpnameMode] = useState(false);
   const [opnameId, setOpnameId] = useState("");
   const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
+  const [opnameSearch, setOpnameSearch] = useState("");
+  const [opnameCategoryFilter, setOpnameCategoryFilter] = useState("ALL");
+  const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
 
   // Open Modal for New Ingredient
   const handleOpenAddIngredient = () => {
@@ -418,7 +423,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
   // Stock Opname
   const startOpname = () => {
-    setOpnameId(crypto.randomUUID());
+    const newId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+    setOpnameId(newId);
     setOpnameItems(
       ingredients.map((ing) => ({
         ingredientId: ing.id,
@@ -427,6 +435,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         notes: "",
       }))
     );
+    setOpnameSearch("");
+    setOpnameCategoryFilter("ALL");
     setIsOpnameMode(true);
   };
 
@@ -447,8 +457,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     );
   };
 
+  const handleOpnameNoteChange = (ingredientId: string, notes: string) => {
+    setOpnameItems((prev) =>
+      prev.map((item) =>
+        item.ingredientId === ingredientId ? { ...item, notes } : item
+      )
+    );
+  };
+
   const saveOpname = (status: "DRAFT" | "FINAL") => {
-    const opname = {
+    const opname: StockOpname = {
       id: opnameId,
       date: new Date().toISOString(),
       status,
@@ -460,14 +478,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
     opnameItems.forEach((item) => {
       const ing = ingredients.find((i) => i.id === item.ingredientId);
+      const itemId = typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : "opi_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
       addStockOpnameItem({
-        id: crypto.randomUUID(),
+        id: itemId,
         opnameId: opname.id,
         ingredientId: item.ingredientId,
         systemStock: ing ? ing.currentStock : 0,
         physicalStock: item.physicalStock,
         difference: item.difference,
-        notes: item.notes,
+        notes: item.notes || null,
       });
 
       if (status === "FINAL" && item.difference !== 0) {
@@ -476,7 +497,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
           type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
           quantity: Math.abs(item.difference),
           date: new Date().toISOString(),
-          note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})`,
+          note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
           createdBy: currentUser?.name || "System",
         });
 
@@ -789,7 +810,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             </div>
           )}
 
-          {activeTab === "opnames" && !isReadOnly && !isOpnameMode && currentUser?.role !== "LEADER" && (
+          {activeTab === "opnames" && !isReadOnly && !isOpnameMode && (
             <button
               onClick={startOpname}
               className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
@@ -1163,32 +1184,65 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── TAB 3: STOCK OPNAME ─────────────────────────────────────────── */}
       {activeTab === "opnames" && (
-        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6">
+        <div className="space-y-6">
           {isOpnameMode ? (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/70">
+            <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6 space-y-6">
+              {/* Header Sesi Aktif */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-amber-50/80 p-4 rounded-2xl border border-amber-200/80">
                 <div>
-                  <h3 className="font-bold text-amber-900 text-sm">Sesi Stok Opname Fisik Aktif</h3>
-                  <p className="text-xs text-amber-800 mt-0.5">
-                    Masukkan jumlah fisik bahan yang dihitung nyata di bar dan gudang.
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-600"></span>
+                    </span>
+                    <h3 className="font-bold text-amber-900 text-sm">Sesi Stok Opname Fisik Sedang Berlangsung</h3>
+                  </div>
+                  <p className="text-xs text-amber-800 mt-1">
+                    Auditor: <strong className="font-semibold">{currentUser?.name || "Staff"}</strong> ({currentUser?.role || "LEADER"}) • Masukkan jumlah fisik nyata hasil hitungan di bar / gudang.
                   </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-stone-700 text-[11px] font-bold border border-amber-200">
+                      Total: {opnameItems.length} Bahan
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                      Sesuai: {opnameItems.filter((i) => i.difference === 0).length}
+                    </span>
+                    {opnameItems.filter((i) => i.difference !== 0).length > 0 && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200">
+                        Selisih: {opnameItems.filter((i) => i.difference !== 0).length} Bahan
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <button
-                    onClick={() => setIsOpnameMode(false)}
-                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-700 text-xs font-bold hover:bg-stone-50 cursor-pointer"
+                    onClick={() => {
+                      if (confirm("Batalkan sesi opname ini? Angka yang belum disimpan akan hilang.")) {
+                        setIsOpnameMode(false);
+                      }
+                    }}
+                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-700 text-xs font-bold hover:bg-stone-50 cursor-pointer transition-all"
                   >
                     Batal
                   </button>
                   <button
                     onClick={() => saveOpname("DRAFT")}
-                    className="px-4 py-2 bg-stone-200 text-stone-800 rounded-xl text-xs font-bold hover:bg-stone-300 cursor-pointer"
+                    className="px-4 py-2 bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold hover:bg-amber-200 cursor-pointer transition-all"
                   >
                     Simpan Draft
                   </button>
                   <button
-                    onClick={() => saveOpname("FINAL")}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer shadow-coffee-sm"
+                    onClick={() => {
+                      const diffCount = opnameItems.filter((i) => i.difference !== 0).length;
+                      const msg =
+                        diffCount > 0
+                          ? `Terdapat ${diffCount} bahan dengan selisih stok. Sistem akan otomatis memperbarui stok riil dan mencatat mutasi koreksi. Lanjutkan finalisasi?`
+                          : "Semua stok fisik sesuai dengan sistem kasir. Lanjutkan finalisasi?";
+                      if (confirm(msg)) {
+                        saveOpname("FINAL");
+                      }
+                    }}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer shadow-coffee-sm transition-all"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Finalisasi & Sesuaikan Stok</span>
@@ -1196,62 +1250,293 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Cari bahan baku opname..."
+                    className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800 focus:bg-white transition-all"
+                    value={opnameSearch}
+                    onChange={(e) => setOpnameSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                  <button
+                    onClick={() => setOpnameCategoryFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      opnameCategoryFilter === "ALL"
+                        ? "bg-amber-800 text-white"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    }`}
+                  >
+                    Semua ({ingredients.length})
+                  </button>
+                  {Array.from(new Set(ingredients.map((i) => i.category))).map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setOpnameCategoryFilter(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        opnameCategoryFilter === cat
+                          ? "bg-amber-800 text-white"
+                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table Opname Items */}
               <div className="overflow-x-auto border border-stone-200 rounded-2xl">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
                       <th className="p-3">Bahan Baku</th>
+                      <th className="p-3">Kategori & Lokasi</th>
                       <th className="p-3 text-center">Stok Sistem</th>
                       <th className="p-3 text-center">Stok Fisik Nyata</th>
                       <th className="p-3 text-center">Selisih</th>
+                      <th className="p-3">Keterangan / Alasan Selisih</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {opnameItems.map((item) => {
-                      const ing = ingredients.find((i) => i.id === item.ingredientId);
-                      if (!ing) return null;
-                      return (
-                        <tr key={item.ingredientId} className="hover:bg-stone-50">
-                          <td className="p-3 font-bold text-stone-900">
-                            {ing.name} <span className="text-stone-400 font-normal">({ing.unit})</span>
-                          </td>
-                          <td className="p-3 text-center font-mono text-stone-600">
-                            {ing.currentStock.toLocaleString("id-ID")}
-                          </td>
-                          <td className="p-3 text-center">
-                            <input
-                              type="number"
-                              className="w-24 px-2 py-1.5 border border-stone-300 rounded-xl text-center mx-auto text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
-                              value={item.physicalStock}
-                              onChange={(e) => handleOpnameChange(item.ingredientId, Number(e.target.value))}
-                            />
-                          </td>
-                          <td className={`p-3 text-center font-mono font-bold ${
-                            item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-stone-500"
-                          }`}>
-                            {item.difference > 0 ? `+${item.difference}` : item.difference} {ing.unit}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {opnameItems
+                      .filter((item) => {
+                        const ing = ingredients.find((i) => i.id === item.ingredientId);
+                        if (!ing) return false;
+                        const matchSearch =
+                          ing.name.toLowerCase().includes(opnameSearch.toLowerCase()) ||
+                          (ing.code && ing.code.toLowerCase().includes(opnameSearch.toLowerCase()));
+                        const matchCategory =
+                          opnameCategoryFilter === "ALL" || ing.category === opnameCategoryFilter;
+                        return matchSearch && matchCategory;
+                      })
+                      .map((item) => {
+                        const ing = ingredients.find((i) => i.id === item.ingredientId);
+                        if (!ing) return null;
+                        return (
+                          <tr key={item.ingredientId} className="hover:bg-stone-50/80 transition-colors">
+                            <td className="p-3">
+                              <div className="font-bold text-stone-900">{ing.name}</div>
+                              <div className="text-[10px] text-stone-400 font-mono">
+                                Satuan: {ing.unit} {ing.code ? `• ${ing.code}` : ""}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold">
+                                {ing.category}
+                              </span>
+                              {ing.storageLocation && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-medium border border-amber-200/60">
+                                  {ing.storageLocation}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center font-mono font-semibold text-stone-700">
+                              {ing.currentStock.toLocaleString("id-ID")} {ing.unit}
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="inline-flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="any"
+                                  className="w-28 px-3 py-1.5 border border-stone-300 rounded-xl text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 bg-white shadow-inner"
+                                  value={item.physicalStock}
+                                  onChange={(e) => handleOpnameChange(item.ingredientId, Number(e.target.value))}
+                                />
+                                <span className="text-stone-400 text-[11px] font-mono">{ing.unit}</span>
+                              </div>
+                            </td>
+                            <td className={`p-3 text-center font-mono font-bold text-xs ${
+                              item.difference < 0
+                                ? "text-rose-600 bg-rose-50/50"
+                                : item.difference > 0
+                                ? "text-emerald-600 bg-emerald-50/50"
+                                : "text-stone-500"
+                            }`}>
+                              {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")} {ing.unit}
+                              {item.difference < 0 && (
+                                <div className="text-[10px] font-sans font-medium text-rose-500">Defisit</div>
+                              )}
+                              {item.difference > 0 && (
+                                <div className="text-[10px] font-sans font-medium text-emerald-600">Surplus</div>
+                              )}
+                              {item.difference === 0 && (
+                                <div className="text-[10px] font-sans font-medium text-stone-400">Cocok</div>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="text"
+                                placeholder={item.difference !== 0 ? "Catatan selisih (misal: tumpah, susut)..." : "Catatan opsional..."}
+                                className={`w-full px-2.5 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-800 ${
+                                  item.difference !== 0 ? "border-amber-300 bg-amber-50/30" : "border-stone-200"
+                                }`}
+                                value={item.notes}
+                                onChange={(e) => handleOpnameNoteChange(item.ingredientId, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
             </div>
           ) : (
-            <div className="py-12 text-center text-stone-400">
-              <ClipboardList className="w-12 h-12 text-stone-300 mx-auto mb-3" />
-              <h4 className="text-sm font-bold text-stone-700">Audit Fisik Stok (Stok Opname)</h4>
-              <p className="text-xs text-stone-500 mt-1 max-w-md mx-auto">
-                Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di bar dengan catatan sistem kasir.
-              </p>
-              {!isReadOnly && currentUser?.role !== "LEADER" && (
-                <button
-                  onClick={startOpname}
-                  className="mt-4 px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold cursor-pointer shadow-coffee-sm"
-                >
-                  Mulai Stok Opname Sekarang
-                </button>
+            <div className="space-y-6">
+              {/* Card Utama Stok Opname */}
+              <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-gradient-to-r from-stone-50 via-amber-50/30 to-stone-50 rounded-2xl border border-amber-100">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-amber-800 text-white rounded-2xl shadow-coffee-sm shrink-0">
+                      <ClipboardList className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-stone-900">Audit Fisik Stok (Stok Opname)</h4>
+                      <p className="text-xs text-stone-600 mt-1 max-w-xl leading-relaxed">
+                        Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di bar dengan catatan sistem kasir. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
+                      </p>
+                    </div>
+                  </div>
+                  {!isReadOnly && (
+                    <button
+                      onClick={startOpname}
+                      className="px-6 py-3 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold cursor-pointer shadow-coffee transition-all flex items-center gap-2 shrink-0 hover:scale-[1.02]"
+                    >
+                      <ClipboardList className="w-4 h-4" />
+                      <span>Mulai Stok Opname Sekarang</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* 3 Langkah Alur Opname */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
+                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center mb-2.5">
+                      1
+                    </div>
+                    <div className="text-xs font-bold text-stone-800">Hitung Riil Bahan Baku</div>
+                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                      Barista / Leader menimbang biji kopi, volume susu, atau bahan di bar dan masukkan jumlah fisik ke sistem.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
+                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center mb-2.5">
+                      2
+                    </div>
+                    <div className="text-xs font-bold text-stone-800">Cek Selisih Real-Time</div>
+                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                      Sistem menghitung otomatis selisih minus (defisit/waste) atau plus (surplus) terhadap transaksi kasir.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center mb-2.5">
+                      3
+                    </div>
+                    <div className="text-xs font-bold text-stone-800">Finalisasi & Koreksi Otomatis</div>
+                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                      Sistem memperbarui saldo stok riil dan otomatis mencatat mutasi koreksi tanpa repot input manual.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Riwayat Sesi Opname Lampau */}
+              {stockOpnames && stockOpnames.length > 0 && (
+                <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
+                  <div className="p-5 border-b border-stone-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <h3 className="font-bold text-stone-900 text-sm">Riwayat Sesi Stok Opname</h3>
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        Daftar seluruh audit fisik berkala yang pernah dilakukan tim bar & supervisor.
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 bg-stone-100 rounded-full text-stone-700 text-xs font-bold">
+                      {stockOpnames.length} Sesi Tercatat
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-stone-50/80 border-b border-stone-100 text-stone-500 font-bold uppercase text-[10px]">
+                          <th className="p-3.5">Tanggal & Waktu</th>
+                          <th className="p-3.5">Auditor / Petugas</th>
+                          <th className="p-3.5 text-center">Status</th>
+                          <th className="p-3.5">Catatan</th>
+                          <th className="p-3.5 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {stockOpnames
+                          .slice()
+                          .reverse()
+                          .map((op) => {
+                            const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
+                            const discrepancyCount = relatedItems.filter((i) => i.difference !== 0).length;
+                            return (
+                              <tr key={op.id} className="hover:bg-stone-50/60 transition-colors">
+                                <td className="p-3.5">
+                                  <div className="font-bold text-stone-900">
+                                    {new Date(op.date).toLocaleDateString("id-ID", {
+                                      weekday: "short",
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    })}
+                                  </div>
+                                  <div className="text-[10px] text-stone-400 font-mono">
+                                    {new Date(op.date).toLocaleTimeString("id-ID", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })} WIB
+                                  </div>
+                                </td>
+                                <td className="p-3.5">
+                                  <span className="font-bold text-stone-800">{op.createdBy}</span>
+                                </td>
+                                <td className="p-3.5 text-center">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                    op.status === "FINAL"
+                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                      : "bg-amber-100 text-amber-800 border border-amber-200"
+                                  }`}>
+                                    {op.status === "FINAL" ? "FINAL (Tersinkron)" : "DRAFT"}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-stone-600">
+                                  <div>{op.notes || "Audit periodik"}</div>
+                                  {discrepancyCount > 0 ? (
+                                    <span className="text-[10px] text-rose-600 font-medium">
+                                      {discrepancyCount} bahan ditemukan selisih
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-emerald-600 font-medium">
+                                      Semua bahan akurat (0 selisih)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3.5 text-center">
+                                  <button
+                                    onClick={() => setSelectedOpnameForView(op)}
+                                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Lihat Rincian</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1880,6 +2165,90 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
           }
         }}
       />
+
+      {/* ── MODAL RINCIAN OPNAME DETAIL ───────────────────────────────────── */}
+      {selectedOpnameForView && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-stone-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+              <div>
+                <h3 className="font-bold text-stone-900 text-base">Rincian Hasil Stok Opname</h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Audit oleh {selectedOpnameForView.createdBy} •{" "}
+                  {new Date(selectedOpnameForView.date).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedOpnameForView(null)}
+                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div className="overflow-x-auto border border-stone-200 rounded-2xl">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                      <th className="p-3">Bahan Baku</th>
+                      <th className="p-3 text-center">Stok Sistem</th>
+                      <th className="p-3 text-center">Stok Fisik Nyata</th>
+                      <th className="p-3 text-center">Selisih</th>
+                      <th className="p-3">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {stockOpnameItems
+                      .filter((i) => i.opnameId === selectedOpnameForView.id)
+                      .map((item) => {
+                        const ing = ingredients.find((i) => i.id === item.ingredientId);
+                        return (
+                          <tr key={item.id} className="hover:bg-stone-50">
+                            <td className="p-3 font-bold text-stone-900">
+                              {ing ? ing.name : "Bahan Terhapus"}{" "}
+                              {ing && <span className="text-stone-400 font-normal">({ing.unit})</span>}
+                            </td>
+                            <td className="p-3 text-center font-mono text-stone-600">
+                              {item.systemStock.toLocaleString("id-ID")}
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-stone-900">
+                              {item.physicalStock.toLocaleString("id-ID")}
+                            </td>
+                            <td className={`p-3 text-center font-mono font-bold ${
+                              item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-stone-500"
+                            }`}>
+                              {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")}
+                            </td>
+                            <td className="p-3 text-stone-500">
+                              {item.notes || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-stone-100 bg-stone-50/50 flex justify-end">
+              <button
+                onClick={() => setSelectedOpnameForView(null)}
+                className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
