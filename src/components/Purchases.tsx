@@ -1012,8 +1012,8 @@ export const Purchases = () => {
 
       {/* ─── MODAL: Receive PO (Goods Arrival) ─────────────────────────────────────── */}
       {poToReceive && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
               <PackageCheck className="w-5 h-5" />
             </div>
@@ -1048,8 +1048,8 @@ export const Purchases = () => {
 
       {/* ─── MODAL: View PO Invoice ────────────────────────────────────────────────── */}
       {isInvoiceModalOpen && currentInvoiceData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto no-scrollbar p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1 flex items-center gap-2">
@@ -1191,8 +1191,8 @@ export const Purchases = () => {
 
       {/* ─── MODAL: Delete Confirmation ────────────────────────────────────────────── */}
       {invoiceToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-base font-bold text-slate-900">
               Hapus Purchase Order?
             </h3>
@@ -1222,8 +1222,8 @@ export const Purchases = () => {
 
       {/* ─── MODAL: Pay PO (Hutang Dagang) ─────────────────────────────────────────── */}
       {payModalOpen && selectedPOForPay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-base font-bold text-slate-900">Bayar Hutang PO</h3>
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-1">
               <span className="text-slate-500">Sisa Tagihan:</span>

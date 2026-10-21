@@ -1783,12 +1783,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       {/* Modal Preview Foto Selfie & Verifikasi Lokasi GPS Absensi */}
       <AnimatePresence>
         {selectedAttendancePhoto && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-coffee-lg border border-stone-200"
+              className="my-auto bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-coffee-lg border border-stone-200 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
             >
               <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/80">
                 <div className="flex items-center gap-2">

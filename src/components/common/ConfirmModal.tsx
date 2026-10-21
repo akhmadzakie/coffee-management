@@ -80,7 +80,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[100] p-3 sm:p-5 overflow-y-auto"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-[100] p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}
@@ -90,7 +90,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 10 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border ${config.borderClass}`}
+            className={`my-auto bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar ${config.borderClass}`}
           >
             {/* Header */}
             <div className="flex items-start justify-between p-6 pb-4">

@@ -111,10 +111,10 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden my-auto border border-slate-200">
+    <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+      <div className="my-auto bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800">{title}</h2>
             <p className="text-sm text-slate-500">
@@ -132,7 +132,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 flex-1 overflow-y-auto space-y-6 bg-white">
+        <div className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-6 bg-white">
           {/* Step: Upload */}
           {step === "upload" && (
             <div className="space-y-4">
@@ -290,7 +290,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
           <button
             onClick={() => {
               if (step === "preview") {

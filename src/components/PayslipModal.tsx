@@ -167,8 +167,8 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] border border-slate-200">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
+      <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200">
         {/* Top Action Bar */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         </div>
 
         {/* Scrollable Document Area */}
-        <div className="overflow-y-auto p-4 sm:p-6 bg-slate-100/70 flex justify-center">
+        <div className="overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-slate-100/70 flex justify-center flex-1">
           {/* Printable Document Box */}
           <div
             ref={printRef}

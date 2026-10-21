@@ -373,8 +373,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] my-auto">
+      <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto">
           {/* Header */}
           <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
@@ -398,7 +398,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </button>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-6 flex-1 overflow-y-auto min-h-0">
+          <div className="p-5 sm:p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar min-h-0">
             {/* 1. Pilih Modul Laporan */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">

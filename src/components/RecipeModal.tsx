@@ -68,10 +68,10 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 z-50 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92vh] flex flex-col my-auto border border-slate-200/90">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/90">
         {/* Header */}
-        <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80">
+        <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
               <UtensilsCrossed className="w-5 h-5" />
@@ -95,7 +95,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
 
         {/* Content Body */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 text-xs">
+          <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 text-xs">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Nama Menu <span className="text-slate-400 font-normal">(Harus sama persis dengan nama menu di POS)</span>
@@ -191,7 +191,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80">
+          <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80 shrink-0">
             <button
               type="button"
               onClick={onClose}

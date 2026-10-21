@@ -1528,14 +1528,14 @@ export const Sales = () => {
       {/* ── MODAL DETAIL STRUK TRANSAKSI POS ─────────────────────────────── */}
       <AnimatePresence>
         {selectedOrderForDetail && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl border border-slate-200/80 w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[92vh]"
+              className="my-auto bg-white rounded-3xl border border-slate-200/80 w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh]"
             >
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2.5 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 shadow-2xs">
                     <Receipt className="w-5 h-5" />
@@ -1551,6 +1551,7 @@ export const Sales = () => {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedOrderForDetail(null)}
                   className="p-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
                 >
@@ -1558,7 +1559,7 @@ export const Sales = () => {
                 </button>
               </div>
 
-              <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+              <div className="p-5 overflow-y-auto custom-scrollbar space-y-4 flex-1 text-xs">
                 {/* Status & Meja */}
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
                   <div>
@@ -1703,7 +1704,7 @@ export const Sales = () => {
                 )}
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
                 <button
                   onClick={handlePrintReceipt}
                   className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
@@ -1727,14 +1728,14 @@ export const Sales = () => {
       {/* ── MODAL CATAT OMZET HARIAN ────────────────────────────────────── */}
       <AnimatePresence>
         {isAddRecapOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl border border-slate-200/80 w-full max-w-lg overflow-hidden shadow-2xl"
+              className="my-auto bg-white rounded-3xl border border-slate-200/80 w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh]"
             >
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs">
                     <DollarSign className="w-5 h-5" />
@@ -1749,6 +1750,7 @@ export const Sales = () => {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsAddRecapOpen(false)}
                   className="p-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
                 >
@@ -1756,7 +1758,8 @@ export const Sales = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveRecap} className="p-6 space-y-4 text-xs">
+              <form onSubmit={handleSaveRecap} className="flex flex-col flex-1 overflow-hidden text-xs">
+                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
@@ -1893,7 +1896,9 @@ export const Sales = () => {
                   />
                 </div>
 
-                <div className="pt-2 flex items-center justify-end gap-2.5">
+                </div>
+
+                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsAddRecapOpen(false)}

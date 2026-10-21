@@ -2205,8 +2205,8 @@ export const LeaderChecklist: React.FC = () => {
 
           {/* Modal Tambah / Edit Aturan Tunjangan */}
           {isRuleModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+              <div className="my-auto bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in duration-150 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-emerald-600" />

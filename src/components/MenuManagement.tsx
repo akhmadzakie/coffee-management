@@ -1017,12 +1017,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {isBatchCookModalOpen && cookingBatchPrep && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl p-5 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200/90 max-h-[92vh] overflow-y-auto"
+              className="my-auto bg-white rounded-3xl p-5 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200/90 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
             >
               <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
                 <div>
@@ -1284,12 +1284,12 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-3xl p-5 sm:p-7 max-w-2xl w-full max-h-[92vh] overflow-y-auto no-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
+        className="my-auto bg-white rounded-3xl p-5 sm:p-7 max-w-2xl w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
       >
         <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
           <div className="flex items-center gap-3">
@@ -1641,12 +1641,12 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[92vh] overflow-y-auto no-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
+        className="my-auto bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
       >
         <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
           <div className="flex items-center gap-3">

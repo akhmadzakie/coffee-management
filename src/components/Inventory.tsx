@@ -2639,11 +2639,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
       {isIngredientModalOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[92vh] overflow-y-auto my-auto border border-slate-200/90"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar my-auto border border-slate-200/90"
           >
             {/* Modal Header */}
             <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80">
@@ -2992,11 +2992,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── MODAL: CATAT PEMAKAIAN & WASTE ───────────────────────────────── */}
       {isAddMovementOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
           >
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-2.5">
@@ -3328,9 +3328,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── MODAL RINCIAN OPNAME DETAIL ───────────────────────────────────── */}
       {selectedOpnameForView && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
                   <ClipboardList className="w-5 h-5" />
@@ -3357,7 +3357,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </button>
             </div>
 
-            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+            <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
               {/* DESKTOP/TABLET VIEW: Structured Table */}
               <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-left text-xs">
@@ -3435,7 +3435,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-2">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-2 shrink-0">
               <div>
                 {selectedOpnameForView.status === "DRAFT" && (
                   <button

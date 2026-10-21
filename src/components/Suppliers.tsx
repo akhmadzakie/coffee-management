@@ -270,11 +270,11 @@ export const Suppliers = () => {
       {/* ─── MODAL: Add / Edit Supplier ───────────────────────────────────────────── */}
       {isModalOpen &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] my-auto border border-slate-200/80 p-6 space-y-5">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] my-auto border border-slate-200/80 flex flex-col">
+              <div className="flex justify-between items-center border-b border-slate-100 p-4 sm:p-5 bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
+                  <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 shrink-0">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <h3 className="text-base font-bold text-slate-900">
@@ -289,7 +289,8 @@ export const Suppliers = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Nama Perusahaan / Supplier / Toko <span className="text-rose-500">*</span>
@@ -359,25 +360,26 @@ export const Suppliers = () => {
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs resize-none"
                   ></textarea>
                 </div>
+              </div>
 
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer"
-                  >
-                    {editingSupplier ? "Simpan Perubahan" : "Tambah Supplier"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>,
+              <div className="flex justify-end gap-2 p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer"
+                >
+                  {editingSupplier ? "Simpan Perubahan" : "Tambah Supplier"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
           document.body
         )}
     </div>

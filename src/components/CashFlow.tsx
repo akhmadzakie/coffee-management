@@ -857,9 +857,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
       {/* ─── TRANSACTION MODAL ────────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center z-50 animate-fade-in">
+          <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[85vh] sm:max-h-[88vh]">
+            <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-2xs ${
                   trxType === "CASH_IN" ? "bg-emerald-50 text-emerald-600 border border-emerald-200/60" : "bg-rose-50 text-rose-600 border border-rose-200/60"
@@ -876,6 +876,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
@@ -883,8 +884,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               </button>
             </div>
 
-            <form onSubmit={handleTrxSubmit} className="p-6">
-              <div className="space-y-4">
+            <form onSubmit={handleTrxSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                 {/* Type Toggle Sliding Pill */}
                 <div className="flex gap-1.5 p-1 bg-slate-100/90 rounded-2xl mb-4 border border-slate-200/70">
                   <button
@@ -1005,7 +1006,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -1027,9 +1028,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
       {/* ─── ACCOUNT MODAL ─────────────────────────────────────────────── */}
       {isAccountModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center z-50 animate-fade-in">
+          <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[85vh] sm:max-h-[88vh]">
+            <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs">
                   <Landmark className="w-5 h-5 stroke-[2.2]" />
@@ -1044,6 +1045,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAccountModalOpen(false)}
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
@@ -1051,8 +1053,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               </button>
             </div>
 
-            <form onSubmit={handleAccountSubmit} className="p-6">
-              <div className="space-y-4">
+            <form onSubmit={handleAccountSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                     Nama Pos Kas
@@ -1083,7 +1085,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAccountModalOpen(false)}
@@ -1106,8 +1108,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
       {/* ─── SALES VERIFICATION MODAL ──────────────────────────────────── */}
       {isVerificationModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-slate-200/80 overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in">
+          <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] sm:max-h-[88vh] flex flex-col border border-slate-200/80 overflow-hidden animate-scale-up">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs">
@@ -1130,7 +1132,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto">
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
               {unverifiedSalesLogs.length === 0 ? (
                 <p className="text-slate-500 text-center py-8 text-xs font-medium">
                   Semua data penjualan telah tervalidasi di buku arus kas.

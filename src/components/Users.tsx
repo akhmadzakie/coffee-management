@@ -593,9 +593,9 @@ export const UsersComponent = () => {
       </div>
 
       {isEditing && createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200/80">
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-50 p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh]">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="font-bold text-base sm:text-lg text-slate-900 flex items-center">
                 <ShieldCheck className="w-5 h-5 mr-2 text-brand-600 shrink-0" />
                 {editingUser ? "Edit Pengguna" : "Tambah Pengguna Baru"}
@@ -607,7 +607,8 @@ export const UsersComponent = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto text-xs">
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
               {/* Opsi Tautkan ke Data Karyawan */}
               <div className="p-3 bg-brand-50/60 border border-brand-100 rounded-2xl">
                 <label className="block text-xs font-bold text-brand-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
@@ -714,12 +715,13 @@ export const UsersComponent = () => {
                   </select>
                 </div>
               )}
+              </div>
 
-              <div className="flex gap-3 pt-3 border-t border-slate-100">
+              <div className="flex gap-3 p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>

@@ -1957,8 +1957,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
       {/* ─── MODAL: Terbitkan ke Katalog Produk Toko ──────────────────────────────── */}
       {isPublishProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto no-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
@@ -2056,8 +2056,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
       {/* ─── MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) ───────────────────── */}
       {isBatchPrepModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto no-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">

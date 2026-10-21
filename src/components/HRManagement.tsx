@@ -3127,8 +3127,8 @@ export function HRManagement() {
 
       {/* Modals */}
       {isEmployeeModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh] my-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto">
             {/* Header */}
             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-base text-slate-900 flex items-center">
@@ -3354,9 +3354,9 @@ export function HRManagement() {
       )}
 
       {isContractModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingContract ? "Edit Kontrak" : "Tambah Kontrak"}
               </h3>
@@ -3364,7 +3364,7 @@ export function HRManagement() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
                 <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={contractForm.employeeId} onChange={e => setContractForm({...contractForm, employeeId: e.target.value})}>
@@ -3408,7 +3408,7 @@ export function HRManagement() {
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
               <button onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
               <button onClick={handleSaveContract} className="px-5 py-2 bg-brand-600 text-white font-medium rounded-xl hover:bg-brand-700 shadow-xs cursor-pointer">Simpan</button>
             </div>
@@ -3423,8 +3423,8 @@ export function HRManagement() {
       {isVerificationModalOpen && verifyingAttendance && (() => {
         const emp = employees.find((e) => e.id === verifyingAttendance.employeeId);
         return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100 my-auto">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100 my-auto">
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 z-10 shrink-0">
               <div className="flex items-center gap-3">
@@ -3469,7 +3469,7 @@ export function HRManagement() {
             </div>
 
             {/* Content Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/30">
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1 bg-slate-50/30">
               {/* Petunjuk Untuk Manager */}
               <div className="p-3.5 bg-blue-50/80 border border-blue-200/70 rounded-xl flex items-start gap-3 text-xs text-blue-900">
                 <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
@@ -3738,9 +3738,9 @@ export function HRManagement() {
 
       {/* Attendance Modal */}
       {isAttendanceModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto my-auto">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingAttendance ? (isIndo ? "Edit Absensi" : "Edit Attendance") : (isIndo ? "Tambah Absensi" : "Add Attendance")}
               </h3>
@@ -3748,7 +3748,7 @@ export function HRManagement() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
                 <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={attendanceForm.employeeId} onChange={e => setAttendanceForm({...attendanceForm, employeeId: e.target.value})}>
@@ -3785,7 +3785,7 @@ export function HRManagement() {
                 <textarea className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.notes || ""} onChange={e => setAttendanceForm({...attendanceForm, notes: e.target.value})} rows={2}></textarea>
               </div>
             </div>
-            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 sticky bottom-0">
+            <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
               <button onClick={() => setIsAttendanceModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
               <button onClick={handleSaveAttendance} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
             </div>
@@ -3796,10 +3796,10 @@ export function HRManagement() {
 
       {/* Master Shift Configuration Modal */}
       {showShiftConfigModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col my-auto border border-slate-100">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-100">
             {/* Header */}
-            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center sticky top-0 z-10">
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
                   <Clock className="w-5 h-5" />
@@ -3821,7 +3821,7 @@ export function HRManagement() {
             </div>
 
             {/* Body */}
-            <form onSubmit={handleSaveShiftDefinitions} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form onSubmit={handleSaveShiftDefinitions} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
               {/* Guidance Info Banner */}
               <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-950 flex items-start gap-3">
                 <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
@@ -4009,9 +4009,9 @@ export function HRManagement() {
 
       {/* Brief Mingguan & Pengesahan Jadwal Modal */}
       {isBriefModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-md">
                   <Megaphone className="w-6 h-6 text-white" />
@@ -4032,7 +4032,7 @@ export function HRManagement() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-emerald-900 leading-relaxed">
@@ -4077,7 +4077,7 @@ export function HRManagement() {
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsBriefModalOpen(false)}
