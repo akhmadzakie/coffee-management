@@ -47,6 +47,8 @@ import {
   Download,
   FileText,
   CheckSquare,
+  Zap,
+  Send,
 } from "lucide-react";
 import { exportMasterExecutiveReportPDF } from "../utils/export";
 import { exportMasterExecutiveReportXlsx } from "../utils/exportXlsx";
@@ -80,6 +82,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
   const [saveTargetToast, setSaveTargetToast] = useState<string | null>(null);
+  const [dashboardAiInput, setDashboardAiInput] = useState("");
+
+  const handleOpenCopilot = (
+    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    prompt?: string
+  ) => {
+    window.dispatchEvent(
+      new CustomEvent("open-ai-assistant", {
+        detail: { tab, prompt: prompt || dashboardAiInput },
+      })
+    );
+    if (prompt || dashboardAiInput) setDashboardAiInput("");
+  };
 
   useEffect(() => {
     if (settings.monthlyRevenueTarget) {
@@ -475,55 +490,64 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* ─── Header & Strategic Filters ───────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm">
-        <div className="space-y-1">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-800 border border-brand-200/60">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200/60 shadow-2xs">
               <Sparkles className="w-3.5 h-3.5 text-brand-600" />
               Executive Suite
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               {netProfitMargin >= 20 ? "Operasional Prima (Sehat)" : "Kondisi Stabil"}
             </span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
             Executive Owner Dashboard
           </h1>
-          <p className="text-xs text-slate-500">
-            Kesehatan finansial, profitabilitas riil, efisiensi rasio biaya, dan laporan kinerja terpadu.
+          <p className="text-xs sm:text-sm text-slate-500">
+            Kesehatan finansial, profitabilitas riil, efisiensi rasio biaya, dan laporan kinerja terpadu Julia's.
           </p>
         </div>
 
         {/* Action & Period Selector */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Period Tabs */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200/70 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Animated Sliding Pill Period Tabs */}
+          <div className="bg-slate-100/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 text-xs shadow-inner overflow-x-auto no-scrollbar max-w-full">
             {[
               { id: "today", label: "Hari Ini" },
               { id: "this_month", label: "Bulan Ini" },
               { id: "last_30_days", label: "30 Hari" },
               { id: "this_year", label: "Tahun Ini" },
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPeriod(p.id as any)}
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                  period === p.id
-                    ? "bg-white text-slate-900 shadow-2xs font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+            ].map((p) => {
+              const isActive = period === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id as any)}
+                  className={`relative px-3 sm:px-3.5 py-1.5 rounded-xl font-semibold transition-colors duration-200 cursor-pointer whitespace-nowrap ${
+                    isActive ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="ownerPeriodTab"
+                      className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                    />
+                  )}
+                  <span className="relative z-10">{p.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* 1-Click Master Executive Report Exports */}
           <button
             onClick={handleExportExecutivePDF}
             disabled={isExporting !== null}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
             title="Unduh Laporan Eksekutif Lengkap Format PDF"
           >
             <Download className="w-3.5 h-3.5" />
@@ -532,7 +556,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <button
             onClick={handleExportExecutiveXlsx}
             disabled={isExporting !== null}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
             title="Unduh Laporan Eksekutif Lengkap Format Excel Multi-Sheet"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -542,7 +566,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           {/* Quick Jump Buttons for Owner */}
           <button
             onClick={() => onNavigate("finance_reports")}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5 text-slate-500" />
             Laporan P&L
@@ -550,16 +574,123 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
       </div>
 
+      {/* ─── Bento AI Copilot Widget (Coursue / Shopeers Aesthetic) ──────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-5 sm:p-6 shadow-xl border border-indigo-950/40">
+        {/* Glow ambient background effects */}
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-amber-300 shadow-inner">
+                <Sparkles className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+                    <span>Julia AI Copilot</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-brand-200 border border-white/15">
+                      Executive Hub
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Data entry cepat secepat narasi kasir, audit stok kritis & konsultan HPP specialty coffee.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleOpenCopilot("quick-input")}
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-brand-900 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>Buka Copilot Penuh →</span>
+            </button>
+          </div>
+
+          {/* Quick Ask / Data Entry Input Box */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (dashboardAiInput.trim()) {
+                const isExpense = /beli|bayar|keluar|ongkir|belanja|terima|masuk|omset/i.test(dashboardAiInput);
+                handleOpenCopilot(isExpense ? "quick-input" : "consultant", dashboardAiInput);
+              }
+            }}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+            <input
+              type="text"
+              value={dashboardAiInput}
+              onChange={(e) => setDashboardAiInput(e.target.value)}
+              placeholder="Ketik catatan belanja cepat (misal: Beli susu 6L 111rb kas laci) atau tanya strategi HPP..."
+              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-300 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!dashboardAiInput.trim()}
+              className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Proses</span>
+              <Send className="w-3 h-3" />
+            </button>
+          </form>
+
+          {/* Bento Prompt Pills */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mr-1">
+              Aksi Cepat:
+            </span>
+            <button
+              onClick={() => handleOpenCopilot("quick-input")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+              <span>⚡ Catat Pengeluaran Cepat</span>
+            </button>
+            <button
+              onClick={() => handleOpenCopilot("receipt")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Receipt className="w-3.5 h-3.5 text-brand-200" />
+              <span>📸 Pindai Nota / Dokumen</span>
+            </button>
+            <button
+              onClick={() => handleOpenCopilot("insights")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              <span>🚨 Audit Stok Menipis</span>
+            </button>
+            <button
+              onClick={() =>
+                handleOpenCopilot(
+                  "consultant",
+                  "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?"
+                )
+              }
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Coffee className="w-3.5 h-3.5 text-amber-200" />
+              <span>☕ Optimasi Margin & HPP Kopi</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ─── Target Omzet Bulanan Run-Rate Bar ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
-              <Target className="w-4 h-4" />
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs hover:shadow-md transition-shadow relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50/90 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
+              <Target className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Target Omzet Bulanan
                 </span>
                 {canSetTarget ? (
@@ -585,10 +716,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   </span>
                 )}
               </div>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2 mt-0.5">
                 {isEditingTarget && canSetTarget ? (
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-xs text-slate-400">Rp</span>
+                    <span className="text-xs text-slate-400 font-semibold">Rp</span>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -603,26 +734,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                         }
                       }}
                       placeholder="150000000"
-                      className="px-2 py-0.5 text-sm font-bold border border-slate-300 rounded-md w-36 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      className="px-2.5 py-1 text-sm font-bold border border-slate-300 rounded-xl w-36 focus:outline-none focus:ring-2 focus:ring-brand-500"
                       autoFocus
                     />
                     <button
                       onClick={handleSaveTarget}
-                      className="px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-semibold rounded-md hover:bg-slate-800 transition-all cursor-pointer"
+                      className="px-3 py-1 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
                     >
-                      Simpan Target
+                      Simpan
                     </button>
                     <button
                       onClick={() => setIsEditingTarget(false)}
-                      className="px-2 py-0.5 text-slate-500 text-[10px] hover:text-slate-700 cursor-pointer"
+                      className="px-2 py-1 text-slate-500 text-xs hover:text-slate-700 cursor-pointer"
                     >
                       Batal
                     </button>
                   </div>
                 ) : (
-                  <span className="text-base font-bold text-slate-900">
+                  <span className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
                     {formatCurrency(totalRevenue)}{" "}
-                    <span className="text-xs font-normal text-slate-400">
+                    <span className="text-xs sm:text-sm font-normal text-slate-400 font-sans">
                       / {formatCurrency(monthlyTarget)}
                     </span>
                   </span>
@@ -631,22 +762,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-4 text-xs bg-slate-50/80 p-2.5 sm:px-4 rounded-2xl border border-slate-200/60 self-start md:self-auto">
             <div>
-              <span className="text-slate-400 block text-[10px]">Capaian Saat Ini</span>
-              <span className="font-bold text-slate-900 text-sm">{targetProgress}%</span>
+              <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Capaian</span>
+              <span className="font-extrabold text-slate-900 text-sm">{targetProgress}%</span>
             </div>
             <div className="h-6 w-px bg-slate-200" />
             <div>
-              <span className="text-slate-400 block text-[10px]">Sisa Target</span>
+              <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Sisa Target</span>
               <span className="font-semibold text-slate-700">
                 {formatCurrency(Math.max(0, monthlyTarget - totalRevenue))}
               </span>
             </div>
             <div className="h-6 w-px bg-slate-200" />
             <div>
-              <span className="text-slate-400 block text-[10px]">Kas Runway</span>
-              <span className="font-semibold text-emerald-600">
+              <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Kas Runway</span>
+              <span className="font-bold text-emerald-600">
                 {cashRunwayMonths} Bulan Aman
               </span>
             </div>
@@ -654,17 +785,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Progress bar track */}
-        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
+        <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${targetProgress}%` }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className={`h-full rounded-full ${
+            transition={{ duration: 0.9, ease: "easeOut" }}
+            className={`h-full rounded-full shadow-xs ${
               targetProgress >= 90
-                ? "bg-emerald-500"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                 : targetProgress >= 60
-                ? "bg-brand-500"
-                : "bg-brand-600"
+                ? "bg-gradient-to-r from-brand-600 to-indigo-500"
+                : "bg-gradient-to-r from-brand-600 to-blue-500"
             }`}
           />
         </div>
@@ -673,255 +804,285 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       {/* ─── The Big 4 Executive KPI Cards ─────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Total Omzet */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Total Omzet Penjualan</span>
-            <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
-              <TrendingUp className="w-4 h-4" />
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Omzet</span>
+            <div className="w-11 h-11 rounded-2xl bg-blue-50/80 text-blue-600 border border-blue-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900">
-            {formatCurrency(totalRevenue)}
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs">
-            <span className="inline-flex items-center text-emerald-600 font-semibold">
-              <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> +14.2%
-            </span>
-            <span className="text-slate-400">vs periode lalu</span>
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              {formatCurrency(totalRevenue)}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-emerald-700 bg-emerald-50 border border-emerald-200/60 font-bold text-[11px]">
+                <ArrowUpRight className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" /> +14.2%
+              </span>
+              <span className="text-slate-400 text-[11px]">vs periode lalu</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 2: Laba Bersih Riil & Margin */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Laba Bersih Riil (Net)</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600">
-              <DollarSign className="w-4 h-4" />
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Laba Bersih Riil</span>
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50/80 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <DollarSign className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900">
-            {formatCurrency(netProfit)}
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs">
-            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/60 text-[10px]">
-              {netProfitMargin.toFixed(1)}% Margin
-            </span>
-            <span className="text-slate-400">setelah HPP & operasional</span>
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              {formatCurrency(netProfit)}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/60 text-[11px]">
+                {netProfitMargin.toFixed(1)}% Margin
+              </span>
+              <span className="text-slate-400 text-[11px]">setelah HPP & opex</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 3: Average Ticket Value (ATV / Basket Size) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Rata-rata Struk (ATV)</span>
-            <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
-              <Receipt className="w-4 h-4" />
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rata-rata Struk (ATV)</span>
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 text-indigo-600 border border-indigo-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <Receipt className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900">
-            {formatCurrency(averageTicketValue)}
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">{transactionCount}</span>
-            <span>total transaksi tamu</span>
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              {formatCurrency(averageTicketValue)}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-500">
+              <span className="font-bold text-slate-800">{transactionCount}</span>
+              <span className="text-slate-400 text-[11px]">total pesanan tamu</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 4: Total Cup / Produk Terjual */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-coffee hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-500">Volume Terjual</span>
-            <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600">
-              <Coffee className="w-4 h-4" />
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Volume Terjual</span>
+            <div className="w-11 h-11 rounded-2xl bg-amber-50/80 text-amber-600 border border-amber-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <Coffee className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900">
-            {totalCupsSold.toLocaleString("id-ID")}{" "}
-            <span className="text-sm font-normal text-slate-500">Cup/Item</span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-500">
-            <span className="inline-flex items-center text-emerald-600 font-medium">
-              <Sparkles className="w-3 h-3 mr-1" /> Permintaan Tinggi
-            </span>
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              {totalCupsSold.toLocaleString("id-ID")}{" "}
+              <span className="text-sm font-semibold text-slate-400">Cup/Item</span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-500">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200/60 text-[11px]">
+                <Sparkles className="w-3 h-3 mr-1 text-amber-500 fill-amber-500" /> Permintaan Tinggi
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ─── Unit Economics: 3 Rasio Emas Kafe ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-coffee">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-brand-600" />
-              Unit Economics & Rasio Beban Ideal Kafe
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Tolak ukur efisiensi biaya terhadap total omzet berdasarkan standar F&B Specialty Coffee.
-            </p>
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <Layers className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Unit Economics & Rasio Beban Kafe
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tolak ukur efisiensi biaya terhadap omzet sesuai standar Specialty Coffee & Eatery.
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-slate-400 hidden sm:inline">
-            Status: Biaya Terkendali
+          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+            ✓ Biaya Terkendali
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Ratio 1: COGS / HPP */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-700">HPP / COGS (Bahan Baku)</span>
-              <span className={`font-bold ${cogsRatio <= 35 && cogsRatio > 0 ? "text-emerald-700" : cogsRatio > 35 ? "text-rose-600" : "text-slate-500"}`}>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-bold text-slate-700">HPP / COGS (Bahan Baku)</span>
+              <span className={`font-extrabold text-sm ${cogsRatio <= 35 && cogsRatio > 0 ? "text-emerald-700" : cogsRatio > 35 ? "text-rose-600" : "text-slate-500"}`}>
                 {cogsRatio.toFixed(1)}%
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
+            <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden my-2.5">
               <div
-                className={`h-full rounded-full ${cogsRatio <= 35 && cogsRatio > 0 ? "bg-emerald-500" : cogsRatio > 35 ? "bg-rose-500" : "bg-slate-300"}`}
+                className={`h-full rounded-full transition-all duration-700 ${cogsRatio <= 35 && cogsRatio > 0 ? "bg-emerald-500" : cogsRatio > 35 ? "bg-rose-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, cogsRatio)}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500">
               <span>Ideal: 28% - 35%</span>
-              <span className="font-medium text-slate-700">{formatCurrency(cogsExpenses)}</span>
+              <span className="font-bold text-slate-800">{formatCurrency(cogsExpenses)}</span>
             </div>
           </div>
 
           {/* Ratio 2: Labor Cost */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-700">Labor Cost (Gaji Staf)</span>
-              <span className={`font-bold ${laborRatio <= 22 && laborRatio > 0 ? "text-emerald-700" : laborRatio > 22 ? "text-amber-600" : "text-slate-500"}`}>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-bold text-slate-700">Labor Cost (Gaji Staf)</span>
+              <span className={`font-extrabold text-sm ${laborRatio <= 22 && laborRatio > 0 ? "text-emerald-700" : laborRatio > 22 ? "text-amber-600" : "text-slate-500"}`}>
                 {laborRatio.toFixed(1)}%
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
+            <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden my-2.5">
               <div
-                className={`h-full rounded-full ${laborRatio <= 22 && laborRatio > 0 ? "bg-emerald-500" : laborRatio > 22 ? "bg-amber-500" : "bg-slate-300"}`}
+                className={`h-full rounded-full transition-all duration-700 ${laborRatio <= 22 && laborRatio > 0 ? "bg-emerald-500" : laborRatio > 22 ? "bg-amber-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, laborRatio)}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500">
               <span>Ideal: 15% - 22%</span>
-              <span className="font-medium text-slate-700">{formatCurrency(laborExpenses)}</span>
+              <span className="font-bold text-slate-800">{formatCurrency(laborExpenses)}</span>
             </div>
           </div>
 
           {/* Ratio 3: OpEx Ratio */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-700">OpEx (Listrik, Sewa, Wifi)</span>
-              <span className={`font-bold ${opexRatio <= 18 && opexRatio > 0 ? "text-emerald-700" : opexRatio > 18 ? "text-amber-600" : "text-slate-500"}`}>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-bold text-slate-700">OpEx (Listrik, Sewa, Wifi)</span>
+              <span className={`font-extrabold text-sm ${opexRatio <= 18 && opexRatio > 0 ? "text-emerald-700" : opexRatio > 18 ? "text-amber-600" : "text-slate-500"}`}>
                 {opexRatio.toFixed(1)}%
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden my-2">
+            <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden my-2.5">
               <div
-                className={`h-full rounded-full ${opexRatio <= 18 && opexRatio > 0 ? "bg-emerald-500" : opexRatio > 18 ? "bg-amber-500" : "bg-slate-300"}`}
+                className={`h-full rounded-full transition-all duration-700 ${opexRatio <= 18 && opexRatio > 0 ? "bg-emerald-500" : opexRatio > 18 ? "bg-amber-500" : "bg-slate-300"}`}
                 style={{ width: `${Math.min(100, opexRatio)}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-slate-500">
               <span>Ideal: 12% - 18%</span>
-              <span className="font-medium text-slate-700">{formatCurrency(opexExpenses)}</span>
+              <span className="font-bold text-slate-800">{formatCurrency(opexExpenses)}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* ─── Peringatan Dini & Deteksi Kebocoran (Loss Prevention) ─────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Kebocoran 1: Diskon & Promo */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-500 text-xs mb-1">
-            <Award className="w-3.5 h-3.5 text-amber-600" />
-            <span>Total Potongan Diskon</span>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Potongan Diskon</span>
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <Award className="w-4 h-4 stroke-[2.2]" />
+            </div>
           </div>
-          <div className="text-lg font-bold text-slate-900">
-            {formatCurrency(totalDiscounts)}
+          <div>
+            <div className="text-xl font-extrabold text-slate-900 tracking-tight">
+              {formatCurrency(totalDiscounts)}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Margin terpotong promo periode ini
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Margin terpotong promo bulan ini
-          </p>
         </div>
 
         {/* Kebocoran 2: Selisih Laci & Void */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-500 text-xs mb-1">
-            <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-            <span>Selisih Kasir / Void</span>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Selisih Kasir / Void</span>
+            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <ShieldAlert className="w-4 h-4 stroke-[2.2]" />
+            </div>
           </div>
-          <div className={`text-lg font-bold ${voidSummary.discrepancyTotal > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-            {voidSummary.discrepancyTotal > 0 ? formatCurrency(voidSummary.discrepancyTotal) : "Rp 0 (Klop)"}
+          <div>
+            <div className={`text-xl font-extrabold tracking-tight ${voidSummary.discrepancyTotal > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+              {voidSummary.discrepancyTotal > 0 ? formatCurrency(voidSummary.discrepancyTotal) : "Rp 0 (Klop)"}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {voidSummary.discrepancyTotal > 0 ? "Terdapat deviasi kasir" : "Semua shift terekonsiliasi"}
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {voidSummary.discrepancyTotal > 0 ? "Terdapat deviasi kasir" : "Semua shift terekonsiliasi"}
-          </p>
         </div>
 
         {/* Kebocoran 3: Waste Cost */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-500 text-xs mb-1">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            <span>Bahan Terbuang (Waste)</span>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Bahan Terbuang (Waste)</span>
+            <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 border border-orange-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <AlertTriangle className="w-4 h-4 stroke-[2.2]" />
+            </div>
           </div>
-          <div className="text-lg font-bold text-slate-900">
-            {formatCurrency(wasteCost)}
+          <div>
+            <div className="text-xl font-extrabold text-slate-900 tracking-tight">
+              {formatCurrency(wasteCost)}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Kerugian susu basi & failed shot
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Kerugian susu basi & failed shot
-          </p>
         </div>
 
         {/* Kebocoran 4: Total Likuiditas Kas */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-500 text-xs mb-1">
-            <Wallet className="w-3.5 h-3.5 text-slate-700" />
-            <span>Total Likuiditas Kas</span>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Likuiditas Kas</span>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+              <Wallet className="w-4 h-4 stroke-[2.2]" />
+            </div>
           </div>
-          <div className="text-lg font-bold text-emerald-700">
-            {formatCurrency(totalCashLiquidity)}
+          <div>
+            <div className="text-xl font-extrabold text-emerald-700 tracking-tight">
+              {formatCurrency(totalCashLiquidity)}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Saldo riil siap pakai di kas & bank
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Saldo riil siap pakai di kas & bank
-          </p>
         </div>
       </div>
 
       {/* ─── Pilar 4: Kinerja SDM, Beban Payroll & Kepatuhan Supervisi ──── */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-coffee">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Users className="w-4 h-4 text-brand-600" />
-              Kinerja SDM, Beban Payroll & Kepatuhan Supervisi
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Monitoring real-time tim kerja, alokasi beban gaji bulanan, dan tingkat disiplin checklist operasional leader.
-            </p>
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <Users className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Kinerja SDM, Payroll & Disiplin Supervisi
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Monitoring staf aktif, beban gaji bulanan, dan kepatuhan checklist SOP lapangan.
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onNavigate("payroll")}
-              className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer"
+              className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 cursor-pointer bg-brand-50/70 hover:bg-brand-50 px-3 py-1.5 rounded-xl border border-brand-200/60 transition-all"
             >
-              Laporan Payroll <ChevronRight className="w-3.5 h-3.5" />
+              <span>Laporan Payroll</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Tim Aktif */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-600 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-indigo-600" />
-                Total Karyawan Aktif
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-200/60">
-                Staff Toko
-              </span>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tim Aktif</span>
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200/60 flex items-center justify-center shadow-2xs">
+                <Users className="w-4 h-4 stroke-[2.2]" />
+              </div>
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">
-              {sdmMetrics.activeStaffCount} <span className="text-xs font-normal text-slate-500">Orang</span>
+            <div className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              {sdmMetrics.activeStaffCount} <span className="text-xs font-semibold text-slate-400">Orang</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               Barista, Kitchen, Kasir & Leader
@@ -929,17 +1090,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </div>
 
           {/* Card 2: Beban Payroll Bulanan */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-600 flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                Estimasi Beban Payroll
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200/60">
-                Bulan Ini
-              </span>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estimasi Payroll</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs">
+                <DollarSign className="w-4 h-4 stroke-[2.2]" />
+              </div>
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">
+            <div className="text-2xl font-extrabold text-slate-900 tracking-tight">
               {formatCurrency(sdmMetrics.totalPayrollAmount)}
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
@@ -948,13 +1106,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </div>
 
           {/* Card 3: Kepatuhan Checklist Jobdesk */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-600 flex items-center gap-1.5">
-                <CheckSquare className="w-3.5 h-3.5 text-brand-600" />
-                Kepatuhan Checklist Jobdesk
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Checklist SOP</span>
+              <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 border border-brand-200/60 flex items-center justify-center shadow-2xs">
+                <CheckSquare className="w-4 h-4 stroke-[2.2]" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                {sdmMetrics.checklistCompliance}%
               </span>
-              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] border ${
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 sdmMetrics.checklistCompliance >= 85
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : "bg-amber-50 text-amber-700 border-amber-200"
@@ -962,17 +1125,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 {sdmMetrics.checklistCompliance >= 85 ? "SOP Disiplin" : "Perlu Atensi"}
               </span>
             </div>
-            <div className="flex items-baseline gap-2 mt-2">
-              <span className="text-2xl font-bold text-slate-900">
-                {sdmMetrics.checklistCompliance}%
-              </span>
-              <span className="text-[11px] text-slate-500">
-                Selesai Tuntas
-              </span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden mt-2">
+            <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden mt-2.5">
               <div
-                className={`h-full rounded-full ${
+                className={`h-full rounded-full transition-all duration-700 ${
                   sdmMetrics.checklistCompliance >= 85 ? "bg-emerald-500" : "bg-amber-500"
                 }`}
                 style={{ width: `${sdmMetrics.checklistCompliance}%` }}
@@ -981,21 +1136,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </div>
 
           {/* Card 4: Rasio Kehadiran Tim */}
-          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/70">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-slate-600 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-sky-600" />
-                Tingkat Kehadiran Presensi
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-bold text-[10px] border border-sky-200/60">
-                {sdmMetrics.attendanceRate}% Hadir
-              </span>
+          <div className="p-4.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Presensi Shift</span>
+              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 border border-sky-200/60 flex items-center justify-center shadow-2xs">
+                <Clock className="w-4 h-4 stroke-[2.2]" />
+              </div>
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">
+            <div className="text-2xl font-extrabold text-slate-900 tracking-tight">
               {sdmMetrics.attendanceRate}%
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Disiplin kehadiran & ketepatan shift
+              Disiplin kehadiran & ketepatan jam shift
             </p>
           </div>
         </div>
@@ -1003,25 +1155,29 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
       {/* ─── Tren Penjualan & Laba Bersih (Area Chart) ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-brand-600" />
-                Tren Omzet vs Laba Bersih (6 Bulan Terakhir)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Pertumbuhan bisnis dan performa margin laba bersih bulanan.
-              </p>
+        <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+                <BarChart3 className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Tren Omzet vs Laba Bersih
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pertumbuhan bisnis dan margin bersih 6 bulan terakhir.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-xs font-medium">
+            <div className="flex items-center gap-4 text-xs font-semibold bg-slate-50 px-3.5 py-1.5 rounded-2xl border border-slate-200/60 self-start sm:self-auto">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
-                <span className="text-slate-600">Omzet</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-600 shadow-xs" />
+                <span className="text-slate-700">Omzet</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-slate-600">Laba Bersih</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" />
+                <span className="text-slate-700">Laba Bersih</span>
               </div>
             </div>
           </div>
@@ -1031,12 +1187,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="ownerRevGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1b2cc0" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#1b2cc0" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#1b2cc0" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#1b2cc0" stopOpacity={0.0} />
                   </linearGradient>
                   <linearGradient id="ownerProfitGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -1051,10 +1207,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   formatter={(value: any) => [formatCurrency(Number(value)), ""]}
                   contentStyle={{
                     backgroundColor: "#0f172a",
-                    borderRadius: "12px",
-                    border: "none",
+                    borderRadius: "16px",
+                    border: "1px solid rgba(255,255,255,0.1)",
                     color: "#fff",
                     fontSize: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
                   }}
                 />
                 <Area
@@ -1064,8 +1221,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   stroke="#1b2cc0"
                   strokeWidth={2.5}
                   fillOpacity={1}
-                  fill="url"
-                  fillUrn="ownerRevGradient"
+                  fill="url(#ownerRevGradient)"
+                  animationDuration={900}
                 />
                 <Area
                   type="monotone"
@@ -1074,8 +1231,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   stroke="#10b981"
                   strokeWidth={2.5}
                   fillOpacity={1}
-                  fill="url"
-                  fillUrn="ownerProfitGradient"
+                  fill="url(#ownerProfitGradient)"
+                  animationDuration={900}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -1083,15 +1240,21 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Donut Chart: Komposisi Omzet per Kategori */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <PieIcon className="w-4 h-4 text-amber-600" />
-              Kontributor Omzet
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Distribusi penjualan per lini produk.
-            </p>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
+                <PieIcon className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Kontributor Omzet
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Distribusi penjualan per lini produk kafe.
+                </p>
+              </div>
+            </div>
 
             {categoryContribution.length === 0 ? (
               <div className="h-44 w-full my-3 flex flex-col items-center justify-center text-center">
@@ -1120,10 +1283,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                       formatter={(value: any) => formatCurrency(Number(value))}
                       contentStyle={{
                         backgroundColor: "#0f172a",
-                        borderRadius: "10px",
-                        border: "none",
+                        borderRadius: "16px",
+                        border: "1px solid rgba(255,255,255,0.1)",
                         color: "#fff",
                         fontSize: "12px",
+                        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
                       }}
                     />
                   </PieChart>
@@ -1136,12 +1300,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           {categoryContribution.length > 0 && (
             <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
               {categoryContribution.map((c) => (
-                <div key={c.name} className="flex items-center justify-between">
+                <div key={c.name} className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="text-slate-600">{c.name}</span>
+                    <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ backgroundColor: c.color }} />
+                    <span className="text-slate-600 font-medium">{c.name}</span>
                   </div>
-                  <span className="font-semibold text-slate-900">
+                  <span className="font-extrabold text-slate-900">
                     {formatCurrency(c.value)}
                   </span>
                 </div>
@@ -1154,20 +1318,24 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       {/* ─── Peta Jam Sibuk & Menu Bintang (Cash Cows) ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Peta Jam Sibuk (Peak Hours) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-brand-600" />
-                  Peta Jam Sibuk (Traffic Velocity)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Waktu puncak keramaian transaksi untuk alokasi staf & promo jam sepi.
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+                  <Clock className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                    Peta Jam Sibuk (Traffic Velocity)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Waktu puncak pesanan untuk alokasi barista & promo happy hour.
+                  </p>
+                </div>
               </div>
               {peakHourData.some((slot) => slot.count > 0) && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200/60">
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200/60 shadow-2xs">
                   Terpantau Aktif
                 </span>
               )}
@@ -1175,8 +1343,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
             {peakHourData.every((slot) => slot.count === 0) ? (
               <div className="py-10 flex flex-col items-center justify-center text-center">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
-                  <Clock className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                  <Clock className="w-6 h-6 stroke-[1.8]" />
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">Belum Ada Transaksi Pada Periode Ini</h4>
                 <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
@@ -1190,20 +1358,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   const pct = maxRev > 0 ? Math.round((slot.revenue / maxRev) * 100) : 0;
 
                   return (
-                    <div key={slot.slot} className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                      <div className="flex items-center justify-between text-xs mb-1.5">
+                    <div key={slot.slot} className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/60 hover:bg-white hover:shadow-xs transition-all">
+                      <div className="flex items-center justify-between text-xs mb-2">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-900">{slot.slot}</span>
                           <span className="text-slate-500 text-[11px] hidden sm:inline">({slot.label})</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-slate-500">{slot.count} Transaksi</span>
-                          <span className="font-bold text-slate-900">{formatCurrency(slot.revenue)}</span>
+                          <span className="text-slate-500 font-medium">{slot.count} Transaksi</span>
+                          <span className="font-extrabold text-slate-900">{formatCurrency(slot.revenue)}</span>
                         </div>
                       </div>
-                      <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-brand-600"
+                          className="h-full rounded-full bg-gradient-to-r from-brand-600 to-indigo-500 transition-all duration-700"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -1216,30 +1384,35 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Top 5 Star Products (Cash Cows) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-coffee flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-brand-600" />
-                  Menu Bintang (Cash Cows)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  5 produk penyumbang omzet terbesar dengan margin tertinggi.
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
+                  <Flame className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                    Menu Bintang (Cash Cows)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    5 produk penyumbang omzet terbesar dengan margin tertinggi.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => onNavigate("import_sales")}
-                className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 bg-brand-50/70 hover:bg-brand-50 px-3 py-1.5 rounded-xl border border-brand-200/60 transition-all cursor-pointer"
               >
-                Lihat Penjualan <ChevronRight className="w-3.5 h-3.5" />
+                <span>Lihat Penjualan</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {topProducts.length === 0 ? (
               <div className="py-10 flex flex-col items-center justify-center text-center">
-                <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 mb-2">
-                  <Coffee className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 mb-2">
+                  <Coffee className="w-6 h-6 stroke-[1.8]" />
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">Belum Ada Menu Terjual</h4>
                 <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
@@ -1248,25 +1421,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 <div className="flex items-center gap-2 mt-4">
                   <button
                     onClick={() => onNavigate("import_sales")}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-2xs"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all shadow-xs cursor-pointer"
                   >
                     Impor Data POS
                   </button>
                   <button
                     onClick={() => onNavigate("shifts")}
-                    className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all"
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95 transition-all cursor-pointer"
                   >
                     Buka Kasir
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="space-y-2">
                 {topProducts.map((prod, idx) => (
-                  <div key={prod.name} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                  <div key={prod.name} className="p-3 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        idx === 0 ? "bg-brand-600 text-white" : idx === 1 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
+                      <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-extrabold shadow-2xs ${
+                        idx === 0 ? "bg-brand-600 text-white" : idx === 1 ? "bg-slate-800 text-white" : idx === 2 ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
                       }`}>
                         {idx + 1}
                       </span>
@@ -1278,10 +1451,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-bold text-slate-900 block">
+                      <span className="text-xs font-extrabold text-slate-900 block tracking-tight">
                         {formatCurrency(prod.rev)}
                       </span>
-                      <span className="text-[10px] text-emerald-600 font-medium">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-emerald-50 text-[10px] text-emerald-700 font-bold border border-emerald-200/60">
                         Terlaris
                       </span>
                     </div>
@@ -1294,34 +1467,35 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       </div>
 
       {/* ─── Navigasi Cepat Eksekutif (Bottom Actions) ──────────────────────── */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-coffee flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="space-y-1 text-center md:text-left">
-          <h4 className="text-base font-bold text-white flex items-center justify-center md:justify-start gap-2">
-            <Sparkles className="w-4 h-4 text-brand-400" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-6 sm:p-7 shadow-xl border border-indigo-950/40 flex flex-col md:flex-row items-center justify-between gap-5">
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/15 blur-3xl pointer-events-none" />
+        <div className="relative z-10 space-y-1 text-center md:text-left">
+          <h4 className="text-base sm:text-lg font-bold text-white flex items-center justify-center md:justify-start gap-2">
+            <Sparkles className="w-4 h-4 text-amber-300" />
             Ingin Analisis Finansial Lebih Mendalam?
           </h4>
           <p className="text-xs text-slate-300 max-w-xl">
-            Akses langsung buku kas besar, laporan laba rugi bulanan, atau pantau operasional lapangan secara real-time.
+            Akses langsung buku kas besar, laporan laba rugi bulanan, atau pantau kas & bank Julia's secara real-time.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative z-10 flex flex-wrap items-center justify-center gap-2.5">
           <button
             onClick={() => onNavigate("cash_flow")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all"
+            className="px-4 py-2 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 text-white border border-white/15 transition-all shadow-xs cursor-pointer"
           >
             Buku Kas Besar
           </button>
           <button
             onClick={() => onNavigate("finance_reports")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all"
+            className="px-4 py-2 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 active:scale-95 text-white border border-white/15 transition-all shadow-xs cursor-pointer"
           >
             Laba Rugi (P&L)
           </button>
           <button
             onClick={() => onNavigate("dashboard_finance")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white transition-all shadow-sm"
+            className="px-4 py-2 rounded-2xl text-xs font-bold bg-brand-500 hover:bg-brand-400 active:scale-95 text-white transition-all shadow-md cursor-pointer"
           >
-            Kas & Bank
+            Kas & Bank →
           </button>
         </div>
       </div>

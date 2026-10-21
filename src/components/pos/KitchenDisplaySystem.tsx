@@ -141,11 +141,26 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
     }
   };
 
-  // Poll realtime tickets every 4 seconds
+  // Poll realtime tickets every 8 seconds, only when tab is visible
   useEffect(() => {
     fetchTickets();
-    const interval = setInterval(fetchTickets, 4000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchTickets();
+      }
+    }, 8000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchTickets();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [stationFilter]);
 
   // Update item status

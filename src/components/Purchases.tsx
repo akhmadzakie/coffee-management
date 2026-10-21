@@ -19,9 +19,16 @@ import {
   Coins,
   Receipt,
   Sparkles,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  X,
+  CreditCard,
+  Layers,
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
 import { exportToCSV } from "../utils/export";
+import { motion, AnimatePresence } from "motion/react";
 
 export const Purchases = () => {
   const {
@@ -40,7 +47,10 @@ export const Purchases = () => {
     currentUser,
   } = useStore();
 
-  const isFinance = currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
+  const isFinance =
+    currentUser?.role === "FINANCE" ||
+    currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "OWNER";
 
   const [activeTab, setActiveTab] = useState<"new_po" | "history">("new_po");
 
@@ -53,9 +63,7 @@ export const Purchases = () => {
   // PO State
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [cart, setCart] = useState<PurchaseOrderItem[]>([]);
-  const [deliveryOption, setDeliveryOption] = useState<"RECEIVED" | "PENDING">(
-    "RECEIVED",
-  );
+  const [deliveryOption, setDeliveryOption] = useState<"RECEIVED" | "PENDING">("RECEIVED");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -69,6 +77,9 @@ export const Purchases = () => {
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null);
   const [poToReceive, setPoToReceive] = useState<any>(null);
 
+  // Mobile drawer toggle for cart on small phones
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+
   const isIndo = settings.language === "id";
 
   useEffect(() => {
@@ -78,7 +89,7 @@ export const Purchases = () => {
           (a) =>
             a.name.toLowerCase().includes("kasir") ||
             a.name.toLowerCase().includes("drawer") ||
-            a.name.toLowerCase().includes("petty"),
+            a.name.toLowerCase().includes("petty")
         ) || cashAccounts[0];
       if (defaultAcc) setSelectedCashAccountId(defaultAcc.id);
     }
@@ -93,8 +104,7 @@ export const Purchases = () => {
   const filteredProducts = ingredients.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      false;
+      (product.category || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory =
       selectedCategory === "ALL" || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -114,8 +124,8 @@ export const Purchases = () => {
                 quantity: item.quantity + 1,
                 subtotal: (item.quantity + 1) * item.unitPrice,
               }
-            : item,
-        ),
+            : item
+        )
       );
     } else {
       setCart([
@@ -123,8 +133,8 @@ export const Purchases = () => {
         {
           productId,
           quantity: 1,
-          unitPrice: 0,
-          subtotal: 0,
+          unitPrice: Number(product.costPerUnit || 0),
+          subtotal: Number(product.costPerUnit || 0),
         },
       ]);
     }
@@ -132,7 +142,7 @@ export const Purchases = () => {
 
   const updateCartItem = (
     productId: string,
-    updates: Partial<PurchaseOrderItem>,
+    updates: Partial<PurchaseOrderItem>
   ) => {
     setCart(
       cart.map((item) => {
@@ -143,7 +153,7 @@ export const Purchases = () => {
           return updated;
         }
         return item;
-      }),
+      })
     );
   };
 
@@ -170,6 +180,7 @@ export const Purchases = () => {
       setIsInvoiceModalOpen(true);
       setCart([]);
       setMarketNotes("");
+      setIsMobileCartOpen(false);
       return;
     }
 
@@ -199,6 +210,7 @@ export const Purchases = () => {
     setIsInvoiceModalOpen(true);
     setCart([]);
     setSelectedSupplier("");
+    setIsMobileCartOpen(false);
   };
 
   const handleExportHistory = () => {
@@ -207,7 +219,7 @@ export const Purchases = () => {
       return {
         PONumber: po.poNumber,
         Date: new Date(po.date).toLocaleDateString(),
-        Supplier: supplier?.name || "Unknown",
+        Supplier: supplier?.name || po.supplierName || "Unknown",
         TotalAmount: po.totalAmount,
         Status: po.status,
         DeliveryStatus: po.deliveryStatus,
@@ -218,65 +230,103 @@ export const Purchases = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-6">
-      {/* Tabs */}
-      <div className="flex space-x-6 border-b border-slate-200 pb-4">
-        {!isReadOnly && (
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
+              Supply Chain & Restock
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              Procurement Center
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <ShoppingBag className="w-5 h-5" />
+            </div>
+            {isIndo ? "Pembelian Bahan & Purchase Order" : "Procurement & Purchase Orders"}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+            Kelola PO resmi distributor, belanja pasar darurat kasir, penerimaan stok gudang, dan rekonsiliasi hutang dagang.
+          </p>
+        </div>
+
+        {/* Tab Selector */}
+        <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full md:w-auto">
+          {!isReadOnly && (
+            <button
+              onClick={() => setActiveTab("new_po")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 md:flex-none cursor-pointer ${
+                activeTab === "new_po" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "new_po" && (
+                <motion.div
+                  layoutId="purchasesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <Plus className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+              <span className="relative z-10">
+                {isIndo ? "Restock / Kulakan Baru" : "New Purchase"}
+              </span>
+            </button>
+          )}
           <button
-            onClick={() => setActiveTab("new_po")}
-            className={`font-medium pb-2 -mb-[18px] transition-colors text-sm ${
-              activeTab === "new_po"
-                ? "border-b-2 border-blue-500 text-blue-600"
-                : "text-slate-500 hover:text-slate-700"
+            onClick={() => setActiveTab("history")}
+            className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 md:flex-none cursor-pointer ${
+              activeTab === "history" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {isIndo
-              ? "Pembelian Baru / Kulakan (Restock)"
-              : "New Purchase (Restock)"}
+            {activeTab === "history" && (
+              <motion.div
+                layoutId="purchasesMainTab"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <Receipt className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+            <span className="relative z-10">
+              {isIndo ? "Riwayat PO & Belanja" : "PO History"} ({purchaseOrders.length})
+            </span>
           </button>
-        )}
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`font-medium pb-2 -mb-[18px] transition-colors text-sm ${
-            activeTab === "history"
-              ? "border-b-2 border-blue-500 text-blue-600"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          {isIndo ? "Riwayat Pembelian & PO" : "Purchase Order History"}
-        </button>
+        </div>
       </div>
 
+      {/* ─── TAB 1: NEW PURCHASE (RESTOCK) ────────────────────────────────────────── */}
       {!isReadOnly && activeTab === "new_po" ? (
-        <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)]">
-          {/* Products Catalog for Restock */}
-          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          {/* Products Catalog for Restock (Left Column) */}
+          <div className="flex-1 w-full bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
             {/* Search & Category Filter Header */}
-            <div className="p-3.5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder={
                     isIndo
-                      ? "Cari nama produk, ID item untuk restock..."
-                      : "Search products for restock..."
+                      ? "Cari nama bahan baku, kemasan, atau kategori..."
+                      : "Search ingredients for restock..."
                   }
-                  className="w-full pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-2xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 bg-white outline-none"
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0 -mx-1 px-1">
                 {categories.map((cat) => (
                   <button
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95 ${
                       selectedCategory === cat
-                        ? "bg-slate-900 text-white"
+                        ? "bg-slate-900 text-white shadow-xs"
                         : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
@@ -286,113 +336,135 @@ export const Purchases = () => {
               </div>
             </div>
 
-            {/* Product Cards with Live Stock Badges */}
-            <div className="p-4 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3.5 flex-1">
+            {/* Product Cards Grid with Live Stock Badges */}
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[700px] grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 flex-1">
               {filteredProducts.map((product) => {
                 const currentStock = product.currentStock;
-                const inCartItem = cart.find(
-                  (item) => item.productId === product.id,
-                );
+                const inCartItem = cart.find((item) => item.productId === product.id);
 
                 return (
                   <div
                     key={product.id}
                     onClick={() => addToCart(product.id)}
-                    className="bg-white border border-slate-200 rounded-xl p-3.5 cursor-pointer hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between group"
+                    className={`bg-white border rounded-2xl p-4 cursor-pointer hover:border-brand-500 hover:shadow-md transition-all flex flex-col justify-between group active:scale-[0.98] ${
+                      inCartItem
+                        ? "border-brand-500 ring-2 ring-brand-500/10 bg-brand-50/20"
+                        : "border-slate-200/80"
+                    }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <div className="flex items-center justify-between gap-1 mb-2">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
                           {product.category || "Ingredient"}
                         </span>
 
                         {/* Stock Badge */}
                         {currentStock <= 0 ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 whitespace-nowrap">
-                            {isIndo ? "Stok: 0 (Habis)" : "Stock: 0"}
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                            Stok Habis (0)
                           </span>
-                        ) : currentStock <= 5 ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
-                            {isIndo
-                              ? `Stok: ${currentStock} (Menipis)`
-                              : `Stock: ${currentStock}`}
+                        ) : currentStock <= product.minStock ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                            Menipis ({currentStock} {product.unit})
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">
-                            {isIndo
-                              ? `Stok: ${currentStock}`
-                              : `Stock: ${currentStock}`}
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">
+                            Stok: {currentStock} {product.unit}
                           </span>
                         )}
                       </div>
 
-                      <h4 className="font-bold text-slate-800 text-sm leading-snug mb-1 group-hover:text-blue-600 line-clamp-2 min-h-[2.5rem]">
+                      <h4 className="font-bold text-slate-900 text-sm leading-snug mb-1 group-hover:text-brand-600 transition-colors line-clamp-2">
                         {product.name}
                       </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Biaya Master: {formatCurrency(Number(product.costPerUnit || 0))} / {product.unit}
+                      </p>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 mt-2 flex items-center justify-between">
-                      <span className="text-xs sm:text-sm font-bold text-blue-600">
-                        {formatCurrency(0)}
+                    <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-500">
+                        Klik untuk tambah
                       </span>
 
-                      {inCartItem && (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-xs">
+                      {inCartItem ? (
+                        <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-brand-600 text-white shadow-2xs flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
                           {inCartItem.quantity}x
+                        </span>
+                      ) : (
+                        <span className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-brand-50 group-hover:text-brand-600 text-slate-400 flex items-center justify-center transition-colors">
+                          <Plus className="w-3.5 h-3.5" />
                         </span>
                       )}
                     </div>
                   </div>
                 );
               })}
+
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full py-12 text-center text-slate-400 text-xs">
+                  Tidak ada bahan baku yang cocok dengan pencarian.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Cart / Purchase Order Summary */}
-          <div className="w-full lg:w-96 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4 text-blue-600" />
+          {/* Cart / Purchase Order Summary Sidebar (Desktop/Tablet) */}
+          <div className="w-full lg:w-96 shrink-0 bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col lg:sticky lg:top-24">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-brand-600" />
                 {isIndo ? "Daftar Restock (PO)" : "Purchase List"}
               </h3>
-              <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                {cart.length} items
+              <span className="text-xs font-black bg-brand-50 text-brand-700 border border-brand-200/70 px-2.5 py-0.5 rounded-full">
+                {cart.length} item
               </span>
             </div>
 
             {/* Mode Switcher: Distributor vs Belanja Pasar */}
-            <div className="p-2.5 border-b border-slate-200 bg-slate-100/80">
-              <div className="grid grid-cols-2 p-1 bg-slate-200/80 rounded-xl gap-1">
+            <div className="p-3 border-b border-slate-100 bg-slate-50/40">
+              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl gap-1">
                 <button
                   type="button"
                   onClick={() => setPurchaseMode("DISTRIBUTOR")}
-                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    purchaseMode === "DISTRIBUTOR"
-                      ? "bg-white text-blue-700 shadow-xs ring-1 ring-slate-200"
-                      : "text-slate-600 hover:text-slate-900"
+                  className={`relative py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    purchaseMode === "DISTRIBUTOR" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>PO Distributor</span>
+                  {purchaseMode === "DISTRIBUTOR" && (
+                    <motion.div
+                      layoutId="purchaseModeTab"
+                      className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <Building2 className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+                  <span className="relative z-10">PO Distributor</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPurchaseMode("MARKET")}
-                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    purchaseMode === "MARKET"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
+                  className={`relative py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    purchaseMode === "MARKET" ? "text-emerald-950" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Belanja Pasar / Eceran</span>
+                  {purchaseMode === "MARKET" && (
+                    <motion.div
+                      layoutId="purchaseModeTab"
+                      className="absolute inset-0 bg-emerald-50 rounded-xl shadow-xs border border-emerald-200"
+                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <Store className="w-3.5 h-3.5 text-emerald-600 relative z-10" />
+                  <span className="relative z-10">Belanja Pasar</span>
                 </button>
               </div>
             </div>
 
             {/* Mode Details Form */}
             {purchaseMode === "MARKET" ? (
-              <div className="p-3.5 border-b border-slate-200 bg-emerald-50/40 space-y-3">
+              <div className="p-4 border-b border-slate-100 bg-emerald-50/30 space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
                     <Store className="w-3.5 h-3.5 text-emerald-600" />
@@ -403,21 +475,21 @@ export const Purchases = () => {
                     value={marketName}
                     onChange={(e) => setMarketName(e.target.value)}
                     placeholder="Misal: Pasar Pagi, Toko Plastik, Indomaret..."
-                    className="w-full border border-emerald-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full border border-emerald-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium"
                   />
                   {/* Quick Chips */}
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {[
                       "Pasar Tradisional",
                       "Warung Terdekat",
-                      "Minimarket / Indomaret",
+                      "Minimarket",
                       "Toko Plastik",
                     ].map((chip) => (
                       <button
                         key={chip}
                         type="button"
                         onClick={() => setMarketName(chip)}
-                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors ${
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
                           marketName === chip
                             ? "bg-emerald-600 text-white border-emerald-600 font-bold"
                             : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
@@ -437,7 +509,7 @@ export const Purchases = () => {
                   <select
                     value={selectedCashAccountId}
                     onChange={(e) => setSelectedCashAccountId(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium"
                   >
                     {cashAccounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
@@ -456,27 +528,27 @@ export const Purchases = () => {
                     value={marketNotes}
                     onChange={(e) => setMarketNotes(e.target.value)}
                     placeholder="Misal: Beli lemon segar & susu darurat..."
-                    className="w-full border border-slate-200 rounded-lg px-3 py-1 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-base sm:text-xs bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none"
                   />
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-emerald-100/70 border border-emerald-200 text-[11px] text-emerald-950 leading-tight">
+                <div className="p-3 rounded-2xl bg-emerald-100/70 border border-emerald-200 text-[11px] text-emerald-950 leading-tight">
                   <div className="font-bold flex items-center gap-1 mb-0.5 text-emerald-900">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     Otomatis Masuk Stok & Kas Terpotong:
                   </div>
                   Bahan yang dibeli langsung masuk stok aktif dan saldo kas kasir otomatis terpotong saat disimpan.
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 border-b border-slate-200 bg-slate-50/50 space-y-3">
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    {isIndo ? "Pilih Supplier" : "Select Supplier"}{" "}
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {isIndo ? "Pilih Supplier Rekanan" : "Select Supplier"}{" "}
                     <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 outline-none focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm bg-white"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500/20 text-base sm:text-xs bg-white font-medium"
                     value={selectedSupplier}
                     onChange={(e) => setSelectedSupplier(e.target.value)}
                   >
@@ -493,35 +565,33 @@ export const Purchases = () => {
 
                 {/* Delivery Option */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     {isIndo ? "Status Penerimaan Barang" : "Delivery Reception"}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setDeliveryOption("RECEIVED")}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         deliveryOption === "RECEIVED"
-                          ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-bold"
+                          ? "bg-brand-50 border-brand-300 text-brand-900 ring-2 ring-brand-500/20"
                           : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      <PackageCheck className="w-3.5 h-3.5" />
-                      {isIndo
-                        ? "Langsung Diterima (Masuk Stok)"
-                        : "Received (In Stock)"}
+                      <PackageCheck className="w-3.5 h-3.5 text-brand-600" />
+                      <span className="text-[11px]">Langsung Diterima</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setDeliveryOption("PENDING")}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         deliveryOption === "PENDING"
-                          ? "bg-slate-100 border-slate-400 text-slate-800 font-bold"
+                          ? "bg-slate-100 border-slate-300 text-slate-800 ring-2 ring-slate-400/20"
                           : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      <Clock className="w-3.5 h-3.5" />
-                      {isIndo ? "Menunggu Pengiriman" : "Pending Delivery"}
+                      <Clock className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="text-[11px]">Tunggu Kirim</span>
                     </button>
                   </div>
                 </div>
@@ -529,53 +599,49 @@ export const Purchases = () => {
             )}
 
             {/* Cart Item Rows */}
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-slate-50/30">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[380px] bg-slate-50/20">
               {cart.length === 0 ? (
                 <div className="text-center text-slate-400 py-10 flex flex-col items-center">
-                  <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
-                  <p className="text-sm font-medium">
-                    {isIndo ? "Daftar pembelian kosong" : "List is empty"}
+                  <ShoppingBag className="w-10 h-10 mb-2 opacity-30 text-slate-400" />
+                  <p className="text-xs font-bold text-slate-600">
+                    {isIndo ? "Daftar restock masih kosong" : "Cart is empty"}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-[11px] text-slate-400 mt-0.5">
                     {isIndo
-                      ? "Klik produk di samping untuk menambah restock."
-                      : "Click products to add to restock."}
+                      ? "Pilih produk dari katalog di sebelah kiri."
+                      : "Select products from catalog."}
                   </p>
                 </div>
               ) : (
                 cart.map((item) => {
-                  const product = ingredients.find(
-                    (p) => p.id === item.productId,
-                  );
+                  const product = ingredients.find((p) => p.id === item.productId);
                   const currentStock = product?.currentStock || 0;
 
                   return (
                     <div
                       key={item.productId}
-                      className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs"
+                      className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-2xs space-y-2"
                     >
-                      <div className="flex justify-between items-start mb-1.5">
+                      <div className="flex justify-between items-start gap-2">
                         <div>
-                          <h4 className="font-bold text-xs sm:text-sm text-slate-800 line-clamp-1">
+                          <h4 className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1">
                             {product?.name}
                           </h4>
-                          <p className="text-[10px] text-slate-500 mt-0.5">
-                            {isIndo
-                              ? `Stok saat ini: ${currentStock} unit`
-                              : `Current stock: ${currentStock}`}
+                          <p className="text-[10px] text-slate-400">
+                            Stok saat ini: {currentStock} {product?.unit}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.productId)}
-                          className="text-rose-400 hover:text-rose-600 p-1"
+                          className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between text-xs sm:text-sm gap-2 mt-2 pt-2 border-t border-slate-100">
-                        <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-between text-xs gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="number"
                             min="1"
@@ -585,9 +651,9 @@ export const Purchases = () => {
                                 quantity: Math.max(1, Number(e.target.value)),
                               })
                             }
-                            className="w-14 border border-slate-300 rounded-lg px-2 py-1 text-center font-bold text-xs"
+                            className="w-14 border border-slate-200 rounded-xl px-2 py-1 text-center font-bold text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
                           />
-                          <span className="text-slate-400 text-xs">x</span>
+                          <span className="text-slate-400 text-xs">× Rp</span>
                           <input
                             type="number"
                             min="0"
@@ -597,10 +663,10 @@ export const Purchases = () => {
                                 unitPrice: Math.max(0, Number(e.target.value)),
                               })
                             }
-                            className="w-20 border border-slate-300 rounded-lg px-2 py-1 text-right text-xs"
+                            className="w-20 border border-slate-200 rounded-xl px-2 py-1 text-right font-mono text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
                           />
                         </div>
-                        <span className="font-bold text-slate-800">
+                        <span className="font-bold font-mono text-slate-900">
                           {formatCurrency(item.subtotal)}
                         </span>
                       </div>
@@ -611,21 +677,22 @@ export const Purchases = () => {
             </div>
 
             {/* Footer Checkout Controls */}
-            <div className="p-4 bg-white border-t border-slate-200">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs font-semibold text-slate-600">
-                  {isIndo ? "Total Pembelian" : "Total"}
+            <div className="p-4 bg-white border-t border-slate-100 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-semibold text-slate-500">
+                  {isIndo ? "Total Pembelian:" : "Total Amount:"}
                 </span>
-                <span className="font-bold text-base text-blue-600">
+                <span className="font-black font-mono text-lg text-brand-950">
                   {formatCurrency(totalAmount)}
                 </span>
               </div>
+
               {purchaseMode === "MARKET" ? (
                 <button
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => handleCheckout("PAID")}
-                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-2xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Store className="w-4 h-4" />
                   <span>Simpan Belanja & Potong Kas Tunai</span>
@@ -636,17 +703,17 @@ export const Purchases = () => {
                     type="button"
                     disabled={!selectedSupplier || cart.length === 0}
                     onClick={() => handleCheckout("UNPAID")}
-                    className="py-2 px-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
+                    className="py-3 px-2 bg-slate-100 border border-slate-200 text-slate-800 font-bold rounded-2xl hover:bg-slate-200 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
                   >
-                    {isIndo ? "Simpan Belum Lunas" : "Save as Unpaid"}
+                    Simpan Belum Lunas
                   </button>
                   <button
                     type="button"
                     disabled={!selectedSupplier || cart.length === 0}
                     onClick={() => handleCheckout("PAID")}
-                    className="py-2 px-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs cursor-pointer"
+                    className="py-3 px-2 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs cursor-pointer"
                   >
-                    {isIndo ? "Bayar Sekarang (Lunas)" : "Pay Now"}
+                    Bayar Sekarang
                   </button>
                 </div>
               )}
@@ -654,72 +721,61 @@ export const Purchases = () => {
           </div>
         </div>
       ) : (
-        /* Purchase Orders History */
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-800 text-sm sm:text-base">
-              {isIndo
-                ? "Riwayat Purchase Order (PO)"
-                : "Purchase Order History"}
-            </h3>
+        /* ─── TAB 2: PURCHASE ORDERS HISTORY ───────────────────────────────────────── */
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                {isIndo ? "Riwayat Purchase Order (PO)" : "Purchase Order History"}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Daftar semua faktur pembelian dari distributor rekanan dan belanja eceran kafe.
+              </p>
+            </div>
             <button
               onClick={handleExportHistory}
-              className="flex items-center px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors shadow-xs text-xs font-medium"
+              className="flex items-center px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
             >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
+              <Download className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
               {isIndo ? "Ekspor CSV" : "Export CSV"}
             </button>
           </div>
-          <div className="overflow-x-auto flex-1">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "No PO" : "PO Number"}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Tanggal" : "Date"}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Supplier" : "Supplier"}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Status Bayar" : "Payment"}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Penerimaan Stok" : "Delivery"}
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Total" : "Total"}
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    {isIndo ? "Aksi" : "Actions"}
-                  </th>
+
+          {/* TABLE VIEW (Desktop / Tablet) */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50/70 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="px-4 py-3 rounded-l-xl">No PO</th>
+                  <th className="px-4 py-3">Tanggal</th>
+                  <th className="px-4 py-3">Supplier / Toko</th>
+                  <th className="px-4 py-3">Status Bayar</th>
+                  <th className="px-4 py-3">Penerimaan Stok</th>
+                  <th className="px-4 py-3 text-right">Total Tagihan</th>
+                  <th className="px-4 py-3 text-center rounded-r-xl">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-100">
                 {purchaseOrders
                   .slice()
                   .reverse()
                   .map((po) => {
-                    const supplier = suppliers.find(
-                      (s) => s.id === po.supplierId,
-                    );
+                    const supplier = suppliers.find((s) => s.id === po.supplierId);
                     return (
-                      <tr key={po.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                          <div className="flex items-center gap-1.5">
+                      <tr key={po.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3.5 whitespace-nowrap font-bold">
+                          <div className="flex items-center gap-2">
                             {po.purchaseType === "MARKET" ? (
                               <span
                                 className="p-1 rounded-md bg-emerald-100 text-emerald-700"
-                                title="Belanja Pasar / Eceran Langsung"
+                                title="Belanja Pasar Langsung"
                               >
                                 <Store className="w-3.5 h-3.5" />
                               </span>
                             ) : (
                               <span
-                                className="p-1 rounded-md bg-blue-100 text-blue-700"
-                                title="PO Distributor Resmi"
+                                className="p-1 rounded-md bg-brand-50 text-brand-700"
+                                title="PO Distributor"
                               >
                                 <Building2 className="w-3.5 h-3.5" />
                               </span>
@@ -727,298 +783,366 @@ export const Purchases = () => {
                             <span
                               className={
                                 po.purchaseType === "MARKET"
-                                  ? "text-emerald-700"
-                                  : "text-blue-600"
+                                  ? "text-emerald-700 font-mono"
+                                  : "text-brand-700 font-mono"
                               }
                             >
                               {po.poNumber}
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
                           {new Date(po.date).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                        <td className="px-4 py-3.5 whitespace-nowrap">
                           {po.purchaseType === "MARKET" ? (
-                            <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                               <Store className="w-3 h-3 text-emerald-600" />
                               {po.supplierName || "Pasar Tradisional"}
                             </span>
                           ) : (
-                            <span>{supplier?.name || po.supplierName || "Unknown Supplier"}</span>
+                            <span className="font-semibold text-slate-800">
+                              {supplier?.name || po.supplierName || "Unknown Supplier"}
+                            </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                              po.status === "PAID"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-orange-100 text-orange-800"
-                            }`}
-                          >
-                            {po.status}
-                          </span>
-                          {po.status === "UNPAID" && isFinance && (
-                            <button
-                              onClick={() => {
-                                setSelectedPOForPay(po);
-                                setPayAmount(po.totalAmount - (po.amountPaid || 0));
-                                setPayModalOpen(true);
-                              }}
-                              className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline font-semibold"
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                po.status === "PAID"
+                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-800 border border-amber-200"
+                              }`}
                             >
-                              {isIndo ? "Lunasi" : "Pay"}
-                            </button>
-                          )}
+                              {po.status === "PAID" ? "Lunas" : "Belum Lunas"}
+                            </span>
+                            {po.status === "UNPAID" && isFinance && (
+                              <button
+                                onClick={() => {
+                                  setSelectedPOForPay(po);
+                                  setPayAmount(po.totalAmount - (po.amountPaid || 0));
+                                  setPayModalOpen(true);
+                                }}
+                                className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
+                              >
+                                Lunasi
+                              </button>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                              po.deliveryStatus === "RECEIVED"
-                                ? "bg-indigo-100 text-indigo-800"
-                                : "bg-slate-100 text-slate-800"
-                            }`}
-                          >
-                            {po.deliveryStatus === "RECEIVED"
-                              ? isIndo
-                                ? "Diterima (Stok Masuk)"
-                                : "Received"
-                              : isIndo
-                                ? "Pending"
-                                : "Pending"}
-                          </span>
-                          {po.deliveryStatus !== "RECEIVED" && (
-                            <button
-                              onClick={() => setPoToReceive(po)}
-                              className="ml-2 text-xs text-indigo-600 hover:text-indigo-800 underline font-semibold"
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                po.deliveryStatus === "RECEIVED"
+                                  ? "bg-brand-50 text-brand-800 border border-brand-200"
+                                  : "bg-slate-100 text-slate-700"
+                              }`}
                             >
-                              {isIndo ? "Terima Barang" : "Receive"}
-                            </button>
-                          )}
+                              {po.deliveryStatus === "RECEIVED" ? "Diterima (Stok Masuk)" : "Menunggu"}
+                            </span>
+                            {po.deliveryStatus !== "RECEIVED" && (
+                              <button
+                                onClick={() => setPoToReceive(po)}
+                                className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
+                              >
+                                Terima Barang
+                              </button>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-slate-700">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono text-slate-900">
                           {formatCurrency(po.totalAmount)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                          <button
-                            onClick={() => {
-                              setCurrentInvoiceData(po);
-                              setIsInvoiceModalOpen(true);
-                            }}
-                            className="text-indigo-600 hover:text-indigo-900 mr-3"
-                            title="View PO"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setInvoiceToDelete(po)}
-                            className="text-rose-600 hover:text-rose-900"
-                            title="Delete PO"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setCurrentInvoiceData(po);
+                                setIsInvoiceModalOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-600 transition-colors cursor-pointer"
+                              title="Cetak Faktur PO"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setInvoiceToDelete(po)}
+                              className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 transition-colors cursor-pointer"
+                              title="Hapus PO"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
                   })}
+
                 {purchaseOrders.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-10 text-center text-slate-400 text-sm"
-                    >
-                      {isIndo
-                        ? "Belum ada data Purchase Order."
-                        : "No purchase orders found."}
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                      Belum ada data Purchase Order terdaftar.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* CARD FEED VIEW (Mobile Phone 360-480px) */}
+          <div className="block md:hidden space-y-3">
+            {purchaseOrders
+              .slice()
+              .reverse()
+              .map((po) => {
+                const supplier = suppliers.find((s) => s.id === po.supplierId);
+                return (
+                  <div
+                    key={po.id}
+                    className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          {po.purchaseType === "MARKET" ? (
+                            <Store className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Building2 className="w-3.5 h-3.5 text-brand-600" />
+                          )}
+                          <span className="font-bold font-mono text-xs text-slate-900">
+                            {po.poNumber}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {new Date(po.date).toLocaleDateString()} ·{" "}
+                          {po.purchaseType === "MARKET"
+                            ? po.supplierName || "Pasar Tradisional"
+                            : supplier?.name || po.supplierName || "Distributor"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-black font-mono text-sm text-brand-950 block">
+                          {formatCurrency(po.totalAmount)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {po.items.length} items
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          po.status === "PAID"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {po.status === "PAID" ? "Lunas" : "Hutang"}
+                      </span>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          po.deliveryStatus === "RECEIVED"
+                            ? "bg-brand-50 text-brand-800"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {po.deliveryStatus === "RECEIVED" ? "Masuk Stok" : "Tunggu Kirim"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        {po.status === "UNPAID" && isFinance && (
+                          <button
+                            onClick={() => {
+                              setSelectedPOForPay(po);
+                              setPayAmount(po.totalAmount - (po.amountPaid || 0));
+                              setPayModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                          >
+                            Lunasi
+                          </button>
+                        )}
+                        {po.deliveryStatus !== "RECEIVED" && (
+                          <button
+                            onClick={() => setPoToReceive(po)}
+                            className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                          >
+                            Terima Stok
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setCurrentInvoiceData(po);
+                            setIsInvoiceModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Faktur</span>
+                        </button>
+                        <button
+                          onClick={() => setInvoiceToDelete(po)}
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {purchaseOrders.length === 0 && (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                Belum ada data Purchase Order terdaftar.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Receive PO Modal */}
+      {/* ─── MODAL: Receive PO (Goods Arrival) ─────────────────────────────────────── */}
       {poToReceive && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 ">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">
-              {isIndo
-                ? "Konfirmasi Penerimaan Barang?"
-                : "Confirm Goods Reception?"}
-            </h3>
-            <p className="text-slate-600 text-sm mb-6">
-              {isIndo ? (
-                <>
-                  Barang untuk PO <strong>{poToReceive.poNumber}</strong> sudah
-                  sampai di gudang/lapangan?
-                  <br />
-                  <br />
-                  Sistem akan secara otomatis menambahkan kuantitas barang ke
-                  stok inventaris.
-                </>
-              ) : (
-                <>
-                  Have the goods for PO <strong>{poToReceive.poNumber}</strong>{" "}
-                  arrived?
-                  <br />
-                  <br />
-                  This will automatically increment product stock counts in your
-                  inventory.
-                </>
-              )}
-            </p>
-            <div className="flex justify-end gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
+              <PackageCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Konfirmasi Penerimaan Barang?
+              </h3>
+              <p className="text-slate-500 text-xs mt-1 leading-relaxed">
+                Barang untuk PO <strong className="text-slate-800">{poToReceive.poNumber}</strong> sudah sampai di outlet/gudang? Sistem akan secara otomatis menambahkan stok masuk ke inventori.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setPoToReceive(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium"
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold cursor-pointer"
               >
-                {isIndo ? "Batal" : "Cancel"}
+                Batal
               </button>
               <button
                 onClick={() => {
                   markPOAsReceived(poToReceive.id);
                   setPoToReceive(null);
                 }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold"
+                className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
-                {isIndo
-                  ? "Ya, Terima & Masukkan Stok"
-                  : "Yes, Receive & Add Stock"}
+                Ya, Terima & Masuk Stok
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* View PO Modal */}
+      {/* ─── MODAL: View PO Invoice ────────────────────────────────────────────────── */}
       {isInvoiceModalOpen && currentInvoiceData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-8">
-              <div className="flex justify-between items-start mb-8 border-b border-slate-200 pb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-                    {currentInvoiceData.purchaseType === "MARKET" ? (
-                      <>
-                        <Store className="w-6 h-6 text-emerald-600" />
-                        <span>BUKTI BELANJA PASAR / ECERAN</span>
-                      </>
-                    ) : (
-                      <span>PURCHASE ORDER</span>
-                    )}
-                  </h2>
-                  <p className="text-slate-500 text-sm font-medium">
-                    {currentInvoiceData.poNumber}
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.status === "PAID" ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-700"}`}
-                    >
-                      {currentInvoiceData.status === "PAID" ? "LUNAS (CASH)" : currentInvoiceData.status}
-                    </span>
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${currentInvoiceData.deliveryStatus === "RECEIVED" ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-700"}`}
-                    >
-                      {currentInvoiceData.deliveryStatus === "RECEIVED"
-                        ? "MASUK STOK (RECEIVED)"
-                        : "MENUNGGU PENGIRIMAN"}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="flex flex-col items-center sm:items-start mb-2">
-                    {settings.logoDataUrl ? (
-                      <img
-                        src={settings.logoDataUrl}
-                        alt={settings.brandName}
-                        className="h-16 w-auto object-contain"
-                      />
-                    ) : (
-                      <h3 className="font-bold text-slate-800 text-lg">
-                        {settings.brandName}
-                      </h3>
-                    )}
-                  </div>
-                  <p className="text-slate-500 text-sm max-w-xs ml-auto mt-1">
-                    {settings.companyAddress}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-8">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  {currentInvoiceData.purchaseType === "MARKET"
-                    ? "Tempat Belanja / Toko"
-                    : "Order To (Supplier)"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto no-scrollbar p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1 flex items-center gap-2">
+                  {currentInvoiceData.purchaseType === "MARKET" ? (
+                    <>
+                      <Store className="w-5 h-5 text-emerald-600" />
+                      <span>BUKTI BELANJA PASAR / ECERAN</span>
+                    </>
+                  ) : (
+                    <span>PURCHASE ORDER</span>
+                  )}
+                </h2>
+                <p className="text-slate-400 text-xs font-mono font-bold">
+                  {currentInvoiceData.poNumber}
                 </p>
-                <h4 className="font-bold text-slate-800 text-lg">
-                  {currentInvoiceData.purchaseType === "MARKET"
-                    ? currentInvoiceData.supplierName || "Pasar Tradisional / Belanja Harian"
-                    : suppliers.find((s) => s.id === currentInvoiceData.supplierId)?.name ||
-                      currentInvoiceData.supplierName ||
-                      "Unknown Supplier"}
-                </h4>
-                {currentInvoiceData.notes && (
-                  <p className="text-slate-600 text-sm mt-1 italic">
-                    Catatan: {currentInvoiceData.notes}
-                  </p>
-                )}
-                {currentInvoiceData.purchaseType !== "MARKET" && (
-                  <>
-                    <p className="text-slate-600 text-sm mt-1">
-                      {
-                        suppliers.find(
-                          (s) => s.id === currentInvoiceData.supplierId,
-                        )?.picName
-                      }
-                    </p>
-                    <p className="text-slate-600 text-sm">
-                      {
-                        suppliers.find(
-                          (s) => s.id === currentInvoiceData.supplierId,
-                        )?.address
-                      }
-                    </p>
-                  </>
-                )}
+                <div className="flex gap-2 mt-2">
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      currentInvoiceData.status === "PAID"
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                        : "bg-amber-50 text-amber-800 border border-amber-200"
+                    }`}
+                  >
+                    {currentInvoiceData.status === "PAID" ? "LUNAS (CASH)" : "HUTANG (TEMPO)"}
+                  </span>
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      currentInvoiceData.deliveryStatus === "RECEIVED"
+                        ? "bg-brand-50 text-brand-800 border border-brand-200"
+                        : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {currentInvoiceData.deliveryStatus === "RECEIVED"
+                      ? "MASUK STOK (RECEIVED)"
+                      : "MENUNGGU PENGIRIMAN"}
+                  </span>
+                </div>
               </div>
+              <div className="text-right">
+                <h3 className="font-black text-slate-900 text-base">
+                  {settings.brandName || "Julia's Coffee & Eatery"}
+                </h3>
+                <p className="text-slate-500 text-xs max-w-xs ml-auto mt-0.5">
+                  {settings.companyAddress || "Specialty Room"}
+                </p>
+              </div>
+            </div>
 
-              <table className="w-full mb-8">
+            <div className="mb-6">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                {currentInvoiceData.purchaseType === "MARKET"
+                  ? "Tempat Belanja / Toko"
+                  : "Order To (Supplier)"}
+              </p>
+              <h4 className="font-bold text-slate-900 text-base">
+                {currentInvoiceData.purchaseType === "MARKET"
+                  ? currentInvoiceData.supplierName || "Pasar Tradisional / Belanja Harian"
+                  : suppliers.find((s) => s.id === currentInvoiceData.supplierId)?.name ||
+                    currentInvoiceData.supplierName ||
+                    "Unknown Supplier"}
+              </h4>
+              {currentInvoiceData.notes && (
+                <p className="text-slate-600 text-xs mt-1 italic">
+                  Catatan: {currentInvoiceData.notes}
+                </p>
+              )}
+            </div>
+
+            <div className="overflow-x-auto mb-6">
+              <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="py-2 text-left text-xs font-bold text-slate-500 uppercase">
-                      Item Description
-                    </th>
-                    <th className="py-2 text-center text-xs font-bold text-slate-500 uppercase">
-                      Qty
-                    </th>
-                    <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
-                      Unit Price
-                    </th>
-                    <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
-                      Total
-                    </th>
+                  <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50">
+                    <th className="py-2.5 px-3 text-left rounded-l-lg">Deskripsi Bahan</th>
+                    <th className="py-2.5 px-3 text-center">Qty</th>
+                    <th className="py-2.5 px-3 text-right">Harga Satuan</th>
+                    <th className="py-2.5 px-3 text-right rounded-r-lg">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {currentInvoiceData.items.map((item: any, idx: number) => {
-                    const product = ingredients.find(
-                      (p) => p.id === item.productId,
-                    );
+                    const product = ingredients.find((p) => p.id === item.productId);
                     return (
                       <tr key={idx}>
-                        <td className="py-3 text-sm text-slate-800 font-medium">
+                        <td className="py-3 px-3 text-slate-900 font-medium">
                           {product?.name || "Unknown Product"}
                         </td>
-                        <td className="py-3 text-sm text-slate-600 text-center">
-                          {item.quantity}
+                        <td className="py-3 px-3 text-slate-600 text-center font-mono">
+                          {item.quantity} {product?.unit}
                         </td>
-                        <td className="py-3 text-sm text-slate-600 text-right">
+                        <td className="py-3 px-3 text-slate-600 text-right font-mono">
                           {formatCurrency(item.unitPrice)}
                         </td>
-                        <td className="py-3 text-sm text-slate-800 font-bold text-right">
+                        <td className="py-3 px-3 text-slate-900 font-bold font-mono text-right">
                           {formatCurrency(item.subtotal)}
                         </td>
                       </tr>
@@ -1026,128 +1150,119 @@ export const Purchases = () => {
                   })}
                 </tbody>
               </table>
+            </div>
 
-              <div className="flex justify-end border-t border-slate-200 pt-4 mb-8">
-                <div className="w-64">
-                  <div className="flex justify-between items-center text-lg font-bold text-slate-900 border-t-2 border-slate-800 pt-2">
-                    <span>Total Amount</span>
-                    <span className="text-blue-600">
-                      {formatCurrency(currentInvoiceData.totalAmount)}
-                    </span>
-                  </div>
+            <div className="flex justify-end border-t border-slate-100 pt-4 mb-6">
+              <div className="w-64 space-y-1 text-xs">
+                <div className="flex justify-between items-center text-base font-black text-slate-900 pt-1">
+                  <span>Total Tagihan:</span>
+                  <span className="text-brand-950 font-mono">
+                    {formatCurrency(currentInvoiceData.totalAmount)}
+                  </span>
                 </div>
               </div>
+            </div>
 
-              <div className="flex justify-between items-center border-t border-slate-200 pt-6">
-                <p className="text-xs text-slate-400">
-                  Date: {new Date(currentInvoiceData.date).toLocaleString()}
-                </p>
-                <div className="space-x-3">
-                  <button
-                    onClick={() => {
-                      setIsInvoiceModalOpen(false);
-                      setCurrentInvoiceData(null);
-                    }}
-                    className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors shadow-sm"
-                  >
-                    Print PO
-                  </button>
-                </div>
+            <div className="flex justify-between items-center border-t border-slate-100 pt-5">
+              <p className="text-[11px] text-slate-400">
+                Tanggal: {new Date(currentInvoiceData.date).toLocaleString()}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setIsInvoiceModalOpen(false);
+                    setCurrentInvoiceData(null);
+                  }}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Cetak Faktur
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* ─── MODAL: Delete Confirmation ────────────────────────────────────────────── */}
       {invoiceToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 ">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">
-              {isIndo ? "Hapus Purchase Order?" : "Delete Purchase Order?"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-slate-900">
+              Hapus Purchase Order?
             </h3>
-            <p className="text-slate-600 text-sm mb-6">
-              {isIndo ? (
-                <>
-                  Apakah Anda yakin ingin menghapus PO{" "}
-                  <strong>{invoiceToDelete.poNumber}</strong>?<br />
-                  <br />
-                  Catatan stok inventaris dan transaksi keuangan terkait PO ini
-                  juga akan dihapus.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to delete PO{" "}
-                  <strong>{invoiceToDelete.poNumber}</strong>?<br />
-                  <br />
-                  This will also remove associated inventory and finance
-                  records.
-                </>
-              )}
+            <p className="text-slate-500 text-xs leading-relaxed">
+              Apakah Anda yakin ingin menghapus PO <strong className="text-slate-800">{invoiceToDelete.poNumber}</strong>? Catatan inventaris dan transaksi keuangan terkait PO ini juga akan disesuaikan.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setInvoiceToDelete(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium"
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold cursor-pointer"
               >
-                {isIndo ? "Batal" : "Cancel"}
+                Batal
               </button>
               <button
                 onClick={() => {
                   deletePurchaseOrder(invoiceToDelete.id);
                   setInvoiceToDelete(null);
                 }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
-                {isIndo ? "Hapus" : "Delete"}
+                Ya, Hapus PO
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pay PO Modal */}
+      {/* ─── MODAL: Pay PO (Hutang Dagang) ─────────────────────────────────────────── */}
       {payModalOpen && selectedPOForPay && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold text-slate-800 mb-4">Bayar Hutang PO</h3>
-            <div className="mb-4">
-              <div className="text-sm text-slate-500">Sisa Tagihan:</div>
-              <div className="text-lg font-bold">{(selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0)).toLocaleString()}</div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-slate-900">Bayar Hutang PO</h3>
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-1">
+              <span className="text-slate-500">Sisa Tagihan:</span>
+              <div className="text-lg font-black font-mono text-rose-600">
+                {formatCurrency(selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0))}
+              </div>
             </div>
-            
-            <div className="space-y-4">
+
+            <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah Dibayar</label>
+                <label className="block font-bold text-slate-700 mb-1">Jumlah Dibayar (Rp)</label>
                 <input
                   type="number"
                   value={payAmount}
                   onChange={(e) => setPayAmount(Number(e.target.value))}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Dari Akun Kas/Bank</label>
+                <label className="block font-bold text-slate-700 mb-1">Dari Akun Kas / Bank</label>
                 <select
                   value={payAccountId}
                   onChange={(e) => setPayAccountId(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
                 >
-                  <option value="">-- Pilih Akun --</option>
-                  {cashAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.balance.toLocaleString()})</option>)}
+                  <option value="">-- Pilih Akun Kas/Bank --</option>
+                  {cashAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({formatCurrency(a.balance || 0)})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setPayModalOpen(false)}
-                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl text-xs cursor-pointer"
               >
                 Batal
               </button>
@@ -1159,7 +1274,7 @@ export const Purchases = () => {
                   }
                 }}
                 disabled={!payAccountId || payAmount <= 0}
-                className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 active:scale-95 transition-all text-xs disabled:opacity-40 shadow-xs cursor-pointer"
               >
                 Konfirmasi Pembayaran
               </button>

@@ -10,6 +10,10 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  CheckCircle2,
+  Calendar,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -62,7 +66,7 @@ export const ShiftManagement = () => {
     .filter((s) => s.status === "CLOSED")
     .sort(
       (a, b) =>
-        new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+        new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
     );
 
   // Calculate expected cash for current shift
@@ -82,7 +86,7 @@ export const ShiftManagement = () => {
     const recentCashTxs = cashTransactions.filter(
       (t) =>
         new Date(t.date).getTime() >= shiftStartTime &&
-        t.accountId === currentShift.cashAccountId,
+        t.accountId === currentShift.cashAccountId
     );
 
     totalCashIn = recentCashTxs
@@ -152,88 +156,121 @@ export const ShiftManagement = () => {
     });
 
   return (
-    <div className="flex-1 flex flex-col gap-6">
-      <div className="flex space-x-6 border-b border-stone-200 pb-3">
-        <button
-          onClick={() => setActiveTab("current")}
-          className={`font-semibold pb-3 -mb-[13px] transition-colors text-sm flex items-center gap-2 ${
-            activeTab === "current"
-              ? "border-b-2 border-amber-600 text-amber-800"
-              : "text-stone-500 hover:text-stone-800"
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          {isIndo ? "Shift Kasir Saat Ini" : "Current Shift"}
-        </button>
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`font-semibold pb-3 -mb-[13px] transition-colors text-sm flex items-center gap-2 ${
-            activeTab === "history"
-              ? "border-b-2 border-amber-600 text-amber-800"
-              : "text-stone-500 hover:text-stone-800"
-          }`}
-        >
-          <History className="w-4 h-4" />
-          {isIndo ? "Riwayat Shift" : "Shift History"}
-        </button>
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
+              Cash Drawer & Session
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              Shift Kasir
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            {isIndo ? "Sesi & Rekonsiliasi Shift Kasir" : "Cashier Shift & Drawer Session"}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+            Catat modal uang tunai awal laci kasir, monitor pergerakan kas selama jam kerja, dan rekonsiliasi selisih fisik saat serah terima shift.
+          </p>
+        </div>
+
+        {/* Tab Selector */}
+        <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full md:w-auto">
+          <button
+            onClick={() => setActiveTab("current")}
+            className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 md:flex-none cursor-pointer ${
+              activeTab === "current" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {activeTab === "current" && (
+              <motion.div
+                layoutId="shiftSessionTab"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <Clock className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+            <span className="relative z-10">
+              {isIndo ? "Shift Saat Ini" : "Current Shift"}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 md:flex-none cursor-pointer ${
+              activeTab === "history" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {activeTab === "history" && (
+              <motion.div
+                layoutId="shiftSessionTab"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <History className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+            <span className="relative z-10">
+              {isIndo ? "Riwayat Shift" : "Shift History"} ({pastShifts.length})
+            </span>
+          </button>
+        </div>
       </div>
 
+      {/* ─── TAB 1: CURRENT ACTIVE SHIFT ─────────────────────────────────────────── */}
       {activeTab === "current" && (
-        <div className="max-w-4xl">
+        <div className="max-w-4xl mx-auto space-y-6">
           {!currentShift ? (
-            <div className="bg-white rounded-3xl shadow-coffee border border-stone-200/80 p-8 sm:p-10">
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 p-6 sm:p-10">
               {isReadOnly ? (
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-stone-100 text-stone-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
                     <Clock className="w-8 h-8" />
                   </div>
-                  <h2 className="text-xl font-bold text-stone-800 mb-2">
+                  <h2 className="text-xl font-bold text-slate-800 mb-2">
                     Tidak Ada Shift Aktif
                   </h2>
-                  <p className="text-stone-500 text-sm max-w-sm mx-auto">
-                    Saat ini tidak ada sesi kasir yang sedang berjalan. Kasir bertugas dapat
-                    membuka shift baru.
+                  <p className="text-slate-500 text-xs sm:text-sm max-w-sm mx-auto leading-relaxed">
+                    Saat ini tidak ada sesi kasir yang sedang berjalan. Kasir bertugas dapat membuka shift baru.
                   </p>
                 </div>
               ) : isKasir && globalOpenShift ? (
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-coffee-sm">
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-amber-50 text-amber-700 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-amber-200 shadow-2xs">
                     <AlertCircle className="w-8 h-8" />
                   </div>
-                  <h2 className="text-xl font-bold text-stone-800 mb-2">
+                  <h2 className="text-xl font-bold text-slate-900 mb-2">
                     Ada Shift yang Sedang Berjalan
                   </h2>
-                  <p className="text-stone-500 text-sm max-w-sm mx-auto">
+                  <p className="text-slate-500 text-xs sm:text-sm max-w-sm mx-auto leading-relaxed">
                     Kasir lain sedang dalam shift aktif. Shift baru hanya bisa dibuka setelah shift sebelumnya ditutup.
                   </p>
                 </div>
               ) : (
                 <div>
                   <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-amber-100/80 text-amber-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-coffee-sm">
+                    <div className="w-16 h-16 bg-brand-50 text-brand-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xs border border-brand-100">
                       <Play className="w-8 h-8 ml-1" />
                     </div>
-                    <h2 className="text-2xl font-bold text-stone-900 tracking-tight mb-2">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
                       {isIndo ? "Buka Sesi Kasir (Mulai Shift)" : "Start Cashier Shift"}
                     </h2>
-                    <p className="text-stone-500 text-sm max-w-md mx-auto">
+                    <p className="text-slate-500 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
                       {isIndo
-                        ? "Pilih laci kas dan masukkan jumlah modal uang tunai awal untuk memulai transaksi penjualan."
+                        ? "Pilih laci kas dan masukkan jumlah modal uang tunai awal untuk memulai transaksi kasir."
                         : "Select cash drawer and input starting cash amount to begin transactions."}
                     </p>
                   </div>
-                  <form
-                    onSubmit={handleOpenShift}
-                    className="max-w-md mx-auto space-y-5"
-                  >
+                  <form onSubmit={handleOpenShift} className="max-w-md mx-auto space-y-5">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-2">
-                        {isIndo
-                          ? "Pilih Laci Kasir (Pos Kas)"
-                          : "Select Cash Drawer"}
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                        {isIndo ? "Pilih Laci Kasir (Pos Kas)" : "Select Cash Drawer"}
                       </label>
                       {cashOnlyAccounts.length === 0 ? (
-                        <div className="p-4 bg-rose-50 text-rose-700 rounded-2xl border border-rose-200 text-sm">
+                        <div className="p-4 bg-rose-50 text-rose-700 rounded-2xl border border-rose-200 text-xs">
                           {isIndo
                             ? "Anda belum memiliki Pos Kas berjenis Tunai. Buat di menu Keuangan > Arus Kas."
                             : "You do not have any Cash Accounts of type CASH. Create one in Finance > Cash Flow."}
@@ -242,28 +279,27 @@ export const ShiftManagement = () => {
                         <select
                           required
                           value={selectedCashAccountId}
-                          onChange={(e) =>
-                            setSelectedCashAccountId(e.target.value)
-                          }
-                          className="w-full px-4 py-3 border border-stone-200 rounded-2xl focus:border-amber-600 focus:ring-4 focus:ring-amber-500/10 outline-none text-stone-800 transition-all font-medium bg-stone-50/50"
+                          onChange={(e) => setSelectedCashAccountId(e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:border-brand-600 focus:ring-4 focus:ring-brand-500/10 outline-none text-slate-800 transition-all font-semibold text-base sm:text-xs bg-slate-50/50"
                         >
                           <option value="" disabled>
-                            {isIndo ? "Pilih Pos Kas..." : "Select account..."}
+                            {isIndo ? "-- Pilih Pos Kas Tunai --" : "Select account..."}
                           </option>
                           {cashOnlyAccounts.map((acc) => (
                             <option key={acc.id} value={acc.id}>
-                              {acc.name}
+                              {acc.name} ({formatCurrency(acc.balance || 0)})
                             </option>
                           ))}
                         </select>
                       )}
                     </div>
+
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-2">
-                        {isIndo ? "Modal Awal Tunai di Laci" : "Starting Cash"}
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                        {isIndo ? "Modal Awal Uang Tunai di Laci" : "Starting Cash"}
                       </label>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-sm">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                           Rp
                         </span>
                         <input
@@ -271,18 +307,17 @@ export const ShiftManagement = () => {
                           required
                           value={startingCashInput}
                           onChange={(e) =>
-                            setStartingCashInput(
-                              formatNumberInput(e.target.value),
-                            )
+                            setStartingCashInput(formatNumberInput(e.target.value))
                           }
-                          className="w-full pl-12 pr-4 py-3.5 border border-stone-200 rounded-2xl focus:border-amber-600 focus:ring-4 focus:ring-amber-500/10 outline-none text-xl font-bold font-mono text-stone-900 transition-all bg-stone-50/50"
+                          className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl focus:border-brand-600 focus:ring-4 focus:ring-brand-500/10 outline-none text-xl font-bold font-mono text-slate-900 transition-all bg-slate-50/50"
                           placeholder="0"
                         />
                       </div>
                     </div>
+
                     <button
                       type="submit"
-                      className="w-full py-3.5 bg-[#241813] hover:bg-[#1b130f] text-white font-bold rounded-2xl shadow-coffee transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
+                      className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm"
                     >
                       <Play className="w-4 h-4 fill-current" />
                       {isIndo ? "Buka Shift Sekarang" : "Open Shift Now"}
@@ -297,39 +332,32 @@ export const ShiftManagement = () => {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-3xl shadow-coffee border border-stone-200/80 overflow-hidden"
+                className="bg-white rounded-3xl shadow-xs border border-slate-200/80 overflow-hidden"
               >
-                <div className="p-6 border-b border-stone-200/70 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-4 bg-stone-50/80 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="p-6 border-b border-slate-100 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-4 bg-slate-50/70 relative overflow-hidden">
                   <div className="relative z-10">
                     <div className="flex items-center gap-3 mb-1">
                       <div className="relative flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                       </div>
-                      <h2 className="text-xl font-bold text-stone-900 tracking-tight">
+                      <h2 className="text-xl font-bold text-slate-900 tracking-tight">
                         {isIndo ? "Shift Kasir Sedang Berjalan" : "Active Shift"}
                       </h2>
                     </div>
-                    <p className="text-xs text-stone-500 flex items-center gap-1.5 mt-1 font-medium mb-1.5">
+                    <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1 font-medium mb-1.5">
                       <Clock className="w-3.5 h-3.5 text-emerald-600" />
                       {isIndo ? "Dimulai pada" : "Started at"}{" "}
-                      {new Date(currentShift.startTime).toLocaleTimeString(
-                        "id-ID",
-                        { hour: "2-digit", minute: "2-digit" },
-                      )}{" "}
-                      (
-                      {new Date(currentShift.startTime).toLocaleDateString(
-                        "id-ID",
-                      )}
-                      )
+                      {new Date(currentShift.startTime).toLocaleTimeString("id-ID", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      ({new Date(currentShift.startTime).toLocaleDateString("id-ID")})
                     </p>
-                    <p className="text-xs font-semibold text-stone-700 bg-white inline-block px-2.5 py-1 rounded-lg border border-stone-200 shadow-2xs">
+                    <p className="text-xs font-semibold text-slate-700 bg-white inline-block px-2.5 py-1 rounded-xl border border-slate-200 shadow-2xs">
                       Laci Kasir:{" "}
-                      <span className="font-bold text-stone-900">
-                        {cashAccounts.find(
-                          (a) => a.id === currentShift.cashAccountId,
-                        )?.name || "Unknown"}
+                      <span className="font-bold text-slate-900">
+                        {cashAccounts.find((a) => a.id === currentShift.cashAccountId)?.name || "Unknown"}
                       </span>
                     </p>
                   </div>
@@ -338,43 +366,46 @@ export const ShiftManagement = () => {
                   </div>
                 </div>
 
-                <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 sm:p-5 bg-white shadow-coffee-sm rounded-2xl border border-stone-200/80 flex flex-col justify-between">
-                    <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider mb-2">
+                <div className="p-5 sm:p-6 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="p-4 sm:p-5 bg-white shadow-2xs rounded-2xl border border-slate-200/80 flex flex-col justify-between">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                       {isIndo ? "Modal Awal" : "Starting Cash"}
                     </p>
-                    <p className="text-xl font-bold font-mono text-stone-900">
+                    <p className="text-lg sm:text-xl font-black font-mono text-slate-900">
                       {formatCurrency(currentShift.startingCash)}
                     </p>
                   </div>
-                  <div className="p-4 sm:p-5 bg-amber-50/70 shadow-coffee-sm rounded-2xl border border-amber-200/70 flex flex-col justify-between group">
-                    <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider mb-2">
+
+                  <div className="p-4 sm:p-5 bg-brand-50/40 shadow-2xs rounded-2xl border border-brand-200/80 flex flex-col justify-between group">
+                    <p className="text-[11px] font-bold text-brand-800 uppercase tracking-wider mb-2">
                       {isIndo ? "Penjualan" : "Sales"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-xl font-bold font-mono text-amber-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-brand-950">
                         +{formatCurrency(totalSales)}
                       </p>
-                      <TrendingUp className="w-4 h-4 text-amber-600" />
+                      <TrendingUp className="w-4 h-4 text-brand-600" />
                     </div>
                   </div>
-                  <div className="p-4 sm:p-5 bg-emerald-50/70 shadow-coffee-sm rounded-2xl border border-emerald-200/70 flex flex-col justify-between group">
+
+                  <div className="p-4 sm:p-5 bg-emerald-50/70 shadow-2xs rounded-2xl border border-emerald-200/70 flex flex-col justify-between group">
                     <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-2">
                       {isIndo ? "Kas Masuk" : "Cash In"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-xl font-bold font-mono text-emerald-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-emerald-950">
                         +{formatCurrency(totalCashIn)}
                       </p>
                       <TrendingUp className="w-4 h-4 text-emerald-600" />
                     </div>
                   </div>
-                  <div className="p-4 sm:p-5 bg-rose-50/70 shadow-coffee-sm rounded-2xl border border-rose-200/70 flex flex-col justify-between group">
+
+                  <div className="p-4 sm:p-5 bg-rose-50/70 shadow-2xs rounded-2xl border border-rose-200/70 flex flex-col justify-between group">
                     <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider mb-2">
                       {isIndo ? "Kas Keluar" : "Cash Out"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-xl font-bold font-mono text-rose-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-rose-950">
                         -{formatCurrency(totalCashOut)}
                       </p>
                       <TrendingDown className="w-4 h-4 text-rose-600" />
@@ -382,15 +413,13 @@ export const ShiftManagement = () => {
                   </div>
                 </div>
 
-                {/* Hero Expected Cash Drawer in Deep Roast Espresso */}
-                <div className="p-6 bg-gradient-to-r from-[#1c130e] via-[#241813] to-[#2c1d17] text-white flex justify-between items-center relative overflow-hidden rounded-b-3xl border-t border-[#3a281f]">
+                {/* Hero Expected Cash Drawer in Royal Cobalt Dark */}
+                <div className="p-6 bg-gradient-to-r from-slate-950 via-slate-900 to-brand-950 text-white flex justify-between items-center relative overflow-hidden rounded-b-3xl border-t border-slate-800">
                   <div className="relative z-10">
-                    <p className="text-amber-200/70 text-xs font-bold uppercase tracking-wider mb-1">
-                      {isIndo
-                        ? "Ekspektasi Uang Fisik di Laci Kasir"
-                        : "Expected Cash in Drawer"}
+                    <p className="text-brand-300 text-xs font-bold uppercase tracking-wider mb-1">
+                      {isIndo ? "Ekspektasi Uang Fisik di Laci Kasir" : "Expected Cash in Drawer"}
                     </p>
-                    <p className="text-3xl sm:text-4xl font-black font-mono text-amber-400 drop-shadow-sm">
+                    <p className="text-3xl sm:text-4xl font-black font-mono text-amber-300 drop-shadow-sm">
                       {formatCurrency(expectedEndingCash)}
                     </p>
                   </div>
@@ -398,37 +427,28 @@ export const ShiftManagement = () => {
                 </div>
               </motion.div>
 
-              {/* Close Shift Form — only for staff who can modify */}
+              {/* Close Shift Form */}
               {!isReadOnly && (
-                <div className="bg-white rounded-3xl shadow-coffee border border-stone-200/80 p-6 sm:p-7">
-                  <h3 className="text-base font-bold text-stone-900 mb-4 flex items-center gap-2">
+                <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 p-6 sm:p-7">
+                  <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <Square className="w-4 h-4 text-rose-600 fill-current" />
                     {isIndo ? "Tutup Shift & Rekonsiliasi Laci" : "Close Shift & Drawer Reconciliation"}
                   </h3>
-                  <form
-                    onSubmit={handleCloseShift}
-                    className="space-y-4 max-w-md"
-                  >
+                  <form onSubmit={handleCloseShift} className="space-y-4 max-w-md">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-2">
-                        {isIndo
-                          ? "Total Hitungan Fisik Uang di Laci"
-                          : "Actual Cash Counted in Drawer"}
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                        {isIndo ? "Total Hitungan Fisik Uang di Laci" : "Actual Cash Counted in Drawer"}
                       </label>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-sm">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                           Rp
                         </span>
                         <input
                           type="text"
                           required
                           value={endingCashInput}
-                          onChange={(e) =>
-                            setEndingCashInput(
-                              formatNumberInput(e.target.value),
-                            )
-                          }
-                          className="w-full pl-12 pr-4 py-3.5 border border-stone-200 rounded-2xl focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none text-xl font-bold font-mono text-stone-900 transition-all bg-stone-50/50"
+                          onChange={(e) => setEndingCashInput(formatNumberInput(e.target.value))}
+                          className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none text-xl font-bold font-mono text-slate-900 transition-all bg-slate-50/50"
                           placeholder="0"
                         />
                       </div>
@@ -443,7 +463,7 @@ export const ShiftManagement = () => {
                     </div>
                     <button
                       type="submit"
-                      className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-coffee transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
+                      className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold rounded-2xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm"
                     >
                       <Square className="w-4 h-4 fill-current" />
                       {isIndo ? "Akhiri Shift Sekarang" : "End Shift Now"}
@@ -456,64 +476,46 @@ export const ShiftManagement = () => {
         </div>
       )}
 
+      {/* ─── TAB 2: SHIFT HISTORY ─────────────────────────────────────────────────── */}
       {activeTab === "history" && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-6"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
           {/* Chart Section */}
           {pastShifts.length > 0 && (
-            <div className="bg-white rounded-3xl shadow-coffee border border-stone-200/80 p-6 sm:p-7">
-              <h3 className="font-bold text-stone-900 mb-6 flex items-center gap-2 text-base">
-                <History className="w-4 h-4 text-amber-700" />
-                {isIndo
-                  ? "Tren Total Kas (7 Shift Terakhir)"
-                  : "Cash Trend (Last 7 Shifts)"}
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 p-5 sm:p-7">
+              <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 text-base">
+                <History className="w-4 h-4 text-brand-600" />
+                {isIndo ? "Tren Total Kas (7 Shift Terakhir)" : "Cash Trend (Last 7 Shifts)"}
               </h3>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={shiftChartData}
-                    margin={{ top: 10, right: 10, left: 20, bottom: 0 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="#f1ece6"
-                    />
+                  <BarChart data={shiftChartData} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis
                       dataKey="name"
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: "#78716c", fontSize: 11, fontWeight: 500 }}
+                      tick={{ fill: "#64748b", fontSize: 11, fontWeight: 500 }}
                       dy={10}
                     />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: "#a8a29e", fontSize: 11 }}
+                      tick={{ fill: "#94a3b8", fontSize: 11 }}
                       tickFormatter={(value) => `Rp ${value / 1000}k`}
                     />
                     <RechartsTooltip
-                      cursor={{ fill: "#fbf9f5" }}
+                      cursor={{ fill: "#f8fafc" }}
                       contentStyle={{
                         borderRadius: "16px",
-                        border: "1px solid #ede4d8",
-                        boxShadow: "0 10px 25px -5px rgba(44, 29, 23, 0.08)",
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.08)",
                         backgroundColor: "#ffffff",
                       }}
-                      formatter={(value: number) => [
-                        formatCurrency(value),
-                        "Total Kas",
-                      ]}
+                      formatter={(value: number) => [formatCurrency(value), "Total Kas"]}
                     />
                     <Bar dataKey="kas" radius={[8, 8, 0, 0]}>
                       {shiftChartData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={entry.isPagi ? "#c27803" : "#2c1d17"}
-                        />
+                        <Cell key={`cell-${index}`} fill={entry.isPagi ? "#1b2cc0" : "#0f172a"} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -522,59 +524,56 @@ export const ShiftManagement = () => {
             </div>
           )}
 
-          {/* Table Section */}
-          <div className="bg-white rounded-3xl shadow-coffee border border-stone-200/80 overflow-hidden">
-            <div className="p-5 border-b border-stone-200/60 bg-stone-50/70 flex justify-between items-center">
-              <h3 className="font-bold text-stone-900 text-sm">
-                {isIndo
-                  ? "Riwayat Rekonsiliasi Shift"
-                  : "Shift Reconciliation History"}
+          {/* Table Section (Desktop / Tablet) */}
+          <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/70 flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 text-sm">
+                {isIndo ? "Riwayat Rekonsiliasi Shift" : "Shift Reconciliation History"}
               </h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-stone-200/60">
-                <thead className="bg-stone-50/40">
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-xs">
+                <thead className="bg-slate-50/60 text-slate-500 font-bold">
                   <tr>
-                    <th className="px-6 py-3.5 text-left text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-left uppercase tracking-wider">
                       {isIndo ? "Waktu Buka" : "Started"}
                     </th>
-                    <th className="px-6 py-3.5 text-left text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-left uppercase tracking-wider">
                       {isIndo ? "Waktu Tutup" : "Ended"}
                     </th>
-                    <th className="px-6 py-3.5 text-right text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right uppercase tracking-wider">
                       {isIndo ? "Modal Awal" : "Starting"}
                     </th>
-                    <th className="px-6 py-3.5 text-right text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right uppercase tracking-wider">
                       {isIndo ? "Ekspektasi" : "Expected"}
                     </th>
-                    <th className="px-6 py-3.5 text-right text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right uppercase tracking-wider">
                       {isIndo ? "Aktual" : "Actual"}
                     </th>
-                    <th className="px-6 py-3.5 text-right text-xs font-bold text-stone-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right uppercase tracking-wider">
                       {isIndo ? "Selisih" : "Difference"}
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-stone-100 font-mono">
+                <tbody className="bg-white divide-y divide-slate-100 font-mono">
                   {pastShifts.map((shift) => (
-                    <tr key={shift.id} className="hover:bg-stone-50/70 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-stone-600 font-sans">
+                    <tr key={shift.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
                         {new Date(shift.startTime).toLocaleString("id-ID")}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-stone-600 font-sans">
-                        {shift.endTime
-                          ? new Date(shift.endTime).toLocaleString("id-ID")
-                          : "-"}
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
+                        {shift.endTime ? new Date(shift.endTime).toLocaleString("id-ID") : "-"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-medium text-stone-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-medium text-slate-700">
                         {formatCurrency(shift.startingCash)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-medium text-stone-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-medium text-slate-700">
                         {shift.expectedEndingCash != null
                           ? formatCurrency(shift.expectedEndingCash)
                           : "-"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-bold text-stone-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-bold text-slate-900">
                         {shift.actualEndingCash != null
                           ? formatCurrency(shift.actualEndingCash)
                           : "-"}
@@ -586,8 +585,8 @@ export const ShiftManagement = () => {
                               shift.difference > 0
                                 ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                 : shift.difference < 0
-                                  ? "bg-rose-50 text-rose-800 border border-rose-200"
-                                  : "bg-stone-100 text-stone-700"
+                                ? "bg-rose-50 text-rose-800 border border-rose-200"
+                                : "bg-slate-100 text-slate-700"
                             }`}
                           >
                             {shift.difference > 0 ? "+" : ""}
@@ -601,18 +600,75 @@ export const ShiftManagement = () => {
                   ))}
                   {pastShifts.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={6}
-                        className="px-6 py-8 text-center text-stone-400 text-xs font-sans"
-                      >
-                        {isIndo
-                          ? "Belum ada riwayat shift"
-                          : "No shift history"}
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400 text-xs font-sans">
+                        {isIndo ? "Belum ada riwayat shift" : "No shift history"}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card Feed (Phones 360-480px) */}
+            <div className="block md:hidden p-4 space-y-3">
+              {pastShifts.map((shift) => (
+                <div
+                  key={shift.id}
+                  className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-2.5 text-xs"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-bold text-slate-900 block">
+                        {new Date(shift.startTime).toLocaleDateString("id-ID", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {new Date(shift.startTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} -{" "}
+                        {shift.endTime ? new Date(shift.endTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      </span>
+                    </div>
+
+                    {shift.difference != null && (
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          shift.difference > 0
+                            ? "bg-emerald-100 text-emerald-800"
+                            : shift.difference < 0
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {shift.difference > 0 ? "+" : ""}
+                        {formatCurrency(shift.difference)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 font-mono text-[11px]">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-sans">Modal:</span>
+                      <span className="font-semibold text-slate-700">{formatCurrency(shift.startingCash)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-sans">Ekspektasi:</span>
+                      <span className="font-semibold text-slate-700">{formatCurrency(shift.expectedEndingCash || 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-sans">Aktual:</span>
+                      <span className="font-bold text-slate-900">{formatCurrency(shift.actualEndingCash || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {pastShifts.length === 0 && (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  Belum ada riwayat shift tersimpan.
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

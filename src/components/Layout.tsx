@@ -67,6 +67,21 @@ export const Layout: React.FC<LayoutProps> = ({
     "sales" | "inventory" | "finance" | "payroll" | "attendance" | "kpi" | "executive"
   >("sales");
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [aiInitialTab, setAiInitialTab] = useState<
+    "quick-input" | "receipt" | "consultant" | "insights"
+  >("quick-input");
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string>("");
+
+  useEffect(() => {
+    const handleOpenAi = (e: any) => {
+      if (e.detail?.tab) setAiInitialTab(e.detail.tab);
+      if (e.detail?.prompt) setAiInitialPrompt(e.detail.prompt);
+      setIsAIAssistantOpen(true);
+    };
+    window.addEventListener("open-ai-assistant", handleOpenAi);
+    return () => window.removeEventListener("open-ai-assistant", handleOpenAi);
+  }, []);
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -107,6 +122,7 @@ export const Layout: React.FC<LayoutProps> = ({
     logout,
     cashAccounts,
     addCashTransaction,
+    addStockMovement,
     employees,
   } = useStore();
   const { t } = useTranslation(settings.language || "id");
@@ -190,24 +206,18 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     { 
       group: "Keuangan & Kas",
+      name: "Kategori Kas & Biaya",
+      view: "expense_categories" as ViewState,
+      icon: Tag,
+    },
+    { 
+      group: "Keuangan & Kas",
       name: "Laporan Laba Rugi",
       view: "finance_reports" as ViewState,
       icon: BarChart3,
     },
-    { 
-      group: "Keuangan & Kas",
-      name: "Rekonsiliasi Bank",
-      view: "bank_reconciliation" as ViewState,
-      icon: CreditCard,
-    },
-    { 
-      group: "Keuangan & Kas",
-      name: "Kategori Beban",
-      view: "expense_categories" as ViewState,
-      icon: Tag,
-    },
 
-    // ─── 6. SDM & Tim (Manager, Finance untuk Gaji, Leader & Staf) ─
+    // ─── 5. SDM & Tim (Manager, Finance untuk Gaji, Leader & Staf) ─
     { 
       group: "SDM & Tim",
       name: "Presensi & Clock In",
@@ -233,18 +243,12 @@ export const Layout: React.FC<LayoutProps> = ({
       icon: Calculator,
     },
 
-    // ─── 7. Sistem & Admin (Super Admin & Manager) ───────────────
+    // ─── 6. Sistem & Admin (Super Admin & Manager) ───────────────
     { 
       group: "Sistem & Admin",
       name: "Manajemen Pengguna",
       view: "users" as ViewState,
       icon: Users,
-    },
-    { 
-      group: "Sistem & Admin",
-      name: "Audit Log Aktivitas",
-      view: "audit_log" as ViewState,
-      icon: ShieldCheck,
     },
     { 
       group: "Sistem & Admin",
@@ -260,7 +264,7 @@ export const Layout: React.FC<LayoutProps> = ({
     "menu_management", "hpp_calculator",
     "import_sales",
     "inventory", "purchases", "suppliers",
-    "cash_flow", "finance_reports", "bank_reconciliation", "expense_categories",
+    "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
     "attendance_clock", "leader_checklist", "hr", "payroll",
     "users", "audit_log", "settings",
   ];
@@ -275,6 +279,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "import_sales",
       "finance_reports",
       "cash_flow",
+      "expense_categories",
       "payroll",
     ],
 
@@ -288,6 +293,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "inventory",
       "purchases",
       "suppliers",
+      "expense_categories",
       "hr",
       "leader_checklist",
       "users",
@@ -298,12 +304,10 @@ export const Layout: React.FC<LayoutProps> = ({
       "dashboard_finance",
       "import_sales",
       "cash_flow",
-      "finance_reports",
-      "bank_reconciliation",
       "expense_categories",
+      "finance_reports",
       "purchases",
       "payroll",
-      "audit_log",
     ],
 
     // Kasir: Rekap penjualan, presensi
@@ -420,21 +424,46 @@ export const Layout: React.FC<LayoutProps> = ({
       <AIAssistantModal
         isOpen={isAIAssistantOpen && canAccessAIAssistant}
         onClose={() => setIsAIAssistantOpen(false)}
-        onApplyTransactions={(txs) => {
+        initialTab={aiInitialTab}
+        initialPrompt={aiInitialPrompt}
+        onApplyTransactions={(txs, options) => {
           if (Array.isArray(txs) && txs.length > 0) {
             const defaultAccountId = cashAccounts?.[0]?.id || "acc-main";
+            const nowIso = new Date().toISOString();
             txs.forEach((tx) => {
+              const targetAccountId = tx.accountId || defaultAccountId;
               addCashTransaction({
-                accountId: defaultAccountId,
+                accountId: targetAccountId,
                 type: tx.type === "CASH_IN" ? "IN" : "OUT",
                 amount: Number(tx.amount || 0),
                 category: tx.category || "Operasional",
+                categoryId: tx.categoryId || null,
                 description: tx.description || "Draft AI",
-                date: new Date().toISOString(),
-                createdBy: currentUser?.name || "AI Assistant",
+                date: nowIso,
+                createdBy: currentUser?.name || "Julia AI Copilot",
               });
+
+              // If automatic stock update was checked and item is linked to an ingredient
+              if (options?.updateStock && tx.ingredientId && Number(tx.quantity || 0) > 0) {
+                addStockMovement({
+                  ingredientId: tx.ingredientId,
+                  type: "IN",
+                  quantity: Number(tx.quantity),
+                  unitCost: Number(tx.quantity) > 0 ? Math.round(Number(tx.amount) / Number(tx.quantity)) : 0,
+                  totalCost: Number(tx.amount || 0),
+                  date: nowIso,
+                  note: `Input Cepat AI: ${tx.description}`,
+                  createdBy: currentUser?.name || "Julia AI Copilot",
+                });
+              }
             });
-            alert(`Berhasil menyimpan ${txs.length} transaksi dari AI ke Buku Kas!`);
+            alert(
+              `Berhasil menyimpan ${txs.length} transaksi dari AI ke Buku Kas!${
+                options?.updateStock
+                  ? " Stok bahan masuk juga telah diperbarui di gudang."
+                  : ""
+              }`
+            );
           }
         }}
       />
@@ -677,7 +706,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   dashboard_finance: "Dashboard Keuangan",
                   dashboard_inventory: "Dashboard Inventori",
                   cash_flow: "Buku Kas & Arus Kas",
-                  expense_categories: "Kategori Beban Keuangan",
+                  expense_categories: "Kategori Kas & Biaya",
                   finance_reports: "Laporan Laba Rugi & Keuangan",
                   bank_reconciliation: "Rekonsiliasi Bank & QRIS",
                   inventory: "Stok Bahan Baku & Opname",
@@ -993,7 +1022,7 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar">
           {/* View-Only Alert for Owner */}
           {currentUser?.role === "OWNER" && (
             <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-brand-50/80 border border-brand-200 rounded-2xl text-brand-900 text-xs shadow-2xs">

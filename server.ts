@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import cors from "cors";
@@ -539,6 +540,9 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  app.use(compression({
+    threshold: 1024,
+  }));
   app.use(cors());
   app.use(express.json({ limit: "50mb" }));
 
@@ -1047,8 +1051,22 @@ async function startServer() {
     kpiRecords: [],
   };
 
+  let serverDataVersion = Date.now();
+  const bumpDataVersion = () => {
+    serverDataVersion = Date.now();
+  };
+
   app.get("/api/sync", async (req, res) => {
     try {
+      const clientVersion = req.query.v ? Number(req.query.v) : null;
+      if (clientVersion && clientVersion === serverDataVersion) {
+        return res.json({
+          notModified: true,
+          v: serverDataVersion,
+          serverTime: new Date().toISOString(),
+        });
+      }
+
       if (!isDbConnected) {
         const rawSettings = offlineState.settings && offlineState.settings.length > 0 ? (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) : initialSettings;
         const effectiveApiKey =
@@ -1058,6 +1076,7 @@ async function startServer() {
           "";
         return res.json({
           ...offlineState,
+          v: serverDataVersion,
           settings: {
             ...rawSettings,
             geminiApiKey: effectiveApiKey,
@@ -1381,6 +1400,7 @@ async function startServer() {
         closed_periods,
         products,
         batch_preparations,
+        v: serverDataVersion,
         serverTime: new Date().toISOString(),
       });
     } catch (e) {
@@ -1856,7 +1876,8 @@ async function startServer() {
           }
         }
       });
-      res.json({ success: true, serverTime: new Date().toISOString() });
+      bumpDataVersion();
+      res.json({ success: true, v: serverDataVersion, serverTime: new Date().toISOString() });
     } catch (e) {
       console.error("Save error (running in offline mode):", e);
       // Store in memory for offline usage so it doesn't get overwritten on next GET
@@ -2313,6 +2334,8 @@ async function startServer() {
   );
 
   // ─── AI ASSISTANT API ──────────────────────────────────────────────────────
+  const GEMINI_MODEL = "gemini-2.5-flash";
+
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
       const { text, imageBase64, mimeType, fileName } = req.body;
@@ -2458,7 +2481,7 @@ async function startServer() {
       contents.push({ text: promptText });
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: GEMINI_MODEL,
         contents,
         config: {
           responseMimeType: "application/json",
@@ -2493,6 +2516,267 @@ async function startServer() {
     } catch (e: any) {
       console.error("AI parse error:", e);
       res.status(500).json({ error: e?.message || "Failed to parse with AI" });
+    }
+  });
+
+  // ─── NATURAL LANGUAGE DATA ENTRY API ───────────────────────────────────────
+  app.post("/api/ai/parse-natural-entry", async (req, res) => {
+    try {
+      const { text, storeContext } = req.body;
+      if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "Teks catatan belanja tidak boleh kosong" });
+      }
+
+      let apiKey = process.env.GEMINI_API_KEY || null;
+      try {
+        const settings = await db.select().from(schema.settings).limit(1);
+        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
+      } catch {}
+
+      // Fallback NLP parser function (handles offline or when Gemini is unreachable)
+      const parseLocalNaturalEntry = () => {
+        const clean = text.trim();
+        const sentences = clean.split(/(?:;|\n| lalu | dan kemudian |,| serta )/i).map((s: string) => s.trim()).filter(Boolean);
+        const transactions: any[] = [];
+
+        for (const sentence of sentences) {
+          // Detect amount
+          let amount = 0;
+          const matchNumber = sentence.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
+          if (matchNumber) {
+            let num = parseFloat(matchNumber[1].replace(",", "."));
+            const unit = (matchNumber[2] || "").toLowerCase();
+            if (unit === "rb" || unit === "ribu" || unit === "k") num *= 1000;
+            else if (unit === "jt" || unit === "juta") num *= 1000000;
+            else if (num < 1000 && !unit) num *= 1000;
+            amount = Math.round(num);
+          }
+
+          if (amount <= 0) continue;
+
+          // Detect type
+          const isIncome = /terima|masuk|omset|pendapatan|setor|income|pelunasan/i.test(sentence);
+          const type = isIncome ? "CASH_IN" : "CASH_OUT";
+
+          // Detect category
+          let category = "Operasional";
+          if (/susu|milk|kopi|bean|espresso|syrup|sirup|teh|tea|matcha|aren|creamer|oat|butter|mentega|croissant|daging|ayam|beras|saus/i.test(sentence)) {
+            category = "Bahan Baku";
+          } else if (/es|ice|galon|air|cup|lid|sedotan|straw|paper|seal|plastik/i.test(sentence)) {
+            category = "Operasional Bar";
+          } else if (/sabun|sunlight|sampah|tissue|tisu|pel|sapu|lap|kebersihan/i.test(sentence)) {
+            category = "Kebersihan & Sanitasi";
+          } else if (/listrik|pln|wifi|indihome|pdam|gas|lpg/i.test(sentence)) {
+            category = "Utilitas";
+          } else if (isIncome) {
+            category = "Pendapatan Lain";
+          }
+
+          // Detect suggested cash account
+          let accountName = "Laci Kasir";
+          if (/bca|bank|transfer|rekening|mandiri|debit|qris/i.test(sentence)) {
+            accountName = "Bank BCA";
+          } else if (/utama|brankas|owner|tabungan/i.test(sentence)) {
+            accountName = "Kas Utama";
+          }
+
+          // Attempt to match with known ingredients in storeContext
+          let matchedIngredient: any = null;
+          let quantity = 1;
+          const qtyMatch = sentence.match(/(\d+(?:[.,]\d+)?)\s*(liter|l|kg|gr|gram|pcs|pack|karung|karton|dus|bal|botol|galon)/i);
+          if (qtyMatch) {
+            quantity = parseFloat(qtyMatch[1].replace(",", "."));
+          }
+
+          if (Array.isArray(storeContext?.ingredients)) {
+            const sentenceLower = sentence.toLowerCase();
+            matchedIngredient = storeContext.ingredients.find((ing: any) => {
+              const nameLower = (ing.name || "").toLowerCase();
+              return sentenceLower.includes(nameLower) ||
+                (nameLower.includes("susu") && sentenceLower.includes("susu")) ||
+                (nameLower.includes("beans") && sentenceLower.includes("kopi")) ||
+                (nameLower.includes("es batu") && (sentenceLower.includes("es") || sentenceLower.includes("kristal"))) ||
+                (nameLower.includes("aren") && sentenceLower.includes("aren")) ||
+                (nameLower.includes("galon") && (sentenceLower.includes("galon") || sentenceLower.includes("air")));
+            });
+          }
+
+          transactions.push({
+            type,
+            amount,
+            category,
+            description: sentence.trim(),
+            accountName,
+            ingredientId: matchedIngredient?.id || null,
+            ingredientName: matchedIngredient?.name || null,
+            quantity: matchedIngredient ? quantity : null,
+            unit: matchedIngredient?.unit || (qtyMatch ? qtyMatch[2] : null),
+          });
+        }
+
+        return {
+          summary: `${transactions.length} transaksi berhasil diekstrak dari catatan narasi.`,
+          transactions,
+          source: "local-nlp",
+        };
+      };
+
+      if (apiKey) {
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          const prompt = `Anda adalah sistem data entry cerdas untuk "Julia's Specialty Room • Coffee • Eatery".
+Tugas Anda: mengekstrak catatan kasir/staf dalam bahasa Indonesia santai menjadi transaksi kas terstruktur.
+
+Konteks Akun Kas: ${JSON.stringify(storeContext?.cashAccounts?.map((a: any) => a.name) || ["Laci Kasir", "Kas Utama", "Bank BCA"])}
+Kategori Tersedia: ${JSON.stringify(storeContext?.categories?.map((c: any) => c.name) || ["Bahan Baku", "Operasional Bar", "Kebersihan & Sanitasi", "Utilitas", "Pendapatan Lain"])}
+Daftar Bahan Baku di Gudang/Bar: ${JSON.stringify(storeContext?.ingredients?.map((i: any) => ({ id: i.id, name: i.name, unit: i.unit })) || [])}
+
+Teks Catatan: "${text}"
+
+Aturan Pemrosesan:
+1. Pahami satuan angka: "25rb" = 25000, "150k" = 150000, "1.2jt" = 1200000.
+2. Tentukan type: "CASH_OUT" untuk belanja/beli/bayar/keluar, "CASH_IN" untuk pemasukan/terima/omset.
+3. Cocokkan accountName jika pengguna menyebut "laci/kasir", "bank/bca", atau "kas utama".
+4. Jika nama bahan disebutkan (susu, beans, es, gula aren, galon, dsb), cocokkan ingredientId & ingredientName dari daftar bahan baku, sertakan quantity dan unitnya.
+5. Buat summary bahasa Indonesia yang ringkas dan ramah.`;
+
+          const response = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [{ text: prompt }],
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  summary: { type: Type.STRING },
+                  transactions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        type: { type: Type.STRING, enum: ["CASH_OUT", "CASH_IN"] },
+                        amount: { type: Type.NUMBER },
+                        category: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        accountName: { type: Type.STRING },
+                        ingredientId: { type: Type.STRING },
+                        ingredientName: { type: Type.STRING },
+                        quantity: { type: Type.NUMBER },
+                        unit: { type: Type.STRING },
+                      },
+                      required: ["type", "amount", "category", "description"],
+                    },
+                  },
+                },
+                required: ["summary", "transactions"],
+              },
+            },
+          });
+
+          const jsonStr = response.text;
+          if (jsonStr) {
+            const parsed = JSON.parse(jsonStr);
+            return res.json({ ...parsed, source: "gemini" });
+          }
+        } catch (genErr: any) {
+          console.warn("Gemini natural parser failed, falling back to local NLP:", genErr?.message);
+        }
+      }
+
+      // Local fallback
+      const localResult = parseLocalNaturalEntry();
+      return res.json(localResult);
+    } catch (e: any) {
+      console.error("Parse natural entry error:", e);
+      res.status(500).json({ error: e?.message || "Gagal memproses catatan teks" });
+    }
+  });
+
+  // ─── EXECUTIVE AI MANAGEMENT INSIGHTS API ──────────────────────────────────
+  app.post("/api/ai/executive-insights", async (req, res) => {
+    try {
+      const { metrics } = req.body;
+      let apiKey = process.env.GEMINI_API_KEY || null;
+      try {
+        const settings = await db.select().from(schema.settings).limit(1);
+        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
+      } catch {}
+
+      const prompt = `Anda adalah "Julia Coffee AI Copilot" — penasihat bisnis eksekutif untuk "Julia's Specialty Room • Coffee • Eatery".
+Berdasarkan data performa toko berikut:
+${JSON.stringify(metrics || {})}
+
+Berikan ringkasan eksekutif manajemen yang padat, berbobot, dan actionable dalam format Markdown dengan 4 bagian:
+1. 🩺 **Evaluasi Kesehatan Finansial & Profitabilitas**: Analisis margin, arus kas, dan run-rate omzet.
+2. 🚨 **Audit Stok Kritis & Tindakan Segera**: Soroti bahan baku yang menipis/habis dan urutan prioritas belanja harian.
+3. ☕ **Optimalisasi Menu & Food Cost**: Rekomendasi upselling menu margin tinggi (espresso based, specialty) dan strategi untuk menu lambat (slow-moving).
+4. ⚡ **Taktik Operasional & Jam Sibuk**: Rekomendasi alokasi barista dan promo jam sepi (14:00 - 17:00).
+
+Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas dan angka bold. Jangan bertele-tele.`;
+
+      if (apiKey) {
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [{ text: prompt }],
+            config: { temperature: 0.6 },
+          });
+
+          if (response.text) {
+            return res.json({
+              briefing: response.text,
+              source: "gemini",
+            });
+          }
+        } catch (apiErr: any) {
+          console.warn("Gemini executive briefing failed, falling back to smart local:", apiErr?.message);
+        }
+      }
+
+      // Smart local executive briefing generator
+      const rev = metrics?.totalRevenue || 0;
+      const exp = metrics?.totalExpense || 0;
+      const profit = Math.max(0, rev - exp);
+      const margin = rev > 0 ? Math.round((profit / rev) * 100) : 0;
+      const lowStockCount = Array.isArray(metrics?.lowStockItems) ? metrics.lowStockItems.length : 0;
+      const lowStockNames = Array.isArray(metrics?.lowStockItems)
+        ? metrics.lowStockItems.slice(0, 3).map((i: any) => `${i.name} (Sisa: ${i.currentStock} ${i.unit})`).join(", ")
+        : "Tidak ada stok kritis";
+
+      const localBriefing = `### 🩺 1. Evaluasi Kesehatan Finansial & Profitabilitas
+- **Omzet Tercatat:** Rp ${Number(rev).toLocaleString("id-ID")} dengan Pengeluaran Rp ${Number(exp).toLocaleString("id-ID")}.
+- **Estimasi Laba Bersih Operasional:** Rp ${Number(profit).toLocaleString("id-ID")} (Margin **${margin}%**).
+- **Rekomendasi:** Rasio biaya ideal specialty coffee adalah food cost 28-32% dan operasional maksimal 20%. Posisi keuangan toko saat ini dalam koridor **${margin >= 25 ? "Sangat Sehat & Produktif" : "Perlu Pengetatan Pengeluaran Kas Kecil"}**.
+
+---
+
+### 🚨 2. Audit Stok Kritis & Tindakan Segera
+- Terdeteksi **${lowStockCount} bahan baku** berada di bawah batas stok minimum (*safety stock*).
+- **Prioritas Belanja:** ${lowStockNames}.
+- **Tindakan:** Segera lakukan pemesanan ke supplier atau belanja pasar harian sebelum jam sibuk esok hari agar alur pesanan kasir tidak tertunda.
+
+---
+
+### ☕ 3. Optimalisasi Menu & Food Cost
+- **Cash Cow Produk:** Kopi susu gula aren dan espresso-based beverage memiliki kontribusi margin tertinggi (>65%).
+- **Saran Menu Engineering:** Pasang paket pairing kopi filter/espresso dengan pastry/croissant untuk mendongkrak rata-rata belanja (*basket size*) dari Rp 28.000 menjadi Rp 45.000 per struk.
+
+---
+
+### ⚡ 4. Taktik Operasional & Jam Sibuk
+- **Rush Hour (11:00 - 13:00 & 19:00 - 21:00):** Terapkan pembagian barista tetap (1 fokus dial-in espresso & steaming susu, 1 floater kasir & packaging).
+- **Slow Hours (14:00 - 17:00):** Luncurkan promo *Afternoon Working Space* dengan voucher potongan pastry untuk menarik pelanggan komunitas remote work.`;
+
+      return res.json({
+        briefing: localBriefing,
+        source: "local-expert",
+      });
+    } catch (e: any) {
+      console.error("Executive insights error:", e);
+      res.status(500).json({ error: e?.message || "Failed to generate executive insights" });
     }
   });
 
@@ -2539,7 +2823,7 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
           });
 
           const response = await ai.models.generateContent({
-            model: "gemini-3.8-flash",
+            model: GEMINI_MODEL,
             contents,
             config: {
               systemInstruction: {
@@ -4035,10 +4319,10 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
       res.json({
         isConnected,
-        model: isConnected ? "gemini-3.8-flash" : "heuristic-fallback",
+        model: isConnected ? "gemini-2.5-flash" : "heuristic-fallback",
         source: isConnected ? (process.env.GEMINI_API_KEY ? "Environment (.env)" : "Pengaturan Sistem") : "offline",
         message: isConnected
-          ? "Koneksi Gemini 3.8 Flash aktif dan siap memproses konsultasi & OCR nota."
+          ? "Koneksi Google Gemini 2.5 Flash aktif dan siap memproses konsultasi, OCR nota & input cerdas."
           : "Kunci API Gemini belum terkonfigurasi. Berjalan dalam mode pintar lokal (offline fallback).",
       });
     } catch (err: any) {
@@ -4068,14 +4352,14 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
       const ai = new GoogleGenAI({ apiKey: keyToTest.trim() });
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-2.5-flash",
         contents: [{ text: "Tes koneksi. Jawab singkat: OK!" }],
       });
 
       return res.json({
         success: true,
         reply: response.text?.trim() || "OK!",
-        message: "Koneksi ke Google Gemini 3.8 Flash berhasil!",
+        message: "Koneksi ke Google Gemini 2.5 Flash berhasil!",
       });
     } catch (err: any) {
       console.error("Gemini test connection failed:", err);
@@ -4173,7 +4457,16 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: "1d",
+      setHeaders: (res, filePath) => {
+        if (filePath.includes("assets")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+        }
+      }
+    }));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });

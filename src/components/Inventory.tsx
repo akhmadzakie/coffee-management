@@ -327,9 +327,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [selectedIngredientForMove, setSelectedIngredientForMove] = useState<string>("");
-  const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE">("OUT");
+  const [movementType, setMovementType] = useState<"IN" | "OUT" | "WASTE" | "RETURN" | "TRANSFER" | "USAGE">("TRANSFER");
   const [movementNote, setMovementNote] = useState<string>("");
-  const [movementQuantity, setMovementQuantity] = useState<number>(0);
+  const [movementQuantity, setMovementQuantity] = useState<number>(1);
+  const [movementUnitMode, setMovementUnitMode] = useState<"PURCHASE" | "BASE">("PURCHASE");
+  const [movementTargetStation, setMovementTargetStation] = useState<string>("BAR");
+  const [isDirectUsage, setIsDirectUsage] = useState<boolean>(true);
+
+  // Quick Open Transfer Modal (Ambil dari Gudang ke Bar / Dapur)
+  const handleOpenTransferModal = (ingredientId?: string) => {
+    const targetId = ingredientId || (accessibleIngredients.length > 0 ? accessibleIngredients[0].id : "");
+    setSelectedIngredientForMove(targetId);
+    setMovementType("TRANSFER");
+    setMovementTargetStation(userDivision !== "ALL" ? userDivision : "BAR");
+    const ing = ingredients.find((i) => i.id === targetId);
+    const conv = ing ? getIngredientUnitConversion(ing) : null;
+    setMovementUnitMode(conv?.hasConversion ? "PURCHASE" : "BASE");
+    setMovementQuantity(1);
+    setMovementNote("Ambil pemakaian harian");
+    setIsDirectUsage(true);
+    setIsAddMovementOpen(true);
+  };
 
   // Form State for Add / Edit Ingredient
   const [ingredientForm, setIngredientForm] = useState({
@@ -631,27 +649,39 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     }
 
     const ing = ingredients.find((i) => i.id === selectedIngredientForMove);
-    const cost = (ing?.costPerUnit || 0) * movementQuantity;
+    const conv = ing ? getIngredientUnitConversion(ing) : null;
+    const factor = (conv?.hasConversion && movementUnitMode === "PURCHASE") ? conv.conversionFactor : 1;
+    const actualQuantity = movementQuantity * factor;
+    const cost = (ing?.costPerUnit || 0) * actualQuantity;
+
+    let defaultNote = "Mutasi Operasional";
+    if (movementType === "TRANSFER") {
+      defaultNote = `Ambil dari Gudang ke ${movementTargetStation}${conv?.hasConversion && movementUnitMode === "PURCHASE" ? ` (${movementQuantity} ${conv.purchaseUnit} = ${actualQuantity.toLocaleString("id-ID")} ${ing?.unit})` : ""}`;
+    } else if (movementType === "WASTE") {
+      defaultNote = "Bahan Rusak / Kalibrasi Barista";
+    }
+
+    const finalType = (movementType === "TRANSFER" && isDirectUsage) ? "USAGE" : movementType;
 
     addStockMovement({
       ingredientId: selectedIngredientForMove,
-      type: movementType,
-      quantity: movementQuantity,
+      type: finalType,
+      quantity: actualQuantity,
       date: new Date().toISOString(),
-      note: movementNote.trim() || (movementType === "WASTE" ? "Bahan Rusak / Terbuang" : "Mutasi Operasional"),
+      note: movementNote.trim() || defaultNote,
       unitCost: ing?.costPerUnit || 0,
       totalCost: cost,
-      createdBy: currentUser?.name || "System",
-      location: (ing?.storageLocation as any) || currentUser?.department || "MAIN",
+      createdBy: currentUser?.name || "Barista / Cook",
+      location: (movementTargetStation as any) || (ing?.storageLocation as any) || "BAR",
     } as any);
 
     // Auto update currentStock
     if (ing) {
       let newStock = ing.currentStock;
       if (movementType === "IN" || movementType === "RETURN") {
-        newStock += movementQuantity;
-      } else {
-        newStock = Math.max(0, newStock - movementQuantity);
+        newStock += actualQuantity;
+      } else if (movementType === "OUT" || movementType === "WASTE" || (movementType === "TRANSFER" && isDirectUsage) || movementType === "USAGE") {
+        newStock = Math.max(0, newStock - actualQuantity);
       }
       updateIngredient({
         ...ing,
@@ -660,7 +690,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     }
 
     setIsAddMovementOpen(false);
-    setMovementQuantity(0);
+    setMovementQuantity(1);
     setMovementNote("");
   };
 
@@ -927,160 +957,146 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   return (
     <div className="space-y-6 pb-12">
       {/* ── TOP EXECUTIVE KPI STATS ────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         {/* Total Valuasi Aset */}
-        <div className="p-5 rounded-3xl bg-white border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Total Valuasi Aset
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs">
               <Coins className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-black text-stone-900 tracking-tight font-mono">
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
               {formatCurrency(totalValuation)}
             </p>
-            <p className="text-[11px] text-stone-500 mt-1">
+            <p className="text-[11px] text-slate-500 mt-1">
               Dari <strong>{accessibleIngredients.length}</strong> bahan baku {!isManagerOrAdmin ? "stasiun Anda" : "terdaftar"}
             </p>
           </div>
         </div>
 
         {/* Bahan Menipis / Perlu Reorder */}
-        <div className={`p-5 rounded-3xl bg-white border shadow-coffee flex flex-col justify-between ${
-          lowStockCount > 0 ? "border-amber-300 bg-amber-50/20" : "border-stone-200/80"
+        <div className={`p-5 rounded-3xl bg-white border shadow-xs flex flex-col justify-between ${
+          lowStockCount > 0 ? "border-amber-300 bg-amber-50/20" : "border-slate-200/80"
         }`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Perlu Reorder
             </span>
-            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border ${
-              lowStockCount > 0 ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-stone-100 text-stone-600 border-stone-200"
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-2xs ${
+              lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-slate-50 text-slate-500 border-slate-200"
             }`}>
               <AlertTriangle className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3">
             <div className="flex items-baseline gap-2">
-              <p className={`text-2xl font-black tracking-tight font-mono ${
-                lowStockCount > 0 ? "text-amber-800" : "text-stone-900"
+              <p className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-mono ${
+                lowStockCount > 0 ? "text-amber-800" : "text-slate-900"
               }`}>
                 {lowStockCount}
               </p>
-              <span className="text-xs text-stone-500">bahan baku</span>
+              <span className="text-xs text-slate-500">bahan baku</span>
             </div>
-            <p className="text-[11px] text-stone-500 mt-1">
+            <p className="text-[11px] text-slate-500 mt-1">
               {lowStockCount > 0 ? "Stok di bawah batas minimum aman" : "Semua bahan di atas batas aman"}
             </p>
           </div>
         </div>
 
         {/* Bahan Habis / Kritis */}
-        <div className={`p-5 rounded-3xl bg-white border shadow-coffee flex flex-col justify-between ${
-          outOfStockCount > 0 ? "border-rose-300 bg-rose-50/20" : "border-stone-200/80"
+        <div className={`p-5 rounded-3xl bg-white border shadow-xs flex flex-col justify-between ${
+          outOfStockCount > 0 ? "border-rose-300 bg-rose-50/20" : "border-slate-200/80"
         }`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Stok Habis (0)
             </span>
-            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border ${
-              outOfStockCount > 0 ? "bg-rose-100 text-rose-800 border-rose-200" : "bg-stone-100 text-stone-600 border-stone-200"
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-2xs ${
+              outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-200" : "bg-slate-50 text-slate-500 border-slate-200"
             }`}>
               <Package className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3">
             <div className="flex items-baseline gap-2">
-              <p className={`text-2xl font-black tracking-tight font-mono ${
-                outOfStockCount > 0 ? "text-rose-700" : "text-stone-900"
+              <p className={`text-2xl sm:text-3xl font-extrabold tracking-tight font-mono ${
+                outOfStockCount > 0 ? "text-rose-600" : "text-slate-900"
               }`}>
                 {outOfStockCount}
               </p>
-              <span className="text-xs text-stone-500">bahan kosong</span>
+              <span className="text-xs text-slate-500">bahan kosong</span>
             </div>
-            <p className="text-[11px] text-stone-500 mt-1">
+            <p className="text-[11px] text-slate-500 mt-1">
               {outOfStockCount > 0 ? "Mengunci menu terkait di POS" : "Tidak ada bahan yang habis total"}
             </p>
           </div>
         </div>
 
         {/* Hubungan ke HPP & Resep */}
-        <div className="p-5 rounded-3xl bg-white border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Integrasi HPP
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 shadow-2xs">
               <Calculator className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3">
             <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-black text-stone-900 tracking-tight font-mono">
+              <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
                 {recipes.length}
               </p>
-              <span className="text-xs text-stone-500">resep terdaftar</span>
+              <span className="text-xs text-slate-500">resep terdaftar</span>
             </div>
             {onNavigate ? (
               <button
                 onClick={() => onNavigate("hpp_calculator")}
-                className="mt-1 text-[11px] font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 cursor-pointer"
+                className="mt-1 text-[11px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1 cursor-pointer transition-colors"
               >
                 Buka Kalkulator HPP <ChevronRight className="w-3 h-3" />
               </button>
             ) : (
-              <p className="text-[11px] text-stone-500 mt-1">Tersinkron dengan menu POS</p>
+              <p className="text-[11px] text-slate-500 mt-1">Tersinkron dengan menu POS</p>
             )}
           </div>
         </div>
       </div>
 
       {/* ── NAVIGATION & TOOLBAR ─────────────────────────────────────────── */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-3xl border border-stone-200/80 shadow-coffee-sm">
-        {/* Tab Switcher */}
-        <div className="flex p-1 bg-stone-100 rounded-2xl w-full xl:w-auto">
-          <button
-            onClick={() => setActiveTab("ingredients")}
-            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "ingredients"
-                ? "bg-white text-stone-900 shadow-coffee-sm"
-                : "text-stone-500 hover:text-stone-800"
-            }`}
-          >
-            Daftar Bahan Baku ({ingredients.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("movements")}
-            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "movements"
-                ? "bg-white text-stone-900 shadow-coffee-sm"
-                : "text-stone-500 hover:text-stone-800"
-            }`}
-          >
-            Mutasi & Pemakaian
-          </button>
-          <button
-            onClick={() => setActiveTab("opnames")}
-            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "opnames"
-                ? "bg-white text-stone-900 shadow-coffee-sm"
-                : "text-stone-500 hover:text-stone-800"
-            }`}
-          >
-            Stok Opname
-          </button>
-          <button
-            onClick={() => setActiveTab("recipes")}
-            className={`flex-1 xl:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "recipes"
-                ? "bg-white text-stone-900 shadow-coffee-sm"
-                : "text-stone-500 hover:text-stone-800"
-            }`}
-          >
-            Resep Baku ({recipes.length})
-          </button>
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs">
+        {/* Animated Sliding Pill Tab Switcher */}
+        <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full xl:w-auto">
+          {[
+            { id: "ingredients", label: `Daftar Bahan Baku (${ingredients.length})` },
+            { id: "movements", label: "Mutasi & Pemakaian" },
+            { id: "opnames", label: "Stok Opname" },
+            { id: "recipes", label: `Resep Baku (${recipes.length})` },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap flex-1 xl:flex-none text-center ${
+                  isActive ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="inventoryMainTab"
+                    className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Action Buttons */}
@@ -1180,8 +1196,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 }))}
               />
               <button
+                onClick={() => handleOpenTransferModal()}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                title="Keluarkan bahan dus/karton dari gudang ke stasiun Bar/Dapur"
+              >
+                <ArrowRight className="w-4 h-4 text-brand-600" />
+                <span>Ambil ke Bar / Dapur</span>
+              </button>
+              <button
                 onClick={handleOpenAddIngredient}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Tambah Bahan Baku</span>
@@ -1190,7 +1214,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
           )}
 
           {activeTab === "movements" && !isReadOnly && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => {
                   if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
@@ -1199,7 +1223,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   setMovementNote("Kalibrasi Grinder Pagi");
                   setIsAddMovementOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-2xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                 <span>Catat Bahan Rusak / Waste</span>
@@ -1213,7 +1237,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   setMovementNote("");
                   setIsAddMovementOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-stone-900 hover:bg-black text-white rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-coffee-sm"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Catat Pemakaian Harian</span>
@@ -1224,7 +1248,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
           {activeTab === "opnames" && !isReadOnly && !isOpnameMode && (
             <button
               onClick={startOpname}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
             >
               <ClipboardList className="w-4 h-4" />
               <span>Mulai Sesi Opname Fisik</span>
@@ -1237,7 +1261,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 setEditingRecipe(null);
                 setIsAddRecipeOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Tambah Resep Baru</span>
@@ -1250,11 +1274,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
       {activeTab === "ingredients" && (
         <div className="space-y-4">
           {/* Filter Bar: Search, Category Pills, Location, Status */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200/80 shadow-coffee-sm space-y-4">
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
             {/* Division Tabs */}
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100 gap-2">
-              <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
                   Divisi:
                 </span>
                 {allowedDivisionTabs.map((div) => {
@@ -1266,8 +1290,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       onClick={() => setSelectedDivision(div.id as any)}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                         isSelected
-                          ? "bg-amber-800 text-white shadow-coffee-sm"
-                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                          ? "bg-brand-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
@@ -1277,8 +1301,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 })}
               </div>
               {!isManagerOrAdmin && (
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] font-bold text-amber-900 shrink-0">
-                  <Sparkles className="w-3 h-3 text-amber-700" />
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-brand-50 border border-brand-200/80 rounded-xl text-[11px] font-bold text-brand-900 shrink-0">
+                  <Sparkles className="w-3 h-3 text-brand-600" />
                   <span>Stasiun: {userDivision === "BAR" ? "Bar" : userDivision === "KITCHEN" ? "Kitchen" : "Bakery"} & Kebersihan Bersama</span>
                 </div>
               )}
@@ -1287,23 +1311,23 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             {/* Row 1: Search & Dropdowns */}
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <div className="relative flex-1 w-full">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Cari nama bahan, kode SKU, atau kategori..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-stone-200 text-xs focus:outline-none focus:ring-2 focus:ring-amber-800/30 focus:border-amber-800"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-base sm:text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition-all"
                 />
               </div>
 
               {/* Filter Lokasi Simpan */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                 <select
                   value={selectedLocation}
                   onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="px-3 py-2.5 rounded-2xl border border-stone-200 text-xs bg-white text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-800/30"
+                  className="px-3 py-2.5 rounded-2xl border border-slate-200 text-base sm:text-xs bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
                   {PRESET_LOCATIONS.map((loc) => (
                     <option key={loc.id} value={loc.id}>
@@ -1314,11 +1338,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
 
               {/* Filter Status Stok */}
-              <div className="flex items-center gap-1 p-1 bg-stone-100 rounded-2xl text-xs font-semibold w-full sm:w-auto">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs font-semibold w-full sm:w-auto">
                 <button
                   onClick={() => setSelectedStockStatus("ALL")}
                   className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    selectedStockStatus === "ALL" ? "bg-white text-stone-900 shadow-coffee-sm" : "text-stone-500"
+                    selectedStockStatus === "ALL" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   Semua
@@ -1326,7 +1350,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 <button
                   onClick={() => setSelectedStockStatus("LOW_STOCK")}
                   className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
-                    selectedStockStatus === "LOW_STOCK" ? "bg-white text-amber-800 shadow-coffee-sm" : "text-stone-500"
+                    selectedStockStatus === "LOW_STOCK" ? "bg-white text-amber-800 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   <AlertTriangle className="w-3 h-3 text-amber-600" />
@@ -1335,7 +1359,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 <button
                   onClick={() => setSelectedStockStatus("SAFE")}
                   className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    selectedStockStatus === "SAFE" ? "bg-white text-emerald-800 shadow-coffee-sm" : "text-stone-500"
+                    selectedStockStatus === "SAFE" ? "bg-white text-emerald-800 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   Aman
@@ -1344,7 +1368,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             </div>
 
             {/* Row 2: Category Horizontal Scrolling Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {PRESET_CATEGORIES.map((cat) => {
                 const IconComponent = cat.icon;
                 const isSelected = selectedCategory === cat.id;
@@ -1358,14 +1382,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     onClick={() => setSelectedCategory(cat.id)}
                     className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border ${
                       isSelected
-                        ? "bg-stone-900 text-white border-stone-900 shadow-coffee-sm"
-                        : "bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                     }`}
                   >
-                    <IconComponent className={`w-3.5 h-3.5 ${isSelected ? "text-amber-400" : "text-stone-500"}`} />
+                    <IconComponent className={`w-3.5 h-3.5 ${isSelected ? "text-amber-400" : "text-slate-500"}`} />
                     <span>{cat.name}</span>
                     <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                      isSelected ? "bg-stone-800 text-amber-300" : "bg-stone-200 text-stone-600"
+                      isSelected ? "bg-slate-800 text-amber-300" : "bg-slate-200 text-slate-600"
                     }`}>
                       {count}
                     </span>
@@ -1391,12 +1415,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.15, delay: index * 0.02 }}
-                    className={`relative bg-white rounded-3xl p-5 border shadow-coffee transition-all flex flex-col justify-between overflow-hidden group ${
+                    className={`relative bg-white rounded-3xl p-5 border shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group ${
                       isOutOfStock
-                        ? "border-rose-300 ring-1 ring-rose-300"
+                        ? "border-rose-300 ring-1 ring-rose-200"
                         : isLow
-                        ? "border-amber-300 ring-1 ring-amber-300"
-                        : "border-stone-200/80 hover:border-amber-700/40"
+                        ? "border-amber-300 ring-1 ring-amber-200"
+                        : "border-slate-200/80 hover:border-brand-300"
                     }`}
                   >
                     {/* Top Alert Bar */}
@@ -1407,11 +1431,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       {/* Category & Action Buttons */}
                       <div className="flex justify-between items-start gap-2 mb-3">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100/70 text-amber-900 border border-amber-200/60">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-900 border border-brand-200/60">
                             {item.category}
                           </span>
                           {item.storageLocation && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-stone-500 bg-stone-100 flex items-center gap-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold text-slate-500 bg-slate-100 flex items-center gap-0.5 border border-slate-200/60">
                               <MapPin className="w-2.5 h-2.5" />
                               {item.storageLocation}
                             </span>
@@ -1422,7 +1446,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleOpenEditIngredient(item)}
-                              className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                               title="Edit Bahan Baku"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1433,7 +1457,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                   deleteIngredient(item.id);
                                 }
                               }}
-                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                               title="Hapus Bahan Baku"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1445,19 +1469,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       {/* Name & SKU */}
                       <div>
                         {item.code && (
-                          <span className="text-[10px] font-mono font-bold text-stone-400">
+                          <span className="text-[10px] font-mono font-bold text-slate-400">
                             {item.code}
                           </span>
                         )}
-                        <h3 className="font-bold text-stone-900 text-base leading-tight mt-0.5">
+                        <h3 className="font-bold text-slate-900 text-base leading-tight mt-0.5">
                           {item.name}
                         </h3>
                       </div>
 
                       {/* Kemasan Pembelian Badge jika ada */}
                       {hasPurchaseConversion && (
-                        <div className="mt-2.5 p-2 rounded-xl bg-stone-50 border border-stone-200/60 text-[11px] text-stone-600">
-                          <span className="font-semibold text-stone-800">Kemasan Beli:</span>{" "}
+                        <div className="mt-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200/60 text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-800">Kemasan Beli:</span>{" "}
                           1 {conv.purchaseUnit} = {conv.conversionFactor.toLocaleString("id-ID")} {item.unit}
                           {item.purchasePrice ? ` (@ ${formatCurrency(item.purchasePrice)})` : ""}
                         </div>
@@ -1465,31 +1489,31 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     </div>
 
                     {/* Bottom Stock & Valuation */}
-                    <div className="mt-4 pt-4 border-t border-stone-100 flex flex-col gap-3">
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-3">
                       <div className="flex justify-between items-end">
                         <div>
-                          <p className="text-[11px] text-stone-500 font-medium">Sisa Stok Fisik</p>
+                          <p className="text-[11px] text-slate-500 font-medium">Sisa Stok Fisik</p>
                           <div className="flex items-baseline gap-1.5 mt-0.5">
                             <span
-                              className={`text-2xl font-black font-mono tracking-tight ${
-                                isOutOfStock ? "text-rose-600" : isLow ? "text-amber-700" : "text-stone-900"
+                              className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${
+                                isOutOfStock ? "text-rose-600" : isLow ? "text-amber-700" : "text-slate-900"
                               }`}
                             >
                               {item.currentStock.toLocaleString("id-ID")}
                             </span>
-                            <span className="text-xs text-stone-500 font-semibold">{item.unit}</span>
+                            <span className="text-xs text-slate-500 font-semibold">{item.unit}</span>
                           </div>
                           {hasPurchaseConversion && conv.conversionFactor > 1 && (
-                            <div className="text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2 py-0.5 rounded-md mt-1 border border-amber-200/50 inline-block">
+                            <div className="text-[11px] font-bold text-brand-700 bg-brand-50/80 px-2 py-0.5 rounded-md mt-1 border border-brand-200/50 inline-block">
                               ≈ {(item.currentStock / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 1 })} {conv.purchaseUnit}
                             </div>
                           )}
                         </div>
 
                         <div className="text-right">
-                          <p className="text-[10px] text-stone-400">Harga Modal Resep</p>
-                          <p className="text-xs font-mono font-bold text-stone-700 mt-0.5">
-                            {formatCurrency(item.costPerUnit || 0)} <span className="text-[10px] font-normal text-stone-400">/{item.unit}</span>
+                          <p className="text-[10px] text-slate-400">Harga Modal Resep</p>
+                          <p className="text-xs font-mono font-bold text-slate-700 mt-0.5">
+                            {formatCurrency(item.costPerUnit || 0)} <span className="text-[10px] font-normal text-slate-400">/{item.unit}</span>
                           </p>
                           <p className="text-[10px] font-mono text-emerald-700 font-medium">
                             Aset: {formatCurrency(item.currentStock * (item.costPerUnit || 0))}
@@ -1516,16 +1540,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           </div>
                         )}
 
-                        {(isLow || isOutOfStock) && onNavigate && (
+                        <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => onNavigate("purchases")}
-                            className="px-2.5 py-1 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-coffee-sm"
-                            title="Buka Pembelian untuk order bahan ini"
+                            onClick={() => handleOpenTransferModal(item.id)}
+                            className="px-2 py-1 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors active:scale-[0.98]"
+                            title="Keluarkan bahan ini ke stasiun Bar/Kitchen"
                           >
-                            <span>+ Order PO</span>
-                            <ArrowRight className="w-2.5 h-2.5" />
+                            <ArrowRight className="w-3 h-3 text-brand-600" />
+                            <span>Ambil ke Bar</span>
                           </button>
-                        )}
+
+                          {(isLow || isOutOfStock) && onNavigate && (
+                            <button
+                              onClick={() => onNavigate("purchases")}
+                              className="px-2.5 py-1 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs active:scale-[0.98]"
+                              title="Buka Pembelian untuk order bahan ini"
+                            >
+                              <span>+ Order PO</span>
+                              <ArrowRight className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -1534,10 +1569,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             </AnimatePresence>
 
             {filteredIngredients.length === 0 && (
-              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-stone-200">
-                <Package className="w-12 h-12 text-stone-300 mx-auto mb-3" />
-                <h4 className="text-sm font-bold text-stone-700">Tidak ada bahan baku yang cocok</h4>
-                <p className="text-xs text-stone-400 mt-1">
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+                <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h4 className="text-sm font-bold text-slate-700">Tidak ada bahan baku yang cocok</h4>
+                <p className="text-xs text-slate-400 mt-1">
                   Coba ubah kata kunci pencarian, kategori, atau filter status stok.
                 </p>
               </div>
@@ -1548,20 +1583,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── TAB 2: STOCK MOVEMENTS & USAGE ──────────────────────────────── */}
       {activeTab === "movements" && (
-        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
-          <div className="p-5 border-b border-stone-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <h3 className="font-bold text-stone-900 text-sm">Riwayat Mutasi & Pemakaian Bahan</h3>
-              <p className="text-xs text-stone-500 mt-0.5">
+              <h3 className="font-bold text-slate-900 text-sm">Riwayat Mutasi & Pemakaian Bahan</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
                 Audit otomatis setiap bahan yang keluar untuk order kasir, terbuang (waste), atau masuk dari PO.
               </p>
             </div>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+              {filteredMovements.length} Transaksi Tercatat
+            </span>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* DESKTOP & TABLET VIEW: Structured Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-stone-50 border-b border-stone-200/80 text-stone-600 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
                   <th className="p-4">Waktu</th>
                   <th className="p-4">Bahan Baku</th>
                   <th className="p-4">Jenis Mutasi</th>
@@ -1572,15 +1611,15 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   <th className="p-4">Operator</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
+              <tbody className="divide-y divide-slate-100">
                 {filteredMovements.map((mov) => {
                   const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
                   const isPositive = mov.type === "IN" || mov.type === "RETURN";
                   const isWaste = mov.type === "WASTE";
 
                   return (
-                    <tr key={mov.id} className="hover:bg-stone-50/70 transition-colors">
-                      <td className="p-4 text-stone-500 whitespace-nowrap">
+                    <tr key={mov.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-4 text-slate-500 whitespace-nowrap">
                         {new Date(mov.date).toLocaleDateString("id-ID", {
                           day: "numeric",
                           month: "short",
@@ -1588,46 +1627,143 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="p-4 font-bold text-stone-900">
+                      <td className="p-4 font-bold text-slate-900">
                         {ingredient?.name || "Bahan Terhapus"}
                       </td>
                       <td className="p-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                             mov.type === "IN"
-                              ? "bg-emerald-100 text-emerald-800"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                               : mov.type === "USAGE"
-                              ? "bg-blue-100 text-blue-800"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
                               : mov.type === "WASTE"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-stone-100 text-stone-700"
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : "bg-slate-100 text-slate-700 border-slate-200"
                           }`}
                         >
                           {mov.type === "USAGE" ? "Kasir (Order)" : mov.type === "WASTE" ? "Terbuang / Rusak" : mov.type}
                         </span>
                       </td>
-                      <td className="p-4 text-stone-600">{(mov as any).location || "BAR"}</td>
-                      <td className={`p-4 font-mono font-bold text-right ${isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-stone-800"}`}>
+                      <td className="p-4 text-slate-600">{(mov as any).location || "BAR"}</td>
+                      <td className={`p-4 font-mono font-bold text-right ${isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-slate-800"}`}>
                         {isPositive ? "+" : "-"}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
                       </td>
-                      <td className="p-4 font-mono text-stone-600 text-right">
+                      <td className="p-4 font-mono text-slate-600 text-right">
                         {mov.totalCost ? formatCurrency(mov.totalCost) : "-"}
                       </td>
-                      <td className="p-4 text-stone-600 max-w-xs truncate">{mov.note || "-"}</td>
-                      <td className="p-4 text-stone-500">{mov.createdBy}</td>
+                      <td className="p-4 text-slate-600 max-w-xs truncate">{mov.note || "-"}</td>
+                      <td className="p-4 text-slate-500">{mov.createdBy}</td>
                     </tr>
                   );
                 })}
 
                 {filteredMovements.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-stone-400">
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
                       Belum ada catatan mutasi pergerakan stok.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* MOBILE SMARTPHONE VIEW: Ergonomic Card Feed */}
+          <div className="block md:hidden divide-y divide-slate-100">
+            {filteredMovements.map((mov) => {
+              const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
+              const isPositive = mov.type === "IN" || mov.type === "RETURN";
+              const isWaste = mov.type === "WASTE";
+
+              return (
+                <div key={mov.id} className="p-4 space-y-2 hover:bg-slate-50/50 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 border ${
+                          isPositive
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                            : isWaste
+                            ? "bg-rose-50 text-rose-600 border-rose-100"
+                            : "bg-blue-50 text-blue-600 border-blue-100"
+                        }`}
+                      >
+                        {isPositive ? (
+                          <Plus className="w-4 h-4 stroke-[2.5]" />
+                        ) : isWaste ? (
+                          <AlertTriangle className="w-4 h-4 stroke-[2.2]" />
+                        ) : (
+                          <Layers className="w-4 h-4 stroke-[2.2]" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm leading-tight">
+                          {ingredient?.name || "Bahan Terhapus"}
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span
+                            className={`px-2 py-0.2 rounded-md text-[9px] font-bold uppercase tracking-wider border ${
+                              mov.type === "IN"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : mov.type === "USAGE"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : mov.type === "WASTE"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            {mov.type === "USAGE" ? "Kasir" : mov.type === "WASTE" ? "Waste" : mov.type}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            • {(mov as any).location || "BAR"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p
+                        className={`text-sm font-extrabold font-mono ${
+                          isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-slate-900"
+                        }`}
+                      >
+                        {isPositive ? "+" : "-"}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
+                      </p>
+                      {mov.totalCost ? (
+                        <p className="text-[10px] font-mono text-slate-500">
+                          {formatCurrency(mov.totalCost)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {mov.note && (
+                    <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200/50">
+                      {mov.note}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                    <span>Opr: {mov.createdBy}</span>
+                    <span>
+                      {new Date(mov.date).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredMovements.length === 0 && (
+              <div className="p-8 text-center text-slate-400 text-xs">
+                Belum ada catatan mutasi pergerakan stok.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1636,29 +1772,29 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
       {activeTab === "opnames" && (
         <div className="space-y-6">
           {isOpnameMode ? (
-            <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6 space-y-6">
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-6">
               {/* Header Sesi Aktif */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-amber-50/80 p-4 rounded-2xl border border-amber-200/80">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-brand-50/90 p-4 rounded-2xl border border-brand-200/80">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="flex h-2.5 w-2.5 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-600"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-600"></span>
                     </span>
-                    <h3 className="font-bold text-amber-900 text-sm">Sesi Stok Opname Fisik Sedang Berlangsung</h3>
+                    <h3 className="font-bold text-brand-950 text-sm">Sesi Stok Opname Fisik Sedang Berlangsung</h3>
                   </div>
-                  <p className="text-xs text-amber-800 mt-1">
+                  <p className="text-xs text-brand-800 mt-1">
                     Auditor: <strong className="font-semibold">{currentUser?.name || "Staff"}</strong> ({currentUser?.role || "LEADER"}) • Masukkan jumlah fisik nyata hasil hitungan di bar / gudang.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-white text-stone-700 text-[11px] font-bold border border-amber-200">
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[11px] font-bold border border-brand-200">
                       Total: {opnameItems.length} Bahan
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
                       Sesuai: {opnameItems.filter((i) => i.difference === 0).length}
                     </span>
                     {opnameItems.filter((i) => i.difference !== 0).length > 0 && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200">
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[11px] font-bold border border-rose-200">
                         Selisih: {opnameItems.filter((i) => i.difference !== 0).length} Bahan
                       </span>
                     )}
@@ -1671,13 +1807,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         setIsOpnameMode(false);
                       }
                     }}
-                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-stone-700 text-xs font-bold hover:bg-stone-50 cursor-pointer transition-all"
+                    className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-all active:scale-[0.98]"
                   >
                     Batal
                   </button>
                   <button
                     onClick={() => saveOpname("DRAFT")}
-                    className="px-4 py-2 bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold hover:bg-amber-200 cursor-pointer transition-all"
+                    className="flex-1 sm:flex-initial px-4 py-2 bg-brand-100 text-brand-900 border border-brand-200 rounded-xl text-xs font-bold hover:bg-brand-200 cursor-pointer transition-all active:scale-[0.98]"
                   >
                     Simpan Draft
                   </button>
@@ -1692,7 +1828,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         saveOpname("FINAL");
                       }
                     }}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer shadow-coffee-sm transition-all"
+                    className="w-full sm:w-auto px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Finalisasi & Sesuaikan Stok</span>
@@ -1703,8 +1839,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               {/* Filter & Search Bar */}
               <div className="space-y-3">
                 {/* Division Filter for Opname */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  <span className="text-[10px] font-bold text-amber-900/60 uppercase tracking-wider shrink-0 mr-1">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
                     Filter Divisi Opname:
                   </span>
                   {allowedDivisionTabs.map((div) => {
@@ -1716,8 +1852,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         onClick={() => setOpnameDivisionFilter(div.id as any)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                           isSelected
-                            ? "bg-amber-800 text-white shadow-coffee-sm"
-                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                            ? "bg-brand-600 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1729,22 +1865,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                 <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
                   <div className="relative w-full sm:w-72">
-                    <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       placeholder="Cari bahan baku opname..."
-                      className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-800 focus:bg-white transition-all"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all"
                       value={opnameSearch}
                       onChange={(e) => setOpnameSearch(e.target.value)}
                     />
                   </div>
-                  <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                  <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 no-scrollbar">
                     <button
                       onClick={() => setOpnameCategoryFilter("ALL")}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                         opnameCategoryFilter === "ALL"
-                          ? "bg-stone-900 text-white"
-                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
                     >
                       Semua Kategori
@@ -1755,8 +1891,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         onClick={() => setOpnameCategoryFilter(cat)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                           opnameCategoryFilter === cat
-                            ? "bg-stone-900 text-white"
-                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                            ? "bg-slate-900 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                         }`}
                       >
                         {cat}
@@ -1766,11 +1902,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              {/* Table Opname Items */}
-              <div className="overflow-x-auto border border-stone-200 rounded-2xl">
+              {/* DESKTOP & TABLET VIEW: Structured Opname Table */}
+              <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
                       <th className="p-3">Bahan Baku</th>
                       <th className="p-3">Kategori & Lokasi</th>
                       <th className="p-3 text-center">Stok Sistem</th>
@@ -1782,13 +1918,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             onClick={handleToggleGlobalOpnameMode}
                             className={`px-2 py-0.5 rounded-lg text-[9px] font-bold border transition-all cursor-pointer whitespace-nowrap shadow-xs flex items-center gap-1 ${
                               opnameInputMode === "PURCHASE"
-                                ? "bg-amber-800 text-white border-amber-900 shadow-coffee-sm hover:bg-amber-900"
-                                : "bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200"
+                                ? "bg-brand-600 text-white border-brand-700 shadow-2xs hover:bg-brand-700"
+                                : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
                             }`}
                             title="Klik untuk beralih mode hitung: Kemasan Beli (Kg/Liter/Dus) vs Satuan Resep (gr/ml/pcs)"
                           >
-                            <span>Mode: {opnameInputMode === "PURCHASE" ? "📦 Kemasan (Kotak/Kg)" : "⚖️ Satuan (gr/ml)"}</span>
-                            <span className={opnameInputMode === "PURCHASE" ? "text-amber-300" : "text-stone-500"}>⇄</span>
+                            <span>Mode: {opnameInputMode === "PURCHASE" ? "📦 Kemasan" : "⚖️ Satuan Resep"}</span>
+                            <span className={opnameInputMode === "PURCHASE" ? "text-brand-200" : "text-slate-500"}>⇄</span>
                           </button>
                         </div>
                       </th>
@@ -1796,7 +1932,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       <th className="p-3">Keterangan / Alasan Selisih</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-slate-100">
                     {opnameItems
                       .filter((item) => {
                         const ing = ingredients.find((i) => i.id === item.ingredientId);
@@ -1829,27 +1965,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         if (!ing) return null;
                         const conv = getIngredientUnitConversion(ing);
                         return (
-                          <tr key={item.ingredientId} className="hover:bg-stone-50/80 transition-colors">
+                          <tr key={item.ingredientId} className="hover:bg-slate-50/80 transition-colors">
                             <td className="p-3">
-                              <div className="font-bold text-stone-900">{ing.name}</div>
-                              <div className="text-[10px] text-stone-400 font-mono">
+                              <div className="font-bold text-slate-900">{ing.name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">
                                 Satuan: {ing.unit} {ing.code ? `• ${ing.code}` : ""}
                               </div>
                             </td>
                             <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[10px] font-semibold">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-semibold">
                                 {ing.category}
                               </span>
                               {ing.storageLocation && (
-                                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-medium border border-amber-200/60">
+                                <span className="ml-1 px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-800 text-[10px] font-medium border border-brand-200/60">
                                   {ing.storageLocation}
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 text-center font-mono font-semibold text-stone-700">
-                              <div className="font-bold text-stone-900">{ing.currentStock.toLocaleString("id-ID")} {ing.unit}</div>
+                            <td className="p-3 text-center font-mono font-semibold text-slate-700">
+                              <div className="font-bold text-slate-900">{ing.currentStock.toLocaleString("id-ID")} {ing.unit}</div>
                               {conv.hasConversion && (
-                                <div className="text-[10px] text-amber-800 font-sans font-bold bg-amber-50/80 px-1.5 py-0.5 rounded-md border border-amber-200/60 inline-block mt-0.5">
+                                <div className="text-[10px] text-brand-700 font-sans font-bold bg-brand-50/80 px-1.5 py-0.5 rounded-md border border-brand-200/60 inline-block mt-0.5">
                                   ≈ {(ing.currentStock / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 2 })} {conv.purchaseUnit}
                                 </div>
                               )}
@@ -1866,12 +2002,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                                 return (
                                   <div className="flex flex-col items-center gap-1">
-                                    <div className="inline-flex items-center gap-1 bg-stone-50 p-1 rounded-xl border border-stone-200 shadow-inner">
+                                    <div className="inline-flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 shadow-inner">
                                       <input
                                         type="text"
                                         inputMode="decimal"
                                         placeholder="0"
-                                        className="w-20 px-2 py-1 bg-white border border-stone-300 rounded-lg text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800 shadow-xs"
+                                        className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
                                         value={currentDraft}
                                         onChange={(e) => handleOpnameInputChange(item.ingredientId, e.target.value, isRowPurchase, factor)}
                                       />
@@ -1880,13 +2016,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                           type="button"
                                           onClick={() => handleToggleRowUnit(item.ingredientId)}
                                           title={`Klik untuk ubah satuan baris ini ke ${isRowPurchase ? ing.unit : conv.purchaseUnit}`}
-                                          className="px-2 py-1 rounded-lg text-[10px] font-bold font-mono bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300/80 flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                                          className="px-2 py-1 rounded-lg text-[10px] font-bold font-mono bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200/80 flex items-center gap-1 cursor-pointer transition-all shrink-0"
                                         >
                                           <span>{isRowPurchase ? conv.purchaseUnit : ing.unit}</span>
-                                          <span className="text-[9px] text-amber-700">⇄</span>
+                                          <span className="text-[9px] text-brand-600">⇄</span>
                                         </button>
                                       ) : (
-                                        <span className="px-2 py-1 text-stone-700 text-[11px] font-bold font-mono shrink-0">
+                                        <span className="px-2 py-1 text-slate-700 text-[11px] font-bold font-mono shrink-0">
                                           {ing.unit}
                                         </span>
                                       )}
@@ -1894,12 +2030,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                     {conv.hasConversion && (
                                       <span className="text-[10px] font-mono">
                                         {isRowPurchase ? (
-                                          <span className="text-stone-500 font-medium">
-                                            = <strong className="text-stone-800 font-bold">{item.physicalStock.toLocaleString("id-ID")}</strong> {ing.unit}
+                                          <span className="text-slate-500 font-medium">
+                                            = <strong className="text-slate-800 font-bold">{item.physicalStock.toLocaleString("id-ID")}</strong> {ing.unit}
                                           </span>
                                         ) : (
-                                          <span className="text-amber-800 font-medium">
-                                            ≈ <strong className="text-amber-900 font-bold">{(item.physicalStock / factor).toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong> {conv.purchaseUnit}
+                                          <span className="text-brand-700 font-medium">
+                                            ≈ <strong className="text-brand-900 font-bold">{(item.physicalStock / factor).toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong> {conv.purchaseUnit}
                                           </span>
                                         )}
                                       </span>
@@ -1913,7 +2049,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                 ? "text-rose-600 bg-rose-50/50"
                                 : item.difference > 0
                                 ? "text-emerald-600 bg-emerald-50/50"
-                                : "text-stone-500"
+                                : "text-slate-500"
                             }`}>
                               <div>
                                 {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")} {ing.unit}
@@ -1930,15 +2066,15 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                 <div className="text-[10px] font-sans font-medium text-emerald-600">Surplus</div>
                               )}
                               {item.difference === 0 && (
-                                <div className="text-[10px] font-sans font-medium text-stone-400">Cocok</div>
+                                <div className="text-[10px] font-sans font-medium text-slate-400">Cocok</div>
                               )}
                             </td>
                             <td className="p-3">
                               <input
                                 type="text"
                                 placeholder={item.difference !== 0 ? "Catatan selisih (misal: tumpah, susut)..." : "Catatan opsional..."}
-                                className={`w-full px-2.5 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-800 ${
-                                  item.difference !== 0 ? "border-amber-300 bg-amber-50/30" : "border-stone-200"
+                                className={`w-full px-2.5 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                                  item.difference !== 0 ? "border-amber-300 bg-amber-50/30" : "border-slate-200"
                                 }`}
                                 value={item.notes}
                                 onChange={(e) => handleOpnameNoteChange(item.ingredientId, e.target.value)}
@@ -1950,14 +2086,126 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   </tbody>
                 </table>
               </div>
+
+              {/* MOBILE SMARTPHONE VIEW: Ergonomic Opname Cards */}
+              <div className="block md:hidden space-y-3">
+                {opnameItems
+                  .filter((item) => {
+                    const ing = ingredients.find((i) => i.id === item.ingredientId);
+                    if (!ing) return false;
+                    if (!isIngredientAllowedForUser(ing, userDivision)) return false;
+                    const matchSearch =
+                      ing.name.toLowerCase().includes(opnameSearch.toLowerCase()) ||
+                      (ing.code && ing.code.toLowerCase().includes(opnameSearch.toLowerCase()));
+                    const matchCategory =
+                      opnameCategoryFilter === "ALL" || ing.category === opnameCategoryFilter;
+                    let matchDivision = true;
+                    if (opnameDivisionFilter === "BAR") matchDivision = isBarItem(ing);
+                    else if (opnameDivisionFilter === "KITCHEN") matchDivision = isKitchenItem(ing);
+                    else if (opnameDivisionFilter === "BAKERY") matchDivision = isBakeryItem(ing);
+                    else if (opnameDivisionFilter === "OPERATIONAL") matchDivision = isOperationalItem(ing);
+                    return matchSearch && matchCategory && matchDivision;
+                  })
+                  .map((item) => {
+                    const ing = ingredients.find((i) => i.id === item.ingredientId);
+                    if (!ing) return null;
+                    const conv = getIngredientUnitConversion(ing);
+                    const isRowPurchase = (rowUnitModes[item.ingredientId] || opnameInputMode) === "PURCHASE" && conv.hasConversion;
+                    const factor = conv.conversionFactor || 1;
+                    const currentDraft = opnameInputDrafts[item.ingredientId] !== undefined
+                      ? opnameInputDrafts[item.ingredientId]
+                      : (isRowPurchase
+                          ? (Math.round((item.physicalStock / factor) * 1000) / 1000).toString()
+                          : item.physicalStock.toString());
+
+                    return (
+                      <div key={item.ingredientId} className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h4 className="font-bold text-slate-900 text-sm">{ing.name}</h4>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <span className="px-2 py-0.2 rounded-md bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                                {ing.category}
+                              </span>
+                              {ing.storageLocation && (
+                                <span className="px-1.5 py-0.2 rounded-md bg-brand-50 text-brand-800 text-[10px] font-medium border border-brand-200/60">
+                                  {ing.storageLocation}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">Stok Sistem</span>
+                            <span className="font-mono font-bold text-xs text-slate-800">
+                              {ing.currentStock.toLocaleString("id-ID")} {ing.unit}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Mobile Counting Input */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                          <div className="flex-1 flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                            <span className="text-[10px] text-slate-400 font-bold px-1.5">Fisik:</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-center text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
+                              value={currentDraft}
+                              onChange={(e) => handleOpnameInputChange(item.ingredientId, e.target.value, isRowPurchase, factor)}
+                            />
+                            {conv.hasConversion ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleRowUnit(item.ingredientId)}
+                                className="ml-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold font-mono bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200/80 flex items-center gap-1 cursor-pointer transition-all"
+                              >
+                                <span>{isRowPurchase ? conv.purchaseUnit : ing.unit}</span>
+                                <span className="text-brand-600">⇄</span>
+                              </button>
+                            ) : (
+                              <span className="px-2 text-slate-600 text-xs font-bold font-mono">
+                                {ing.unit}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Difference & Note in Mobile */}
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <div
+                            className={`px-2.5 py-1 rounded-xl text-xs font-bold border ${
+                              item.difference === 0
+                                ? "bg-slate-100 text-slate-600 border-slate-200"
+                                : item.difference < 0
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}
+                          >
+                            {item.difference === 0
+                              ? "✓ Cocok"
+                              : `${item.difference > 0 ? "+" : ""}${item.difference.toLocaleString("id-ID")} ${ing.unit}`}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Catatan selisih..."
+                            className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                            value={item.notes}
+                            onChange={(e) => handleOpnameNoteChange(item.ingredientId, e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Active Draft Alert Banner */}
               {activeDrafts.length > 0 && latestDraft && (
-                <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl p-5 shadow-coffee-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="flex items-start sm:items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-800 text-white flex items-center justify-center shadow-coffee-sm shrink-0">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
                       <Clock className="w-6 h-6" />
                     </div>
                     <div>
@@ -1965,14 +2213,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         <span className="text-[10px] font-black uppercase tracking-wider text-amber-950 bg-amber-200/90 px-2.5 py-0.5 rounded-md">
                           Draf Aktif Tersimpan
                         </span>
-                        <span className="text-xs font-semibold text-stone-500">
+                        <span className="text-xs font-semibold text-slate-500">
                           {activeDrafts.length} sesi belum difinalisasi
                         </span>
                       </div>
-                      <h4 className="text-sm font-bold text-stone-900 mt-1">
+                      <h4 className="text-sm font-bold text-slate-900 mt-1">
                         Draf terakhir oleh <strong className="text-amber-900 font-extrabold">{latestDraft.createdBy}</strong> ({new Date(latestDraft.date).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WIB)
                       </h4>
-                      <p className="text-[11px] text-stone-600 mt-0.5">
+                      <p className="text-[11px] text-slate-600 mt-0.5">
                         Hitungan fisik sebelumnya telah tersimpan di sistem. Anda dapat langsung melanjutkan pengisian tanpa harus mengulang dari nol.
                       </p>
                     </div>
@@ -1980,14 +2228,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
                     <button
                       onClick={() => handleResumeDraft(latestDraft)}
-                      className="flex-1 md:flex-initial px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold transition-all shadow-coffee-sm flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02]"
+                      className="flex-1 md:flex-initial px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                       <span>Lanjutkan Draf Terakhir</span>
                     </button>
                     <button
                       onClick={() => handleDeleteDraft(latestDraft.id)}
-                      className="p-2.5 bg-white border border-stone-200 hover:bg-rose-50 text-stone-600 hover:text-rose-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                      className="p-2.5 bg-white border border-slate-200 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
                       title="Hapus draf ini"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1997,15 +2245,15 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               )}
 
               {/* Card Utama Stok Opname */}
-              <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee p-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-gradient-to-r from-stone-50 via-amber-50/30 to-stone-50 rounded-2xl border border-amber-100">
+              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-5 sm:p-6">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-slate-50/80 rounded-2xl border border-slate-200/70">
                   <div className="flex items-start gap-4">
-                    <div className="p-3 bg-amber-800 text-white rounded-2xl shadow-coffee-sm shrink-0">
+                    <div className="p-3 bg-brand-600 text-white rounded-2xl shadow-xs shrink-0">
                       <ClipboardList className="w-8 h-8" />
                     </div>
                     <div>
-                      <h4 className="text-base font-bold text-stone-900">Audit Fisik Stok (Stok Opname)</h4>
-                      <p className="text-xs text-stone-600 mt-1 max-w-xl leading-relaxed">
+                      <h4 className="text-base font-bold text-slate-900">Audit Fisik Stok (Stok Opname)</h4>
+                      <p className="text-xs text-slate-600 mt-1 max-w-xl leading-relaxed">
                         Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di stasiun dengan catatan sistem kasir. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
                       </p>
                     </div>
@@ -2013,7 +2261,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   {!isReadOnly && (
                     <button
                       onClick={startOpname}
-                      className="px-6 py-3 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl text-xs font-bold cursor-pointer shadow-coffee transition-all flex items-center gap-2 shrink-0 hover:scale-[1.02]"
+                      className="w-full md:w-auto px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold cursor-pointer shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-[0.98]"
                     >
                       <ClipboardList className="w-4 h-4" />
                       <span>Mulai Stok Opname Sekarang</span>
@@ -2023,30 +2271,30 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                 {/* 3 Langkah Alur Opname */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
-                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center mb-2.5">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70">
+                    <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-900 font-bold text-xs flex items-center justify-center mb-2.5">
                       1
                     </div>
-                    <div className="text-xs font-bold text-stone-800">Hitung Riil Bahan Baku</div>
-                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                    <div className="text-xs font-bold text-slate-800">Hitung Riil Bahan Baku</div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
                       Barista / Leader menimbang biji kopi, volume susu, atau bahan di stasiun dan masukkan jumlah fisik ke sistem.
                     </p>
                   </div>
-                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
-                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center mb-2.5">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70">
+                    <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-900 font-bold text-xs flex items-center justify-center mb-2.5">
                       2
                     </div>
-                    <div className="text-xs font-bold text-stone-800">Cek Selisih Real-Time</div>
-                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                    <div className="text-xs font-bold text-slate-800">Cek Selisih Real-Time</div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
                       Sistem menghitung otomatis selisih minus (defisit/waste) atau plus (surplus) terhadap transaksi kasir.
                     </p>
                   </div>
-                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/70">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70">
                     <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center mb-2.5">
                       3
                     </div>
-                    <div className="text-xs font-bold text-stone-800">Finalisasi & Koreksi Otomatis</div>
-                    <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                    <div className="text-xs font-bold text-slate-800">Finalisasi & Koreksi Otomatis</div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
                       Sistem memperbarui saldo stok riil dan otomatis mencatat mutasi koreksi tanpa repot input manual.
                     </p>
                   </div>
@@ -2055,23 +2303,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
               {/* Riwayat Sesi Opname Lampau */}
               {stockOpnames && stockOpnames.length > 0 && (
-                <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
-                  <div className="p-5 border-b border-stone-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
-                      <h3 className="font-bold text-stone-900 text-sm">Riwayat Sesi Stok Opname</h3>
-                      <p className="text-xs text-stone-500 mt-0.5">
+                      <h3 className="font-bold text-slate-900 text-sm">Riwayat Sesi Stok Opname</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
                         Daftar seluruh audit fisik berkala yang pernah dilakukan tim stasiun & supervisor.
                       </p>
                     </div>
-                    <span className="px-3 py-1 bg-stone-100 rounded-full text-stone-700 text-xs font-bold">
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-slate-700 text-xs font-bold border border-slate-200/60">
                       {stockOpnames.length} Sesi Tercatat
                     </span>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {/* DESKTOP & TABLET VIEW: Structured Table */}
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead>
-                        <tr className="bg-stone-50/80 border-b border-stone-100 text-stone-500 font-bold uppercase text-[10px]">
+                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-600 font-bold uppercase text-[10px]">
                           <th className="p-3.5">Tanggal & Waktu</th>
                           <th className="p-3.5">Auditor / Petugas</th>
                           <th className="p-3.5 text-center">Status</th>
@@ -2079,7 +2328,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           <th className="p-3.5 text-center">Aksi</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-stone-100">
+                      <tbody className="divide-y divide-slate-100">
                         {stockOpnames
                           .slice()
                           .reverse()
@@ -2087,9 +2336,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
                             const discrepancyCount = relatedItems.filter((i) => i.difference !== 0).length;
                             return (
-                              <tr key={op.id} className="hover:bg-stone-50/60 transition-colors">
+                              <tr key={op.id} className="hover:bg-slate-50/60 transition-colors">
                                 <td className="p-3.5">
-                                  <div className="font-bold text-stone-900">
+                                  <div className="font-bold text-slate-900">
                                     {new Date(op.date).toLocaleDateString("id-ID", {
                                       weekday: "short",
                                       day: "numeric",
@@ -2097,7 +2346,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                       year: "numeric",
                                     })}
                                   </div>
-                                  <div className="text-[10px] text-stone-400 font-mono">
+                                  <div className="text-[10px] text-slate-400 font-mono">
                                     {new Date(op.date).toLocaleTimeString("id-ID", {
                                       hour: "2-digit",
                                       minute: "2-digit",
@@ -2105,18 +2354,18 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                   </div>
                                 </td>
                                 <td className="p-3.5">
-                                  <span className="font-bold text-stone-800">{op.createdBy}</span>
+                                  <span className="font-bold text-slate-800">{op.createdBy}</span>
                                 </td>
                                 <td className="p-3.5 text-center">
-                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                                     op.status === "FINAL"
-                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                      : "bg-amber-100 text-amber-800 border border-amber-200"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-amber-50 text-amber-700 border-amber-200"
                                   }`}>
                                     {op.status === "FINAL" ? "FINAL (Tersinkron)" : "DRAFT"}
                                   </span>
                                 </td>
-                                <td className="p-3.5 text-stone-600">
+                                <td className="p-3.5 text-slate-600">
                                   <div>{op.notes || "Audit periodik"}</div>
                                   {discrepancyCount > 0 ? (
                                     <span className="text-[10px] text-rose-600 font-medium">
@@ -2134,7 +2383,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                       <>
                                         <button
                                           onClick={() => handleResumeDraft(op)}
-                                          className="px-2.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs hover:scale-105"
+                                          className="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-[0.98]"
                                           title="Lanjutkan pengisian draf ini"
                                         >
                                           <Edit2 className="w-3 h-3" />
@@ -2142,7 +2391,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                         </button>
                                         <button
                                           onClick={() => handleDeleteDraft(op.id)}
-                                          className="p-1.5 bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
+                                          className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
                                           title="Hapus draf ini"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
@@ -2151,7 +2400,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                     )}
                                     <button
                                       onClick={() => setSelectedOpnameForView(op)}
-                                      className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
                                     >
                                       <Eye className="w-3.5 h-3.5" />
                                       <span>{op.status === "DRAFT" ? "Rincian" : "Lihat Rincian"}</span>
@@ -2164,6 +2413,83 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* MOBILE SMARTPHONE VIEW: Ergonomic Opname History Cards */}
+                  <div className="block md:hidden divide-y divide-slate-100">
+                    {stockOpnames
+                      .slice()
+                      .reverse()
+                      .map((op) => {
+                        const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
+                        const discrepancyCount = relatedItems.filter((i) => i.difference !== 0).length;
+                        return (
+                          <div key={op.id} className="p-4 space-y-2 hover:bg-slate-50/50 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-sm">
+                                  {new Date(op.date).toLocaleDateString("id-ID", {
+                                    weekday: "short",
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 font-mono">
+                                  Opr: {op.createdBy} • {new Date(op.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                                </p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                op.status === "FINAL"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}>
+                                {op.status === "FINAL" ? "FINAL" : "DRAFT"}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200/50 flex justify-between items-center">
+                              <span>{op.notes || "Audit berkala"}</span>
+                              {discrepancyCount > 0 ? (
+                                <span className="text-rose-600 font-bold text-[10px]">
+                                  {discrepancyCount} selisih
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold text-[10px]">
+                                  ✓ Akurat
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              {op.status === "DRAFT" && (
+                                <>
+                                  <button
+                                    onClick={() => handleResumeDraft(op)}
+                                    className="px-3 py-1.5 bg-brand-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 active:scale-[0.98]"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                    <span>Lanjutkan</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDraft(op.id)}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => setSelectedOpnameForView(op)}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Rincian</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
             </div>
@@ -2173,29 +2499,30 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── TAB 4: RECIPES (BOM) ─────────────────────────────────────────── */}
       {activeTab === "recipes" && (
-        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-coffee overflow-hidden">
-          <div className="p-5 border-b border-stone-100 flex justify-between items-center">
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-stone-900 text-sm">Resep Takaran Menu (Bill of Materials)</h3>
-              <p className="text-xs text-stone-500 mt-0.5">
+              <h3 className="font-bold text-slate-900 text-sm">Resep Takaran Menu (Bill of Materials)</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
                 Setiap resep menentukan bahan apa saja yang otomatis dipotong saat pesanan dibuat di kasir POS.
               </p>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* DESKTOP & TABLET VIEW: Structured Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
                   <th className="p-4">Nama Menu</th>
                   <th className="p-4">Komposisi Bahan & Takaran</th>
                   <th className="p-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
+              <tbody className="divide-y divide-slate-100">
                 {filteredRecipes.map((recipe) => (
-                  <tr key={recipe.id} className="hover:bg-stone-50">
-                    <td className="p-4 font-bold text-stone-900">{recipe.menuName}</td>
+                  <tr key={recipe.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="p-4 font-bold text-slate-900">{recipe.menuName}</td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-1.5">
                         {recipe.ingredients.map((ri, idx) => {
@@ -2203,7 +2530,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           return (
                             <span
                               key={idx}
-                              className="px-2.5 py-1 rounded-xl bg-stone-100 text-stone-700 text-[11px] font-medium border border-stone-200"
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-medium border border-slate-200/60"
                             >
                               <strong>{ing?.name || "Bahan"}</strong>: {ri.quantity} {ing?.unit || "unit"}
                             </span>
@@ -2219,7 +2546,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                               setEditingRecipe(recipe);
                               setIsAddRecipeOpen(true);
                             }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-xl"
+                            className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                             title="Edit Resep"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -2230,7 +2557,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                                 deleteRecipe(recipe.id);
                               }
                             }}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl"
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                             title="Hapus Resep"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -2243,7 +2570,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                 {filteredRecipes.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="p-8 text-center text-stone-400">
+                    <td colSpan={3} className="p-8 text-center text-slate-400">
                       Belum ada data resep terdaftar.
                     </td>
                   </tr>
@@ -2251,41 +2578,101 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </tbody>
             </table>
           </div>
+
+          {/* MOBILE SMARTPHONE VIEW: Ergonomic Recipe Cards */}
+          <div className="block md:hidden divide-y divide-slate-100">
+            {filteredRecipes.map((recipe) => (
+              <div key={recipe.id} className="p-4 space-y-2.5 hover:bg-slate-50/50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-900 text-sm">{recipe.menuName}</h4>
+                  {!isReadOnly && currentUser?.role !== "LEADER" && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingRecipe(recipe);
+                          setIsAddRecipeOpen(true);
+                        }}
+                        className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
+                        title="Edit Resep"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Hapus resep untuk menu "${recipe.menuName}"?`)) {
+                            deleteRecipe(recipe.id);
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                        title="Hapus Resep"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {recipe.ingredients.map((ri, idx) => {
+                    const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                    return (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200/60"
+                      >
+                        <strong>{ing?.name || "Bahan"}</strong>: {ri.quantity} {ing?.unit || "unit"}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {filteredRecipes.length === 0 && (
+              <div className="p-8 text-center text-slate-400 text-xs">
+                Belum ada data resep terdaftar.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
       {isIngredientModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-coffee-lg w-full max-w-xl overflow-hidden max-h-[92vh] overflow-y-auto my-auto border border-stone-200"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[92vh] overflow-y-auto my-auto border border-slate-200/90"
           >
             {/* Modal Header */}
-            <div className="flex justify-between items-center p-5 sm:p-6 border-b border-stone-100 bg-stone-50/80">
-              <div>
-                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                  <Package className="w-5 h-5 text-amber-800" />
-                  {editingIngredient ? "Edit Bahan Baku" : "Tambah Bahan Baku Baru"}
-                </h2>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Lengkapi satuan pakai resep dan satuan beli supplier untuk integrasi HPP otomatis.
-                </p>
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                    {editingIngredient ? "Edit Bahan Baku" : "Tambah Bahan Baku Baru"}
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Lengkapi satuan pakai resep dan satuan beli supplier untuk integrasi HPP otomatis.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsIngredientModalOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitIngredient} className="p-5 sm:p-6 space-y-4 text-xs">
-              {/* Row 1: Kode & Nama Bahan */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-1">
-                  <label className="block font-bold text-stone-700 mb-1">
+            <form onSubmit={handleSubmitIngredient} className="p-4 sm:p-6 space-y-4 text-xs">
+              {/* Row 1: Kode & Nama Bahan (Responsive stack on mobile, 3 cols on tablet/desktop) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">
                     Kode SKU / Barcode
                   </label>
                   <input
@@ -2293,11 +2680,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     value={ingredientForm.code}
                     onChange={(e) => setIngredientForm({ ...ingredientForm, code: e.target.value })}
                     placeholder="BB-001"
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                   />
                 </div>
-                <div className="col-span-2">
-                  <label className="block font-bold text-stone-700 mb-1">
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">
                     Nama Bahan Baku <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -2306,19 +2693,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     value={ingredientForm.name}
                     onChange={(e) => setIngredientForm({ ...ingredientForm, name: e.target.value })}
                     placeholder="e.g. Biji Kopi Arabika Gayo, Susu Fresh Milk"
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-medium text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                   />
                 </div>
               </div>
 
               {/* Row 2: Kategori & Lokasi Simpan */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Kategori</label>
+                  <label className="block font-bold text-slate-700 mb-1">Kategori</label>
                   <select
                     value={ingredientForm.category}
                     onChange={(e) => setIngredientForm({ ...ingredientForm, category: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
                   >
                     {PRESET_CATEGORIES.filter((c) => c.id !== "ALL").map((c) => (
                       <option key={c.id} value={c.id}>
@@ -2329,11 +2716,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Lokasi Simpan</label>
+                  <label className="block font-bold text-slate-700 mb-1">Lokasi Simpan</label>
                   <select
                     value={ingredientForm.storageLocation}
                     onChange={(e) => setIngredientForm({ ...ingredientForm, storageLocation: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-800"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
                   >
                     {PRESET_LOCATIONS.filter((l) => l.id !== "ALL").map((l) => (
                       <option key={l.id} value={l.id}>
@@ -2345,30 +2732,30 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
 
               {/* ── SECTION KONVERSI BELI KE RESEP (SMART FEATURE) ─────────── */}
-              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
-                <div className="flex items-center justify-between">
+              <div className="p-4 rounded-2xl bg-brand-50/40 border border-brand-100 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <Calculator className="w-4 h-4 text-amber-800" />
-                    <span className="font-bold text-amber-950 text-xs">
+                    <Calculator className="w-4 h-4 text-brand-600 shrink-0" />
+                    <span className="font-bold text-slate-900 text-xs">
                       Konversi Satuan Kemasan Supplier & Harga Modal HPP
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-amber-900">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-brand-900">
                     <input
                       type="checkbox"
                       checked={ingredientForm.usePurchaseUnit}
                       onChange={(e) => setIngredientForm({ ...ingredientForm, usePurchaseUnit: e.target.checked })}
-                      className="rounded text-amber-800 focus:ring-amber-800"
+                      className="rounded text-brand-600 focus:ring-brand-500"
                     />
                     <span>Beli dalam Kemasan (Dus/Kg/Liter)</span>
                   </label>
                 </div>
 
                 {ingredientForm.usePurchaseUnit ? (
-                  <div className="space-y-3 pt-2 border-t border-amber-200/60">
+                  <div className="space-y-3 pt-2 border-t border-brand-100">
                     {/* Preset selection buttons */}
                     <div>
-                      <span className="text-[10px] text-amber-900 font-semibold block mb-1">
+                      <span className="text-[10px] text-slate-600 font-semibold block mb-1.5">
                         Pilih Cepat Tipe Kemasan:
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -2377,10 +2764,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             type="button"
                             key={p.unit}
                             onClick={() => handlePurchasePresetSelect(p.unit)}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all cursor-pointer active:scale-95 ${
                               ingredientForm.purchaseUnit === p.unit
-                                ? "bg-amber-800 text-white border-amber-800"
-                                : "bg-white text-stone-700 border-amber-200 hover:bg-amber-100/50"
+                                ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-brand-50/60"
                             }`}
                           >
                             {p.unit}
@@ -2389,9 +2776,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                        <label className="block text-[11px] font-bold text-slate-800 mb-1">
                           Satuan Beli Supplier
                         </label>
                         <input
@@ -2400,35 +2787,35 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                           value={ingredientForm.purchaseUnit}
                           onChange={(e) => setIngredientForm({ ...ingredientForm, purchaseUnit: e.target.value })}
                           placeholder="e.g. Kg, Karton, Dus"
-                          className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold text-stone-800"
+                          className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                        <label className="block text-[11px] font-bold text-slate-800 mb-1">
                           Isi per Kemasan
                         </label>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="number"
                             required
                             min="1"
                             value={ingredientForm.conversionFactor}
                             onChange={(e) => setIngredientForm({ ...ingredientForm, conversionFactor: Number(e.target.value) })}
-                            className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                            className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
-                          <span className="text-xs font-bold text-amber-900 shrink-0">
+                          <span className="text-xs font-bold text-brand-700 shrink-0">
                             {ingredientForm.unit}
                           </span>
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                        <label className="block text-[11px] font-bold text-slate-800 mb-1">
                           Harga Beli Kemasan
                         </label>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-bold">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
                             Rp
                           </span>
                           <input
@@ -2437,32 +2824,32 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                             min="0"
                             value={ingredientForm.purchasePrice}
                             onChange={(e) => setIngredientForm({ ...ingredientForm, purchasePrice: Number(e.target.value) })}
-                            className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                            className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
                         </div>
                       </div>
                     </div>
 
                     {/* Live Formula Preview Box */}
-                    <div className="p-2.5 rounded-xl bg-white border border-amber-200 flex items-center justify-between text-[11px]">
+                    <div className="p-3 rounded-2xl bg-white border border-brand-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px]">
                       <div>
-                        <span className="text-stone-500">Harga Modal Resep (HPP):</span>
-                        <p className="font-bold text-stone-800 mt-0.5">
+                        <span className="text-slate-500 font-medium">Harga Modal Resep (HPP):</span>
+                        <p className="font-bold text-slate-800 mt-0.5">
                           {formatCurrency(ingredientForm.purchasePrice)} ÷ {ingredientForm.conversionFactor.toLocaleString("id-ID")} {ingredientForm.unit}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-stone-400 text-[10px]">Otomatis ke HPP:</span>
-                        <p className="font-mono font-black text-amber-900 text-sm">
-                          {formatCurrency(computedCostPerUnit)} <span className="text-[10px] font-normal text-stone-500">/{ingredientForm.unit}</span>
+                      <div className="sm:text-right">
+                        <span className="text-slate-400 text-[10px]">Otomatis ke HPP:</span>
+                        <p className="font-mono font-black text-brand-600 text-sm">
+                          {formatCurrency(computedCostPerUnit)} <span className="text-[10px] font-normal text-slate-500">/{ingredientForm.unit}</span>
                         </p>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/60">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-brand-100">
                     <div>
-                      <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                      <label className="block text-[11px] font-bold text-slate-800 mb-1">
                         Satuan Resep Dasar
                       </label>
                       <input
@@ -2471,11 +2858,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         value={ingredientForm.unit}
                         onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
                         placeholder="gr, ml, pcs, portion"
-                        className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold text-stone-800"
+                        className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                      <label className="block text-[11px] font-bold text-slate-800 mb-1">
                         Harga Modal Satuan (Rp/{ingredientForm.unit})
                       </label>
                       <input
@@ -2484,7 +2871,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         min="0"
                         value={ingredientForm.costPerUnit}
                         onChange={(e) => setIngredientForm({ ...ingredientForm, costPerUnit: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-white rounded-xl border border-amber-300 font-bold font-mono text-stone-800"
+                        className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
                   </div>
@@ -2492,10 +2879,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
 
               {/* Row 3: Stok Fisik & Batas Minimum */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="font-bold text-stone-700">
+                    <label className="font-bold text-slate-700">
                       {editingIngredient ? "Stok Saat Ini" : "Stok Awal Fisik"}
                     </label>
                     {ingredientForm.usePurchaseUnit && (
@@ -2503,8 +2890,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         <button
                           type="button"
                           onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "BASE" })}
-                          className={`px-1.5 py-0.5 rounded ${
-                            ingredientForm.initialStockUnit === "BASE" ? "bg-stone-800 text-white font-bold" : "text-stone-500"
+                          className={`px-1.5 py-0.5 rounded transition-colors ${
+                            ingredientForm.initialStockUnit === "BASE" ? "bg-slate-800 text-white font-bold" : "text-slate-500 hover:text-slate-700"
                           }`}
                         >
                           {ingredientForm.unit}
@@ -2512,8 +2899,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                         <button
                           type="button"
                           onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "PURCHASE" })}
-                          className={`px-1.5 py-0.5 rounded ${
-                            ingredientForm.initialStockUnit === "PURCHASE" ? "bg-stone-800 text-white font-bold" : "text-stone-500"
+                          className={`px-1.5 py-0.5 rounded transition-colors ${
+                            ingredientForm.initialStockUnit === "PURCHASE" ? "bg-slate-800 text-white font-bold" : "text-slate-500 hover:text-slate-700"
                           }`}
                         >
                           {ingredientForm.purchaseUnit}
@@ -2529,21 +2916,21 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       step="any"
                       value={ingredientForm.stockInput}
                       onChange={(e) => setIngredientForm({ ...ingredientForm, stockInput: Number(e.target.value) })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                     />
-                    <span className="font-bold text-stone-500 shrink-0 text-xs">
+                    <span className="font-bold text-slate-500 shrink-0 text-xs">
                       {ingredientForm.initialStockUnit === "PURCHASE" ? ingredientForm.purchaseUnit : ingredientForm.unit}
                     </span>
                   </div>
                   {ingredientForm.initialStockUnit === "PURCHASE" && ingredientForm.usePurchaseUnit && (
-                    <p className="text-[10px] text-stone-500 mt-1">
+                    <p className="text-[10px] text-slate-500 mt-1">
                       Setara dengan <strong>{(Number(ingredientForm.stockInput) * Number(ingredientForm.conversionFactor)).toLocaleString("id-ID")} {ingredientForm.unit}</strong>
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">
+                  <label className="block font-bold text-slate-700 mb-1">
                     Batas Minimum Aman (Alert Reorder)
                   </label>
                   <div className="flex items-center gap-1.5">
@@ -2554,13 +2941,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       step="any"
                       value={ingredientForm.minStock}
                       onChange={(e) => setIngredientForm({ ...ingredientForm, minStock: Number(e.target.value) })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-800"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                     />
-                    <span className="font-bold text-stone-500 shrink-0 text-xs">
+                    <span className="font-bold text-slate-500 shrink-0 text-xs">
                       {ingredientForm.unit}
                     </span>
                   </div>
-                  <p className="text-[10px] text-stone-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1">
                     Notifikasi muncul jika stok &le; batas ini.
                   </p>
                 </div>
@@ -2568,7 +2955,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
               {/* Catatan / Keterangan */}
               <div>
-                <label className="block font-bold text-stone-700 mb-1">
+                <label className="block font-bold text-slate-700 mb-1">
                   Catatan Tambahan (Merek, Supplier, dsb)
                 </label>
                 <input
@@ -2576,22 +2963,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   value={ingredientForm.notes}
                   onChange={(e) => setIngredientForm({ ...ingredientForm, notes: e.target.value })}
                   placeholder="e.g. Beli di Toko Kopi Mandiri, kadaluwarsa 6 bulan"
-                  className="w-full px-3 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-800"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
 
               {/* Modal Footer */}
-              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-stone-100">
+              <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsIngredientModalOpen(false)}
-                  className="px-4 py-2.5 text-stone-600 hover:bg-stone-100 rounded-2xl font-bold cursor-pointer"
+                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-amber-800 hover:bg-amber-900 text-white rounded-2xl font-bold shadow-coffee-sm cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>{editingIngredient ? "Simpan Perubahan" : "Simpan Bahan Baku"}</span>
@@ -2605,76 +2992,124 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── MODAL: CATAT PEMAKAIAN & WASTE ───────────────────────────────── */}
       {isAddMovementOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-5 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-coffee-lg w-full max-w-md overflow-hidden border border-stone-200"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90"
           >
-            <div className="flex justify-between items-center p-5 border-b border-stone-100 bg-stone-50/80">
-              <div>
-                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                    movementType === "WASTE"
+                      ? "bg-rose-50 text-rose-600 border border-rose-100"
+                      : movementType === "TRANSFER"
+                      ? "bg-brand-50 text-brand-600 border border-brand-100"
+                      : movementType === "IN"
+                      ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                  }`}
+                >
                   {movementType === "WASTE" ? (
-                    <AlertTriangle className="w-5 h-5 text-rose-600" />
+                    <AlertTriangle className="w-4.5 h-4.5" />
+                  ) : movementType === "TRANSFER" ? (
+                    <ArrowRight className="w-4.5 h-4.5" />
+                  ) : movementType === "IN" ? (
+                    <Plus className="w-4.5 h-4.5" />
                   ) : (
-                    <Plus className="w-5 h-5 text-amber-800" />
+                    <Droplets className="w-4.5 h-4.5" />
                   )}
-                  {movementType === "WASTE" ? "Catat Bahan Rusak / Terbuang (Waste)" : "Catat Pemakaian Harian"}
-                </h2>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Setiap mutasi akan mengurangi saldo stok dan tercatat dalam audit log.
-                </p>
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                    {movementType === "TRANSFER"
+                      ? "Keluarkan Bahan ke Bar / Dapur"
+                      : movementType === "WASTE"
+                      ? "Catat Bahan Rusak / Kalibrasi (Waste)"
+                      : movementType === "IN"
+                      ? "Tambah Stok Masuk Manual"
+                      : "Catat Pemakaian Harian"}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {movementType === "TRANSFER"
+                      ? "Ambil bahan kemasan dari gudang ke stasiun operasional kafe."
+                      : "Setiap mutasi tercatat otomatis dalam riwayat stok."}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsAddMovementOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddMovement} className="p-5 space-y-4 text-xs">
-              {/* Type Switcher */}
-              <div className="flex gap-1.5 p-1 bg-stone-100 rounded-2xl">
+            <form onSubmit={handleAddMovement} className="p-4 sm:p-5 space-y-4 text-xs">
+              {/* Type Switcher Pills */}
+              <div className="flex flex-wrap gap-1 p-1 bg-slate-100 rounded-2xl border border-slate-200/60">
                 <button
                   type="button"
-                  onClick={() => setMovementType("USAGE")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    movementType === "USAGE" ? "bg-white text-stone-900 shadow-coffee-sm" : "text-stone-500"
+                  onClick={() => {
+                    setMovementType("TRANSFER");
+                    const ing = ingredients.find((i) => i.id === selectedIngredientForMove);
+                    const conv = ing ? getIngredientUnitConversion(ing) : null;
+                    if (conv?.hasConversion) setMovementUnitMode("PURCHASE");
+                  }}
+                  className={`flex-1 min-w-[90px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    movementType === "TRANSFER" ? "bg-brand-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Pemakaian
+                  Ambil ke Bar
                 </button>
                 <button
                   type="button"
                   onClick={() => setMovementType("WASTE")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    movementType === "WASTE" ? "bg-white text-rose-700 shadow-coffee-sm" : "text-stone-500"
+                  className={`flex-1 min-w-[80px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    movementType === "WASTE" ? "bg-rose-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   Waste (Rusak)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementType("USAGE")}
+                  className={`flex-1 min-w-[70px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    movementType === "USAGE" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Pakai
                 </button>
                 {currentUser?.role !== "LEADER" && (
                   <button
                     type="button"
                     onClick={() => setMovementType("IN")}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                      movementType === "IN" ? "bg-white text-emerald-700 shadow-coffee-sm" : "text-stone-500"
+                    className={`flex-1 min-w-[70px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                      movementType === "IN" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    Masuk Manual
+                    Masuk
                   </button>
                 )}
               </div>
 
               {/* Select Ingredient */}
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Pilih Bahan Baku</label>
+                <label className="block font-bold text-slate-700 mb-1">Pilih Bahan Baku</label>
                 <select
                   required
                   value={selectedIngredientForMove}
-                  onChange={(e) => setSelectedIngredientForMove(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-stone-300 bg-white font-medium text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    setSelectedIngredientForMove(newId);
+                    const ing = ingredients.find((i) => i.id === newId);
+                    const conv = ing ? getIngredientUnitConversion(ing) : null;
+                    if (conv?.hasConversion && movementType === "TRANSFER") {
+                      setMovementUnitMode("PURCHASE");
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
                 >
                   {accessibleIngredients.map((ing) => (
                     <option key={ing.id} value={ing.id}>
@@ -2684,44 +3119,129 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </select>
               </div>
 
-              {/* Quantity */}
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  Jumlah {movementType === "IN" ? "Masuk" : "Keluar / Terbuang"}
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    required
-                    min="0.01"
-                    step="any"
-                    value={movementQuantity || ""}
-                    onChange={(e) => setMovementQuantity(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
-                    placeholder="0"
-                  />
-                  <span className="font-bold text-stone-500 shrink-0 text-xs">
-                    {ingredients.find((i) => i.id === selectedIngredientForMove)?.unit || "unit"}
-                  </span>
+              {/* Destination Station (if TRANSFER) */}
+              {movementType === "TRANSFER" && (
+                <div className="p-3 bg-brand-50/50 rounded-2xl border border-brand-100 space-y-2.5">
+                  <div>
+                    <label className="block font-bold text-brand-950 mb-1">
+                      Stasiun Tujuan Pengeluaran
+                    </label>
+                    <select
+                      value={movementTargetStation}
+                      onChange={(e) => setMovementTargetStation(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-brand-200 bg-white font-bold text-base sm:text-xs text-brand-950 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
+                    >
+                      <option value="BAR">Meja Bar (Barista & Minuman)</option>
+                      <option value="CHILLER">Kulkas / Chiller Bar</option>
+                      <option value="KITCHEN">Kitchen / Dapur Makanan</option>
+                      <option value="BAKERY">Bakery & Pastry Station</option>
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={isDirectUsage}
+                      onChange={(e) => setIsDirectUsage(e.target.checked)}
+                      className="rounded border-brand-300 text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-semibold text-brand-900">
+                      Otomatis kurangi stok gudang sebagai bahan aktif di stasiun
+                    </span>
+                  </label>
                 </div>
-              </div>
+              )}
+
+              {/* Quantity & Unit Selection */}
+              {(() => {
+                const currentIng = ingredients.find((i) => i.id === selectedIngredientForMove);
+                const conv = currentIng ? getIngredientUnitConversion(currentIng) : null;
+                const hasConv = conv?.hasConversion;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="font-bold text-slate-700">
+                        {movementType === "TRANSFER"
+                          ? "Jumlah yang Dikeluarkan dari Gudang"
+                          : movementType === "IN"
+                          ? "Jumlah Masuk"
+                          : "Jumlah Keluar / Terbuang"}
+                      </label>
+
+                      {/* Unit mode toggle if purchase conversion exists */}
+                      {hasConv && (
+                        <div className="flex gap-1 p-0.5 bg-slate-100 rounded-lg text-[10px] font-bold border border-slate-200/60">
+                          <button
+                            type="button"
+                            onClick={() => setMovementUnitMode("PURCHASE")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              movementUnitMode === "PURCHASE"
+                                ? "bg-brand-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {conv.purchaseUnit}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementUnitMode("BASE")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              movementUnitMode === "BASE"
+                                ? "bg-brand-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {currentIng?.unit}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        required
+                        min="0.01"
+                        step="any"
+                        value={movementQuantity || ""}
+                        onChange={(e) => setMovementQuantity(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                        placeholder="0"
+                      />
+                      <span className="font-bold text-slate-700 shrink-0 text-xs px-2.5 py-2.5 bg-slate-100 rounded-xl border border-slate-200/80">
+                        {hasConv && movementUnitMode === "PURCHASE" ? conv.purchaseUnit : currentIng?.unit || "unit"}
+                      </span>
+                    </div>
+
+                    {/* Live Calculation Preview */}
+                    {hasConv && movementUnitMode === "PURCHASE" && movementQuantity > 0 && (
+                      <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex justify-between items-center">
+                        <span>Konversi Satuan:</span>
+                        <span className="font-mono font-bold text-brand-700">
+                          {movementQuantity} {conv.purchaseUnit} = {(movementQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Waste Reason Quick Select */}
               {movementType === "WASTE" && (
                 <div>
-                  <span className="block font-bold text-rose-900 mb-1 text-[11px]">
+                  <span className="block font-bold text-rose-900 mb-1.5 text-[11px]">
                     Pilih Alasan Bahan Terbuang:
                   </span>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {WASTE_REASONS.map((r) => (
                       <button
                         type="button"
                         key={r}
                         onClick={() => setMovementNote(r)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-all cursor-pointer border active:scale-95 ${
                           movementNote === r
-                            ? "bg-rose-100 text-rose-900 border-rose-300"
-                            : "bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100"
+                            ? "bg-rose-50 text-rose-700 border-rose-300 shadow-xs"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                         }`}
                       >
                         {r}
@@ -2731,9 +3251,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
                   {/* Estimated Loss Display */}
                   {movementQuantity > 0 && selectedIngredientForMove && (
-                    <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex justify-between items-center text-[11px]">
+                    <div className="mt-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 flex justify-between items-center text-[11px]">
                       <span className="text-rose-800 font-semibold">Taksiran Nilai Kerugian:</span>
-                      <span className="font-mono font-black text-rose-700">
+                      <span className="font-mono font-black text-rose-700 text-sm">
                         {formatCurrency(
                           movementQuantity * (ingredients.find((i) => i.id === selectedIngredientForMove)?.costPerUnit || 0)
                         )}
@@ -2745,32 +3265,44 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
               {/* Note input */}
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Catatan Tambahan</label>
+                <label className="block font-bold text-slate-700 mb-1">Catatan Tambahan</label>
                 <textarea
                   rows={2}
                   value={movementNote}
                   onChange={(e) => setMovementNote(e.target.value)}
                   placeholder="Keterangan mutasi (opsional)..."
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:ring-2 focus:ring-amber-800"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
 
               {/* Footer */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddMovementOpen(false)}
-                  className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-xl font-bold cursor-pointer"
+                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className={`px-4 py-2 rounded-xl text-white font-bold cursor-pointer shadow-coffee-sm ${
-                    movementType === "WASTE" ? "bg-rose-600 hover:bg-rose-700" : "bg-stone-900 hover:bg-black"
+                  className={`px-4.5 py-2.5 rounded-xl text-white font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all ${
+                    movementType === "TRANSFER"
+                      ? "bg-brand-600 hover:bg-brand-700"
+                      : movementType === "WASTE"
+                      ? "bg-rose-600 hover:bg-rose-700"
+                      : movementType === "IN"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-slate-900 hover:bg-black"
                   }`}
                 >
-                  Simpan Transaksi
+                  {movementType === "TRANSFER"
+                    ? "Konfirmasi Pengeluaran"
+                    : movementType === "WASTE"
+                    ? "Simpan Catatan Waste"
+                    : movementType === "IN"
+                    ? "Simpan Stok Masuk"
+                    : "Simpan Transaksi"}
                 </button>
               </div>
             </form>
@@ -2796,35 +3328,41 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
 
       {/* ── MODAL RINCIAN OPNAME DETAIL ───────────────────────────────────── */}
       {selectedOpnameForView && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-stone-200 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-5 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
-              <div>
-                <h3 className="font-bold text-stone-900 text-base">Rincian Hasil Stok Opname</h3>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Audit oleh {selectedOpnameForView.createdBy} •{" "}
-                  {new Date(selectedOpnameForView.date).toLocaleDateString("id-ID", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">Rincian Hasil Stok Opname</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Audit oleh {selectedOpnameForView.createdBy} •{" "}
+                    {new Date(selectedOpnameForView.date).toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedOpnameForView(null)}
-                className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1 space-y-4">
-              <div className="overflow-x-auto border border-stone-200 rounded-2xl">
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+              {/* DESKTOP/TABLET VIEW: Structured Table */}
+              <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-stone-50 border-b border-stone-200 text-stone-600 font-bold uppercase text-[10px]">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
                       <th className="p-3">Bahan Baku</th>
                       <th className="p-3 text-center">Stok Sistem</th>
                       <th className="p-3 text-center">Stok Fisik Nyata</th>
@@ -2832,29 +3370,29 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                       <th className="p-3">Keterangan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-slate-100">
                     {stockOpnameItems
                       .filter((i) => i.opnameId === selectedOpnameForView.id)
                       .map((item) => {
                         const ing = ingredients.find((i) => i.id === item.ingredientId);
                         return (
-                          <tr key={item.id} className="hover:bg-stone-50">
-                            <td className="p-3 font-bold text-stone-900">
+                          <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-3 font-bold text-slate-900">
                               {ing ? ing.name : "Bahan Terhapus"}{" "}
-                              {ing && <span className="text-stone-400 font-normal">({ing.unit})</span>}
+                              {ing && <span className="text-slate-400 font-normal">({ing.unit})</span>}
                             </td>
-                            <td className="p-3 text-center font-mono text-stone-600">
+                            <td className="p-3 text-center font-mono text-slate-600">
                               {item.systemStock.toLocaleString("id-ID")}
                             </td>
-                            <td className="p-3 text-center font-mono font-bold text-stone-900">
+                            <td className="p-3 text-center font-mono font-bold text-slate-900">
                               {item.physicalStock.toLocaleString("id-ID")}
                             </td>
                             <td className={`p-3 text-center font-mono font-bold ${
-                              item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-stone-500"
+                              item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-slate-500"
                             }`}>
                               {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")}
                             </td>
-                            <td className="p-3 text-stone-500">
+                            <td className="p-3 text-slate-500">
                               {item.notes || "-"}
                             </td>
                           </tr>
@@ -2863,14 +3401,46 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   </tbody>
                 </table>
               </div>
+
+              {/* MOBILE VIEW: Cards Feed */}
+              <div className="block sm:hidden divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                {stockOpnameItems
+                  .filter((i) => i.opnameId === selectedOpnameForView.id)
+                  .map((item) => {
+                    const ing = ingredients.find((i) => i.id === item.ingredientId);
+                    return (
+                      <div key={item.id} className="p-3.5 space-y-1.5 hover:bg-slate-50/60 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900 text-xs">
+                            {ing ? ing.name : "Bahan Terhapus"}
+                          </span>
+                          <span className={`font-mono text-xs font-bold ${
+                            item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-slate-500"
+                          }`}>
+                            Selisih: {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")} {ing?.unit}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span>Sistem: <strong className="font-mono text-slate-700">{item.systemStock.toLocaleString("id-ID")}</strong></span>
+                          <span>Fisik Nyata: <strong className="font-mono text-slate-900">{item.physicalStock.toLocaleString("id-ID")} {ing?.unit}</strong></span>
+                        </div>
+                        {item.notes && (
+                          <p className="text-[10px] text-slate-400 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                            Catatan: {item.notes}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
 
-            <div className="p-4 border-t border-stone-100 bg-stone-50/50 flex justify-between items-center">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-2">
               <div>
                 {selectedOpnameForView.status === "DRAFT" && (
                   <button
                     onClick={() => handleDeleteDraft(selectedOpnameForView.id)}
-                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 border border-rose-200 transition-all"
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 border border-rose-200 transition-all active:scale-95"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Hapus Draf</span>
@@ -2881,7 +3451,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 {selectedOpnameForView.status === "DRAFT" && (
                   <button
                     onClick={() => handleResumeDraft(selectedOpnameForView)}
-                    className="px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-coffee-sm transition-all"
+                    className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                     <span>Lanjutkan Draf Ini</span>
@@ -2889,7 +3459,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 )}
                 <button
                   onClick={() => setSelectedOpnameForView(null)}
-                  className="px-5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer transition-colors active:scale-95"
                 >
                   Tutup
                 </button>

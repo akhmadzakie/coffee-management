@@ -7,6 +7,12 @@ import {
   Edit2,
   Trash2,
   Phone,
+  Building2,
+  User,
+  MapPin,
+  FileText,
+  ExternalLink,
+  MessageCircle,
 } from "lucide-react";
 import { Supplier } from "../types";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -17,12 +23,12 @@ export const Suppliers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredSuppliers = suppliers.filter(
     (s) =>
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.picName.toLowerCase().includes(searchTerm.toLowerCase()),
+      s.picName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleOpenModal = (supplier?: Supplier) => {
@@ -54,7 +60,7 @@ export const Suppliers = () => {
         };
 
         if (idSistem) {
-          const existing = suppliers.find(s => s.id === idSistem);
+          const existing = suppliers.find((s) => s.id === idSistem);
           if (existing) {
             updateSupplier({ ...supplierData, id: idSistem });
             updatedCount++;
@@ -65,7 +71,10 @@ export const Suppliers = () => {
         }
       }
     });
-    if (importedCount > 0 || updatedCount > 0) alert(`Berhasil menambahkan ${importedCount} data baru dan memperbarui ${updatedCount} data supplier.`);
+    if (importedCount > 0 || updatedCount > 0)
+      alert(
+        `Berhasil menambahkan ${importedCount} data baru dan memperbarui ${updatedCount} data supplier.`
+      );
     else alert("Tidak ada data valid yang diimpor.");
   };
 
@@ -89,223 +98,288 @@ export const Suppliers = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full sm:w-96">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-slate-400" />
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
+              Vendor Directory
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              {suppliers.length} Mitra Terdaftar
+            </span>
           </div>
-          <input
-            type="text"
-            className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm text-sm"
-            placeholder="Search suppliers by name or PIC..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+            Daftar Supplier & Distributor
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+            Data kontak vendor resmi biji kopi, susu UHT fresh, sirup rasa, kemasan cup take-away, dan bahan baku kafe.
+          </p>
         </div>
-        {!isReadOnly && (
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <CsvImportExport
-              onImport={handleImportSuppliers}
-              templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
-              templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
-              currentData={suppliers.map(s => ({
-                id: s.id,
-                "Nama Supplier": s.name,
-                "Nama PIC": s.picName,
-                "Kontak": s.contact,
-                "Alamat": s.address,
-                "Catatan": s.notes
-              }))}
-              templateFilename="template_supplier"
-              buttonLabel="Import Supplier"
-              templateHints={{
-                "Nama Supplier": "Wajib diisi",
-                Kontak: "No. HP / WhatsApp, contoh: 081234567890",
-              }}
-            />
-            <button
-              onClick={() => handleOpenModal()}
-              className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm text-sm font-medium w-full sm:w-auto justify-center"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Supplier
-            </button>
-          </div>
-        )}
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {!isReadOnly && (
+            <>
+              <CsvImportExport
+                onImport={handleImportSuppliers}
+                templateHeaders={["Nama Supplier", "Nama PIC", "Kontak", "Alamat", "Catatan"]}
+                templateExampleRow={["PT Kopi Nikmat", "Budi", "0812345678", "Jl Mawar 1", "Supplier Sirup"]}
+                currentData={suppliers.map((s) => ({
+                  id: s.id,
+                  "Nama Supplier": s.name,
+                  "Nama PIC": s.picName,
+                  Kontak: s.contact,
+                  Alamat: s.address,
+                  Catatan: s.notes,
+                }))}
+                templateFilename="template_supplier"
+                buttonLabel="Impor / Ekspor"
+                templateHints={{
+                  "Nama Supplier": "Wajib diisi",
+                  Kontak: "No. HP / WhatsApp, contoh: 081234567890",
+                }}
+              />
+              <button
+                onClick={() => handleOpenModal()}
+                className="flex items-center justify-center px-4 py-2.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all shadow-xs text-xs font-bold w-full sm:w-auto cursor-pointer"
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                Tambah Supplier
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* ─── Search Bar ───────────────────────────────────────────────────────────── */}
+      <div className="relative max-w-md">
+        <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          className="block w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500/20 bg-white shadow-2xs text-base sm:text-xs font-medium outline-none"
+          placeholder="Cari nama supplier, nama PIC, atau alamat..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* ─── Suppliers Grid ───────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {filteredSuppliers.length === 0 ? (
-          <div className="col-span-full py-10 text-center text-slate-500 text-sm bg-white rounded-xl border border-slate-200 border-dashed">
-            No suppliers found. Add your first supplier!
+          <div className="col-span-full py-16 text-center text-slate-400 text-xs bg-white rounded-3xl border border-slate-200/80 border-dashed">
+            Belum ada supplier yang cocok. Klik "Tambah Supplier" untuk mendaftarkan vendor baru!
           </div>
         ) : (
-          filteredSuppliers.map((supplier) => (
-            <div
-              key={supplier.id}
-              className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col hover:border-blue-200 transition-colors"
-            >
-              <div className="flex justify-between items-start mb-4">
+          filteredSuppliers.map((supplier) => {
+            const cleanPhone = supplier.contact ? supplier.contact.replace(/\D/g, "") : "";
+            const waLink = cleanPhone ? `https://wa.me/${cleanPhone.startsWith("0") ? "62" + cleanPhone.slice(1) : cleanPhone}` : "";
+
+            return (
+              <div
+                key={supplier.id}
+                className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-5 sm:p-6 flex flex-col justify-between hover:border-brand-300 hover:shadow-md transition-all group"
+              >
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 leading-tight">
-                    {supplier.name}
-                  </h3>
-                  <p className="text-sm text-blue-600 font-medium mt-1">
-                    {supplier.address} • {supplier.picName}
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 font-bold shrink-0">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900 leading-snug group-hover:text-brand-600 transition-colors">
+                          {supplier.name}
+                        </h3>
+                        <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                          <User className="w-3.5 h-3.5 text-slate-400" />
+                          <span>PIC: <strong className="text-slate-700">{supplier.picName || "-"}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleOpenModal(supplier)}
+                          className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Supplier"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Hapus supplier "${supplier.name}"?`)) {
+                              deleteSupplier(supplier.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Hapus Supplier"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Address Badge */}
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate">{supplier.address || "Alamat tidak dicantumkan"}</span>
+                  </div>
+
+                  {/* Direct WhatsApp Call */}
+                  <div className="flex items-center justify-between text-xs bg-emerald-50/70 border border-emerald-200/70 p-2.5 rounded-xl mb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span className="font-semibold text-emerald-950 font-mono">
+                        {supplier.contact || "-"}
+                      </span>
+                    </div>
+                    {waLink && (
+                      <a
+                        href={waLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-all shadow-2xs"
+                      >
+                        <span>Chat WA</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 mt-2">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">
+                    Catatan Suplai
+                  </p>
+                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                    {supplier.notes || "Tidak ada catatan khusus."}
                   </p>
                 </div>
-                <div className="flex space-x-1">
-                  {!isReadOnly && (
-                    <>
-                      <button
-                        onClick={() => handleOpenModal(supplier)}
-                        className="text-slate-400 hover:text-blue-600 p-1 transition-colors"
-                        title="Edit Supplier"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteSupplier(supplier.id)}
-                        className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
-                        title="Delete Supplier"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
               </div>
-
-              <div className="flex items-center text-sm text-slate-600 mb-4 bg-slate-50 p-2 rounded-lg">
-                <Phone className="h-4 w-4 mr-2 text-slate-400" />
-                <a
-                  href={`https://wa.me/${supplier.contact.replace(/\D/g, "")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-blue-600 font-medium"
-                >
-                  {supplier.contact}
-                </a>
-              </div>
-
-              <div className="mt-auto pt-4 border-t border-slate-100">
-                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">
-                  Notes
-                </p>
-                <p className="text-sm text-slate-700 line-clamp-2">
-                  {supplier.notes || "-"}
-                </p>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Modal */}
-      {isModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] my-auto border border-slate-200">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-slate-800">
-                {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
-              </h3>
-              <button
-                onClick={handleCloseModal}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                &times;
-              </button>
-            </div>
+      {/* ─── MODAL: Add / Edit Supplier ───────────────────────────────────────────── */}
+      {isModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] my-auto border border-slate-200/80 p-6 space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingSupplier ? "Edit Data Supplier" : "Tambah Supplier Baru"}
+                  </h3>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
 
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4 mb-6">
+              <form onSubmit={handleSubmit} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Supplier Name
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Nama Perusahaan / Supplier / Toko <span className="text-rose-500">*</span>
                   </label>
                   <input
                     required
                     type="text"
                     name="name"
                     defaultValue={editingSupplier?.name}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="Contoh: PT Sukses Kopi Nusantara"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs font-medium"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      PIC Name
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Nama PIC / Sales
                     </label>
                     <input
                       required
                       type="text"
                       name="picName"
                       defaultValue={editingSupplier?.picName}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                      placeholder="Contoh: Budi Santoso"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs font-medium"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Address/Area
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Alamat / Wilayah Gudang
                     </label>
                     <input
                       required
                       type="text"
                       name="address"
                       defaultValue={editingSupplier?.address}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                      placeholder="Contoh: Jakarta Barat"
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Contact (WhatsApp)
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Nomor Kontak / WhatsApp <span className="text-rose-500">*</span>
                   </label>
                   <input
                     required
                     type="text"
                     name="contact"
                     defaultValue={editingSupplier?.contact}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                    placeholder="Contoh: 081234567890"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs font-mono font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Notes
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Catatan Pasokan / Term of Payment (TOP)
                   </label>
                   <textarea
                     name="notes"
                     rows={3}
                     defaultValue={editingSupplier?.notes}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm resize-none"
+                    placeholder="Contoh: Supplier Fresh Milk Greenfields, TOP Tempo 14 hari, minimum order 2 krat."
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-brand-500/20 bg-slate-50 focus:bg-white outline-none text-base sm:text-xs resize-none"
                   ></textarea>
                 </div>
-              </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors"
-                >
-                  {editingSupplier ? "Save Changes" : "Add Supplier"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer"
+                  >
+                    {editingSupplier ? "Simpan Perubahan" : "Tambah Supplier"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

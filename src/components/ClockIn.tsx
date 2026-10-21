@@ -14,14 +14,24 @@ import {
   User,
   Coffee,
   Check,
+  ShieldCheck,
+  Layers,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { DailyAttendance, DEFAULT_SHIFT_DEFINITIONS } from "../types";
 import { getLocalDateString } from "../utils/dateUtils";
 
 export function ClockIn() {
-  const { currentUser, employees, dailyAttendances, addDailyAttendance, updateDailyAttendance, employeeShifts, settings } = useStore();
-  
+  const {
+    currentUser,
+    employees,
+    dailyAttendances,
+    addDailyAttendance,
+    updateDailyAttendance,
+    employeeShifts,
+    settings,
+  } = useStore();
+
   const [activeMode, setActiveMode] = useState<"ATTENDANCE" | "LEAVE">("ATTENDANCE");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string>("");
@@ -31,14 +41,14 @@ export function ClockIn() {
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   // Check today's attendance for the current user
   const todayStr = getLocalDateString();
-  const activeEmployee = employees.find(e => e.username === currentUser?.username);
+  const activeEmployee = employees.find((e) => e.username === currentUser?.username);
   const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
 
   const todayShift = (employeeShifts || []).find(
@@ -49,7 +59,7 @@ export function ClockIn() {
   const todayAttendance = dailyAttendances.find(
     (a) => a.employeeId === activeEmployeeId && a.date === todayStr
   );
-  
+
   const isClockedIn = !!todayAttendance?.clockInTime;
   const isClockedOut = !!todayAttendance?.clockOutTime;
 
@@ -63,9 +73,9 @@ export function ClockIn() {
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false 
+        audio: false,
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -83,7 +93,7 @@ export function ClockIn() {
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setIsCameraActive(false);
@@ -122,27 +132,25 @@ export function ClockIn() {
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    
-    // Set canvas dimensions to match video
+
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
-    
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    
-    // Draw video frame to canvas
+
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     // Add Watermark
     ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
     ctx.fillRect(0, canvas.height - 55, canvas.width, 55);
-    
+
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 14px 'Plus Jakarta Sans', Arial, sans-serif";
-    
+
     const now = new Date();
     const timeStr = now.toLocaleDateString("id-ID", {
       day: "numeric",
@@ -152,11 +160,17 @@ export function ClockIn() {
       minute: "2-digit",
       second: "2-digit",
     });
-    const locStr = location ? `GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "GPS: Tidak diketahui";
-    
-    ctx.fillText(`${activeEmployee?.name || currentUser?.name || "Karyawan"} • Shift ${scheduledShift} • ${timeStr}`, 14, canvas.height - 30);
-    ctx.fillText(`${locStr} • Julia Coffee`, 14, canvas.height - 12);
-    
+    const locStr = location
+      ? `GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
+      : "GPS: Tidak diketahui";
+
+    ctx.fillText(
+      `${activeEmployee?.name || currentUser?.name || "Karyawan"} • Shift ${scheduledShift} • ${timeStr}`,
+      14,
+      canvas.height - 30
+    );
+    ctx.fillText(`${locStr} • Julia's Coffee & Eatery`, 14, canvas.height - 12);
+
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     setPhotoDataUrl(dataUrl);
     stopCamera();
@@ -184,9 +198,10 @@ export function ClockIn() {
     try {
       if (!isClockedIn) {
         // Clock In
-        const shiftDefs = settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
-          ? settings.shiftDefinitions
-          : DEFAULT_SHIFT_DEFINITIONS;
+        const shiftDefs =
+          settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+            ? settings.shiftDefinitions
+            : DEFAULT_SHIFT_DEFINITIONS;
         const matchedShiftDef = shiftDefs.find((s: any) => s.id === scheduledShift);
 
         let status: "HADIR" | "TERLAMBAT" = "HADIR";
@@ -199,16 +214,22 @@ export function ClockIn() {
           const currentMin = nowObj.getHours() * 60 + nowObj.getMinutes();
           const tolerance = matchedShiftDef.lateToleranceMinutes ?? 15;
 
-          if (currentMin > (shiftStartMin + tolerance)) {
+          if (currentMin > shiftStartMin + tolerance) {
             status = "TERLAMBAT";
             lateMinutes = currentMin - shiftStartMin;
           }
         } else {
-          // Fallback toleransi default
           const nowDecimalHour = new Date().getHours() + new Date().getMinutes() / 60;
-          if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 7) * 60); }
-          else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 11) * 60); }
-          else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) { status = "TERLAMBAT"; lateMinutes = Math.round((nowDecimalHour - 15) * 60); }
+          if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) {
+            status = "TERLAMBAT";
+            lateMinutes = Math.round((nowDecimalHour - 7) * 60);
+          } else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) {
+            status = "TERLAMBAT";
+            lateMinutes = Math.round((nowDecimalHour - 11) * 60);
+          } else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) {
+            status = "TERLAMBAT";
+            lateMinutes = Math.round((nowDecimalHour - 15) * 60);
+          }
         }
 
         const lateNote = lateMinutes > 0 ? `[Terlambat ${lateMinutes} menit]` : "";
@@ -226,9 +247,12 @@ export function ClockIn() {
           clockOutPhotoUrl: null,
           status,
           approvalStatus: "PENDING",
-          notes: combinedNotes
+          notes: combinedNotes,
         });
-        setFeedback({ type: "success", message: `Clock In berhasil dicatat untuk Shift ${scheduledShift}! Selamat bertugas.` });
+        setFeedback({
+          type: "success",
+          message: `Clock In berhasil dicatat untuk Shift ${scheduledShift}! Selamat bertugas.`,
+        });
       } else if (!isClockedOut && todayAttendance) {
         // Clock Out
         updateDailyAttendance({
@@ -236,11 +260,14 @@ export function ClockIn() {
           clockOutTime: now,
           clockOutLocation: location,
           clockOutPhotoUrl: photoDataUrl,
-          notes: todayAttendance.notes ? `${todayAttendance.notes} | ${notes.trim()}` : notes.trim()
+          notes: todayAttendance.notes ? `${todayAttendance.notes} | ${notes.trim()}` : notes.trim(),
         });
-        setFeedback({ type: "success", message: "Clock Out berhasil dicatat! Terima kasih atas dedikasi Anda." });
+        setFeedback({
+          type: "success",
+          message: "Clock Out berhasil dicatat! Terima kasih atas dedikasi Anda.",
+        });
       }
-      
+
       setPhotoDataUrl(null);
       setNotes("");
     } catch (error) {
@@ -260,7 +287,7 @@ export function ClockIn() {
 
     setIsLoading(true);
     const now = new Date().toISOString();
-    
+
     try {
       if (todayAttendance) {
         updateDailyAttendance({
@@ -301,29 +328,35 @@ export function ClockIn() {
     }
   };
 
-  if (!currentUser) return <div className="p-8 text-center text-slate-500">Silakan login terlebih dahulu.</div>;
+  if (!currentUser)
+    return <div className="p-8 text-center text-slate-500">Silakan login terlebih dahulu.</div>;
 
   const userPos = (activeEmployee?.position || "").toUpperCase();
   const userRole = (currentUser?.role || "").toUpperCase();
-  const isManagerOrExempt = userRole === "MANAGER" || userRole === "OWNER" || userRole === "SUPER_ADMIN" ||
-                            userPos.includes("MANAGER") || userPos.includes("MANAJER") || userPos.includes("OWNER");
+  const isManagerOrExempt =
+    userRole === "MANAGER" ||
+    userRole === "OWNER" ||
+    userRole === "SUPER_ADMIN" ||
+    userPos.includes("MANAGER") ||
+    userPos.includes("MANAJER") ||
+    userPos.includes("OWNER");
 
   if (isManagerOrExempt) {
     return (
       <div className="max-w-2xl mx-auto py-12 px-4 text-center">
-        <div className="bg-white p-8 rounded-3xl border border-stone-200/80 shadow-coffee max-w-lg mx-auto">
-          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto mb-4 shadow-coffee-sm">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-xs max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-3xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center mx-auto mb-4 shadow-2xs">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">
             Bebas Kewajiban Presensi & Absen
           </h2>
-          <p className="text-xs text-stone-500 mt-2 leading-relaxed">
-            Sebagai <strong>{currentUser.name} ({currentUser.role})</strong>, Anda dibebaskan dari kewajiban absensi foto selfie, GPS, dan clock in/out harian. Fokus utama Anda adalah supervisi dan pemantauan manajemen operasional toko.
+          <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+            Sebagai <strong className="text-slate-800">{currentUser.name} ({currentUser.role})</strong>, Anda dibebaskan dari kewajiban absensi foto selfie, GPS, dan clock in/out harian. Fokus utama Anda adalah supervisi dan pemantauan manajemen operasional kafe.
           </p>
-          <div className="mt-6 p-4 rounded-2xl bg-amber-50/70 border border-amber-200/60 text-left">
-            <p className="text-xs font-bold text-amber-900 mb-1">Kebijakan Operasional:</p>
-            <p className="text-[11px] text-amber-800 leading-relaxed">
+          <div className="mt-6 p-4 rounded-2xl bg-brand-50/60 border border-brand-200/70 text-left">
+            <p className="text-xs font-bold text-brand-900 mb-1">Kebijakan Operasional:</p>
+            <p className="text-[11px] text-brand-800 leading-relaxed">
               Manajer mengawasi kedisiplinan dan checklist staf melalui <strong>Dashboard Pintar Manajer</strong> tanpa perlu mengisi absen pribadi.
             </p>
           </div>
@@ -333,18 +366,18 @@ export function ClockIn() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-12">
+    <div className="max-w-2xl mx-auto space-y-5 pb-16">
       {/* Toast Feedback */}
       <AnimatePresence>
         {feedback && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`p-4 rounded-2xl flex items-center gap-3 text-sm font-semibold shadow-lg border ${
+            exit={{ opacity: 0, y: -8 }}
+            className={`p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-semibold shadow-xs border ${
               feedback.type === "success"
-                ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-                : "bg-rose-50 text-rose-900 border-rose-200"
+                ? "bg-emerald-50 text-emerald-950 border-emerald-200"
+                : "bg-rose-50 text-rose-950 border-rose-200"
             }`}
           >
             {feedback.type === "success" ? (
@@ -358,81 +391,108 @@ export function ClockIn() {
       </AnimatePresence>
 
       {/* Main Card */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200/80">
+      <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-xs border border-slate-200/80">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5 mb-6">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
                 Absensi Kehadiran
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200/70">
                 Selfie & GPS
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              {currentUser.name} • {currentUser.role} {activeEmployee?.department ? `(${activeEmployee.department})` : ""}
+              {currentUser.name} • {currentUser.role}{" "}
+              {activeEmployee?.department ? `(${activeEmployee.department})` : ""}
             </p>
           </div>
 
           {/* Mode Switcher */}
           {!isClockedOut && (
-            <div className="flex p-1 bg-slate-100 rounded-xl text-xs font-bold self-start sm:self-auto">
+            <div className="flex p-1 bg-slate-100 rounded-2xl text-xs font-bold self-start sm:self-auto gap-1">
               <button
                 type="button"
                 onClick={() => setActiveMode("ATTENDANCE")}
-                className={`px-3.5 py-1.5 rounded-lg transition-all ${
-                  activeMode === "ATTENDANCE"
-                    ? "bg-white text-slate-800 shadow-2xs"
-                    : "text-slate-500 hover:text-slate-700"
+                className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  activeMode === "ATTENDANCE" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Hadir Shift
+                {activeMode === "ATTENDANCE" && (
+                  <motion.div
+                    layoutId="clockInModeTab"
+                    className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                  />
+                )}
+                <span className="relative z-10">Hadir Shift</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveMode("LEAVE")}
-                className={`px-3.5 py-1.5 rounded-lg transition-all ${
-                  activeMode === "LEAVE"
-                    ? "bg-white text-slate-800 shadow-2xs"
-                    : "text-slate-500 hover:text-slate-700"
+                className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  activeMode === "LEAVE" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Izin / Sakit
+                {activeMode === "LEAVE" && (
+                  <motion.div
+                    layoutId="clockInModeTab"
+                    className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                  />
+                )}
+                <span className="relative z-10">Izin / Sakit</span>
               </button>
             </div>
           )}
         </div>
 
         {/* Jadwal Shift Banner */}
-        <div className={`p-4 rounded-2xl border mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          scheduledShift === "OFF"
-            ? "bg-amber-50/80 border-amber-200"
-            : "bg-gradient-to-r from-slate-50 to-brand-50/40 border-slate-200/80"
-        }`}>
+        <div
+          className={`p-4 rounded-2xl border mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            scheduledShift === "OFF"
+              ? "bg-amber-50/80 border-amber-200"
+              : "bg-gradient-to-r from-slate-50 to-brand-50/40 border-slate-200/80"
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
-              scheduledShift === "PAGI" ? "bg-emerald-100 text-emerald-800" :
-              scheduledShift === "MIDDLE" ? "bg-blue-100 text-blue-800" :
-              scheduledShift === "SORE" ? "bg-amber-100 text-amber-800" :
-              "bg-amber-200 text-amber-900"
-            }`}>
-              {scheduledShift === "PAGI" ? "PGI" : scheduledShift === "MIDDLE" ? "MID" : scheduledShift === "SORE" ? "SRE" : "OFF"}
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 ${
+                scheduledShift === "PAGI"
+                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  : scheduledShift === "MIDDLE"
+                  ? "bg-brand-100 text-brand-800 border border-brand-200"
+                  : scheduledShift === "SORE"
+                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                  : "bg-slate-200 text-slate-800"
+              }`}
+            >
+              {scheduledShift === "PAGI"
+                ? "PGI"
+                : scheduledShift === "MIDDLE"
+                ? "MID"
+                : scheduledShift === "SORE"
+                ? "SRE"
+                : "OFF"}
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 Jadwal Shift Anda Hari Ini
               </p>
-              <p className="text-sm font-bold text-slate-800">
-                {scheduledShift === "PAGI" ? "Shift Pagi (07:00 – 15:00 WIB)" :
-                 scheduledShift === "MIDDLE" ? "Shift Middle (11:00 – 19:00 WIB)" :
-                 scheduledShift === "SORE" ? "Shift Sore (15:00 – 23:00 WIB)" :
-                 "Hari Libur (OFF)"}
+              <p className="text-sm font-bold text-slate-900">
+                {scheduledShift === "PAGI"
+                  ? "Shift Pagi (07:00 – 15:00 WIB)"
+                  : scheduledShift === "MIDDLE"
+                  ? "Shift Middle (11:00 – 19:00 WIB)"
+                  : scheduledShift === "SORE"
+                  ? "Shift Sore (15:00 – 23:00 WIB)"
+                  : "Hari Libur (OFF)"}
               </p>
             </div>
           </div>
           {scheduledShift === "OFF" ? (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-white/90 px-3 py-1.5 rounded-xl border border-amber-300 self-start sm:self-auto">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-white/90 px-3 py-1.5 rounded-xl border border-amber-300 self-start sm:self-auto">
               <span>⚠️ Jadwal Libur: Presensi akan dicatat sebagai lembur / shift pengganti</span>
             </div>
           ) : (
@@ -445,11 +505,11 @@ export function ClockIn() {
 
         {/* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */}
         {isClockedOut ? (
-          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-blue-50/50 border border-emerald-200/80 p-8 rounded-2xl flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 shadow-sm">
+          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-brand-50/50 border border-emerald-200/80 p-6 sm:p-8 rounded-3xl flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 shadow-2xs">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">
+            <h3 className="text-xl font-black text-slate-900">
               Shift Anda Hari Ini Telah Selesai
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md">
@@ -457,8 +517,10 @@ export function ClockIn() {
             </p>
 
             <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-6">
-              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs text-left">
-                <span className="text-[11px] text-slate-400 block">Jam Masuk (IN)</span>
+              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs text-left">
+                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
+                  Jam Masuk (IN)
+                </span>
                 <span className="text-base font-black text-emerald-700 font-mono">
                   {new Date(todayAttendance.clockInTime!).toLocaleTimeString("id-ID", {
                     hour: "2-digit",
@@ -466,8 +528,10 @@ export function ClockIn() {
                   })}
                 </span>
               </div>
-              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs text-left">
-                <span className="text-[11px] text-slate-400 block">Jam Pulang (OUT)</span>
+              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs text-left">
+                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
+                  Jam Pulang (OUT)
+                </span>
                 <span className="text-base font-black text-rose-700 font-mono">
                   {new Date(todayAttendance.clockOutTime!).toLocaleTimeString("id-ID", {
                     hour: "2-digit",
@@ -478,11 +542,16 @@ export function ClockIn() {
             </div>
 
             {todayAttendance.clockInTime && todayAttendance.clockOutTime && (
-              <div className="mt-4 p-4 bg-white rounded-xl border border-emerald-100 w-full max-w-sm shadow-2xs">
+              <div className="mt-4 p-4 bg-white rounded-2xl border border-emerald-100 w-full max-w-sm shadow-2xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-600">Durasi Kerja Total:</span>
                   <span className="text-lg font-black text-emerald-600 font-mono">
-                    {((new Date(todayAttendance.clockOutTime).getTime() - new Date(todayAttendance.clockInTime).getTime()) / 3600000).toFixed(1)} Jam
+                    {(
+                      (new Date(todayAttendance.clockOutTime).getTime() -
+                        new Date(todayAttendance.clockInTime).getTime()) /
+                      3600000
+                    ).toFixed(1)}{" "}
+                    Jam
                   </span>
                 </div>
               </div>
@@ -490,36 +559,40 @@ export function ClockIn() {
           </div>
         ) : activeMode === "ATTENDANCE" ? (
           /* ─── STATE 2: ATTENDANCE (CLOCK IN / CLOCK OUT) ─── */
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* Status Shift Badge */}
-            <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-between text-xs">
+            <div className="p-4 rounded-2xl bg-brand-50/70 border border-brand-100 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2.5">
-                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                <span className="text-blue-900 font-semibold">
-                  {isClockedIn ? "Langkah Berikutnya: Absen Pulang (Clock Out)" : "Langkah Berikutnya: Absen Masuk (Clock In)"}
+                <Clock className="w-4 h-4 text-brand-600 shrink-0" />
+                <span className="text-brand-950 font-semibold">
+                  {isClockedIn
+                    ? "Langkah Berikutnya: Absen Pulang (Clock Out)"
+                    : "Langkah Berikutnya: Absen Masuk (Clock In)"}
                 </span>
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                isClockedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-              }`}>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  isClockedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                }`}
+              >
                 {isClockedIn ? "SEDANG BERTUGAS" : "BELUM ABSEN"}
               </span>
             </div>
 
             {/* GPS Location Box */}
             <div className="flex items-center gap-3 bg-slate-50/90 p-4 rounded-2xl border border-slate-200/80">
-              <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shrink-0">
+              <div className="p-2.5 bg-brand-50 border border-brand-100 text-brand-600 rounded-xl shrink-0">
                 <MapPin className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-800 text-xs">Titik Lokasi GPS</p>
+                <p className="font-bold text-slate-800 text-xs">Titik Lokasi GPS Presisi</p>
                 {location ? (
                   <p className="text-[11px] text-slate-600 font-mono truncate">
                     Lat: {location.lat.toFixed(5)}, Lng: {location.lng.toFixed(5)}
                   </p>
                 ) : (
                   <p className="text-[11px] text-rose-500 font-medium">
-                    {locationError || "Sedang mengunci sinyal GPS presisi..."}
+                    {locationError || "Sedang mengunci sinyal GPS..."}
                   </p>
                 )}
               </div>
@@ -527,9 +600,11 @@ export function ClockIn() {
                 type="button"
                 onClick={getLocation}
                 disabled={isRefreshingLocation}
-                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 shrink-0"
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 active:scale-95 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingLocation ? "animate-spin text-blue-600" : ""}`} />
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${isRefreshingLocation ? "animate-spin text-brand-600" : ""}`}
+                />
                 <span>Refresh GPS</span>
               </button>
             </div>
@@ -539,7 +614,7 @@ export function ClockIn() {
               {photoDataUrl ? (
                 <div className="relative w-full h-full">
                   <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
-                  <div className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                  <div className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
                     <Check className="w-3 h-3" /> Foto Siap
                   </div>
                 </div>
@@ -572,13 +647,13 @@ export function ClockIn() {
                       <div>
                         <h4 className="text-white font-bold text-sm">Ambil Foto Selfie</h4>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Verifikasi kehadiran fisik di lokasi outlet
+                          Verifikasi kehadiran fisik di lokasi outlet Julia's
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={startCamera}
-                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                        className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 active:scale-95 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
                       >
                         Buka Kamera Depan
                       </button>
@@ -595,7 +670,7 @@ export function ClockIn() {
                 <button
                   type="button"
                   onClick={capturePhoto}
-                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-full font-bold text-sm shadow-lg shadow-blue-500/30 transition-all flex items-center gap-2"
+                  className="px-8 py-3.5 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 active:scale-95 text-white rounded-full font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <Camera className="w-4 h-4" />
                   <span>Ambil Foto Selfie</span>
@@ -608,7 +683,7 @@ export function ClockIn() {
                 <button
                   type="button"
                   onClick={handleRetake}
-                  className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Ulangi Ambil Foto</span>
@@ -624,7 +699,7 @@ export function ClockIn() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 p-3 text-xs text-slate-700 min-h-[70px] outline-none transition-all placeholder:text-slate-400"
+                className="w-full rounded-2xl border border-slate-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10 p-3.5 text-base sm:text-xs text-slate-800 min-h-[70px] outline-none transition-all placeholder:text-slate-400 bg-slate-50/50 focus:bg-white"
                 placeholder="Misal: Tukar shift dengan Rian, atau alasan keterlambatan..."
               />
             </div>
@@ -634,12 +709,12 @@ export function ClockIn() {
               type="button"
               onClick={handleSubmit}
               disabled={isLoading || !photoDataUrl || !location}
-              className={`w-full py-4 rounded-2xl font-black text-white text-sm transition-all shadow-lg flex justify-center items-center gap-2 ${
+              className={`w-full py-4 rounded-2xl font-black text-white text-xs sm:text-sm transition-all shadow-md flex justify-center items-center gap-2 cursor-pointer ${
                 isLoading || !photoDataUrl || !location
                   ? "bg-slate-300 cursor-not-allowed shadow-none"
                   : isClockedIn
-                  ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/25 active:scale-[0.99]"
-                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25 active:scale-[0.99]"
+                  ? "bg-rose-600 hover:bg-rose-700 active:scale-[0.98]"
+                  : "bg-brand-600 hover:bg-brand-700 active:scale-[0.98]"
               }`}
             >
               <Clock className="w-5 h-5" />
@@ -654,12 +729,12 @@ export function ClockIn() {
           </div>
         ) : (
           /* ─── STATE 3: LEAVE / PERMISSION REQUEST ─── */
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3">
               <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">Pengajuan Izin atau Sakit</p>
-                <p className="text-amber-800/90 mt-0.5">
+                <p className="text-amber-800/90 mt-0.5 leading-relaxed">
                   Tuliskan keterangan lengkap alasan Anda tidak dapat hadir bertugas hari ini. Manager akan menerima notifikasi untuk verifikasi.
                 </p>
               </div>
@@ -672,7 +747,7 @@ export function ClockIn() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-100 p-3.5 text-xs text-slate-700 min-h-[100px] outline-none transition-all placeholder:text-slate-400"
+                className="w-full rounded-2xl border border-slate-200 focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10 p-3.5 text-base sm:text-xs text-slate-800 min-h-[100px] outline-none transition-all placeholder:text-slate-400 bg-slate-50/50 focus:bg-white"
                 placeholder="Tuliskan alasan izin / sakit secara rinci (misal: Sakit demam dengan surat dokter, atau keperluan mendesak)..."
               />
             </div>
@@ -682,7 +757,7 @@ export function ClockIn() {
                 type="button"
                 onClick={() => handleLeaveSubmit("IZIN")}
                 disabled={isLoading}
-                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
+                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-brand-600 hover:bg-brand-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Ajukan Izin</span>
               </button>
@@ -690,7 +765,7 @@ export function ClockIn() {
                 type="button"
                 onClick={() => handleLeaveSubmit("SAKIT")}
                 disabled={isLoading}
-                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all flex items-center justify-center gap-2"
+                className="py-3.5 rounded-2xl font-bold text-white text-xs bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Ajukan Sakit</span>
               </button>

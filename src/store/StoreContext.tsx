@@ -343,6 +343,41 @@ export const DEFAULT_PRODUCTS: Product[] = [
   },
 ];
 
+export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  { id: "cat-pendapatan", name: "Pendapatan", type: "PENDAPATAN", parentId: null, color: "#10B981", icon: "trending-up", isActive: true, sortOrder: 1 },
+  { id: "cat-pengeluaran", name: "Pengeluaran Operasional", type: "PENGELUARAN", parentId: null, color: "#EF4444", icon: "trending-down", isActive: true, sortOrder: 2 },
+  { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "#F59E0B", icon: "package", isActive: true, sortOrder: 3 },
+  { id: "cat-utilitas", name: "Utilitas", type: "UTILITAS", parentId: null, color: "#3B82F6", icon: "zap", isActive: true, sortOrder: 4 },
+  { id: "cat-hrd", name: "HRD & Personalia", type: "HRD", parentId: null, color: "#8B5CF6", icon: "users", isActive: true, sortOrder: 5 },
+  { id: "cat-aset", name: "Pembelian Aset", type: "ASET", parentId: null, color: "#6366F1", icon: "briefcase", isActive: true, sortOrder: 6 },
+  { id: "cat-lainnya", name: "Lainnya", type: "LAINNYA", parentId: null, color: "#6B7280", icon: "more-horizontal", isActive: true, sortOrder: 7 },
+  // Sub-Kategori: Pendapatan
+  { id: "cat-penjualan", name: "Penjualan Minuman", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#34D399", icon: "coffee", isActive: true, sortOrder: 1 },
+  { id: "cat-penjualan-makanan", name: "Penjualan Makanan", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#6EE7B7", icon: "utensils", isActive: true, sortOrder: 2 },
+  { id: "cat-pendapatan-lain", name: "Pendapatan Lain / Event", type: "PENDAPATAN", parentId: "cat-pendapatan", color: "#A7F3D0", icon: "plus-circle", isActive: true, sortOrder: 3 },
+  // Sub-Kategori: Pengeluaran Operasional
+  { id: "cat-sewa", name: "Sewa Tempat", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "home", isActive: true, sortOrder: 1 },
+  { id: "cat-kebersihan", name: "Kebersihan & Sanitasi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "trash-2", isActive: true, sortOrder: 2 },
+  { id: "cat-marketing-ops", name: "Marketing & Promosi", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "megaphone", isActive: true, sortOrder: 3 },
+  { id: "cat-opex-lain", name: "Operasional Lainnya", type: "PENGELUARAN", parentId: "cat-pengeluaran", color: "#FCA5A5", icon: "settings", isActive: true, sortOrder: 4 },
+  // Sub-Kategori: Bahan Baku
+  { id: "cat-kopi", name: "Kopi & Espresso", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "coffee", isActive: true, sortOrder: 1 },
+  { id: "cat-susu", name: "Susu & Dairy", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "droplets", isActive: true, sortOrder: 2 },
+  { id: "cat-minuman", name: "Minuman & Sirup", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "cup-soda", isActive: true, sortOrder: 3 },
+  { id: "cat-packaging", name: "Packaging & Kemasan", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "box", isActive: true, sortOrder: 4 },
+  { id: "cat-bahan-lain", name: "Bahan Baku Lainnya (Es/Gas/Galon)", type: "BAHAN_BAKU", parentId: "cat-bahan-baku", color: "#FCD34D", icon: "shopping-cart", isActive: true, sortOrder: 5 },
+  // Sub-Kategori: Utilitas
+  { id: "cat-listrik", name: "Listrik & PLN", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "zap", isActive: true, sortOrder: 1 },
+  { id: "cat-air", name: "Air & PDAM", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "droplets", isActive: true, sortOrder: 2 },
+  { id: "cat-internet", name: "Internet & WiFi", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "wifi", isActive: true, sortOrder: 3 },
+  { id: "cat-gas", name: "Gas LPG", type: "UTILITAS", parentId: "cat-utilitas", color: "#93C5FD", icon: "flame", isActive: true, sortOrder: 4 },
+  // Sub-Kategori: HRD
+  { id: "cat-gaji", name: "Gaji & Upah Karyawan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "wallet", isActive: true, sortOrder: 1 },
+  { id: "cat-bpjs", name: "BPJS & Asuransi", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "shield", isActive: true, sortOrder: 2 },
+  { id: "cat-tunjangan", name: "Bonus, Kasbon & Tunjangan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "gift", isActive: true, sortOrder: 3 },
+  { id: "cat-pelatihan", name: "Pelatihan & Seragam", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "book-open", isActive: true, sortOrder: 4 },
+];
+
 interface StoreContextType {
   currentUser: User | null;
   users: User[];
@@ -656,7 +691,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   });
 
   // Fase 1-4 state
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() => {
+    try {
+      const cached = localStorage.getItem("app_expense_categories_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_EXPENSE_CATEGORIES;
+  });
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [bankReconciliations, setBankReconciliations] = useState<BankReconciliation[]>([]);
   const [bankStatementLines, setBankStatementLines] = useState<BankStatementLine[]>([]);
@@ -837,20 +881,34 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [currentUser, isAuthLoaded]);
 
-  // Sync Logic
+  // Sync Logic & Version tracking for Railway Network Egress Optimization
+  const serverVersionRef = useRef<number | null>(null);
+
   const fetchFromServer = async (isManual = false) => {
+    // Hemat kuota data & biaya Railway: jangan sync di background jika tab sedang diminimize/tidak aktif
+    if (typeof document !== "undefined" && document.hidden && !isManual) return;
     if (isSyncingRef.current && !isManual) return;
     if (hasLocalChanges.current && !isManual) return;
 
     try {
       if (isManual) setIsSyncing(true);
-      const res = await fetch("/api/sync", {
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      });
+      const url = isManual || !serverVersionRef.current
+        ? "/api/sync"
+        : `/api/sync?v=${serverVersionRef.current}`;
+
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+
+        // Jika server melaporkan data tidak berubah sejak sync terakhir, selesai seketika (35 byte)!
+        if (data.notModified) {
+          setLastSyncTime(new Date());
+          return;
+        }
+
+        if (data.v) {
+          serverVersionRef.current = data.v;
+        }
 
         isApplyingServerUpdate.current = true;
 
@@ -942,7 +1000,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.employeeShifts)) setEmployeeShifts(data.employeeShifts);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
-        if (Array.isArray(data.expense_categories)) setExpenseCategories(data.expense_categories);
+        if (Array.isArray(data.expense_categories) && data.expense_categories.length > 0) {
+          setExpenseCategories(data.expense_categories);
+          try {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(data.expense_categories));
+          } catch {}
+        }
         if (Array.isArray(data.budgets)) setBudgets(data.budgets);
         if (Array.isArray(data.bank_reconciliations)) setBankReconciliations(data.bank_reconciliations);
         if (Array.isArray(data.bank_statement_lines)) setBankStatementLines(data.bank_statement_lines);
@@ -988,16 +1051,30 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     fetchFromServer(false);
-    const interval = setInterval(() => fetchFromServer(false), 5000);
+    
+    // Polling cerdas: 25 detik sekali dan hanya jalan jika tab sedang aktif di layar
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchFromServer(false);
+      }
+    }, 25000);
+
     const handleFocus = () => fetchFromServer(false);
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchFromServer(false);
+      }
+    };
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("online", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("online", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -1136,10 +1213,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (currentUser) {
       sendHeartbeat(currentUser);
       fetchSessions();
+      // Heartbeat sesi setiap 30 detik (hanya saat tab aktif)
       const sessionInterval = setInterval(() => {
-        sendHeartbeat(currentUser);
-        fetchSessions();
-      }, 5000);
+        if (typeof document !== "undefined" && !document.hidden) {
+          sendHeartbeat(currentUser);
+          fetchSessions();
+        }
+      }, 30000);
       return () => clearInterval(sessionInterval);
     }
   }, [currentUser?.id]);

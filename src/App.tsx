@@ -191,6 +191,7 @@ function AppContent() {
       "dashboard_finance",
       "dashboard_manager",
       "cash_flow",
+      "expense_categories",
       "finance_reports",
       "import_sales",
       "menu_management",
@@ -208,6 +209,7 @@ function AppContent() {
       "inventory",
       "purchases",
       "suppliers",
+      "expense_categories",
       "hr",
       "leader_checklist",
       "users",
@@ -350,7 +352,7 @@ function AppContent() {
       case "import_sales":
         return <Sales />;
       case "cash_flow":
-        return <CashFlow />;
+        return <CashFlow onNavigate={setCurrentView} />;
       case "audit_log":
         return <AuditLogViewer />;
       case "users":

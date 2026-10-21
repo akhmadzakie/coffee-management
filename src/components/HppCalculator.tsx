@@ -34,6 +34,13 @@ import {
   UtensilsCrossed,
   Cake,
   Flame,
+  Info,
+  DollarSign,
+  Layers,
+  ChefHat,
+  ArrowUpRight,
+  ShieldCheck,
+  Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -450,6 +457,9 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const [targetFoodCostPercent, setTargetFoodCostPercent] = useState<number>(30);
   const [dailyVolume, setDailyVolume] = useState<number>(65);
 
+  // Search filter for catalog tab
+  const [catalogSearch, setCatalogSearch] = useState("");
+
   // Feedback & AI States
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -488,7 +498,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
 
   // Tambah baris bahan baru
   const handleAddItem = () => {
-    // Cari bahan pertama yang belum dipakai jika ada
     const firstUnused = ingredients.find((i) => !items.some((it) => it.ingredientId === i.id)) || ingredients[0];
     const newItem: RecipeIngredientItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -507,7 +516,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       prev.map((item) => {
         if (item.id !== id) return item;
 
-        // Jika mengubah ingredientId, auto-fill nama, unit, dan costPerUnit dari master
         if (updates.ingredientId !== undefined && updates.ingredientId !== item.ingredientId) {
           const ing = ingredients.find((i) => i.id === updates.ingredientId);
           return {
@@ -585,10 +593,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       return {
         level: "neutral",
         badge: "Belum Dihitung",
-        colorText: "text-stone-500",
-        colorBg: "bg-stone-100",
-        colorBorder: "border-stone-200",
-        barColor: "bg-stone-300",
+        colorText: "text-slate-500",
+        colorBg: "bg-slate-100",
+        colorBorder: "border-slate-200",
+        barColor: "bg-slate-300",
         note: "Masukkan harga jual untuk melihat persentase food cost.",
       };
     }
@@ -596,8 +604,8 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       return {
         level: "healthy",
         badge: "Sangat Sehat & Prima (Ideal)",
-        colorText: "text-emerald-800",
-        colorBg: "bg-emerald-50",
+        colorText: "text-emerald-700",
+        colorBg: "bg-emerald-50/80",
         colorBorder: "border-emerald-200",
         barColor: "bg-emerald-500",
         note: "Persentase food cost <= 30% sangat ideal untuk kafe. Menyisakan margin yang luas untuk menutup biaya operasional dan menghasilkan laba bersih.",
@@ -608,7 +616,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         level: "warning",
         badge: "Waspada / Sedang (Moderat)",
         colorText: "text-amber-800",
-        colorBg: "bg-amber-50",
+        colorBg: "bg-amber-50/80",
         colorBorder: "border-amber-200",
         barColor: "bg-amber-500",
         note: "Food cost berada di rentang 31% - 38%. Wajar untuk menu signature premium atau menu promo, namun perlu diawasi agar tidak melambung saat harga bahan baku naik.",
@@ -617,11 +625,11 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     return {
       level: "danger",
       badge: "Kritis (Margin Terlalu Tipis)",
-      colorText: "text-rose-800",
-      colorBg: "bg-rose-50",
+      colorText: "text-rose-700",
+      colorBg: "bg-rose-50/80",
       colorBorder: "border-rose-200",
       barColor: "bg-rose-500",
-      note: "Peringatan! Food cost di atas 38% terlalu berisiko. Margin tersisa sangat rentan tergerus oleh biaya listrik, sewa ruko, dan gaji karyawan.",
+      note: "Peringatan! Food cost di atas 38% terlalu berisiko. Margin tersisa sangat rentan tergerus oleh biaya operasional, sewa ruko, dan upah tim.",
     };
   }, [foodCostPercent]);
 
@@ -636,7 +644,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       return;
     }
 
-    // Pastikan setiap bahan baku memiliki ID master
     const validIngredients = items
       .filter((it) => it.ingredientId && it.quantity > 0)
       .map((it) => ({
@@ -752,7 +759,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       setSaveSuccessMessage(`Produk baru "${menuName}" berhasil diterbitkan ke Katalog Menu Toko!`);
     }
 
-    // Pastikan Master Resep Toko juga tersinkronisasi
     if (validIngredients.length > 0) {
       const existingRec = recipes.find(
         (r) => r.menuName.trim().toLowerCase() === menuName.trim().toLowerCase()
@@ -893,63 +899,82 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
     setTimeout(() => setIsCopied(false), 2500);
   };
 
+  // Filtered recipes for catalog audit
+  const filteredRecipes = useMemo(() => {
+    if (!catalogSearch.trim()) return recipes;
+    const q = catalogSearch.toLowerCase();
+    return recipes.filter((r) => r.menuName.toLowerCase().includes(q));
+  }, [recipes, catalogSearch]);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Header Banner */}
-      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-amber-100 text-amber-800 uppercase border border-amber-200">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
               Operational & Profitability Tool
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
               Manager Exclusive
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight flex items-center gap-3">
-            <Calculator className="w-7 h-7 text-amber-700 shrink-0" />
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+              <Calculator className="w-5 h-5" />
+            </div>
             Simulasi & Kalkulator HPP Menu
           </h1>
-          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
             Hitung biaya bahan baku riil, kemasan takeaway, buffer penyusutan barista, serta simulasi margin laba & target harga jual menu.
           </p>
         </div>
 
         {/* Tab Selector & Navigation */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-stone-100/80 p-1.5 rounded-2xl border border-stone-200">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("simulator")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === "simulator"
-                  ? "bg-white text-stone-900 shadow-2xs"
-                  : "text-stone-600 hover:text-stone-900"
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
+                activeTab === "simulator" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <Sliders className="w-3.5 h-3.5 text-amber-700" />
-              Simulator HPP & Laba
+              {activeTab === "simulator" && (
+                <motion.div
+                  layoutId="hppMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <Sliders className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+              <span className="relative z-10">Simulator HPP & Laba</span>
             </button>
             <button
               onClick={() => setActiveTab("catalog")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === "catalog"
-                  ? "bg-white text-stone-900 shadow-2xs"
-                  : "text-stone-600 hover:text-stone-900"
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
+                activeTab === "catalog" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <Coffee className="w-3.5 h-3.5 text-amber-700" />
-              Katalog Resep ({recipes.length})
+              {activeTab === "catalog" && (
+                <motion.div
+                  layoutId="hppMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <Coffee className="w-3.5 h-3.5 text-brand-600 relative z-10" />
+              <span className="relative z-10">Katalog Resep ({recipes.length})</span>
             </button>
           </div>
 
           {onNavigate && (
             <button
               onClick={() => onNavigate("menu_management")}
-              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shadow-2xs"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs w-full sm:w-auto"
             >
-              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-400" />
-              Katalog Menu & Dapur Olahan
-              <ArrowRight className="w-3 h-3 text-stone-400" />
+              <UtensilsCrossed className="w-3.5 h-3.5 text-brand-300" />
+              <span>Katalog Menu & Dapur Olahan</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
             </button>
           )}
         </div>
@@ -959,10 +984,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
       <AnimatePresence>
         {saveSuccessMessage && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs"
+            exit={{ opacity: 0, y: -8 }}
+            className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/90 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-xs"
           >
             <div className="flex items-center gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -970,7 +995,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             </div>
             <button
               onClick={() => setSaveSuccessMessage(null)}
-              className="text-emerald-700 hover:text-emerald-900 font-bold"
+              className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 rounded cursor-pointer"
             >
               Tutup
             </button>
@@ -978,40 +1003,40 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         )}
       </AnimatePresence>
 
-      {/* VIEW 1: SIMULATOR UTAMA */}
+      {/* ─── VIEW 1: SIMULATOR UTAMA ──────────────────────────────────────────────── */}
       {activeTab === "simulator" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* KOLOM KIRI (7/12): INPUT FORM BAHAN & KEMASAN */}
           <div className="lg:col-span-7 space-y-6">
             {/* Integrated Supply Chain Strip */}
-            <div className="p-3.5 bg-gradient-to-r from-amber-900/90 via-stone-900 to-amber-950 text-white rounded-2xl shadow-sm border border-amber-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
+            <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-brand-950 text-white rounded-2xl shadow-sm border border-brand-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="p-2 rounded-xl bg-brand-500/20 text-brand-300 border border-brand-500/30 shrink-0">
                   <RefreshCw className="w-4 h-4 animate-spin-slow" />
                 </span>
                 <div>
-                  <span className="font-extrabold text-amber-200 block text-[11px] uppercase tracking-wider">
+                  <span className="font-extrabold text-brand-200 block text-[11px] uppercase tracking-wider">
                     Alur Terintegrasi Supply Chain
                   </span>
-                  <span className="text-[11px] text-stone-300">
-                    Bahan Baku (Inventori) ➜ Formulasi HPP ➜ Katalog Menu POS ➜ Pengurangan Stok Kasir
+                  <span className="text-[11px] text-slate-300">
+                    Bahan Baku (Inventori) ➜ Formulasi HPP ➜ Katalog Menu POS ➜ Pengurangan Otomatis
                   </span>
                 </div>
               </div>
 
               {onNavigate && (
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
                   <button
                     type="button"
                     onClick={() => onNavigate("inventory")}
-                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold transition-all border border-white/10"
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-[0.98] text-white rounded-xl text-[11px] font-bold transition-all border border-white/10 cursor-pointer"
                   >
                     Bahan Baku ↗
                   </button>
                   <button
                     type="button"
                     onClick={() => onNavigate("menu_management")}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-xs"
+                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 active:scale-[0.98] text-white rounded-xl text-[11px] font-bold transition-all shadow-xs cursor-pointer"
                   >
                     Katalog Menu ↗
                   </button>
@@ -1020,24 +1045,27 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             </div>
 
             {/* Card 1: Identitas Menu & Muat Resep Eksisting */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight">
-                    1. Identitas Menu & Varian
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-black flex items-center justify-center border border-brand-100">
+                      1
+                    </span>
+                    Identitas Menu & Varian
                   </h2>
-                  <p className="text-xs text-stone-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Pilih preset kopi standar kafe, muat dari resep toko, atau racik menu baru.
                   </p>
                 </div>
 
                 {/* Dropdown Muat Resep */}
                 {recipes.length > 0 && (
-                  <div className="relative min-w-[220px]">
+                  <div className="relative w-full sm:w-auto sm:min-w-[220px]">
                     <select
                       value={selectedRecipeId}
                       onChange={(e) => handleLoadExistingRecipe(e.target.value)}
-                      className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                      className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     >
                       <option value="">-- Muat Resep Toko --</option>
                       {recipes.map((r) => (
@@ -1052,32 +1080,35 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
               {/* Quick Presets Standard Coffee Shop Recipes */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-amber-600" />
+                <span className="text-[11px] font-bold text-brand-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-600" />
                   Preset Cepat Menu Standar Kafe:
                 </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {STANDARD_RECIPE_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleApplyPreset(preset)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
-                        menuName === preset.name
-                          ? "bg-amber-800 text-white border-amber-900 shadow-2xs font-extrabold"
-                          : "bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200"
-                      }`}
-                    >
-                      <span>{preset.icon}</span>
-                      <span>{preset.name}</span>
-                    </button>
-                  ))}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+                  {STANDARD_RECIPE_PRESETS.map((preset) => {
+                    const isSelected = menuName === preset.name;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleApplyPreset(preset)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 border cursor-pointer active:scale-[0.98] ${
+                          isSelected
+                            ? "bg-brand-600 text-white border-brand-600 shadow-xs font-black"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                        }`}
+                      >
+                        <span className="text-sm">{preset.icon}</span>
+                        <span>{preset.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Nama Menu / Minuman
                   </label>
                   <input
@@ -1088,11 +1119,11 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       setSelectedRecipeId("");
                     }}
                     placeholder="e.g. Spanish Latte, Butterscotch Coffee"
-                    className="w-full px-3.5 py-2.5 text-xs font-semibold bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Keterangan Porsi / Serving / Varian
                   </label>
                   <input
@@ -1100,76 +1131,78 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     value={servingNote}
                     onChange={(e) => setServingNote(e.target.value)}
                     placeholder="e.g. Cup 16oz Dingin / Botol 250ml"
-                    className="w-full px-3.5 py-2.5 text-xs font-semibold bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
                 </div>
               </div>
 
               {/* Division Selector */}
-              <div className="pt-2 border-t border-stone-100">
-                <label className="block text-xs font-bold text-stone-700 mb-2">
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-700 mb-2">
                   Divisi Operasional & Paket Kemasan Khusus
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => handleDivisionChange("BAR")}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer active:scale-[0.98] ${
                       selectedDivision === "BAR"
-                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
-                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                        ? "bg-brand-50 border-brand-300 text-brand-900 ring-2 ring-brand-500/20 font-black shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <Coffee className="w-3.5 h-3.5 text-amber-700" />
+                    <Coffee className="w-3.5 h-3.5 text-brand-600" />
                     Divisi Bar
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDivisionChange("KITCHEN")}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer active:scale-[0.98] ${
                       selectedDivision === "KITCHEN"
-                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
-                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                        ? "bg-brand-50 border-brand-300 text-brand-900 ring-2 ring-brand-500/20 font-black shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />
+                    <UtensilsCrossed className="w-3.5 h-3.5 text-brand-600" />
                     Divisi Kitchen
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDivisionChange("BAKER")}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer active:scale-[0.98] ${
                       selectedDivision === "BAKER"
-                        ? "bg-amber-100/90 border-amber-400 text-amber-950 shadow-2xs font-extrabold"
-                        : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                        ? "bg-brand-50 border-brand-300 text-brand-900 ring-2 ring-brand-500/20 font-black shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <Cake className="w-3.5 h-3.5 text-amber-700" />
+                    <Cake className="w-3.5 h-3.5 text-brand-600" />
                     Divisi Bakery
                   </button>
                 </div>
-                <p className="text-[11px] text-stone-400 mt-1.5">
+                <p className="text-[11px] text-slate-400 mt-2">
                   Mengubah divisi akan otomatis menyesuaikan opsi kemasan (packaging cost) di formulir bawah.
                 </p>
               </div>
             </div>
 
             {/* Card 2: Bahan Baku (Bill of Materials) */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee space-y-4">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <div>
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                    <Coffee className="w-4 h-4 text-amber-700" />
-                    2. Komposisi Bahan Baku (Gramasi / Porsi)
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-black flex items-center justify-center border border-brand-100">
+                      2
+                    </span>
+                    Komposisi Bahan Baku (Gramasi / Porsi)
                   </h2>
-                  <p className="text-xs text-stone-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Bahan baku yang dipakai per 1 porsi saji.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+                  className="px-3.5 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" /> Tambah Bahan
                 </button>
@@ -1182,20 +1215,20 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   return (
                     <div
                       key={item.id}
-                      className="p-3.5 rounded-2xl bg-stone-50/80 border border-stone-200/70 space-y-2.5"
+                      className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3 hover:border-brand-200 transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-stone-200 text-stone-700">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
                           Bahan #{idx + 1}
                         </span>
                         <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold font-mono text-amber-950">
+                          <span className="text-xs font-bold font-mono text-brand-950">
                             Subtotal: {formatCurrency(subtotal)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
-                            className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
                             title="Hapus Bahan"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1206,13 +1239,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
                         {/* Pilih dari Master Inventori atau Kustom */}
                         <div className="sm:col-span-5">
-                          <label className="block text-[10px] font-bold text-stone-500 mb-1">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Pilih Bahan Master
                           </label>
                           <select
                             value={item.ingredientId}
                             onChange={(e) => handleUpdateItem(item.id, { ingredientId: e.target.value })}
-                            className="w-full text-xs font-medium px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-700"
+                            className="w-full text-base sm:text-xs font-medium px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
                           >
                             <option value="">-- Input Bahan Kustom --</option>
                             {(Object.entries(groupedIngredients) as [string, Ingredient[]][]).map(([cat, list]) => (
@@ -1233,7 +1266,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                         {/* Nama Display / Kustom */}
                         <div className="sm:col-span-3">
-                          <label className="block text-[10px] font-bold text-stone-500 mb-1">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Nama Bahan
                           </label>
                           <input
@@ -1241,13 +1274,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             value={item.name}
                             onChange={(e) => handleUpdateItem(item.id, { name: e.target.value })}
                             placeholder="Nama bahan"
-                            className="w-full text-xs font-medium px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-900"
+                            className="w-full text-base sm:text-xs font-medium px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
 
                         {/* Takaran / Porsi */}
                         <div className="sm:col-span-2">
-                          <label className="block text-[10px] font-bold text-stone-500 mb-1">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Takaran ({item.unit})
                           </label>
                           <input
@@ -1256,13 +1289,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             min="0"
                             value={item.quantity}
                             onChange={(e) => handleUpdateItem(item.id, { quantity: Number(e.target.value) })}
-                            className="w-full text-xs font-bold font-mono px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-900 text-center"
+                            className="w-full text-base sm:text-xs font-bold font-mono px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
 
                         {/* Biaya per unit */}
                         <div className="sm:col-span-2">
-                          <label className="block text-[10px] font-bold text-stone-500 mb-1">
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Biaya/{item.unit} (Rp)
                           </label>
                           <input
@@ -1271,7 +1304,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             min="0"
                             value={item.costPerUnit}
                             onChange={(e) => handleUpdateItem(item.id, { costPerUnit: Number(e.target.value) })}
-                            className="w-full text-xs font-semibold font-mono px-2.5 py-1.5 bg-white border border-stone-200 rounded-xl text-stone-900 text-right"
+                            className="w-full text-base sm:text-xs font-semibold font-mono px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-right focus:outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
                       </div>
@@ -1280,7 +1313,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 })}
 
                 {items.length === 0 && (
-                  <div className="py-8 text-center text-xs text-stone-400 bg-stone-50/50 rounded-2xl border border-dashed border-stone-200">
+                  <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                     Belum ada bahan baku ditambahkan. Klik "+ Tambah Bahan" di atas.
                   </div>
                 )}
@@ -1288,7 +1321,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
               {/* Zero Cost Alert */}
               {items.some((it) => it.costPerUnit <= 0) && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
@@ -1299,7 +1332,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     <button
                       type="button"
                       onClick={() => onNavigate("inventory")}
-                      className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-[10px] shrink-0 self-start sm:self-auto"
+                      className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:scale-[0.98] text-amber-950 font-bold rounded-lg text-[10px] shrink-0 self-start sm:self-auto cursor-pointer"
                     >
                       Isi Harga di Inventori ↗
                     </button>
@@ -1308,25 +1341,27 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               )}
 
               {/* Subtotal Bahan Baku Pokok */}
-              <div className="pt-2 border-t border-stone-100 flex justify-between items-center text-xs">
-                <span className="font-semibold text-stone-500">
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">
                   Subtotal Biaya Bahan Baku ({items.length} jenis):
                 </span>
-                <span className="font-bold font-mono text-sm text-stone-900">
+                <span className="font-bold font-mono text-sm text-slate-900">
                   {formatCurrency(rawMaterialCost)}
                 </span>
               </div>
             </div>
 
             {/* Card 3: Kemasan & Disposables (Packaging) */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee space-y-4">
-              <div className="border-b border-stone-100 pb-3">
-                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                  <Package className="w-4 h-4 text-amber-700" />
-                  3. Kemasan & Alat Sekali Pakai (Packaging)
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+              <div className="border-b border-slate-100 pb-3">
+                <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-black flex items-center justify-center border border-brand-100">
+                    3
+                  </span>
+                  Kemasan & Alat Sekali Pakai (Packaging)
                 </h2>
-                <p className="text-xs text-stone-500">
-                  Biaya kemasan sering luput dari hitungan HPP kafe, padahal menyumbang 10-15% biaya riil.
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Biaya kemasan sering luput dari hitungan HPP kafe, padahal menyumbang 10-15% biaya riil per cup/porsi.
                 </p>
               </div>
 
@@ -1334,10 +1369,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 {packagingList.map((pack) => (
                   <div
                     key={pack.id}
-                    className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition-colors ${
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-colors ${
                       pack.isIncluded
-                        ? "bg-amber-50/40 border-amber-200 text-stone-900"
-                        : "bg-stone-50/60 border-stone-200 text-stone-400"
+                        ? "bg-brand-50/40 border-brand-200/80 text-slate-900"
+                        : "bg-slate-50/60 border-slate-200 text-slate-400"
                     }`}
                   >
                     <label className="flex items-center gap-3 cursor-pointer flex-1">
@@ -1345,25 +1380,25 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                         type="checkbox"
                         checked={pack.isIncluded}
                         onChange={() => handleTogglePackaging(pack.id)}
-                        className="w-4 h-4 rounded text-amber-700 focus:ring-amber-700/20"
+                        className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500/20"
                       />
-                      <span className={`font-semibold ${pack.isIncluded ? "text-stone-900" : "text-stone-500"}`}>
+                      <span className={`font-semibold ${pack.isIncluded ? "text-slate-900" : "text-slate-500"}`}>
                         {pack.name}
                       </span>
                     </label>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-stone-500">Biaya: Rp</span>
+                      <span className="text-[11px] text-slate-500">Biaya: Rp</span>
                       <input
                         type="number"
                         min="0"
                         value={pack.cost}
                         disabled={!pack.isIncluded}
                         onChange={(e) => handleUpdatePackagingCost(pack.id, Number(e.target.value))}
-                        className={`w-20 px-2 py-1 text-xs font-bold font-mono rounded-lg border text-right ${
+                        className={`w-20 px-2 py-1 text-base sm:text-xs font-bold font-mono rounded-lg border text-right focus:outline-none focus:ring-1 focus:ring-brand-500 ${
                           pack.isIncluded
-                            ? "bg-white border-amber-300 text-amber-950"
-                            : "bg-stone-100 border-stone-200 text-stone-400"
+                            ? "bg-white border-brand-300 text-brand-950"
+                            : "bg-slate-100 border-slate-200 text-slate-400"
                         }`}
                       />
                     </div>
@@ -1371,27 +1406,29 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-stone-100 flex justify-between items-center text-xs">
-                <span className="font-semibold text-stone-500">Subtotal Biaya Kemasan:</span>
-                <span className="font-bold font-mono text-sm text-stone-900">
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">Subtotal Biaya Kemasan:</span>
+                <span className="font-bold font-mono text-sm text-slate-900">
                   {formatCurrency(packagingCost)}
                 </span>
               </div>
             </div>
 
             {/* Card 4: Buffer Penyusutan (Wastage & Purge Barista) */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee space-y-4">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
-                    <Scale className="w-4 h-4 text-amber-700" />
-                    4. Buffer Penyusutan & Purge (Wastage)
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-black flex items-center justify-center border border-brand-100">
+                      4
+                    </span>
+                    Buffer Penyusutan & Purge (Wastage)
                   </h2>
-                  <p className="text-xs text-stone-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Kompensasi kalibrasi grinder, sisa susu di steam pitcher, dan es mencair.
                   </p>
                 </div>
-                <span className="px-3 py-1 bg-amber-100 text-amber-900 text-xs font-bold rounded-xl font-mono">
+                <span className="px-3 py-1 bg-brand-50 text-brand-900 text-xs font-black rounded-xl font-mono border border-brand-200/70">
                   {wastagePercent}%
                 </span>
               </div>
@@ -1404,21 +1441,21 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   step="1"
                   value={wastagePercent}
                   onChange={(e) => setWastagePercent(Number(e.target.value))}
-                  className="w-full accent-amber-700 cursor-pointer"
+                  className="w-full accent-brand-600 cursor-pointer"
                 />
-                <div className="flex justify-between text-[11px] text-stone-400 font-medium">
+                <div className="flex justify-between text-[11px] text-slate-400 font-medium">
                   <span>0% (Ideal / Tanpa rugi)</span>
-                  <span className="text-amber-800 font-bold">5% (Standar Kafe)</span>
+                  <span className="text-brand-700 font-bold">5% (Standar Kafe)</span>
                   <span>10% (Tinggi)</span>
                   <span>15% (Maksimal)</span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-stone-100 flex justify-between items-center text-xs">
-                <span className="font-semibold text-stone-500">
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">
                   Alokasi Nilai Penyusutan (+{wastagePercent}%):
                 </span>
-                <span className="font-bold font-mono text-sm text-amber-900">
+                <span className="font-bold font-mono text-sm text-brand-900">
                   +{formatCurrency(wastageCost)}
                 </span>
               </div>
@@ -1427,57 +1464,57 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
           {/* KOLOM KANAN (5/12): EXECUTIVE SUMMARY & SIMULATOR MARGIN */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
-            {/* Card Ringkasan HPP Pokok */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee space-y-6">
+            {/* Card Ringkasan HPP Pokok (Bento Hero Dark Royal) */}
+            <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full border border-brand-200/80">
                   Total Biaya Pokok Produksi
                 </span>
-                <h3 className="text-xl font-bold text-stone-900 tracking-tight mt-1.5">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight mt-2">
                   HPP Riil Per Porsi
                 </h3>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Bahan baku + kemasan + cadangan penyusutan.
                 </p>
               </div>
 
-              {/* Angka Total HPP Besar */}
-              <div className="p-5 rounded-2xl bg-[#241813] text-white space-y-3 shadow-coffee-sm">
+              {/* Angka Total HPP Besar Hero Card */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 text-white space-y-3.5 shadow-md border border-slate-800">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-xs text-stone-300 font-medium">Total HPP Riil:</span>
-                  <span className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                  <span className="text-xs text-slate-300 font-medium">Total HPP Riil:</span>
+                  <span className="text-2xl sm:text-3xl font-black font-mono text-amber-300">
                     {formatCurrency(totalHpp)}
                   </span>
                 </div>
 
-                <div className="border-t border-stone-700/80 pt-2.5 space-y-1 text-xs text-stone-300">
+                <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs text-slate-300">
                   <div className="flex justify-between">
-                    <span>• Bahan Baku:</span>
-                    <span className="font-mono">{formatCurrency(rawMaterialCost)}</span>
+                    <span className="text-slate-400">• Bahan Baku:</span>
+                    <span className="font-mono font-medium">{formatCurrency(rawMaterialCost)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>• Kemasan:</span>
-                    <span className="font-mono">{formatCurrency(packagingCost)}</span>
+                    <span className="text-slate-400">• Kemasan:</span>
+                    <span className="font-mono font-medium">{formatCurrency(packagingCost)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>• Wastage ({wastagePercent}%):</span>
-                    <span className="font-mono">+{formatCurrency(wastageCost)}</span>
+                    <span className="text-slate-400">• Wastage ({wastagePercent}%):</span>
+                    <span className="font-mono font-medium text-amber-200">+{formatCurrency(wastageCost)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Simulator Harga Jual & Margin */}
-              <div className="space-y-4 pt-2 border-t border-stone-100">
+              <div className="space-y-4 pt-2 border-t border-slate-100">
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-bold text-stone-900">
+                    <label className="text-xs font-bold text-slate-900">
                       Rencana Harga Jual Toko (Rp)
                     </label>
-                    <span className="text-[11px] text-stone-500">Harga Nett Kasir</span>
+                    <span className="text-[11px] text-slate-500">Harga Nett Kasir</span>
                   </div>
 
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-stone-400 text-sm">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">
                       Rp
                     </span>
                     <input
@@ -1486,7 +1523,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       min="1000"
                       value={targetSellingPrice}
                       onChange={(e) => setTargetSellingPrice(Math.max(0, Number(e.target.value)))}
-                      className="w-full pl-11 pr-4 py-3 text-base font-black font-mono bg-stone-50 border border-stone-200 rounded-2xl text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                      className="w-full pl-11 pr-4 py-3 text-base sm:text-lg font-black font-mono bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                   </div>
 
@@ -1497,10 +1534,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                         key={price}
                         type="button"
                         onClick={() => setTargetSellingPrice(price)}
-                        className={`text-[11px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer active:scale-95 ${
                           targetSellingPrice === price
-                            ? "bg-amber-700 text-white border-amber-700 shadow-2xs"
-                            : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                            ? "bg-brand-600 text-white border-brand-600 shadow-2xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                         }`}
                       >
                         {(price / 1000).toFixed(0)}k
@@ -1512,66 +1549,66 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 {/* Metric Grid: Food Cost % & Gross Profit */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className={`p-4 rounded-2xl border ${healthStatus.colorBg} ${healthStatus.colorBorder}`}>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-0.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
                       Food Cost Ratio
                     </p>
                     <p className={`text-2xl font-black font-mono ${healthStatus.colorText}`}>
                       {foodCostPercent.toFixed(1)}%
                     </p>
-                    <p className="text-[10px] font-semibold text-stone-600 mt-1">
+                    <p className="text-[10px] font-semibold text-slate-600 mt-1">
                       Target ideal: 28% - 32%
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-2xl border border-stone-200 bg-stone-50/80">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-0.5">
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
                       Laba Kotor (Margin)
                     </p>
                     <p className="text-xl font-black font-mono text-emerald-700">
                       +{formatCurrency(grossProfit)}
                     </p>
-                    <p className="text-[10px] font-bold text-stone-600 mt-1">
+                    <p className="text-[10px] font-bold text-slate-600 mt-1">
                       {grossMarginPercent.toFixed(1)}% dari omset
                     </p>
                   </div>
                 </div>
 
                 {/* Health Meter Bar */}
-                <div className="space-y-2 p-3.5 rounded-2xl bg-stone-50/70 border border-stone-200/70">
+                <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-stone-800">Indikator Kelayakan:</span>
+                    <span className="font-bold text-slate-800">Indikator Kelayakan:</span>
                     <span className={`font-bold ${healthStatus.colorText}`}>
                       {healthStatus.badge}
                     </span>
                   </div>
 
-                  <div className="w-full h-2.5 bg-stone-200 rounded-full overflow-hidden">
+                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all duration-500 rounded-full ${healthStatus.barColor}`}
                       style={{ width: `${Math.min(100, Math.max(10, foodCostPercent))}%` }}
                     />
                   </div>
 
-                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
                     {healthStatus.note}
                   </p>
                 </div>
 
                 {/* Reverse Simulator: Rekomendasi Harga dari Target Food Cost */}
-                <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/70 space-y-2.5">
+                <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/70 space-y-2.5">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-amber-900">
-                      Rekomendasi Harga (Target Food Cost {targetFoodCostPercent}%):
+                    <span className="font-bold text-brand-900">
+                      Rekomendasi Harga (Food Cost {targetFoodCostPercent}%):
                     </span>
                     <div className="flex items-center gap-1">
                       {[25, 28, 30, 32].map((fc) => (
                         <button
                           key={fc}
                           onClick={() => setTargetFoodCostPercent(fc)}
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer ${
                             targetFoodCostPercent === fc
-                              ? "bg-amber-800 text-white"
-                              : "bg-white text-stone-700 border border-amber-200"
+                              ? "bg-brand-600 text-white"
+                              : "bg-white text-slate-700 border border-brand-200"
                           }`}
                         >
                           {fc}%
@@ -1580,26 +1617,26 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     </div>
                   </div>
                   <div className="flex justify-between items-baseline">
-                    <span className="text-xs text-stone-500">Harga Ideal Dibulatkan:</span>
-                    <span className="font-black font-mono text-base text-amber-950">
+                    <span className="text-xs text-slate-500">Harga Ideal Dibulatkan:</span>
+                    <span className="font-black font-mono text-base text-brand-950">
                       {formatCurrency(recommendedSellingPrice)}
                     </span>
                   </div>
                   <button
                     onClick={() => setTargetSellingPrice(recommendedSellingPrice)}
-                    className="w-full py-1.5 bg-white hover:bg-amber-100/60 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-bold transition-colors"
+                    className="w-full py-2 bg-white hover:bg-brand-100/60 active:scale-[0.98] text-brand-900 border border-brand-300 rounded-xl text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
                   >
                     Gunakan Harga Rekomendasi Ini
                   </button>
                 </div>
 
                 {/* Proyeksi Penjualan Harian & Bulanan */}
-                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-stone-800">
+                    <span className="font-bold text-slate-800">
                       Estimasi Penjualan Harian:
                     </span>
-                    <span className="font-mono font-bold text-amber-900">
+                    <span className="font-mono font-bold text-brand-900">
                       {dailyVolume} cup / hari
                     </span>
                   </div>
@@ -1610,17 +1647,17 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     step="5"
                     value={dailyVolume}
                     onChange={(e) => setDailyVolume(Number(e.target.value))}
-                    className="w-full accent-amber-700"
+                    className="w-full accent-brand-600 cursor-pointer"
                   />
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="p-2.5 rounded-xl bg-white border border-stone-200">
-                      <p className="text-[10px] text-stone-500">Laba Kotor/Hari:</p>
-                      <p className="font-bold font-mono text-stone-900">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <p className="text-[10px] text-slate-500">Laba Kotor/Hari:</p>
+                      <p className="font-bold font-mono text-slate-900">
                         {formatCurrency(dailyGrossProfit)}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-white border border-stone-200">
-                      <p className="text-[10px] text-stone-500">Laba Kotor/Bulan (30h):</p>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <p className="text-[10px] text-slate-500">Laba Kotor/Bulan (30h):</p>
                       <p className="font-bold font-mono text-emerald-700">
                         {formatCurrency(monthlyGrossProfit)}
                       </p>
@@ -1634,15 +1671,15 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     <button
                       type="button"
                       onClick={() => setIsPublishProductModalOpen(true)}
-                      className="w-full py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                      className="w-full py-3 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                     >
-                      <UtensilsCrossed className="w-4 h-4 text-amber-200" />
+                      <UtensilsCrossed className="w-4 h-4 text-brand-200" />
                       Terbitkan ke Katalog
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsBatchPrepModalOpen(true)}
-                      className="w-full py-3 bg-stone-800 hover:bg-stone-900 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                      className="w-full py-3 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                     >
                       <Flame className="w-4 h-4 text-amber-400" />
                       Simpan sbg Kondimen
@@ -1652,7 +1689,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <button
                     type="button"
                     onClick={handleSaveToStoreRecipes}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm"
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                   >
                     <Save className="w-4 h-4" /> Simpan Sebagai Resep Pokok Toko
                   </button>
@@ -1661,7 +1698,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     type="button"
                     onClick={handleAskGeminiAi}
                     disabled={isAiLoading}
-                    className="w-full py-2.5 bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-coffee-sm disabled:opacity-50"
+                    className="w-full py-2.5 bg-gradient-to-r from-brand-600 to-indigo-700 hover:from-brand-700 hover:to-indigo-800 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
                     {isAiLoading ? "Menganalisis Komposisi Resep..." : "Analisis Resep & Rekomendasi AI Gemini"}
@@ -1677,17 +1714,17 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="bg-white p-6 rounded-3xl border border-amber-200/80 shadow-coffee space-y-4"
+                  className="bg-white p-5 sm:p-6 rounded-3xl border border-brand-200/80 shadow-xs space-y-4"
                 >
-                  <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                      <Sparkles className="w-4 h-4 text-amber-600" />
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2 text-brand-950 font-bold text-sm">
+                      <Sparkles className="w-4 h-4 text-brand-600" />
                       <h3>Rekomendasi AI Konsultan Coffee Shop</h3>
                     </div>
                     {aiAnalysisResult && (
                       <button
                         onClick={handleCopyAiResult}
-                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-500 text-xs flex items-center gap-1"
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 text-xs flex items-center gap-1 cursor-pointer"
                         title="Salin Catatan AI"
                       >
                         {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1698,13 +1735,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                   {isAiLoading ? (
                     <div className="py-8 text-center space-y-3">
-                      <div className="w-7 h-7 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-xs text-stone-500 font-medium">
-                        Gemini 3.8 Flash sedang menganalisis proporsi bahan dan struktur margin...
+                      <div className="w-7 h-7 border-3 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-xs text-slate-500 font-medium">
+                        Gemini AI sedang menganalisis proporsi bahan dan struktur margin...
                       </p>
                     </div>
                   ) : (
-                    <div className="text-xs text-stone-700 leading-relaxed whitespace-pre-line space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                    <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line space-y-2 max-h-96 overflow-y-auto no-scrollbar pr-1">
                       {aiAnalysisResult}
                     </div>
                   )}
@@ -1715,35 +1752,48 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         </div>
       )}
 
-      {/* VIEW 2: KATALOG AUDIT HPP RESEP TOKO */}
+      {/* ─── VIEW 2: KATALOG AUDIT HPP RESEP TOKO ─────────────────────────────────── */}
       {activeTab === "catalog" && (
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 className="text-lg font-bold text-stone-900 tracking-tight">
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">
                 Katalog Resep & Estimasi HPP Toko
               </h2>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Daftar semua resep yang terhubung ke sistem kasir dan pengurangan stok otomatis.
               </p>
             </div>
-            <button
-              onClick={() => {
-                setMenuName("Menu Baru Racikan");
-                setItems([]);
-                setSelectedRecipeId("");
-                setActiveTab("simulator");
-              }}
-              className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
-            >
-              <Plus className="w-3.5 h-3.5" /> Buat Simulasi Baru
-            </button>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Cari resep menu..."
+                  className="w-full pl-9 pr-3 py-2 text-base sm:text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setMenuName("Menu Baru Racikan");
+                  setItems([]);
+                  setSelectedRecipeId("");
+                  setActiveTab("simulator");
+                }}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Buat Simulasi Baru
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* DESKTOP/TABLET TABLE VIEW (hidden on phone) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-stone-200 text-stone-500 font-bold bg-stone-50/70">
+                <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50/70">
                   <th className="py-3 px-4 rounded-l-xl">Nama Menu</th>
                   <th className="py-3 px-4">Komposisi Bahan</th>
                   <th className="py-3 px-4 text-right">Estimasi HPP Bahan</th>
@@ -1751,9 +1801,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <th className="py-3 px-4 text-center rounded-r-xl">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
-                {recipes.map((r) => {
-                  // Hitung HPP bahan dari ingredients
+              <tbody className="divide-y divide-slate-100">
+                {filteredRecipes.map((r) => {
                   const recipeHpp = r.ingredients.reduce((sum, ri) => {
                     const ing = ingredients.find((i) => i.id === ri.ingredientId);
                     const cost = ing ? Number(ing.costPerUnit || 0) : 0;
@@ -1766,18 +1815,18 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   });
 
                   return (
-                    <tr key={r.id} className="hover:bg-stone-50/60 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-stone-900">
+                    <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
                         {r.menuName}
                       </td>
-                      <td className="py-3.5 px-4 text-stone-600">
+                      <td className="py-3.5 px-4 text-slate-600">
                         <div className="flex flex-wrap gap-1 max-w-md">
                           {r.ingredients.map((ri, idx) => {
                             const ing = ingredients.find((i) => i.id === ri.ingredientId);
                             return (
                               <span
                                 key={idx}
-                                className="px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 text-[11px]"
+                                className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px]"
                               >
                                 {ing?.name || "Bahan"} ({ri.quantity} {ing?.unit})
                               </span>
@@ -1785,16 +1834,16 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                           })}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-950">
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-brand-950">
                         {formatCurrency(Math.round(recipeHpp))}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         {hasMissingCost ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                             Harga Bahan Belum Lengkap
                           </span>
                         ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             Siap Dihitung
                           </span>
                         )}
@@ -1805,7 +1854,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             handleLoadExistingRecipe(r.id);
                             setActiveTab("simulator");
                           }}
-                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl font-bold text-xs transition-colors flex items-center gap-1 mx-auto"
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-800 rounded-xl font-bold text-xs transition-colors flex items-center gap-1 mx-auto cursor-pointer"
                         >
                           Muat ke Simulator <ArrowRight className="w-3 h-3" />
                         </button>
@@ -1814,64 +1863,145 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   );
                 })}
 
-                {recipes.length === 0 && (
+                {filteredRecipes.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-stone-400">
-                      Belum ada data resep terdaftar di sistem.
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                      {recipes.length === 0 ? "Belum ada data resep terdaftar di sistem." : "Tidak ada resep yang sesuai pencarian."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* MOBILE CARD VIEW (Phone 360-480px) */}
+          <div className="block md:hidden space-y-3">
+            {filteredRecipes.map((r) => {
+              const recipeHpp = r.ingredients.reduce((sum, ri) => {
+                const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                const cost = ing ? Number(ing.costPerUnit || 0) : 0;
+                return sum + ri.quantity * cost;
+              }, 0);
+
+              const hasMissingCost = r.ingredients.some((ri) => {
+                const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                return !ing || !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
+              });
+
+              return (
+                <div
+                  key={r.id}
+                  className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{r.menuName}</h3>
+                      <p className="text-[11px] text-slate-500">{r.ingredients.length} bahan baku</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block">HPP Pokok:</span>
+                      <span className="font-black font-mono text-sm text-brand-950">
+                        {formatCurrency(Math.round(recipeHpp))}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Ingredients Tags */}
+                  <div className="flex flex-wrap gap-1">
+                    {r.ingredients.map((ri, idx) => {
+                      const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                      return (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[10px]"
+                        >
+                          {ing?.name || "Bahan"} ({ri.quantity} {ing?.unit})
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                    {hasMissingCost ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                        Biaya Belum Lengkap
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Siap Dihitung
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        handleLoadExistingRecipe(r.id);
+                        setActiveTab("simulator");
+                      }}
+                      className="px-3 py-1.5 bg-brand-600 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center gap-1 cursor-pointer shadow-2xs"
+                    >
+                      Buka di Simulator <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredRecipes.length === 0 && (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                {recipes.length === 0 ? "Belum ada data resep terdaftar di sistem." : "Tidak ada resep yang sesuai pencarian."}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* MODAL: Terbitkan ke Katalog Produk Toko */}
+      {/* ─── MODAL: Terbitkan ke Katalog Produk Toko ──────────────────────────────── */}
       {isPublishProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto no-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <UtensilsCrossed className="w-5 h-5 text-amber-700" />
-                <h3 className="font-bold text-stone-900 text-base">Terbitkan ke Katalog Produk</h3>
+                <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
+                  <UtensilsCrossed className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-base">Terbitkan ke Katalog Produk</h3>
               </div>
               <button
                 onClick={() => setIsPublishProductModalOpen(false)}
-                className="text-stone-400 hover:text-stone-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/70 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-stone-500 font-medium">Nama Produk:</span>
-                  <span className="font-bold text-stone-900 text-sm">{menuName}</span>
+                  <span className="text-slate-500 font-medium">Nama Produk:</span>
+                  <span className="font-bold text-slate-900 text-sm">{menuName}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-stone-500 font-medium">Divisi Operasional:</span>
-                  <span className="font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px]">
+                  <span className="text-slate-500 font-medium">Divisi Operasional:</span>
+                  <span className="font-bold px-2 py-0.5 rounded-md bg-brand-50 text-brand-800 border border-brand-200 text-[11px]">
                     {selectedDivision}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-stone-500 font-medium">Nama Varian:</span>
-                  <span className="font-bold text-stone-900">
+                  <span className="text-slate-500 font-medium">Nama Varian:</span>
+                  <span className="font-bold text-slate-900">
                     {servingNote || (selectedDivision === "BAR" ? "Iced 16oz" : "Reguler")}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-stone-700 font-bold mb-1.5">
+                <label className="block text-slate-700 font-bold mb-1.5">
                   Kategori Menu Toko
                 </label>
                 <select
                   value={publishCategory}
                   onChange={(e) => setPublishCategory(e.target.value)}
-                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                  className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
                   <option value="COFFEE">☕ COFFEE (Espresso-based, Cold Brew)</option>
                   <option value="NON_COFFEE">🍵 NON_COFFEE (Matcha, Tea, Chocolate)</option>
@@ -1882,16 +2012,16 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </div>
 
               {/* Rincian Finansial yang Diterbitkan */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-2">
-                <div className="flex justify-between text-stone-700">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200/70 space-y-2">
+                <div className="flex justify-between text-slate-700">
                   <span>HPP Terkalkulasi (Bahan + Kemasan):</span>
-                  <span className="font-bold font-mono text-amber-950">{formatCurrency(totalHpp)}</span>
+                  <span className="font-bold font-mono text-brand-950">{formatCurrency(totalHpp)}</span>
                 </div>
-                <div className="flex justify-between text-stone-700">
+                <div className="flex justify-between text-slate-700">
                   <span>Harga Jual Resmi Kasir:</span>
-                  <span className="font-extrabold font-mono text-stone-900">{formatCurrency(targetSellingPrice)}</span>
+                  <span className="font-extrabold font-mono text-slate-900">{formatCurrency(targetSellingPrice)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-800 font-bold pt-1 border-t border-amber-200">
+                <div className="flex justify-between text-emerald-800 font-bold pt-1 border-t border-brand-200">
                   <span>Proyeksi Gross Margin:</span>
                   <span className="font-mono">
                     {formatCurrency(grossProfit)} ({grossMarginPercent.toFixed(1)}%)
@@ -1899,23 +2029,23 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 </div>
               </div>
 
-              <p className="text-[11px] text-stone-500 leading-relaxed">
+              <p className="text-[11px] text-slate-500 leading-relaxed">
                 Produk ini akan terdaftar di <b>Katalog Menu Toko</b>. Kasir dan tim bar/kitchen akan langsung dapat melihat harga jual resmi, estimasi laba, dan live ketersediaan porsi berdasarkan stok bahan baku.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setIsPublishProductModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-800 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handlePublishToProductCatalog}
-                className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs"
+                className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" /> Terbitkan Sekarang
               </button>
@@ -1924,30 +2054,32 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         </div>
       )}
 
-      {/* MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) */}
+      {/* ─── MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) ───────────────────── */}
       {isBatchPrepModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-stone-200/80 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto no-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-amber-700" />
-                <h3 className="font-bold text-stone-900 text-base">Simpan Resep Kondimen Olahan</h3>
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
+                  <Flame className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-base">Simpan Resep Kondimen Olahan</h3>
               </div>
               <button
                 onClick={() => setIsBatchPrepModalOpen(false)}
-                className="text-stone-400 hover:text-stone-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <p className="text-stone-500 leading-relaxed">
+              <p className="text-slate-500 leading-relaxed">
                 Resep ini akan disimpan sebagai formula <b>Dapur Olahan (Batch Prep)</b>. Tim barista/kitchen dapat memasak batch ini kapan saja untuk menghasilkan kondimen siap pakai (seperti Sirup Gula Aren Racikan, Sambal Matah, Cold Brew Concentrate) dengan HPP unit otomatis.
               </p>
 
               <div>
-                <label className="block text-stone-700 font-bold mb-1">
+                <label className="block text-slate-700 font-bold mb-1">
                   Nama Kondimen / Olahan
                 </label>
                 <input
@@ -1955,13 +2087,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   value={menuName}
                   onChange={(e) => setMenuName(e.target.value)}
                   placeholder="e.g. Sirup Gula Aren Racikan Toko"
-                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                  className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-stone-700 font-bold mb-1">
+                  <label className="block text-slate-700 font-bold mb-1">
                     Hasil Jadi (Yield Qty)
                   </label>
                   <input
@@ -1969,17 +2101,17 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     min="1"
                     value={batchYieldQty}
                     onChange={(e) => setBatchYieldQty(Math.max(1, Number(e.target.value)))}
-                    className="w-full text-xs font-bold font-mono px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                    className="w-full text-base sm:text-xs font-bold font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-stone-700 font-bold mb-1">
+                  <label className="block text-slate-700 font-bold mb-1">
                     Satuan Hasil (Unit)
                   </label>
                   <select
                     value={batchYieldUnit}
                     onChange={(e) => setBatchYieldUnit(e.target.value)}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900"
+                    className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   >
                     <option value="ml">ml (Mililiter)</option>
                     <option value="gr">gr (Gram)</option>
@@ -1989,12 +2121,12 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </div>
 
               {/* Rincian Modal Bahan Baku Batch */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-2">
-                <div className="flex justify-between text-stone-700">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200/70 space-y-2">
+                <div className="flex justify-between text-slate-700">
                   <span>Total Biaya Bahan Baku Pokok:</span>
-                  <span className="font-bold font-mono text-amber-950">{formatCurrency(rawMaterialCost)}</span>
+                  <span className="font-bold font-mono text-brand-950">{formatCurrency(rawMaterialCost)}</span>
                 </div>
-                <div className="flex justify-between text-stone-700 font-bold pt-1 border-t border-amber-200">
+                <div className="flex justify-between text-slate-700 font-bold pt-1 border-t border-brand-200">
                   <span>Estimasi HPP per {batchYieldUnit}:</span>
                   <span className="font-extrabold font-mono text-emerald-800">
                     {formatCurrency(Math.round(batchYieldQty > 0 ? rawMaterialCost / batchYieldQty : 0))} / {batchYieldUnit}
@@ -2003,18 +2135,18 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setIsBatchPrepModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-800 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleSaveAsBatchPrep}
-                className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs"
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Simpan ke Dapur Olahan
               </button>

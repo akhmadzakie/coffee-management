@@ -394,7 +394,8 @@ export const UsersComponent = () => {
             </span>
           </div>
         )}
-        <div className="overflow-x-auto">
+        {/* Desktop View Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
@@ -430,7 +431,7 @@ export const UsersComponent = () => {
                   >
                     <td className="p-4">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center mr-3 shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-700 font-bold flex items-center justify-center mr-3 shrink-0 border border-brand-200/80">
                           {user.name.charAt(0).toUpperCase()}
                         </div>
                         <span className="font-semibold text-slate-900">
@@ -475,7 +476,7 @@ export const UsersComponent = () => {
                       {canEdit(user) ? (
                         <button
                           onClick={() => startEdit(user)}
-                          className="text-slate-400 hover:text-blue-600 p-2 transition-colors"
+                          className="text-slate-400 hover:text-brand-600 p-2 transition-colors cursor-pointer"
                           title="Edit pengguna"
                         >
                           <Edit className="w-4 h-4" />
@@ -491,7 +492,7 @@ export const UsersComponent = () => {
                       {canDelete(user) ? (
                         <button
                           onClick={() => handleDelete(user)}
-                          className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1"
+                          className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1 cursor-pointer"
                           title="Hapus pengguna"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -511,34 +512,112 @@ export const UsersComponent = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile View Card Feed */}
+        <div className="block md:hidden divide-y divide-slate-100 p-3 sm:p-4 space-y-3">
+          {users.map((user) => {
+            const linkedEmp = employees.find(
+              (e) =>
+                (user.employeeId && e.id === user.employeeId) ||
+                e.username.toLowerCase() === user.username.toLowerCase()
+            );
+
+            return (
+              <div
+                key={user.id}
+                className={`bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-3 ${
+                  !canEdit(user) ? "opacity-60" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 font-bold flex items-center justify-center text-sm border border-brand-200/80 shrink-0">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm leading-tight">{user.name}</h4>
+                      <p className="text-xs text-slate-500 font-mono">@{user.username}</p>
+                    </div>
+                  </div>
+
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
+                    user.role === "SUPER_ADMIN" ? "bg-rose-100 text-rose-700" :
+                    user.role === "OWNER"       ? "bg-purple-100 text-purple-700" :
+                    user.role === "MANAGER"     ? "bg-blue-100 text-blue-700" :
+                    user.role === "FINANCE"     ? "bg-emerald-100 text-emerald-700" :
+                    user.role === "LEADER"      ? "bg-amber-100 text-amber-700" :
+                    "bg-slate-100 text-slate-700"
+                  }`}>
+                    {ALL_ROLES.find((r) => r.value === user.role)?.label || user.role}
+                  </span>
+                </div>
+
+                <div>
+                  {linkedEmp ? (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200/60">
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Tersambung: {linkedEmp.name} ({linkedEmp.position})</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200/60">
+                      <Link className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Akun Mandiri / Belum Ditautkan</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  {canEdit(user) && (
+                    <button
+                      onClick={() => startEdit(user)}
+                      className="px-3 py-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-xl transition-colors flex items-center gap-1 border border-brand-200/60 cursor-pointer active:scale-95"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                  {canDelete(user) && (
+                    <button
+                      onClick={() => handleDelete(user)}
+                      className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-1 border border-rose-200/60 cursor-pointer active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {isEditing && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200/80">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
               <h3 className="font-bold text-base sm:text-lg text-slate-900 flex items-center">
-                <ShieldCheck className="w-5 h-5 mr-2 text-blue-600 shrink-0" />
+                <ShieldCheck className="w-5 h-5 mr-2 text-brand-600 shrink-0" />
                 {editingUser ? "Edit Pengguna" : "Tambah Pengguna Baru"}
               </h3>
               <button
                 onClick={() => setIsEditing(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/50 transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto text-xs">
               {/* Opsi Tautkan ke Data Karyawan */}
-              <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
-                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-blue-600" />
+              <div className="p-3 bg-brand-50/60 border border-brand-100 rounded-2xl">
+                <label className="block text-xs font-bold text-brand-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-brand-600" />
                   Tautkan ke Data Karyawan (SDM)
                 </label>
                 <select
                   value={formEmployeeId}
                   onChange={(e) => handleSelectEmployee(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-2xs"
+                  className="w-full p-2.5 bg-white border border-brand-200 rounded-xl text-base sm:text-xs font-medium text-slate-800 focus:ring-2 focus:ring-brand-500/20 outline-none shadow-2xs"
                 >
                   <option value="">-- Pilih Karyawan untuk Otomatisasi (Opsional) --</option>
                   {employees.map((emp) => (
@@ -547,12 +626,12 @@ export const UsersComponent = () => {
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-blue-700/80 mt-1 leading-relaxed">
+                <p className="text-[11px] text-brand-700/80 mt-1 leading-relaxed">
                   Memilih data karyawan akan otomatis mengisi nama, username, role, dan PIN sesuai profil SDM sehingga data absensi langsung tersambung.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Nama Lengkap *
@@ -562,7 +641,7 @@ export const UsersComponent = () => {
                     required
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:ring-2 focus:ring-brand-500/20 outline-none"
                     placeholder="Budi Santoso"
                   />
                 </div>
@@ -575,13 +654,13 @@ export const UsersComponent = () => {
                     required
                     value={formUsername}
                     onChange={(e) => setFormUsername(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:ring-2 focus:ring-brand-500/20 outline-none"
                     placeholder="budikopi"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     PIN Akses (4-6 Digit Angka) *
@@ -592,7 +671,7 @@ export const UsersComponent = () => {
                     maxLength={6}
                     value={formPin}
                     onChange={(e) => setFormPin(e.target.value.replace(/\D/g, ""))}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono tracking-widest focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono tracking-widest focus:ring-2 focus:ring-brand-500/20 outline-none"
                     placeholder="123456"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -606,7 +685,7 @@ export const UsersComponent = () => {
                   <select
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value as Role)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 outline-none"
                   >
                     {ROLES.map((r) => (
                       <option key={r.value} value={r.value}>
@@ -625,7 +704,7 @@ export const UsersComponent = () => {
                   <select
                     value={formDept}
                     onChange={(e) => setFormDept(e.target.value as "BAR" | "KITCHEN" | "MAIN")}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 outline-none"
                   >
                     {DEPARTMENTS.map((d) => (
                       <option key={d.value} value={d.value}>
@@ -640,13 +719,13 @@ export const UsersComponent = () => {
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                  className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-brand-700 transition-colors shadow-xs cursor-pointer active:scale-95"
                 >
                   Simpan Pengguna
                 </button>

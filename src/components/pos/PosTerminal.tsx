@@ -234,8 +234,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     fetchMenu();
     fetchActiveBillsCount();
     const interval = setInterval(() => {
-      fetchActiveBillsCount();
-    }, 15000);
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchActiveBillsCount();
+      }
+    }, 20000);
     return () => clearInterval(interval);
   }, []);
 

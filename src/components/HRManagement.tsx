@@ -1256,14 +1256,21 @@ export function HRManagement() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 shrink-0 cursor-pointer ${
+                  className={`relative flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-colors duration-150 shrink-0 cursor-pointer ${
                     isActive
-                      ? "bg-white text-brand-700 shadow-xs border border-slate-200/70"
+                      ? "text-brand-900"
                       : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/70"
                   }`}
                 >
-                  <tab.icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
-                  <span>{tab.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="hrManagementMainTab"
+                      className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/80"
+                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <tab.icon className={`relative z-10 w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
+                  <span className="relative z-10">{tab.label}</span>
                 </button>
               );
             })}

@@ -291,7 +291,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Toast Notification */}
       <AnimatePresence>
         {feedbackMessage && (
@@ -301,14 +301,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             exit={{ opacity: 0, y: -20 }}
             className={`fixed top-5 right-5 z-50 px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 text-sm font-semibold border ${
               feedbackMessage.type === "success"
-                ? "bg-emerald-950 text-emerald-100 border-emerald-700"
-                : "bg-red-950 text-red-100 border-red-700"
+                ? "bg-slate-900 text-emerald-400 border-emerald-500/30"
+                : "bg-slate-900 text-rose-400 border-rose-500/30"
             }`}
           >
             {feedbackMessage.type === "success" ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
             )}
             <span className="whitespace-pre-line">{feedbackMessage.text}</span>
           </motion.div>
@@ -318,37 +318,37 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200/60">
               Supply Chain & Menu Engineering
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Katalog Menu & Dapur Olahan
           </h1>
-          <p className="text-xs sm:text-sm text-stone-500 max-w-2xl mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 max-w-2xl mt-1">
             Kelola produk resmi, varian takaran, HPP riil, dan jadwal masak kondimen olahan (batch prep) per divisi toko.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <button
             type="button"
             onClick={handleBulkRecalculateHpp}
-            className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-2xl text-xs transition-colors flex items-center gap-2 border border-amber-300 shadow-2xs"
+            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-slate-200/90 shadow-2xs cursor-pointer active:scale-95"
             title="Hitung ulang estimasi HPP seluruh produk berdasarkan harga bahan baku dan kemasan terbaru di inventori"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
-            Sinkronkan HPP Terkini
+            <RefreshCw className="w-3.5 h-3.5 text-brand-600" />
+            <span>Sinkronkan HPP</span>
           </button>
 
           {onNavigate && (
             <button
               onClick={() => onNavigate("hpp_calculator")}
-              className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-2xl text-xs transition-colors flex items-center gap-2 border border-stone-200"
+              className="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-brand-200/70 shadow-2xs cursor-pointer active:scale-95"
             >
-              <Calculator className="w-4 h-4 text-amber-700" />
-              Kalkulator HPP
+              <Calculator className="w-3.5 h-3.5 text-brand-600" />
+              <span>Kalkulator HPP</span>
             </button>
           )}
 
@@ -358,10 +358,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 setEditingBatchPrep(null);
                 setIsBatchPrepModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-[#241813] hover:bg-[#38261e] text-white font-bold rounded-2xl text-xs transition-colors flex items-center gap-2 shadow-sm"
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
             >
-              <Plus className="w-4 h-4 text-amber-400" />
-              + Resep Batch Kondimen
+              <Plus className="w-4 h-4 text-white" />
+              <span>+ Resep Batch Baru</span>
             </button>
           ) : (
             <button
@@ -369,31 +369,40 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 setEditingProduct(null);
                 setIsProductModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl text-xs transition-colors flex items-center gap-2 shadow-sm"
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
             >
-              <Plus className="w-4 h-4" />
-              + Produk {activeTab} Baru
+              <Plus className="w-4 h-4 text-white" />
+              <span>+ Produk {activeTab} Baru</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* DIVISION TABS */}
-      <div className="flex border-b border-stone-200 gap-2 sm:gap-4 overflow-x-auto custom-scrollbar">
+      {/* ── SLIDING PILL TABS: DIVISION SELECTION ─────────────────────────── */}
+      <div className="flex bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 gap-1 overflow-x-auto no-scrollbar max-w-full">
         <button
           onClick={() => {
             setActiveTab("BAR");
             setSelectedCategory("ALL");
           }}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "BAR"
-              ? "border-amber-700 text-amber-800"
-              : "border-transparent text-stone-500 hover:text-stone-800"
+          className={`relative px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 shrink-0 ${
+            activeTab === "BAR" ? "text-white" : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Coffee className="w-4 h-4" />
-          Divisi Bar & Kopi
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 font-mono">
+          {activeTab === "BAR" && (
+            <motion.div
+              layoutId="menuDivisionTab"
+              className="absolute inset-0 bg-brand-600 rounded-xl shadow-xs"
+              transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+            />
+          )}
+          <Coffee className="w-3.5 h-3.5 relative z-10" />
+          <span className="relative z-10">Divisi Bar & Kopi</span>
+          <span
+            className={`relative z-10 text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              activeTab === "BAR" ? "bg-white/20 text-white font-bold" : "bg-slate-200/80 text-slate-700"
+            }`}
+          >
             {products.filter((p) => p.division === "BAR").length}
           </span>
         </button>
@@ -403,15 +412,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             setActiveTab("KITCHEN");
             setSelectedCategory("ALL");
           }}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "KITCHEN"
-              ? "border-amber-700 text-amber-800"
-              : "border-transparent text-stone-500 hover:text-stone-800"
+          className={`relative px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 shrink-0 ${
+            activeTab === "KITCHEN" ? "text-white" : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <UtensilsCrossed className="w-4 h-4" />
-          Divisi Kitchen & Makanan
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 font-mono">
+          {activeTab === "KITCHEN" && (
+            <motion.div
+              layoutId="menuDivisionTab"
+              className="absolute inset-0 bg-brand-600 rounded-xl shadow-xs"
+              transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+            />
+          )}
+          <UtensilsCrossed className="w-3.5 h-3.5 relative z-10" />
+          <span className="relative z-10">Divisi Kitchen & Makanan</span>
+          <span
+            className={`relative z-10 text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              activeTab === "KITCHEN" ? "bg-white/20 text-white font-bold" : "bg-slate-200/80 text-slate-700"
+            }`}
+          >
             {products.filter((p) => p.division === "KITCHEN").length}
           </span>
         </button>
@@ -421,15 +439,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             setActiveTab("BAKER");
             setSelectedCategory("ALL");
           }}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "BAKER"
-              ? "border-amber-700 text-amber-800"
-              : "border-transparent text-stone-500 hover:text-stone-800"
+          className={`relative px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 shrink-0 ${
+            activeTab === "BAKER" ? "text-white" : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Cake className="w-4 h-4" />
-          Divisi Bakery & Pastry
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 font-mono">
+          {activeTab === "BAKER" && (
+            <motion.div
+              layoutId="menuDivisionTab"
+              className="absolute inset-0 bg-brand-600 rounded-xl shadow-xs"
+              transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+            />
+          )}
+          <Cake className="w-3.5 h-3.5 relative z-10" />
+          <span className="relative z-10">Divisi Bakery & Pastry</span>
+          <span
+            className={`relative z-10 text-[10px] px-2 py-0.5 rounded-full font-mono ${
+              activeTab === "BAKER" ? "bg-white/20 text-white font-bold" : "bg-slate-200/80 text-slate-700"
+            }`}
+          >
             {products.filter((p) => p.division === "BAKER").length}
           </span>
         </button>
@@ -439,84 +466,113 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             setActiveTab("BATCH_PREP");
             setSelectedCategory("ALL");
           }}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "BATCH_PREP"
-              ? "border-[#241813] text-[#241813]"
-              : "border-transparent text-stone-500 hover:text-stone-800"
+          className={`relative px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 shrink-0 ${
+            activeTab === "BATCH_PREP" ? "text-white" : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Flame className="w-4 h-4 text-amber-600" />
-          Dapur Olahan (Batch Cook / Sub-Recipes)
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-mono font-bold">
+          {activeTab === "BATCH_PREP" && (
+            <motion.div
+              layoutId="menuDivisionTab"
+              className="absolute inset-0 bg-brand-600 rounded-xl shadow-xs"
+              transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+            />
+          )}
+          <Flame className="w-3.5 h-3.5 relative z-10 text-amber-300" />
+          <span className="relative z-10">Dapur Olahan (Batch Cook)</span>
+          <span
+            className={`relative z-10 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+              activeTab === "BATCH_PREP" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-900"
+            }`}
+          >
             {batchPreparations.length}
           </span>
         </button>
       </div>
 
-      {/* METRIC STRIP (For Products) */}
+      {/* ── BENTO METRIC STRIP (For Products) ─────────────────────────────── */}
       {activeTab !== "BATCH_PREP" && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Total Menu Produk
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-stone-900 mt-1">
-              {metrics.totalProducts} <span className="text-xs font-normal text-stone-500">menu</span>
+          <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+                <Coffee className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Total Menu
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+              {metrics.totalProducts} <span className="text-xs font-normal text-slate-500">menu</span>
             </div>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Total Varian Jual
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-stone-900 mt-1 font-mono">
-              {metrics.totalVariants} <span className="text-xs font-normal text-stone-500">sku</span>
+          <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                <Layers className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Total Varian
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+              {metrics.totalVariants} <span className="text-xs font-normal text-slate-500">sku</span>
             </div>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-              Rata-rata Margin
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-emerald-700 mt-1 font-mono">
+          <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <Percent className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Rata-rata Margin
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-emerald-700 font-mono">
               {metrics.avgMargin}%
             </div>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
-              Rata-rata Food Cost
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-amber-800 mt-1 font-mono">
+          <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <Coins className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Rata-rata Food Cost
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-amber-700 font-mono">
               {metrics.avgFoodCost}%
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB CONTENT: PRODUCTS (BAR / KITCHEN / BAKER) */}
+      {/* ── TAB CONTENT: PRODUCTS (BAR / KITCHEN / BAKER) ─────────────────── */}
       {activeTab !== "BATCH_PREP" && (
         <div className="space-y-4">
           {/* SEARCH & CATEGORY FILTER */}
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-2xs">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 sm:p-3.5 rounded-3xl border border-slate-200/90 shadow-2xs">
             <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Cari menu, rasa, kategori..."
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto custom-scrollbar">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
               <button
                 onClick={() => setSelectedCategory("ALL")}
-                className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
+                className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                   selectedCategory === "ALL"
-                    ? "bg-stone-900 text-white border-stone-900"
-                    : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                    ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 Semua
@@ -525,10 +581,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all whitespace-nowrap ${
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                     selectedCategory === cat
-                      ? "bg-amber-700 text-white border-amber-700"
-                      : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                      ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                   }`}
                 >
                   {cat}
@@ -542,38 +598,38 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             {filteredProducts.map((product) => (
               <div
                 key={product.id}
-                className="bg-white rounded-3xl border border-stone-200/80 p-5 sm:p-6 shadow-coffee-sm hover:shadow-coffee transition-shadow space-y-4 flex flex-col justify-between"
+                className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-6 shadow-xs hover:shadow-md transition-all space-y-4 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-3 border-b border-stone-100 pb-3">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 uppercase tracking-wide">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 uppercase tracking-wide border border-slate-200/60">
                           {product.category}
                         </span>
                         {!product.isActive && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-700">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
                             Nonaktif
                           </span>
                         )}
                       </div>
-                      <h3 className="text-base sm:text-lg font-bold text-stone-900 mt-1">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-1.5">
                         {product.name}
                       </h3>
                       {product.description && (
-                        <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
                           {product.description}
                         </p>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => {
                           setEditingProduct(product);
                           setIsProductModalOpen(true);
                         }}
-                        className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-100 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                         title="Edit Produk & Varian"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -585,7 +641,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                             showToast("success", `Produk "${product.name}" berhasil dihapus.`);
                           }
                         }}
-                        className="p-1.5 text-stone-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                         title="Hapus Produk"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -595,7 +651,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
                   {/* VARIAN LIST */}
                   <div className="mt-3.5 space-y-2.5">
-                    <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                       Varian & Harga Jual ({product.variants?.length || 0})
                     </span>
 
@@ -608,27 +664,27 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                       return (
                         <div
                           key={variant.id}
-                          className="p-3 rounded-2xl bg-stone-50/70 border border-stone-200/70 space-y-2 text-xs"
+                          className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-2 text-xs hover:border-slate-300 transition-colors"
                         >
-                          <div className="flex justify-between items-start">
+                          <div className="flex justify-between items-start gap-2">
                             <div>
-                              <div className="font-bold text-stone-900 flex items-center gap-2">
+                              <div className="font-bold text-slate-900 flex items-center gap-2">
                                 <span>{variant.name}</span>
                                 {variant.sku && (
-                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-stone-200 text-stone-600">
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200 text-slate-700">
                                     {variant.sku}
                                   </span>
                                 )}
                               </div>
                               {variant.packagingNotes && (
-                                <span className="text-[10px] text-stone-400 block mt-0.5">
+                                <span className="text-[10px] text-slate-500 block mt-0.5">
                                   Kemasan: {variant.packagingNotes} (Rp {variant.packagingCost || 0})
                                 </span>
                               )}
                             </div>
 
-                            <div className="text-right">
-                              <span className="font-black text-sm text-stone-900 font-mono">
+                            <div className="text-right shrink-0">
+                              <span className="font-black text-sm text-slate-900 font-mono">
                                 {formatCurrency(variant.price)}
                               </span>
                               <div className="text-[10px] font-bold text-emerald-700">
@@ -638,12 +694,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                           </div>
 
                           {/* Live Availability Badge */}
-                          <div className="flex items-center justify-between pt-1.5 border-t border-stone-200/60 text-[11px]">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1.5 border-t border-slate-200/60 text-[11px] gap-1">
                             <div className="flex items-center gap-1.5">
                               {avail.status === "ready" && (
                                 <>
                                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  <span className="text-stone-600 font-medium">
+                                  <span className="text-slate-600 font-medium">
                                     Siap Saji {avail.portions !== null ? `(~${avail.portions} porsi)` : ""}
                                   </span>
                                 </>
@@ -658,15 +714,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                               )}
                               {avail.status === "empty" && (
                                 <>
-                                  <span className="w-2 h-2 rounded-full bg-red-500" />
-                                  <span className="text-red-700 font-bold">
+                                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                  <span className="text-rose-700 font-bold">
                                     Stok Habis: {avail.bottleneck}
                                   </span>
                                 </>
                               )}
                             </div>
 
-                            <span className="text-[10px] text-stone-400 font-mono">
+                            <span className="text-[10px] text-slate-500 font-mono">
                               HPP: {formatCurrency(hpp)}
                             </span>
                           </div>
@@ -677,12 +733,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
                   {/* MODIFIERS PREVIEW IF ANY */}
                   {product.modifierGroups && product.modifierGroups.length > 0 && (
-                    <div className="mt-3 pt-2.5 border-t border-stone-100 flex flex-wrap gap-1.5 items-center">
-                      <span className="text-[10px] font-bold text-stone-400">Modifier:</span>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] font-bold text-slate-400">Modifier:</span>
                       {product.modifierGroups.map((g) => (
                         <span
                           key={g.id}
-                          className="text-[10px] font-medium bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-lg"
+                          className="text-[10px] font-medium bg-brand-50 text-brand-900 border border-brand-200/60 px-2 py-0.5 rounded-lg"
                         >
                           {g.name} ({g.options.length} opsi)
                         </span>
@@ -694,10 +750,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             ))}
 
             {filteredProducts.length === 0 && (
-              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-stone-200 space-y-3">
-                <Coffee className="w-10 h-10 text-stone-300 mx-auto" />
-                <h4 className="text-sm font-bold text-stone-700">Belum ada produk di divisi {activeTab}</h4>
-                <p className="text-xs text-stone-400 max-w-sm mx-auto">
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 space-y-3">
+                <Coffee className="w-10 h-10 text-slate-300 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-700">Belum ada produk di divisi {activeTab}</h4>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
                   Tambahkan produk baru dengan mengklik tombol "+ Produk {activeTab} Baru" di atas.
                 </p>
               </div>
@@ -706,41 +762,41 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
         </div>
       )}
 
-      {/* TAB CONTENT: BATCH PREP (DAPUR OLAHAN / KONDIMEN) */}
+      {/* ── TAB CONTENT: BATCH PREP (DAPUR OLAHAN / KONDIMEN) ─────────────── */}
       {activeTab === "BATCH_PREP" && (
         <div className="space-y-6">
           {/* BANNER PENJELASAN */}
-          <div className="p-5 sm:p-6 bg-[#241813] text-white rounded-3xl border border-stone-800 shadow-coffee space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
-              <Flame className="w-4 h-4" />
-              Batch Preparation & Sub-Recipes Kitchen/Bar
+          <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-brand-950 to-slate-900 text-white rounded-3xl border border-slate-800 shadow-md space-y-2">
+            <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
+              <Flame className="w-4 h-4 text-amber-400" />
+              <span>Batch Preparation & Sub-Recipes Kitchen/Bar</span>
             </div>
             <h2 className="text-lg sm:text-xl font-bold tracking-tight">
               Sistem Otomatisasi Masak Kondimen & Potong Stok Bahan Mentah
             </h2>
-            <p className="text-xs sm:text-sm text-stone-300 max-w-3xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
               Kondimen seperti <b>Saus Gula Aren Racikan, Simple Syrup, Cold Brew Concentrate,</b> dan <b>Sambal Matah</b> dimasak dari kombinasi bahan baku mentah. Saat staf menekan <i>"Masak Batch Sekarang"</i>, sistem otomatis memotong stok bahan mentah dan menambah stok kondimen dengan harga HPP tertimbang yang akurat.
             </p>
           </div>
 
           {/* DIVISION SUB-TABS FILTER */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             <button
               onClick={() => setBatchPrepDivisionFilter("ALL")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "ALL"
-                  ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
-                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                  ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               }`}
             >
               Semua Olahan ({batchPreparations.length})
             </button>
             <button
               onClick={() => setBatchPrepDivisionFilter("BAR")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "BAR"
-                  ? "bg-amber-800 text-white border-amber-800 shadow-2xs font-extrabold"
-                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                  ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               }`}
             >
               <Coffee className="w-3.5 h-3.5" />
@@ -748,10 +804,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </button>
             <button
               onClick={() => setBatchPrepDivisionFilter("KITCHEN")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "KITCHEN"
-                  ? "bg-orange-800 text-white border-orange-800 shadow-2xs font-extrabold"
-                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                  ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
@@ -759,10 +815,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </button>
             <button
               onClick={() => setBatchPrepDivisionFilter("BAKER")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "BAKER"
-                  ? "bg-yellow-800 text-white border-yellow-800 shadow-2xs font-extrabold"
-                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
+                  ? "bg-brand-600 text-white border-brand-600 shadow-xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               }`}
             >
               <Cake className="w-3.5 h-3.5" />
@@ -771,7 +827,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
           </div>
 
           {/* BATCH PREP CARDS GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
             {filteredBatchPreparations.map((bp) => {
               const target = ingredients.find((i) => i.id === bp.targetIngredientId);
               const readiness = calculateBatchPrepReadiness(bp);
@@ -787,40 +843,40 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               return (
                 <div
                   key={bp.id}
-                  className="bg-white rounded-3xl border border-stone-200/80 p-5 sm:p-6 shadow-coffee-sm hover:shadow-coffee transition-shadow space-y-4 flex flex-col justify-between"
+                  className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-6 shadow-xs hover:shadow-md transition-all space-y-4 flex flex-col justify-between"
                 >
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3 border-b border-stone-100 pb-3">
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
                               bp.division === "BAR"
-                                ? "bg-amber-100 text-amber-900 border-amber-300"
+                                ? "bg-brand-50 text-brand-800 border-brand-200"
                                 : bp.division === "KITCHEN"
-                                ? "bg-orange-100 text-orange-900 border-orange-300"
-                                : "bg-yellow-100 text-yellow-900 border-yellow-300"
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-purple-50 text-purple-800 border-purple-200"
                             }`}
                           >
                             {bp.division === "BAR" ? "☕ Bar" : bp.division === "KITCHEN" ? "🍳 Kitchen" : "🥐 Bakery"}
                           </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 font-mono border border-stone-200">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-mono border border-slate-200/60">
                             1 BATCH = {bp.yieldQuantity.toLocaleString("id-ID")} {bp.yieldUnit}
                           </span>
                         </div>
-                        <h3 className="text-lg font-bold text-stone-900 mt-1">{bp.name}</h3>
-                        <p className="text-xs text-stone-500">
-                          Target Stok: <b className="text-stone-800">{target ? target.name : bp.targetIngredientName}</b>
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-1.5">{bp.name}</h3>
+                        <p className="text-xs text-slate-500">
+                          Target Stok: <b className="text-slate-800">{target ? target.name : bp.targetIngredientName}</b>
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => {
                             setEditingBatchPrep(bp);
                             setIsBatchPrepModalOpen(true);
                           }}
-                          className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-100 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                           title="Edit Resep Batch"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -832,7 +888,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                               showToast("success", `Resep batch "${bp.name}" dihapus.`);
                             }
                           }}
-                          className="p-1.5 text-stone-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                           title="Hapus Resep Batch"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -841,20 +897,20 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                     </div>
 
                     {/* STATUS STOK KONDIMEN SIAP PAKAI */}
-                    <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/70 flex justify-between items-center text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex justify-between items-center text-xs">
                       <div>
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                           Stok Kondimen di Chiller / Bar:
                         </span>
-                        <span className="font-bold text-stone-900 text-sm font-mono">
+                        <span className="font-bold text-slate-900 text-sm font-mono">
                           {target ? `${target.currentStock.toLocaleString("id-ID")} ${target.unit}` : "0"}
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                           Estimasi HPP Olahan:
                         </span>
-                        <span className="font-bold text-amber-900 font-mono text-sm">
+                        <span className="font-bold text-brand-700 font-mono text-sm">
                           Rp {costPerUnit.toLocaleString("id-ID")} / {bp.yieldUnit}
                         </span>
                       </div>
@@ -862,7 +918,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
                     {/* KOMPOSISI BAHAN MENTAH */}
                     <div className="space-y-1.5 text-xs">
-                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         Komposisi Bahan Mentah per 1 Batch:
                       </span>
                       <div className="space-y-1">
@@ -874,20 +930,20 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                             <div
                               key={idx}
                               className={`p-2 rounded-xl border flex justify-between items-center ${
-                                isShortage ? "bg-red-50/50 border-red-200" : "bg-white border-stone-100"
+                                isShortage ? "bg-rose-50/70 border-rose-200" : "bg-white border-slate-200/70"
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold text-stone-800">
+                                <span className="font-semibold text-slate-800">
                                   {ing ? ing.name : "Bahan Terhapus"}
                                 </span>
-                                <span className="font-mono text-stone-500 text-[11px]">
+                                <span className="font-mono text-slate-500 text-[11px]">
                                   {ri.quantity} {ing?.unit}
                                 </span>
                               </div>
                               <span
                                 className={`text-[10px] font-bold ${
-                                  isShortage ? "text-red-700" : "text-stone-400"
+                                  isShortage ? "text-rose-700 font-mono" : "text-slate-400 font-mono"
                                 }`}
                               >
                                 Stok: {ing ? `${ing.currentStock} ${ing.unit}` : "0"}
@@ -899,24 +955,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                     </div>
 
                     {bp.notes && (
-                      <p className="text-[11px] text-stone-500 italic bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/50">
+                      <p className="text-[11px] text-slate-600 italic bg-brand-50/50 p-2.5 rounded-xl border border-brand-100">
                         Catatan: {bp.notes}
                       </p>
                     )}
                   </div>
 
                   {/* ACTION COOK BUTTON */}
-                  <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                  <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="text-[11px]">
                       {readiness.canCook ? (
                         <span className="text-emerald-700 font-bold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          Siap masak (Bahan cukup untuk {readiness.maxBatches}x batch)
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Siap masak ({readiness.maxBatches}x batch tersedia)</span>
                         </span>
                       ) : (
-                        <span className="text-red-700 font-bold flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-red-600" />
-                          Bahan mentah kurang ({readiness.bottleneck})
+                        <span className="text-rose-700 font-bold flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>Bahan kurang ({readiness.bottleneck})</span>
                         </span>
                       )}
                     </div>
@@ -929,10 +985,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                         setIsBatchCookModalOpen(true);
                       }}
                       disabled={!readiness.canCook}
-                      className="px-4 py-2 bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+                      className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95 cursor-pointer"
                     >
                       <Flame className="w-3.5 h-3.5 text-amber-300" />
-                      Masak Batch Sekarang
+                      <span>Masak Batch Sekarang</span>
                     </button>
                   </div>
                 </div>
@@ -940,14 +996,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             })}
 
             {filteredBatchPreparations.length === 0 && (
-              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-stone-200 space-y-3">
-                <Flame className="w-10 h-10 text-stone-300 mx-auto" />
-                <h4 className="text-sm font-bold text-stone-700">
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 space-y-3">
+                <Flame className="w-10 h-10 text-slate-300 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-700">
                   {batchPrepDivisionFilter === "ALL"
                     ? "Belum ada resep batch kondimen"
                     : `Belum ada resep batch kondimen di divisi ${batchPrepDivisionFilter}`}
                 </h4>
-                <p className="text-xs text-stone-400 max-w-sm mx-auto">
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
                   Tambahkan formula resep olahan batch baru dengan mengklik tombol "+ Resep Batch Baru" di atas.
                 </p>
               </div>
@@ -961,35 +1017,35 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {isBatchCookModalOpen && cookingBatchPrep && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-stone-200"
+              className="bg-white rounded-3xl p-5 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200/90 max-h-[92vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-start border-b border-stone-100 pb-3">
+              <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
                 <div>
-                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] font-bold text-brand-700 uppercase tracking-wider bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200/60">
                     Eksekusi Produksi Kondimen
                   </span>
-                  <h3 className="text-lg font-black text-stone-900 mt-1">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
                     Masak: {cookingBatchPrep.name}
                   </h3>
                 </div>
                 <button
                   onClick={() => setIsBatchCookModalOpen(false)}
-                  className="p-1.5 rounded-xl hover:bg-stone-100 text-stone-400"
+                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* MULTIPLIER SLIDER & INPUT */}
-              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
                 <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-stone-800">Jumlah Batch yang Dimasak:</label>
-                  <span className="font-mono font-black text-base text-amber-900">
+                  <label className="font-bold text-slate-800">Jumlah Batch yang Dimasak:</label>
+                  <span className="font-mono font-black text-base text-brand-700">
                     {cookMultiplier}x Batch
                   </span>
                 </div>
@@ -1000,11 +1056,11 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                   step="0.5"
                   value={cookMultiplier}
                   onChange={(e) => setCookMultiplier(Number(e.target.value))}
-                  className="w-full accent-amber-700"
+                  className="w-full accent-brand-600"
                 />
-                <div className="flex justify-between text-[11px] text-stone-500 font-medium">
+                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
                   <span>Hasil Olahan:</span>
-                  <span className="font-bold text-stone-900 font-mono">
+                  <span className="font-bold text-slate-900 font-mono">
                     +{(cookingBatchPrep.yieldQuantity * cookMultiplier).toLocaleString("id-ID")}{" "}
                     {cookingBatchPrep.yieldUnit}
                   </span>
@@ -1013,10 +1069,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
               {/* PREVIEW BAHAN YANG AKAN DIPOTONG */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                   Bahan Mentah yang Akan Dipotong Otomatis (USAGE):
                 </span>
-                <div className="max-h-44 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                <div className="max-h-44 overflow-y-auto space-y-1.5 no-scrollbar pr-1">
                   {cookingBatchPrep.ingredients.map((ri, idx) => {
                     const ing = ingredients.find((i) => i.id === ri.ingredientId);
                     const needed = ri.quantity * cookMultiplier;
@@ -1026,18 +1082,18 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                       <div
                         key={idx}
                         className={`p-2.5 rounded-xl border flex justify-between items-center text-xs ${
-                          isShortage ? "bg-red-50 border-red-300" : "bg-stone-50/70 border-stone-200"
+                          isShortage ? "bg-rose-50 border-rose-300" : "bg-slate-50/70 border-slate-200"
                         }`}
                       >
                         <div>
-                          <span className="font-semibold text-stone-900 block">
+                          <span className="font-semibold text-slate-900 block">
                             {ing ? ing.name : "Bahan Terhapus"}
                           </span>
-                          <span className="text-[10px] text-stone-500">
+                          <span className="text-[10px] text-slate-500">
                             Stok Saat Ini: {ing ? `${ing.currentStock} ${ing.unit}` : 0}
                           </span>
                         </div>
-                        <span className={`font-mono font-bold ${isShortage ? "text-red-700" : "text-amber-900"}`}>
+                        <span className={`font-mono font-bold ${isShortage ? "text-rose-700" : "text-brand-700"}`}>
                           -{needed} {ing?.unit}
                         </span>
                       </div>
@@ -1048,7 +1104,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
               {/* CATATAN BATCH */}
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Catatan Masak / Shift (Opsional)
                 </label>
                 <input
@@ -1056,26 +1112,26 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                   value={cookNotes}
                   onChange={(e) => setCookNotes(e.target.value)}
                   placeholder="e.g. Masak shift pagi, panci 5L, aroma wangi sempurna"
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 />
               </div>
 
               {/* BUTTONS */}
-              <div className="flex justify-end gap-2.5 pt-2 border-t border-stone-100">
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsBatchCookModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 font-bold text-xs hover:bg-stone-50"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmBatchCook}
-                  className="px-5 py-2.5 bg-gradient-to-r from-amber-700 to-amber-800 hover:from-amber-800 hover:to-amber-900 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm"
+                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
                 >
                   <Flame className="w-4 h-4 text-amber-300" />
-                  Konfirmasi & Potong Stok Sekarang
+                  <span>Konfirmasi & Potong Stok Sekarang</span>
                 </button>
               </div>
             </motion.div>
@@ -1228,23 +1284,28 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-3xl p-6 sm:p-7 max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-stone-200"
+        className="bg-white rounded-3xl p-5 sm:p-7 max-w-2xl w-full max-h-[92vh] overflow-y-auto no-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
       >
-        <div className="flex justify-between items-start border-b border-stone-100 pb-3">
-          <div>
-            <h3 className="text-lg font-black text-stone-900">
-              {product ? `Edit Produk: ${product.name}` : `Tambah Produk Baru (${division})`}
-            </h3>
-            <p className="text-xs text-stone-500">
-              Atur nama, divisi, kategori, dan daftar varian harga jual resmi toko.
-            </p>
+        <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900">
+                {product ? `Edit Produk: ${product.name}` : `Tambah Produk Baru (${division})`}
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                Atur nama, divisi, kategori, dan daftar varian harga jual resmi toko.
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-stone-100 text-stone-400">
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1252,37 +1313,37 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">Nama Produk</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Nama Produk</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Kopi Susu Gula Aren"
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">Kategori Menu</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Kategori Menu</label>
               <input
                 type="text"
                 required
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="e.g. COFFEE, NON-COFFEE, FOOD"
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">Divisi Dapur/Bar</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Divisi Dapur/Bar</label>
               <select
                 value={division}
                 onChange={(e) => setDivision(e.target.value as ProductDivision)}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
               >
                 <option value="BAR">☕ Divisi Bar & Minuman</option>
                 <option value="KITCHEN">🍳 Divisi Kitchen & Makanan</option>
@@ -1291,11 +1352,11 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">Status Publikasi</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Status Publikasi</label>
               <select
                 value={isActive ? "true" : "false"}
                 onChange={(e) => setIsActive(e.target.value === "true")}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
               >
                 <option value="true">Aktif (Tampil di Menu Kasir)</option>
                 <option value="false">Nonaktif (Draft / Sembunyikan)</option>
@@ -1304,34 +1365,34 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">Deskripsi Singkat</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Deskripsi Singkat</label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Jelaskan aroma, cita rasa, atau keistimewaan sajian..."
-              className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             />
           </div>
 
           {/* VARIAN BUILDER */}
-          <div className="space-y-3 pt-2 border-t border-stone-100">
+          <div className="space-y-3 pt-2 border-t border-slate-100">
             <div className="flex justify-between items-center">
               <div>
-                <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Daftar Varian & Harga Jual
                 </h4>
-                <p className="text-[11px] text-stone-500">
+                <p className="text-[11px] text-slate-500">
                   Setiap varian (Hot/Ice/Size/Portion) memiliki harga dan packaging sendiri.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleAddVariant}
-                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
               >
-                <Plus className="w-3.5 h-3.5 text-amber-700" />
-                Tambah Varian
+                <Plus className="w-3.5 h-3.5 text-brand-600" />
+                <span>Tambah Varian</span>
               </button>
             </div>
 
@@ -1339,15 +1400,15 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
               {variants.map((v, idx) => (
                 <div
                   key={v.id || idx}
-                  className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/80 space-y-2.5 text-xs"
+                  className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-stone-700">Varian #{idx + 1}</span>
+                    <span className="font-bold text-slate-700">Varian #{idx + 1}</span>
                     {variants.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveVariant(idx)}
-                        className="text-stone-400 hover:text-red-600 p-1"
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1356,7 +1417,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
-                      <label className="block text-[10px] font-bold text-stone-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Nama Varian
                       </label>
                       <input
@@ -1364,11 +1425,11 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         value={v.name}
                         onChange={(e) => handleUpdateVariant(idx, { name: e.target.value })}
                         placeholder="e.g. Iced 16oz, Hot 8oz"
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-semibold"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-stone-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Harga Jual Resmi (Rp)
                       </label>
                       <input
@@ -1377,11 +1438,11 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         step="500"
                         value={v.price}
                         onChange={(e) => handleUpdateVariant(idx, { price: Number(e.target.value) })}
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-bold font-mono text-stone-900"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-stone-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Estimasi Total HPP (Rp)
                       </label>
                       <input
@@ -1391,14 +1452,14 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         onChange={(e) =>
                           handleUpdateVariant(idx, { estimatedHpp: Number(e.target.value) })
                         }
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-bold font-mono text-amber-900"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[10px] font-bold text-stone-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Catatan Kemasan / Disposables
                       </label>
                       <input
@@ -1406,11 +1467,11 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         value={v.packagingNotes || ""}
                         onChange={(e) => handleUpdateVariant(idx, { packagingNotes: e.target.value })}
                         placeholder="e.g. Cup 16oz + Lid + Sedotan"
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs text-slate-800"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-stone-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Biaya Kemasan (Rp)
                       </label>
                       <input
@@ -1432,15 +1493,15 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             estimatedHpp: rawCost > 0 ? Math.round(rawCost + newPackCost) : v.estimatedHpp,
                           });
                         }}
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-mono"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-mono font-bold text-slate-900"
                       />
                     </div>
                   </div>
 
                   {/* Tautkan ke Master Resep Toko */}
-                  <div className="pt-2 border-t border-stone-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white/70 p-2 rounded-xl">
+                  <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-200/60">
                     <div className="flex-1 w-full sm:w-auto">
-                      <label className="block text-[10px] font-bold text-stone-600 mb-0.5">
+                      <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
                         Tautkan Resep Master (Pengurangan Stok Otomatis):
                       </label>
                       <select
@@ -1465,7 +1526,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             });
                           }
                         }}
-                        className="w-full text-xs font-semibold px-2 py-1 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 focus:bg-white"
+                        className="w-full text-base sm:text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white cursor-pointer"
                       >
                         <option value="">-- Pilih Resep Toko (Opsional) --</option>
                         {recipes.map((r) => (
@@ -1482,7 +1543,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                           ✅ {v.recipe.length} bahan terhubung
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-stone-100 text-stone-500 rounded-lg font-medium text-[10px]">
+                        <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg font-medium text-[10px]">
                           Resep belum ditautkan
                         </span>
                       )}
@@ -1493,20 +1554,20 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-stone-100">
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 font-bold text-xs hover:bg-stone-50"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm"
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
             >
               <Check className="w-4 h-4" />
-              Simpan Produk & Varian
+              <span>Simpan Produk & Varian</span>
             </button>
           </div>
         </form>
@@ -1580,74 +1641,79 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-3xl p-6 sm:p-7 max-w-xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-stone-200"
+        className="bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[92vh] overflow-y-auto no-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
       >
-        <div className="flex justify-between items-start border-b border-stone-100 pb-3">
-          <div>
-            <h3 className="text-lg font-black text-stone-900">
-              {batchPrep ? `Edit Resep Batch: ${batchPrep.name}` : "Resep Batch Kondimen Baru"}
-            </h3>
-            <p className="text-xs text-stone-500">
-              Formula pengolahan bahan mentah menjadi kondimen olahan (Saus Aren, Sirup, dll).
-            </p>
+        <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+              <Flame className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900">
+                {batchPrep ? `Edit Resep Batch: ${batchPrep.name}` : "Resep Batch Kondimen Baru"}
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                Formula pengolahan bahan mentah menjadi kondimen olahan (Saus Aren, Sirup, dll).
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-stone-100 text-stone-400">
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Divisi Penanggung Jawab Olahan
             </label>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setDivision("BAR")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   division === "BAR"
-                    ? "bg-amber-100 border-amber-400 text-amber-950 font-black shadow-2xs"
-                    : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <Coffee className="w-3.5 h-3.5 text-amber-700" />
-                Divisi Bar
+                <Coffee className="w-3.5 h-3.5 text-brand-600" />
+                <span>Bar</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDivision("KITCHEN")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   division === "KITCHEN"
-                    ? "bg-amber-100 border-amber-400 text-amber-950 font-black shadow-2xs"
-                    : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />
-                Divisi Kitchen
+                <UtensilsCrossed className="w-3.5 h-3.5 text-brand-600" />
+                <span>Kitchen</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDivision("BAKER")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   division === "BAKER"
-                    ? "bg-amber-100 border-amber-400 text-amber-950 font-black shadow-2xs"
-                    : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <Cake className="w-3.5 h-3.5 text-amber-700" />
-                Divisi Bakery
+                <Cake className="w-3.5 h-3.5 text-brand-600" />
+                <span>Bakery</span>
               </button>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
               Nama Resep Olahan
             </label>
             <input
@@ -1659,13 +1725,13 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                 if (!targetIngredientName) setTargetIngredientName(e.target.value);
               }}
               placeholder="e.g. Saus Gula Aren Racikan, Simple Syrup Bar"
-              className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Target Bahan di Inventori
               </label>
               <select
@@ -1678,7 +1744,7 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                     setYieldUnit(sel.unit);
                   }
                 }}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
               >
                 <option value="">-- Buat Bahan Jadi Baru --</option>
                 {ingredients.map((ing) => (
@@ -1690,7 +1756,7 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Nama Bahan Jadi Jika Baru
               </label>
               <input
@@ -1698,14 +1764,14 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                 value={targetIngredientName}
                 onChange={(e) => setTargetIngredientName(e.target.value)}
                 placeholder="e.g. Gula Aren Cair Racikan"
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Yield Hasil Olahan per 1 Batch
               </label>
               <input
@@ -1714,12 +1780,12 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                 min="1"
                 value={yieldQuantity}
                 onChange={(e) => setYieldQuantity(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold font-mono text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Satuan Hasil
               </label>
               <input
@@ -1728,24 +1794,24 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                 value={yieldUnit}
                 onChange={(e) => setYieldUnit(e.target.value)}
                 placeholder="ml / gr / porsi"
-                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
             </div>
           </div>
 
           {/* BAHAN MENTAH ROWS */}
-          <div className="space-y-3 pt-2 border-t border-stone-100">
+          <div className="space-y-3 pt-2 border-t border-slate-100">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-stone-800 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                 Bahan Mentah yang Dimasak
               </span>
               <button
                 type="button"
                 onClick={handleAddIngredient}
-                className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1"
+                className="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
               >
-                <Plus className="w-3.5 h-3.5 text-amber-700" />
-                Tambah Bahan
+                <Plus className="w-3.5 h-3.5 text-brand-600" />
+                <span>Tambah Bahan</span>
               </button>
             </div>
 
@@ -1756,13 +1822,13 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 flex items-center gap-2 text-xs"
+                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center gap-2 text-xs"
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 w-full">
                       <select
                         value={item.ingredientId}
                         onChange={(e) => handleUpdateIngredient(idx, { ingredientId: e.target.value })}
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-semibold"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
                       >
                         {ingredients.map((ing) => (
                           <option key={ing.id} value={ing.id}>
@@ -1772,31 +1838,33 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                       </select>
                     </div>
 
-                    <div className="w-28 flex items-center gap-1">
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="any"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          handleUpdateIngredient(idx, { quantity: Number(e.target.value) })
-                        }
-                        className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-bold font-mono text-right"
-                      />
-                      <span className="text-[10px] text-stone-500 font-bold">
-                        {selectedIng?.unit || "satuan"}
-                      </span>
-                    </div>
+                    <div className="flex items-center gap-2 justify-between sm:justify-end">
+                      <div className="w-28 flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="any"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            handleUpdateIngredient(idx, { quantity: Number(e.target.value) })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-right text-slate-900"
+                        />
+                        <span className="text-[10px] text-slate-500 font-bold shrink-0">
+                          {selectedIng?.unit || "satuan"}
+                        </span>
+                      </div>
 
-                    {recipeItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIngredient(idx)}
-                        className="p-1 text-stone-400 hover:text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                      {recipeItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveIngredient(idx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1804,7 +1872,7 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
               Panduan Memasak / Suhu / Waktu Simpan
             </label>
             <textarea
@@ -1812,24 +1880,24 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Masak api kecil 25 menit, saring halus, simpan di chiller 4°C maksimal 14 hari."
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-700/20"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             />
           </div>
 
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-stone-100">
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 font-bold text-xs hover:bg-stone-50"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-[#241813] hover:bg-[#38261e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm"
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
             >
-              <Check className="w-4 h-4 text-amber-400" />
-              Simpan Resep Batch
+              <Check className="w-4 h-4 text-white" />
+              <span>Simpan Resep Batch</span>
             </button>
           </div>
         </form>
