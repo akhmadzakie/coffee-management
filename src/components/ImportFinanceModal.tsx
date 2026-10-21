@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import {
   X,
@@ -134,8 +135,8 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh]">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -426,6 +427,7 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -82,7 +82,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
   const [saveTargetToast, setSaveTargetToast] = useState<string | null>(null);
-  const [dashboardAiInput, setDashboardAiInput] = useState("");
 
   const handleOpenCopilot = (
     tab: "quick-input" | "receipt" | "consultant" | "insights",
@@ -90,10 +89,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   ) => {
     window.dispatchEvent(
       new CustomEvent("open-ai-assistant", {
-        detail: { tab, prompt: prompt || dashboardAiInput },
+        detail: { tab, prompt },
       })
     );
-    if (prompt || dashboardAiInput) setDashboardAiInput("");
   };
 
   useEffect(() => {
@@ -571,113 +569,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <FileText className="w-3.5 h-3.5 text-slate-500" />
             Laporan P&L
           </button>
-        </div>
-      </div>
 
-      {/* ─── Bento AI Copilot Widget (Coursue / Shopeers Aesthetic) ──────── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-5 sm:p-6 shadow-xl border border-indigo-950/40">
-        {/* Glow ambient background effects */}
-        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-amber-300 shadow-inner">
-                <Sparkles className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
-                    <span>Julia AI Copilot</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-brand-200 border border-white/15">
-                      Executive Hub
-                    </span>
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-300">
-                  Data entry cepat secepat narasi kasir, audit stok kritis & konsultan HPP specialty coffee.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => handleOpenCopilot("quick-input")}
-              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-brand-900 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span>Buka Copilot Penuh →</span>
-            </button>
-          </div>
-
-          {/* Quick Ask / Data Entry Input Box */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (dashboardAiInput.trim()) {
-                const isExpense = /beli|bayar|keluar|ongkir|belanja|terima|masuk|omset/i.test(dashboardAiInput);
-                handleOpenCopilot(isExpense ? "quick-input" : "consultant", dashboardAiInput);
-              }
-            }}
-            className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
+          <button
+            onClick={() => handleOpenCopilot("insights")}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200/80 hover:bg-brand-100 hover:text-brand-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+            title="Buka Audit & Rekomendasi Eksekutif Toko"
           >
-            <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-            <input
-              type="text"
-              value={dashboardAiInput}
-              onChange={(e) => setDashboardAiInput(e.target.value)}
-              placeholder="Ketik catatan belanja cepat (misal: Beli susu 6L 111rb kas laci) atau tanya strategi HPP..."
-              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-300 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!dashboardAiInput.trim()}
-              className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
-            >
-              <span>Proses</span>
-              <Send className="w-3 h-3" />
-            </button>
-          </form>
-
-          {/* Bento Prompt Pills */}
-          <div className="flex items-center gap-2 flex-wrap pt-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mr-1">
-              Aksi Cepat:
-            </span>
-            <button
-              onClick={() => handleOpenCopilot("quick-input")}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>⚡ Catat Pengeluaran Cepat</span>
-            </button>
-            <button
-              onClick={() => handleOpenCopilot("receipt")}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Receipt className="w-3.5 h-3.5 text-brand-200" />
-              <span>📸 Pindai Nota / Dokumen</span>
-            </button>
-            <button
-              onClick={() => handleOpenCopilot("insights")}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-              <span>🚨 Audit Stok Menipis</span>
-            </button>
-            <button
-              onClick={() =>
-                handleOpenCopilot(
-                  "consultant",
-                  "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?"
-                )
-              }
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Coffee className="w-3.5 h-3.5 text-amber-200" />
-              <span>☕ Optimasi Margin & HPP Kopi</span>
-            </button>
-          </div>
+            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+            Ringkasan Eksekutif AI
+          </button>
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
@@ -53,6 +54,8 @@ import {
   QrCode,
   Banknote,
   ArrowUpRight,
+  Send,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -83,6 +86,19 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   const [activeDashboardTab, setActiveDashboardTab] = useState<
     "overview" | "sales" | "inventory" | "team"
   >("overview");
+  const [managerAiInput, setManagerAiInput] = useState("");
+
+  const handleOpenCopilot = (
+    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    prompt?: string
+  ) => {
+    window.dispatchEvent(
+      new CustomEvent("open-ai-assistant", {
+        detail: { tab, prompt: prompt || managerAiInput },
+      })
+    );
+    if (prompt || managerAiInput) setManagerAiInput("");
+  };
 
   // Metrik Ringkas HPP untuk Manager
   const hppStats = useMemo(() => {
@@ -654,6 +670,121 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               ? "Semua divisi berjalan lancar sesuai SOP."
               : "Periksa bahan menipis dan tugas checklist yang tertunda."}
           </p>
+        </div>
+      </div>
+
+      {/* ─── Manager AI Copilot Hub (Operational & Inventory Intelligence) ─── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1c1917] via-[#292524] to-[#44403c] text-white p-5 sm:p-6 shadow-xl border border-stone-800">
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-amber-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-orange-500/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-amber-400 shadow-inner">
+                <Sparkles className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+                    <span>Julia AI Copilot</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Manager Operations Hub
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-stone-300">
+                  Audit stok bahan kritis, simulasi resep & optimasi HPP, serta konsultasi manajemen shift & SOP kafe.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleOpenCopilot("insights")}
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-stone-900 hover:bg-stone-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Buka Copilot Penuh →</span>
+            </button>
+          </div>
+
+          {/* Quick Ask / Consultant Query Input */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (managerAiInput.trim()) {
+                handleOpenCopilot("consultant", managerAiInput);
+              }
+            }}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <input
+              type="text"
+              value={managerAiInput}
+              onChange={(e) => setManagerAiInput(e.target.value)}
+              placeholder="Tanya SOP shift, cara cegah susu basi, atau strategi margin HPP kopi..."
+              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-stone-400 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!managerAiInput.trim()}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Tanya AI</span>
+              <Send className="w-3 h-3" />
+            </button>
+          </form>
+
+          {/* Manager Action Pills */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mr-1">
+              Aksi Manajer:
+            </span>
+            <button
+              onClick={() => handleOpenCopilot("insights")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
+              <span>🚨 Audit Bahan Menipis ({stockValuation.criticalCount})</span>
+            </button>
+            <button
+              onClick={() =>
+                handleOpenCopilot(
+                  "consultant",
+                  "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?"
+                )
+              }
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Coffee className="w-3.5 h-3.5 text-amber-300" />
+              <span>☕ Optimasi Margin & HPP Resep</span>
+            </button>
+            <button
+              onClick={() =>
+                handleOpenCopilot(
+                  "consultant",
+                  "Bagaimana pembagian tugas dan workflow 2 barista saat rush hour ramai?"
+                )
+              }
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+              <span>⚡ Workflow Rush Hour Ramai</span>
+            </button>
+            <button
+              onClick={() =>
+                handleOpenCopilot(
+                  "consultant",
+                  "Bagaimana SOP mencegah susu basi dan meminimalkan waste biji kopi di bar?"
+                )
+              }
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ClipboardCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>📋 SOP Cegah Waste Bahan</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1782,8 +1913,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       {/* Modal Preview Foto Selfie & Verifikasi Lokasi GPS Absensi */}
       <AnimatePresence>
-        {selectedAttendancePhoto && (
-          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+        {selectedAttendancePhoto && createPortal(
+          <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1949,7 +2080,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
               </div>
             </motion.div>
-          </div>
+          </div>,
+          document.body
         )}
       </AnimatePresence>
     </div>

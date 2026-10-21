@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   FileText,
   Printer,
@@ -166,8 +167,8 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
       <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200">
         {/* Top Action Bar */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -645,6 +646,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

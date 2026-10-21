@@ -23,6 +23,10 @@ import {
   Activity,
   ArrowRight,
   Sparkles,
+  Send,
+  Zap,
+  Receipt,
+  Upload,
 } from "lucide-react";
 import {
   AreaChart,
@@ -58,6 +62,19 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
 
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+  const [financeAiInput, setFinanceAiInput] = useState("");
+
+  const handleOpenCopilot = (
+    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    prompt?: string
+  ) => {
+    window.dispatchEvent(
+      new CustomEvent("open-ai-assistant", {
+        detail: { tab, prompt: prompt || financeAiInput },
+      })
+    );
+    if (prompt || financeAiInput) setFinanceAiInput("");
+  };
 
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
@@ -266,6 +283,111 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               </option>
             ))}
           </select>
+        </div>
+      </div>
+
+      {/* ─── Finance AI Copilot Hub (Bookkeeping & Smart OCR) ─────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-5 sm:p-6 shadow-xl border border-indigo-950/40">
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center text-amber-300 shadow-inner">
+                <Sparkles className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+                    <span>Julia AI Copilot</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-brand-200 border border-white/15">
+                      Finance & Cash Flow Hub
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Data entry kas secepat kalimat narasi kasir, ekstraksi struk/invoice otomatis (OCR), & audit saldo bank.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleOpenCopilot("quick-input")}
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-brand-900 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>Buka Copilot Penuh →</span>
+            </button>
+          </div>
+
+          {/* Quick Ask / Data Entry Input Box */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (financeAiInput.trim()) {
+                handleOpenCopilot("quick-input", financeAiInput);
+              }
+            }}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+            <input
+              type="text"
+              value={financeAiInput}
+              onChange={(e) => setFinanceAiInput(e.target.value)}
+              placeholder="Ketik catatan pengeluaran cepat (misal: Beli susu 6L 111rb kas laci, es kristal 2 bal 30rb)..."
+              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-300 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!financeAiInput.trim()}
+              className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Proses</span>
+              <Send className="w-3 h-3" />
+            </button>
+          </form>
+
+          {/* Finance Action Pills */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mr-1">
+              Aksi Cepat Finance:
+            </span>
+            <button
+              onClick={() => handleOpenCopilot("quick-input")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+              <span>⚡ Catat Pengeluaran Cepat</span>
+            </button>
+            <button
+              onClick={() => handleOpenCopilot("receipt")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Receipt className="w-3.5 h-3.5 text-brand-200" />
+              <span>📸 Pindai Nota / Dokumen (OCR)</span>
+            </button>
+            <button
+              onClick={() => handleOpenCopilot("insights")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              <span>📊 Audit Margin & Laba Toko</span>
+            </button>
+            <button
+              onClick={() =>
+                handleOpenCopilot(
+                  "consultant",
+                  "Bagaimana analisis pengeluaran terbesar toko bulan ini dan cara menghemat biaya operasional?"
+                )
+              }
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-sky-200" />
+              <span>💡 Konsultasi Penghematan Biaya</span>
+            </button>
+          </div>
         </div>
       </div>
 

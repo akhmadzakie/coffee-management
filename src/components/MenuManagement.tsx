@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
 import {
@@ -361,7 +362,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
             >
               <Plus className="w-4 h-4 text-white" />
-              <span>+ Resep Batch Baru</span>
+              <span>Resep Batch Baru</span>
             </button>
           ) : (
             <button
@@ -372,7 +373,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
             >
               <Plus className="w-4 h-4 text-white" />
-              <span>+ Produk {activeTab} Baru</span>
+              <span>Produk {activeTab} Baru</span>
             </button>
           )}
         </div>
@@ -1016,8 +1017,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       {/* MODAL 1: COOK BATCH MODAL (MASAK KONDIMEN) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {isBatchCookModalOpen && cookingBatchPrep && (
-          <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
+        {isBatchCookModalOpen && cookingBatchPrep && createPortal(
+          <div className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1135,7 +1136,8 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 </button>
               </div>
             </motion.div>
-          </div>
+          </div>,
+          document.body
         )}
       </AnimatePresence>
 
@@ -1283,8 +1285,8 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
     });
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -1572,7 +1574,8 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
         </form>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -1640,8 +1643,8 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
     });
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -1902,6 +1905,7 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
           </div>
         </form>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 };

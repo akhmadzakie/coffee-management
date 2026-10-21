@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Upload,
@@ -338,8 +339,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       setInputQuestion(initialPrompt);
+      if (initialTab === "quick-input") {
+        setNaturalText(initialPrompt);
+      }
     }
-  }, [initialPrompt]);
+  }, [initialPrompt, initialTab]);
 
   const quickConsultantPrompts = [
     { label: "Hitung HPP Kopi Susu", query: "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?" },
@@ -499,12 +503,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-2.5 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-white border border-slate-200/90 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col h-[92vh] max-h-[850px] text-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+      <div className="my-auto bg-white border border-slate-200/90 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col h-[90vh] max-h-[820px] text-slate-900">
         
         {/* ─── MODAL HEADER ─── */}
-        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 bg-[#FAFAFA] flex items-center justify-between">
+        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 bg-[#FAFAFA] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/70 flex items-center justify-center text-brand-600 shadow-2xs">
               <Sparkles className="w-5 h-5 stroke-[2.2]" />
@@ -544,7 +548,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         </div>
 
         {/* ─── NAVIGATION TABS ─── */}
-        <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-3 sm:px-4 gap-1 overflow-x-auto no-scrollbar">
+        <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-3 sm:px-4 gap-1 overflow-x-auto no-scrollbar shrink-0">
           <button
             onClick={() => setActiveTab("quick-input")}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
@@ -596,7 +600,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
         {/* ─── TAB 1: CATAT CEPAT (INPUT PINTAR BAHASA ALAMI) ─── */}
         {activeTab === "quick-input" && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA]">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA] custom-scrollbar">
             {/* Header Banner */}
             <div className="rounded-2xl p-4 bg-gradient-to-r from-brand-50 to-indigo-50/50 border border-brand-200/80 text-xs text-brand-950 leading-relaxed shadow-2xs flex items-start gap-3">
               <div className="w-8 h-8 rounded-xl bg-white border border-brand-200 flex items-center justify-center shrink-0 text-brand-600 mt-0.5 shadow-2xs">
@@ -831,7 +835,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
         {/* ─── TAB 2: EKSTRAKSI BERKAS & STRUK (OCR) ─── */}
         {activeTab === "receipt" && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA]">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA] custom-scrollbar">
             <div className="rounded-2xl p-4 bg-brand-50/80 border border-brand-200/80 text-xs text-brand-950 leading-relaxed shadow-2xs">
               <span className="font-bold text-brand-950">Ekstraksi Dokumen & Nota Multi-Format:</span>{" "}
               Unggah berkas bukti belanja atau ketik catatan belanja. AI Copilot mendukung foto struk kamera (JPG/PNG/WebP), dokumen PDF invoice supplier, spreadsheet Excel / CSV, hingga catatan teks dokumen. Transaksi kas akan otomatis dirangkum secara rapi.
@@ -1108,7 +1112,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         {activeTab === "consultant" && (
           <div className="flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]">
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
               {messages.map((m) => {
                 const isAi = m.sender === "ai";
                 return (
@@ -1226,7 +1230,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
         {/* ─── TAB 4: AUDIT & REKOMENDASI TOKO (EXECUTIVE MANAGEMENT) ─── */}
         {activeTab === "insights" && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA]">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA] custom-scrollbar">
             {/* Live KPI Quick Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1">
@@ -1381,6 +1385,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         )}
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

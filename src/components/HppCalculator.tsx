@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
 import {
@@ -1956,8 +1957,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
       )}
 
       {/* ─── MODAL: Terbitkan ke Katalog Produk Toko ──────────────────────────────── */}
-      {isPublishProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+      {isPublishProductModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -2051,12 +2052,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) ───────────────────── */}
-      {isBatchPrepModalOpen && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+      {isBatchPrepModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -2152,7 +2154,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
