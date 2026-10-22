@@ -79,17 +79,17 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-[100] p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}
         >
           <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            initial={{ scale: 0.95, opacity: 0, y: 14 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 10 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            exit={{ scale: 0.96, opacity: 0, y: 10 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
             className={`my-auto bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar ${config.borderClass}`}
           >
             {/* Header */}

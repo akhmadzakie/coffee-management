@@ -252,6 +252,12 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     { 
       group: "Sistem & Admin",
+      name: "Audit Log Aktivitas",
+      view: "audit_log" as ViewState,
+      icon: ShieldCheck,
+    },
+    { 
+      group: "Sistem & Admin",
       name: "Pengaturan Sistem",
       view: "settings" as ViewState,
       icon: Settings,
@@ -281,6 +287,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "cash_flow",
       "expense_categories",
       "payroll",
+      "audit_log",
     ],
 
     // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama, tidak perlu clock in)
@@ -586,18 +593,29 @@ export const Layout: React.FC<LayoutProps> = ({
                           <button
                             key={item.view}
                             onClick={() => onViewChange(item.view)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                              isActive
-                                ? "bg-brand-50 text-brand-950 font-bold border-l-3 border-brand-600 shadow-2xs"
-                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                            }`}
+                            className="relative w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer text-left transition-colors"
                           >
-                            <Icon
-                              className={`w-4 h-4 shrink-0 transition-transform ${
-                                isActive ? "text-brand-600 scale-105" : "text-slate-400"
-                              }`}
-                            />
-                            <span className="truncate">{item.name}</span>
+                            {isActive && (
+                              <motion.div
+                                layoutId="activeSidebarPill"
+                                className="absolute inset-0 bg-brand-50 border-l-3 border-brand-600 rounded-xl shadow-2xs z-0"
+                                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                              />
+                            )}
+                            <span className="relative z-10 flex items-center gap-2.5 min-w-0">
+                              <Icon
+                                className={`w-4 h-4 shrink-0 transition-transform ${
+                                  isActive ? "text-brand-600 scale-105" : "text-slate-400"
+                                }`}
+                              />
+                              <span
+                                className={`truncate ${
+                                  isActive ? "text-brand-950 font-bold" : "text-slate-600 hover:text-slate-900"
+                                }`}
+                              >
+                                {item.name}
+                              </span>
+                            </span>
                           </button>
                         );
                       })}
@@ -1037,10 +1055,10 @@ export const Layout: React.FC<LayoutProps> = ({
           <AnimatePresence mode="wait">
             <motion.main
               key={currentView}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="max-w-7xl mx-auto h-full"
             >
               {children}

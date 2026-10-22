@@ -27,6 +27,8 @@ import {
   Zap,
   Receipt,
   Upload,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import {
   AreaChart,
@@ -58,11 +60,20 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     employees,
     contracts,
     bankReconciliations,
+    closedPeriods,
   } = useStore();
 
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [financeAiInput, setFinanceAiInput] = useState("");
+
+  const selectedPeriodStr =
+    filterMonth !== -1
+      ? `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`
+      : null;
+  const isSelectedPeriodClosed = selectedPeriodStr
+    ? closedPeriods.some((p) => p.period === selectedPeriodStr)
+    : false;
 
   const handleOpenCopilot = (
     tab: "quick-input" | "receipt" | "consultant" | "insights",
@@ -259,30 +270,60 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-2xl p-1.5 shadow-2xs w-full sm:w-auto">
-          <select
-            value={filterMonth}
-            onChange={(e) => setFilterMonth(Number(e.target.value))}
-            className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
-          >
-            <option value={-1}>Semua Bulan</option>
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i} value={i}>
-                {new Date(0, i).toLocaleString("id-ID", { month: "long" })}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterYear}
-            onChange={(e) => setFilterYear(Number(e.target.value))}
-            className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          {selectedPeriodStr && (
+            <button
+              onClick={() => onNavigate("finance_reports")}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold transition shadow-2xs border cursor-pointer ${
+                isSelectedPeriodClosed
+                  ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                  : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50"
+              }`}
+              title={
+                isSelectedPeriodClosed
+                  ? `Periode ${selectedPeriodStr} telah Tutup Buku. Klik untuk melihat Laporan Laba Rugi.`
+                  : `Periode ${selectedPeriodStr} masih terbuka. Klik untuk mengelola atau menutup buku.`
+              }
+            >
+              {isSelectedPeriodClosed ? (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Tutup Buku: Terkunci</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Tutup Buku: Terbuka</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-2xl p-1.5 shadow-2xs">
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(Number(e.target.value))}
+              className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
+            >
+              <option value={-1}>Semua Bulan</option>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i} value={i}>
+                  {new Date(0, i).toLocaleString("id-ID", { month: "long" })}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(Number(e.target.value))}
+              className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

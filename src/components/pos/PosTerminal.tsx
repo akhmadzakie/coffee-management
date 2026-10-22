@@ -676,7 +676,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               </div>
             </div>
 
-            {/* Category Pills */}
+            {/* Category Pills with Sliding Indicator */}
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
               {[
                 { id: "ALL", label: "Semua Menu", icon: Sparkles },
@@ -691,14 +691,25 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 shrink-0 ${
-                      isSelected
-                        ? "bg-brand-600 text-white font-bold shadow-md shadow-brand-600/20"
-                        : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
-                    }`}
+                    className="relative px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
                   >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{cat.label}</span>
+                    {isSelected ? (
+                      <motion.div
+                        layoutId="posCategoryPill"
+                        className="absolute inset-0 bg-brand-600 rounded-xl shadow-md shadow-brand-600/20 z-0"
+                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl z-0 transition-colors" />
+                    )}
+                    <span
+                      className={`relative z-10 flex items-center gap-1.5 transition-colors ${
+                        isSelected ? "text-white font-bold" : "text-slate-700"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{cat.label}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -1024,46 +1035,47 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       </div>
 
       {/* ── Modals & Popups ───────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isPaymentModalOpen && (
+          <PosPaymentModal
+            totalAmount={totalAmount}
+            subtotal={subtotal}
+            discountAmount={discountAmount}
+            taxAmount={taxAmount}
+            taxPercent={taxEnabled ? taxRate : 0}
+            taxMode={taxMode}
+            tableNumber={tableNumber}
+            customerName={customerName}
+            orderType={orderType}
+            cart={cart}
+            orderNotes={orderNotes}
+            discountReason={discountReason}
+            discountPercent={discountType === "PERCENT" ? discountValue : 0}
+            editingOrderId={currentEditingOrderId}
+            onClose={() => setIsPaymentModalOpen(false)}
+            onSuccess={(paidOrder) => {
+              setIsPaymentModalOpen(false);
+              setCompletedOrder(paidOrder);
+              setIsReceiptModalOpen(true);
+              setCart([]);
+              setTableNumber("");
+              setCustomerName("");
+              setDiscountValue(0);
+              setDiscountReason("");
+              setCurrentEditingOrderId(null);
+              fetchActiveBillsCount();
+            }}
+          />
+        )}
 
-      {isPaymentModalOpen && (
-        <PosPaymentModal
-          totalAmount={totalAmount}
-          subtotal={subtotal}
-          discountAmount={discountAmount}
-          taxAmount={taxAmount}
-          taxPercent={taxEnabled ? taxRate : 0}
-          taxMode={taxMode}
-          tableNumber={tableNumber}
-          customerName={customerName}
-          orderType={orderType}
-          cart={cart}
-          orderNotes={orderNotes}
-          discountReason={discountReason}
-          discountPercent={discountType === "PERCENT" ? discountValue : 0}
-          editingOrderId={currentEditingOrderId}
-          onClose={() => setIsPaymentModalOpen(false)}
-          onSuccess={(paidOrder) => {
-            setIsPaymentModalOpen(false);
-            setCompletedOrder(paidOrder);
-            setIsReceiptModalOpen(true);
-            setCart([]);
-            setTableNumber("");
-            setCustomerName("");
-            setDiscountValue(0);
-            setDiscountReason("");
-            setCurrentEditingOrderId(null);
-            fetchActiveBillsCount();
-          }}
-        />
-      )}
-
-      {isOpenBillsModalOpen && (
-        <PosOpenBillsModal
-          onClose={() => setIsOpenBillsModalOpen(false)}
-          onSelectOrder={handleSelectOpenBill}
-          onOrderVoided={() => fetchActiveBillsCount()}
-        />
-      )}
+        {isOpenBillsModalOpen && (
+          <PosOpenBillsModal
+            onClose={() => setIsOpenBillsModalOpen(false)}
+            onSelectOrder={handleSelectOpenBill}
+            onOrderVoided={() => fetchActiveBillsCount()}
+          />
+        )}
+      </AnimatePresence>
 
       {isPinModalOpen && (
         <PosManagerPinModal
@@ -1100,113 +1112,130 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         <PosTodayOrdersModal onClose={() => setIsTodayOrdersOpen(false)} />
       )}
 
-      {isDiscountModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Percent className="w-4 h-4 text-brand-600" />
-                Atur Diskon Pesanan
-              </h3>
-              <button
-                onClick={() => setIsDiscountModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Tipe Diskon</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                  <button
-                    onClick={() => setDiscountType("PERCENT")}
-                    className={`py-1.5 text-xs font-semibold rounded-lg transition ${
-                      discountType === "PERCENT"
-                        ? "bg-white text-slate-900 shadow-xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Persentase (%)
-                  </button>
-                  <button
-                    onClick={() => setDiscountType("NOMINAL")}
-                    className={`py-1.5 text-xs font-semibold rounded-lg transition ${
-                      discountType === "NOMINAL"
-                        ? "bg-white text-slate-900 shadow-xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Nominal (Rp)
-                  </button>
-                </div>
+      <AnimatePresence>
+        {isDiscountModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsDiscountModalOpen(false);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-5 shadow-2xl"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-brand-600" />
+                  Atur Diskon Pesanan
+                </h3>
+                <button
+                  onClick={() => setIsDiscountModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              {discountType === "PERCENT" && (
-                <div className="grid grid-cols-4 gap-2">
-                  {[5, 10, 15, 20].map((p) => (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Tipe Diskon</label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
                     <button
-                      key={p}
-                      onClick={() => handleApplyDiscount(p, "PERCENT")}
-                      className="py-1.5 rounded-lg bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-xs font-bold text-slate-700 border border-slate-200 transition"
+                      onClick={() => setDiscountType("PERCENT")}
+                      className={`py-1.5 text-xs font-semibold rounded-lg transition ${
+                        discountType === "PERCENT"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                     >
-                      {p}%
+                      Persentase (%)
                     </button>
-                  ))}
+                    <button
+                      onClick={() => setDiscountType("NOMINAL")}
+                      className={`py-1.5 text-xs font-semibold rounded-lg transition ${
+                        discountType === "NOMINAL"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Nominal (Rp)
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                  {discountType === "PERCENT" ? "Persentase Diskon (%)" : "Jumlah Nominal Potongan (Rp)"}
-                </label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  defaultValue={discountValue || ""}
-                  id="customDiscountInput"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-                />
-              </div>
+                {discountType === "PERCENT" && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[5, 10, 15, 20].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => handleApplyDiscount(p, "PERCENT")}
+                        className="py-1.5 rounded-lg bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-xs font-bold text-slate-700 border border-slate-200 transition"
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Alasan Diskon</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Promo Member, Teman Owner, Event"
-                  value={discountReason}
-                  onChange={(e) => setDiscountReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-                />
-              </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    {discountType === "PERCENT" ? "Persentase Diskon (%)" : "Jumlah Nominal Potongan (Rp)"}
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    defaultValue={discountValue || ""}
+                    id="customDiscountInput"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
+                  />
+                </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    setDiscountValue(0);
-                    setDiscountReason("");
-                    setIsDiscountModalOpen(false);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition"
-                >
-                  Hapus Diskon
-                </button>
-                <button
-                  onClick={() => {
-                    const el = document.getElementById("customDiscountInput") as HTMLInputElement;
-                    const val = Number(el?.value) || 0;
-                    handleApplyDiscount(val, discountType);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-xs transition"
-                >
-                  Terapkan
-                </button>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Alasan Diskon</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Promo Member, Teman Owner, Event"
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setDiscountValue(0);
+                      setDiscountReason("");
+                      setIsDiscountModalOpen(false);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition"
+                  >
+                    Hapus Diskon
+                  </button>
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById("customDiscountInput") as HTMLInputElement;
+                      const val = Number(el?.value) || 0;
+                      handleApplyDiscount(val, discountType);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-xs transition"
+                  >
+                    Terapkan
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal Shift Kasir (Buka/Tutup & Rekonsiliasi Z-Report) */}
       <PosShiftModal

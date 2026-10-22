@@ -20,6 +20,7 @@ import {
   ChevronUp,
   Keyboard,
 } from "lucide-react";
+import { motion } from "motion/react";
 
 export const Login = () => {
   const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert } = useStore();
@@ -252,7 +253,12 @@ export const Login = () => {
           </div>
         )}
 
-        <div className="bg-white border border-slate-200/90 rounded-3xl shadow-xl shadow-brand-950/5 overflow-hidden grid grid-cols-1 md:grid-cols-12">
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", damping: 28, stiffness: 360 }}
+          className="bg-white border border-slate-200/90 rounded-3xl shadow-xl shadow-brand-950/5 overflow-hidden grid grid-cols-1 md:grid-cols-12"
+        >
           
           {/* ─── LEFT: OPERATOR SELECTOR ─── */}
           <div className="md:col-span-5 p-6 sm:p-8 border-b md:border-b-0 md:border-r border-slate-100 bg-[#FAFBFF] flex flex-col justify-between">
@@ -482,7 +488,7 @@ export const Login = () => {
 
             </div>
           </div>
-        </div>
+        </motion.div>
       </main>
 
       {/* ─── BOTTOM MINIMALIST DEMO BAR ─── */}

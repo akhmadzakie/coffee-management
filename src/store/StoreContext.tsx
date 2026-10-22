@@ -1102,6 +1102,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       const idleDuration = Date.now() - lastActivityRef.current;
       if (idleDuration >= IDLE_TIMEOUT_MS) {
         // Auto logout
+        const curSessionId = deviceRef.current?.sessionId;
+        if (curSessionId) {
+          fetch("/api/sessions/logout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: curSessionId }),
+          }).catch(() => {});
+        }
         setCurrentUser(null);
         localStorage.removeItem("node_current_user");
         del("node_current_user").catch(() => {});
@@ -1380,6 +1388,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    const curSessionId = deviceRef.current?.sessionId;
+    if (curSessionId) {
+      fetch("/api/sessions/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: curSessionId }),
+      }).catch(() => {});
+    }
     setCurrentUser(null);
     localStorage.removeItem("node_current_user");
     del("node_current_user").catch(() => {});

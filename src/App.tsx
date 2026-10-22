@@ -9,6 +9,7 @@ import { StoreProvider, useStore } from "./store/StoreContext";
 import { Layout } from "./components/Layout";
 import { Login } from "./components/Login";
 import { ViewState } from "./types";
+import { motion, AnimatePresence } from "motion/react";
 
 // ─── Lazy-loaded page components ─────────────────────────────────────────────
 // These are only downloaded when the user navigates to that page,
@@ -308,35 +309,6 @@ function AppContent() {
   }
 
   // ─── 3. WEB MANAJEMEN BACK-OFFICE (URL UMUM /) ────────────────────────────────
-  if (!currentUser) {
-    return <Login />;
-  }
-
-  // Jika Owner/Manager sedang menguji atau membuka Terminal Kasir dari web manajemen
-  if (currentView === "pos_cashier") {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          <PosTerminal
-            onNavigateBack={() => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")}
-          />
-        </ErrorBoundary>
-      </Suspense>
-    );
-  }
-
-  if (currentView === "kitchen_display") {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          <KitchenDisplaySystem
-            onNavigateBack={() => setCurrentView(roleDefaultView[currentUser.role] || "dashboard_owner")}
-          />
-        </ErrorBoundary>
-      </Suspense>
-    );
-  }
-
   const renderView = () => {
     switch (currentView) {
       case "dashboard_owner":
@@ -393,14 +365,67 @@ function AppContent() {
     }
   };
 
+  const renderAppContent = () => {
+    if (currentView === "pos_cashier") {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            <PosTerminal
+              onNavigateBack={() => setCurrentView(roleDefaultView[currentUser!.role] || "dashboard_owner")}
+            />
+          </ErrorBoundary>
+        </Suspense>
+      );
+    }
+
+    if (currentView === "kitchen_display") {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            <KitchenDisplaySystem
+              onNavigateBack={() => setCurrentView(roleDefaultView[currentUser!.role] || "dashboard_owner")}
+            />
+          </ErrorBoundary>
+        </Suspense>
+      );
+    }
+
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView}>
+        <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            {renderView()}
+          </ErrorBoundary>
+        </Suspense>
+      </Layout>
+    );
+  };
+
   return (
-    <Layout currentView={currentView} onViewChange={setCurrentView}>
-      <Suspense fallback={<PageLoader />}>
-        <ErrorBoundary>
-          {renderView()}
-        </ErrorBoundary>
-      </Suspense>
-    </Layout>
+    <AnimatePresence mode="wait">
+      {!currentUser ? (
+        <motion.div
+          key="auth-login"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+        >
+          <Login />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="app-shell"
+          initial={{ opacity: 0, scale: 1.008 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="min-h-screen"
+        >
+          {renderAppContent()}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

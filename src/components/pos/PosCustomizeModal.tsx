@@ -13,6 +13,7 @@ import {
   Milk,
   MessageSquare,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface MenuItem {
   id: string;
@@ -61,15 +62,17 @@ export const PosCustomizeModal: React.FC<PosCustomizeModalProps> = ({
   item,
   onAddToCartWithCustomization,
 }) => {
-  if (!isOpen || !item) return null;
-
   return (
-    <PosCustomizeModalContent
-      key={item.id}
-      onClose={onClose}
-      item={item}
-      onAddToCartWithCustomization={onAddToCartWithCustomization}
-    />
+    <AnimatePresence>
+      {isOpen && item && (
+        <PosCustomizeModalContent
+          key={item.id}
+          onClose={onClose}
+          item={item}
+          onAddToCartWithCustomization={onAddToCartWithCustomization}
+        />
+      )}
+    </AnimatePresence>
   );
 };
 
@@ -194,8 +197,23 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25, ease: "easeInOut" }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 14 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ type: "spring", damping: 28, stiffness: 360 }}
+        className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+      >
         {/* Header Modal */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
@@ -428,7 +446,7 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
             </span>
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

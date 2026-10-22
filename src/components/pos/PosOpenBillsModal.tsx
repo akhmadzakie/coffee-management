@@ -16,6 +16,7 @@ import {
   Plus,
   Minus,
 } from "lucide-react";
+import { motion } from "motion/react";
 import { PosManagerPinModal } from "./PosManagerPinModal";
 
 interface PosOpenBillsModalProps {
@@ -94,8 +95,23 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25, ease: "easeInOut" }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 14 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ type: "spring", damping: 28, stiffness: 360 }}
+        className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+      >
         {/* Header Modal */}
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -262,7 +278,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
             Tutup
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Modal Otorisasi PIN untuk Void Bill */}
       {selectedVoidOrder && (
@@ -494,6 +510,6 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };

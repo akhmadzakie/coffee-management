@@ -345,8 +345,9 @@ export const Sales = () => {
   return (
     <div className="space-y-6">
       {/* ─── Header Banner & Tab Navigation ──────────────────────────────── */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        {/* Top Info Header */}
+        <div className="p-5 sm:p-7">
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
               Revenue & POS Archives
@@ -361,100 +362,102 @@ export const Sales = () => {
             </div>
             Penjualan & Omzet Kasir
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1.5 max-w-3xl leading-relaxed">
             Rekapitulasi penerimaan kasir, arsip struk transaksi POS lengkap dengan item & pembayaran, serta riwayat mutasi penjualan.
           </p>
         </div>
 
-        {/* Tab Selector with Spring Sliding Pill */}
-        <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full md:w-auto">
-          <button
-            onClick={() => setActiveTab("daily_recap")}
-            className={`relative px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
-              activeTab === "daily_recap" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {activeTab === "daily_recap" && (
-              <motion.div
-                layoutId="salesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                transition={{ type: "spring", stiffness: 450, damping: 32 }}
-              />
-            )}
-            <DollarSign className="w-3.5 h-3.5 text-brand-600 relative z-10" />
-            <span className="relative z-10">Rekap Harian</span>
-            {dailySalesRecaps.length > 0 && (
-              <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
-                {dailySalesRecaps.length}
-              </span>
-            )}
-          </button>
+        {/* Dedicated Tab Navigation Strip */}
+        <div className="px-4 sm:px-7 py-3 bg-slate-50/70 border-t border-slate-200/80 flex items-center overflow-x-auto no-scrollbar">
+          <div className="inline-flex items-center gap-1.5 p-1 bg-slate-200/60 rounded-2xl border border-slate-200/80 shrink-0">
+            <button
+              onClick={() => setActiveTab("daily_recap")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "daily_recap" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "daily_recap" && (
+                <motion.div
+                  layoutId="salesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <DollarSign className="w-4 h-4 text-brand-600 relative z-10" />
+              <span className="relative z-10">Rekap Harian</span>
+              {dailySalesRecaps.length > 0 && (
+                <span className="relative z-10 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
+                  {dailySalesRecaps.length}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab("pos_orders")}
-            className={`relative px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
-              activeTab === "pos_orders" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {activeTab === "pos_orders" && (
-              <motion.div
-                layoutId="salesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                transition={{ type: "spring", stiffness: 450, damping: 32 }}
-              />
-            )}
-            <Receipt className="w-3.5 h-3.5 text-brand-600 relative z-10" />
-            <span className="relative z-10">Arsip Struk POS</span>
-            {posOrders.length > 0 && (
-              <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
-                {posOrders.length}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => setActiveTab("pos_orders")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "pos_orders" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "pos_orders" && (
+                <motion.div
+                  layoutId="salesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <Receipt className="w-4 h-4 text-brand-600 relative z-10" />
+              <span className="relative z-10">Arsip Struk POS</span>
+              {posOrders.length > 0 && (
+                <span className="relative z-10 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
+                  {posOrders.length}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab("sales")}
-            className={`relative px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
-              activeTab === "sales" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {activeTab === "sales" && (
-              <motion.div
-                layoutId="salesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                transition={{ type: "spring", stiffness: 450, damping: 32 }}
-              />
-            )}
-            <FileSpreadsheet className="w-3.5 h-3.5 text-brand-600 relative z-10" />
-            <span className="relative z-10">Item Terjual</span>
-            {salesTransactions.length > 0 && (
-              <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
-                {salesTransactions.length}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => setActiveTab("sales")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "sales" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "sales" && (
+                <motion.div
+                  layoutId="salesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <FileSpreadsheet className="w-4 h-4 text-brand-600 relative z-10" />
+              <span className="relative z-10">Item Terjual</span>
+              {salesTransactions.length > 0 && (
+                <span className="relative z-10 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                  {salesTransactions.length}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab("logs")}
-            className={`relative px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
-              activeTab === "logs" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {activeTab === "logs" && (
-              <motion.div
-                layoutId="salesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                transition={{ type: "spring", stiffness: 450, damping: 32 }}
-              />
-            )}
-            <RotateCcw className="w-3.5 h-3.5 text-brand-600 relative z-10" />
-            <span className="relative z-10">Riwayat Import</span>
-            {salesImportLogs.length > 0 && (
-              <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
-                {salesImportLogs.length}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => setActiveTab("logs")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "logs" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "logs" && (
+                <motion.div
+                  layoutId="salesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <RotateCcw className="w-4 h-4 text-brand-600 relative z-10" />
+              <span className="relative z-10">Riwayat Import</span>
+              {salesImportLogs.length > 0 && (
+                <span className="relative z-10 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                  {salesImportLogs.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

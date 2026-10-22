@@ -702,9 +702,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       </div>
 
       {/* ─── The Big 4 Executive KPI Cards ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div
+        key={`kpi-grid-${period}`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
         {/* KPI 1: Total Omzet */}
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", damping: 26, stiffness: 340, delay: 0 }}
+          className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Omzet</span>
             <div className="w-11 h-11 rounded-2xl bg-blue-50/80 text-blue-600 border border-blue-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
@@ -722,10 +733,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span className="text-slate-400 text-[11px]">vs periode lalu</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 2: Laba Bersih Riil & Margin */}
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", damping: 26, stiffness: 340, delay: 0.06 }}
+          className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Laba Bersih Riil</span>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50/80 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
@@ -743,10 +759,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span className="text-slate-400 text-[11px]">setelah HPP & opex</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 3: Average Ticket Value (ATV / Basket Size) */}
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", damping: 26, stiffness: 340, delay: 0.12 }}
+          className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rata-rata Struk (ATV)</span>
             <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 text-indigo-600 border border-indigo-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
@@ -762,10 +783,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span className="text-slate-400 text-[11px]">total pesanan tamu</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 4: Total Cup / Produk Terjual */}
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", damping: 26, stiffness: 340, delay: 0.18 }}
+          className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Volume Terjual</span>
             <div className="w-11 h-11 rounded-2xl bg-amber-50/80 text-amber-600 border border-amber-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
@@ -783,8 +809,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               </span>
             </div>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* ─── Unit Economics: 3 Rasio Emas Kafe ─────────────────────────────── */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs">

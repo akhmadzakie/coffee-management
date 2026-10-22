@@ -39,7 +39,10 @@ const FinanceReports: React.FC = () => {
     return closedPeriods.some(p => p.period === period);
   }, [closedPeriods, period]);
 
-  const canManagePeriod = currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPER_ADMIN';
+  const canManagePeriod = Boolean(
+    currentUser &&
+      ["FINANCE", "OWNER", "MANAGER", "SUPER_ADMIN"].includes(currentUser.role),
+  );
 
   // Filter transactions by period
   const periodTransactions = useMemo(() => {
@@ -178,7 +181,7 @@ const FinanceReports: React.FC = () => {
               <button 
                 onClick={() => {
                   if (window.confirm("Kunci periode ini? Pastikan seluruh transaksi dan pengeluaran sudah benar.")) {
-                    closePeriod(period, "Tutup buku rutin");
+                    closePeriod(period, currentUser?.name || currentUser?.role || "Finance", "Tutup buku rutin");
                   }
                 }}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"

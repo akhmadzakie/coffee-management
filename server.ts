@@ -1890,15 +1890,44 @@ async function startServer() {
   // Session management endpoints for Connected Devices & Force Logout
   app.get("/api/sessions", async (req, res) => {
     try {
+      // Sesi tanpa heartbeat lebih dari 15 menit dianggap sudah tidak aktif (offline/closed)
+      const STALE_THRESHOLD_MS = 15 * 60 * 1000;
+      const now = Date.now();
+
       if (!isDbConnected && offlineState) {
-        const activeSessions = (offlineState.device_sessions || []).filter((s: any) => s.status === "ACTIVE");
+        const activeSessions = (offlineState.device_sessions || []).filter(
+          (s: any) =>
+            s.status === "ACTIVE" &&
+            now - new Date(s.lastActive).getTime() <= STALE_THRESHOLD_MS,
+        );
         return res.json({ sessions: activeSessions });
       }
 
       const allSessions = await db.select().from(schema.deviceSessions);
-      // Filter active sessions and sort by lastActive descending
+
+      // Auto-expire ghost/zombie sessions yang tabnya sudah ditutup (> 15 menit tanpa heartbeat)
+      const staleSessions = allSessions.filter(
+        (s) =>
+          s.status === "ACTIVE" &&
+          now - new Date(s.lastActive).getTime() > STALE_THRESHOLD_MS,
+      );
+
+      if (staleSessions.length > 0) {
+        for (const s of staleSessions) {
+          await db
+            .update(schema.deviceSessions)
+            .set({ status: "EXPIRED" })
+            .where(eq(schema.deviceSessions.id, s.id));
+        }
+      }
+
+      // Filter sesi yang benar-benar aktif saat ini
       const activeSessions = allSessions
-        .filter((s) => s.status === "ACTIVE")
+        .filter(
+          (s) =>
+            s.status === "ACTIVE" &&
+            now - new Date(s.lastActive).getTime() <= STALE_THRESHOLD_MS,
+        )
         .sort(
           (a, b) =>
             new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime(),

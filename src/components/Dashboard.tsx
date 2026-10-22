@@ -387,9 +387,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
       {view === "FINANCE" && canViewFinance && (
         <motion.div
           key="finance-tab"
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="space-y-6"
         >
           {/* Cash Account Balances */}
@@ -399,9 +399,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
               return (
                 <motion.div
                   key={acc.id}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: idx * 0.05 }}
+                  transition={{ type: "spring", damping: 26, stiffness: 340, delay: idx * 0.04 }}
                   className="bg-white p-5 rounded-3xl border border-stone-200/80 shadow-coffee hover:shadow-coffee-lg transition-all"
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -459,9 +459,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
             ].map((kpi, idx) => (
               <motion.div
                 key={kpi.label}
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: (cashAccounts.length + idx) * 0.05 }}
+                transition={{ type: "spring", damping: 26, stiffness: 340, delay: (cashAccounts.length + idx) * 0.04 }}
                 className={`bg-white p-5 rounded-3xl border shadow-coffee hover:shadow-coffee-lg transition-all ${kpi.bg}`}
               >
                 <div className="flex items-center justify-between mb-3">
