@@ -107,12 +107,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
     recipes.forEach((r) => {
       let cost = 0;
-      r.ingredients.forEach((ri) => {
-        const ing = ingredients.find((i) => i.id === ri.ingredientId);
-        if (ing && ing.costPerUnit) {
-          cost += ri.quantity * Number(ing.costPerUnit);
+      let ingList = r?.ingredients;
+      if (typeof ingList === "string") {
+        try {
+          ingList = JSON.parse(ingList);
+        } catch {
+          ingList = [];
         }
-      });
+      }
+      if (Array.isArray(ingList)) {
+        ingList.forEach((ri: any) => {
+          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+          if (ing && ing.costPerUnit) {
+            cost += Number(ri.quantity || 0) * Number(ing.costPerUnit);
+          }
+        });
+      }
       if (cost > 0) {
         totalEstimatedHpp += cost;
         validRecipeCount++;
@@ -1914,11 +1924,20 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       {/* Modal Preview Foto Selfie & Verifikasi Lokasi GPS Absensi */}
       <AnimatePresence>
         {selectedAttendancePhoto && createPortal(
-          <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <motion.div
+            key="attendance-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto"
+          >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              key="attendance-card"
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
               className="my-auto bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-coffee-lg border border-stone-200 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
             >
               <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/80">
@@ -2080,7 +2099,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
               </div>
             </motion.div>
-          </div>,
+          </motion.div>,
           document.body
         )}
       </AnimatePresence>

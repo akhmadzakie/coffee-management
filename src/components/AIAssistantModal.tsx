@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   Upload,
@@ -501,39 +502,57 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  if (!isOpen) return null;
-
   return createPortal(
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
-      <div className="my-auto bg-white border border-slate-200/90 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col h-[90vh] max-h-[820px] text-slate-900">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="ai-assistant-modal-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] flex justify-center items-end sm:items-center p-0 sm:p-4 md:p-6 overflow-hidden safe-area-top safe-area-bottom"
+        >
+          <motion.div
+            key="ai-assistant-modal-card"
+            initial={{ scale: 0.94, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.94, opacity: 0, y: 15 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className="my-auto sm:my-auto bg-white border border-slate-200/90 rounded-t-3xl sm:rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col h-[94vh] sm:h-[88vh] max-h-[820px] text-slate-900"
+          >
         
         {/* ─── MODAL HEADER ─── */}
-        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 bg-[#FAFAFA] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/70 flex items-center justify-center text-brand-600 shadow-2xs">
+        <div className="px-4 sm:px-6 py-3.5 border-b border-slate-100 bg-[#FAFAFA] flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-50 border border-brand-200/70 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
               <Sparkles className="w-5 h-5 stroke-[2.2]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 tracking-tight">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                   Julia Coffee AI Copilot
                 </h3>
                 {aiStatus?.isConnected ? (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-2xs">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Gemini 2.5 Flash Aktif
+                    <span className="hidden sm:inline">Gemini 2.5 Flash Aktif</span>
+                    <span className="sm:hidden">Gemini 2.5</span>
                   </span>
                 ) : (
                   <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 font-mono flex items-center gap-1.5 shadow-2xs"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 font-mono flex items-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0"
                     title="Kunci API Gemini belum dipasang di Pengaturan. Berjalan dalam mode cerdas lokal internal."
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    Mode Cerdas Lokal
+                    <span className="hidden sm:inline">Mode Cerdas Lokal</span>
+                    <span className="sm:hidden">Mode Lokal</span>
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
                 Data Entry Cerdas, Analisis Manajemen & Konsultan Specialty Coffee
               </p>
             </div>
@@ -541,60 +560,64 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* ─── NAVIGATION TABS ─── */}
-        <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-3 sm:px-4 gap-1 overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-2 sm:px-4 gap-1 overflow-x-auto no-scrollbar shrink-0">
           <button
             onClick={() => setActiveTab("quick-input")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
               activeTab === "quick-input"
                 ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
                 : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-            <span>Catat Cepat (Input Pintar)</span>
+            <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
+            <span className="hidden sm:inline">Catat Cepat (Input Pintar)</span>
+            <span className="sm:hidden">Input Pintar</span>
           </button>
 
           <button
             onClick={() => setActiveTab("receipt")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
               activeTab === "receipt"
                 ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
                 : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <Receipt className="w-4 h-4 text-brand-600" />
-            <span>Pindai Nota / OCR</span>
+            <Receipt className="w-4 h-4 text-brand-600 shrink-0" />
+            <span className="hidden sm:inline">Pindai Nota / OCR</span>
+            <span className="sm:hidden">Scan Nota</span>
           </button>
 
           <button
             onClick={() => setActiveTab("consultant")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
               activeTab === "consultant"
                 ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
                 : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <MessageSquare className="w-4 h-4 text-brand-600" />
-            <span>Konsultan Bisnis & Barista</span>
+            <MessageSquare className="w-4 h-4 text-brand-600 shrink-0" />
+            <span className="hidden sm:inline">Konsultan Bisnis & Barista</span>
+            <span className="sm:hidden">Konsultan AI</span>
           </button>
 
           <button
             onClick={() => setActiveTab("insights")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
               activeTab === "insights"
                 ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
                 : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
             }`}
           >
-            <TrendingUp className="w-4 h-4 text-brand-600" />
-            <span>Audit & Rekomendasi Toko</span>
+            <TrendingUp className="w-4 h-4 text-brand-600 shrink-0" />
+            <span className="hidden sm:inline">Audit & Rekomendasi Toko</span>
+            <span className="sm:hidden">Wawasan</span>
           </button>
         </div>
 
@@ -1384,8 +1407,10 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           </div>
         )}
 
-      </div>
-    </div>,
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

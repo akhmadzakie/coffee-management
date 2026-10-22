@@ -308,7 +308,7 @@ export const UsersComponent = () => {
   return (
     <div className="flex-1 flex flex-col gap-6 max-w-7xl mx-auto pb-12 w-full">
       <ConfirmModal {...confirm.modalProps} />
-      <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
             Manajemen Pengguna
@@ -317,7 +317,7 @@ export const UsersComponent = () => {
             Kelola akses role pengguna dalam sistem Julia's Management.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           <CsvImportExport
             onImport={handleImportUsers}
             templateHeaders={["Nama Lengkap", "Username", "PIN", "Role", "Departemen"]}
@@ -345,10 +345,10 @@ export const UsersComponent = () => {
           />
           <button
             onClick={handleAddNew}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl flex items-center font-bold hover:bg-blue-700 transition-colors shadow-sm shrink-0"
+            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl flex items-center font-bold transition-colors shadow-xs shrink-0 whitespace-nowrap cursor-pointer active:scale-95 text-xs"
           >
-            <Plus className="w-5 h-5 sm:mr-2" />
-            <span className="hidden sm:inline">Tambah Pengguna</span>
+            <Plus className="w-4 h-4 mr-1.5 shrink-0" />
+            <span>Tambah Pengguna</span>
           </button>
         </div>
       </div>

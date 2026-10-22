@@ -43,6 +43,8 @@ import {
   Megaphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomDatePicker } from "./common/CustomDatePicker";
 import {
   BarChart,
   Bar,
@@ -1557,12 +1559,12 @@ export function HRManagement() {
 
           {activeTab === "employees" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Data Karyawan" : "Employee Data"}
                 </h3>
                 {canEditHR && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
                     <CsvImportExport
                       onImport={handleImportEmployees}
                       templateHeaders={["Username", "Nama Karyawan", "Posisi", "Departemen", "Status", "Tipe"]}
@@ -1595,9 +1597,9 @@ export function HRManagement() {
                     />
                     <button
                       onClick={() => handleOpenEmployeeModal()}
-                      className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs"
+                      className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs whitespace-nowrap shrink-0"
                     >
-                      <Plus className="w-4 h-4" />{" "}
+                      <Plus className="w-4 h-4 shrink-0" />{" "}
                       {isIndo ? "Tambah Karyawan" : "Add Employee"}
                     </button>
                   </div>
@@ -1762,12 +1764,12 @@ export function HRManagement() {
 
           {activeTab === "contracts" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <h3 className="text-lg font-bold text-slate-800">
                   {isIndo ? "Struktur Gaji & Kontrak" : "Salary & Contracts"}
                 </h3>
                 {canEditHR && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
                     <CsvImportExport
                       onImport={handleImportContracts}
                       templateHeaders={["Username", "Gaji Pokok", "Tunjangan Jabatan", "Tunjangan Makan", "Tunjangan Transport", "Target Bonus KPI", "Mulai Kontrak", "Selesai Kontrak"]}
@@ -1792,8 +1794,8 @@ export function HRManagement() {
                         "Selesai Kontrak": "Format YYYY-MM-DD",
                       }}
                     />
-                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
+                    <button onClick={() => handleOpenContractModal()} className="px-4 py-2 bg-brand-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-brand-700 transition-colors shadow-xs whitespace-nowrap shrink-0">
+                      <Plus className="w-4 h-4 shrink-0" /> {isIndo ? "Tambah Kontrak" : "Add Contract"}
                     </button>
                   </div>
                 )}
@@ -2515,23 +2517,13 @@ export function HRManagement() {
 
                   {/* Filter Controls */}
                   <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-600">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="date"
-                        value={attendanceDateFilter}
-                        onChange={(e) => setAttendanceDateFilter(e.target.value)}
-                        className="bg-transparent border-0 outline-none text-xs text-slate-700 cursor-pointer font-medium"
-                      />
-                      {attendanceDateFilter && (
-                        <button
-                          onClick={() => setAttendanceDateFilter("")}
-                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold ml-1"
-                        >
-                          Reset
-                        </button>
-                      )}
-                    </div>
+                    <CustomDatePicker
+                      value={attendanceDateFilter}
+                      onChange={setAttendanceDateFilter}
+                      placeholder="Semua Tanggal"
+                      allowClear={true}
+                      buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
+                    />
 
                     <select
                       value={attendanceEmpFilter}
@@ -3400,11 +3392,23 @@ export function HRManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tgl Mulai</label>
-                  <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.startDate} onChange={e => setContractForm({...contractForm, startDate: e.target.value})} />
+                  <CustomDatePicker
+                    value={contractForm.startDate}
+                    onChange={(val) => setContractForm({ ...contractForm, startDate: val })}
+                    placeholder="Pilih Tanggal Mulai"
+                    allowClear={false}
+                    buttonClassName="w-full px-3 py-2 border-slate-300 rounded-lg"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tgl Berakhir (Kosongkan jika tetap)</label>
-                  <input type="date" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={contractForm.endDate || ""} onChange={e => setContractForm({...contractForm, endDate: e.target.value})} />
+                  <CustomDatePicker
+                    value={contractForm.endDate || ""}
+                    onChange={(val) => setContractForm({ ...contractForm, endDate: val })}
+                    placeholder="Pilih Tanggal Selesai"
+                    allowClear={true}
+                    buttonClassName="w-full px-3 py-2 border-slate-300 rounded-lg"
+                  />
                 </div>
               </div>
             </div>
@@ -3759,8 +3763,14 @@ export function HRManagement() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Periode (YYYY-MM)</label>
-                <input type="month" className="w-full px-3 py-2 border border-slate-300 rounded-lg" value={attendanceForm.period} onChange={e => setAttendanceForm({...attendanceForm, period: e.target.value})} />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Periode (Bulan & Tahun)</label>
+                <CustomMonthPicker
+                  value={attendanceForm.period}
+                  onChange={(val) => setAttendanceForm({ ...attendanceForm, period: val })}
+                  allowClear={false}
+                  placeholder="Pilih Bulan & Tahun"
+                  buttonClassName="w-full py-2 px-3 rounded-lg border-slate-300"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -626,7 +626,33 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return DEFAULT_INITIAL_INGREDIENTS;
     }
   });
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+
+  const normalizeRecipeList = (list: any[]): Recipe[] => {
+    if (!Array.isArray(list)) return [];
+    return list.map((r) => {
+      let ingList = r?.ingredients;
+      if (typeof ingList === "string") {
+        try {
+          ingList = JSON.parse(ingList);
+        } catch {
+          ingList = [];
+        }
+      }
+      return {
+        ...r,
+        ingredients: Array.isArray(ingList) ? ingList : [],
+      };
+    });
+  };
+
+  const [recipes, setRecipes] = useState<Recipe[]>(() => {
+    try {
+      const saved = localStorage.getItem("app_recipes_cache");
+      return saved ? normalizeRecipeList(JSON.parse(saved)) : [];
+    } catch {
+      return [];
+    }
+  });
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem("app_products_cache");
@@ -973,8 +999,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setSessions(data.device_sessions);
         if (Array.isArray(data.ingredients) && data.ingredients.length > 0)
           setIngredients(data.ingredients);
-        if (Array.isArray(data.recipes) && data.recipes.length > 0)
-          setRecipes(data.recipes);
+        if (Array.isArray(data.recipes))
+          setRecipes(normalizeRecipeList(data.recipes));
         if (Array.isArray(data.stock_movements))
           setStockMovements(data.stock_movements);
         if (Array.isArray(data.sales_transactions))

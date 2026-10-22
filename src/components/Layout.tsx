@@ -47,6 +47,13 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 
+const DASHBOARD_TABS: { id: ViewState; label: string }[] = [
+  { id: "dashboard_manager", label: "Operasional" },
+  { id: "dashboard_owner", label: "Bisnis & Omzet" },
+  { id: "dashboard_finance", label: "Keuangan" },
+  { id: "dashboard_inventory", label: "Inventori" },
+];
+
 interface LayoutProps {
   children: React.ReactNode;
   currentView: ViewState;
@@ -59,7 +66,12 @@ export const Layout: React.FC<LayoutProps> = ({
   onViewChange,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 1180;
+    }
+    return false;
+  });
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isSwitchAccountOpen, setIsSwitchAccountOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -80,6 +92,21 @@ export const Layout: React.FC<LayoutProps> = ({
     };
     window.addEventListener("open-ai-assistant", handleOpenAi);
     return () => window.removeEventListener("open-ai-assistant", handleOpenAi);
+  }, []);
+
+  // ─── Responsive Orientation & Screen Size Listener ───
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== "undefined" && window.innerWidth < 1024) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
   }, []);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -420,7 +447,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const roleTheme = getRoleTheme(currentUser?.role);
 
   return (
-    <div className="min-h-screen bg-[#f6f8ff] flex antialiased text-slate-900">
+    <div className="min-h-screen bg-[#f6f8ff] flex antialiased text-slate-900 safe-area-left safe-area-right">
       {/* ─── Switch Account Modal ─── */}
       <SwitchAccountModal
         isOpen={isSwitchAccountOpen}
@@ -692,10 +719,10 @@ export const Layout: React.FC<LayoutProps> = ({
 
       {/* ─── MAIN CONTENT WRAPPER ─── */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#f6f8ff]">
-        {/* ─── MODERN HEADER BAR ─── */}
-        <header className="h-16 px-4 sm:px-6 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs">
+        {/* ─── MODERN HEADER BAR (RESPONSIVE & NOTCH-SAFE) ─── */}
+        <header className="h-16 min-h-[4rem] px-3 sm:px-6 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs gap-2 safe-area-top">
           {/* Left: Sidebar Toggle & Page Title */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <button
               onClick={() => {
                 if (window.innerWidth >= 768) {
@@ -704,7 +731,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsMobileMenuOpen(!isMobileMenuOpen);
                 }
               }}
-              className="text-slate-500 hover:text-slate-900 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
+              className="text-slate-500 hover:text-slate-900 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs shrink-0"
               aria-label="Toggle Sidebar"
             >
               {isSidebarCollapsed ? (
@@ -715,7 +742,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </button>
 
             {/* Breadcrumb Title */}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                 {{
                   dashboard_owner: "Dashboard Eksekutif Owner",
@@ -744,58 +771,12 @@ export const Layout: React.FC<LayoutProps> = ({
                 }[currentView] || currentView}
               </h2>
             </div>
-
-            {/* Quick Switcher for Dashboards (For Super Admin & Owner) */}
-            {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER"].includes(currentUser?.role || "") && (
-              <div className="hidden xl:flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 text-[11px] font-semibold ml-2">
-                <button
-                  onClick={() => onViewChange("dashboard_manager")}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    currentView === "dashboard_manager"
-                      ? "bg-white text-slate-900 shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Operasional
-                </button>
-                <button
-                  onClick={() => onViewChange("dashboard_owner")}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    currentView === "dashboard_owner"
-                      ? "bg-white text-slate-900 shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Bisnis & Omzet
-                </button>
-                <button
-                  onClick={() => onViewChange("dashboard_finance")}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    currentView === "dashboard_finance"
-                      ? "bg-white text-slate-900 shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Keuangan
-                </button>
-                <button
-                  onClick={() => onViewChange("dashboard_inventory")}
-                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                    currentView === "dashboard_inventory"
-                      ? "bg-white text-slate-900 shadow-2xs font-bold"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Inventori
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Right Header: AI, Export, Clock, Profile Capsule */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Live Clock Pill (Desktop) */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Live Clock Pill (Desktop Only) */}
+            <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-semibold">
                 {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -804,19 +785,23 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* AI Assistant Button */}
             {canAccessAIAssistant && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setIsAIAssistantOpen(true)}
                 title="Julia Coffee AI Copilot & Business Consultant"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-all shadow-2xs cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-brand-600 stroke-[2.2]" />
-                <span className="hidden sm:inline">AI Copilot</span>
-              </button>
+                <span className="hidden xl:inline">AI Copilot</span>
+              </motion.button>
             )}
 
             {/* Export Center Button */}
             {canAccessBusinessReports && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => {
                   if (currentView === "import_sales") setExportModalModule("sales");
                   else if (currentView === "inventory" || currentView === "purchases")
@@ -833,37 +818,41 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsExportModalOpen(true);
                 }}
                 title="Pusat Ekspor Multi-Format"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Ekspor & Laporan</span>
-              </button>
+                <span className="hidden xl:inline">Ekspor & Laporan</span>
+              </motion.button>
             )}
 
             {/* Cloud Sync Status */}
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => syncData()}
               title="Sinkronisasi Cloud DB"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
                 isSyncing
                   ? "bg-brand-50 border-brand-300 text-brand-900"
                   : "bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900"
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-brand-600" : ""}`} />
-              <span className="hidden md:inline">{isSyncing ? "Sync..." : "Cloud"}</span>
-            </button>
+              <span className="hidden 2xl:inline">{isSyncing ? "Sync..." : "Cloud"}</span>
+            </motion.button>
 
             {/* ─── INTERACTIVE OPERATOR CAPSULE (ACCOUNT SWITCHER TRIGGER) ─── */}
             <div className="relative" ref={dropdownRef}>
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 sm:gap-2 p-1.5 pl-1.5 sm:pl-2 pr-2 sm:pr-3 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
               >
-                <div className="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                <div className="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
                   {currentUser?.name?.charAt(0).toUpperCase() || "U"}
                 </div>
-                <div className="hidden sm:flex flex-col items-start text-left">
+                <div className="hidden xl:flex flex-col items-start text-left">
                   <span className="text-xs font-bold text-slate-900 line-clamp-1 leading-tight">
                     {currentUser?.name}
                   </span>
@@ -874,76 +863,123 @@ export const Layout: React.FC<LayoutProps> = ({
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
                 />
-              </button>
+              </motion.button>
 
               {/* Dropdown Floating Menu */}
-              {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  {/* Operator Info */}
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {currentUser?.name}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      @{currentUser?.username}
-                    </p>
-                    <div className="mt-2">
-                      <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleTheme.bg}`}>
-                        {roleTheme.icon} Peran: {currentUser?.role}
-                      </span>
+              <AnimatePresence>
+                {isUserDropdownOpen && (
+                  <motion.div
+                    key="user-dropdown-menu"
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 origin-top-right"
+                  >
+                    {/* Operator Info */}
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-xs font-bold text-slate-900 truncate">
+                        {currentUser?.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        @{currentUser?.username}
+                      </p>
+                      <div className="mt-2">
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleTheme.bg}`}>
+                          {roleTheme.icon} Peran: {currentUser?.role}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="p-1.5 space-y-0.5">
-                    {/* Fast Switch Account */}
-                    <button
-                      onClick={() => {
-                        setIsUserDropdownOpen(false);
-                        setIsSwitchAccountOpen(true);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <KeyRound className="w-4 h-4 text-brand-600" />
-                      <span>Ganti Akun Operator (Switch)</span>
-                    </button>
-
-                    {canAccessBusinessReports && (
+                    {/* Actions */}
+                    <div className="p-1.5 space-y-0.5">
+                      {/* Fast Switch Account */}
                       <button
                         onClick={() => {
                           setIsUserDropdownOpen(false);
-                          setExportModalModule("executive");
-                          setIsExportModalOpen(true);
+                          setIsSwitchAccountOpen(true);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-brand-700 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
                       >
-                        <FileSpreadsheet className="w-4 h-4 text-slate-500" />
-                        <span>Pusat Ekspor & Laporan</span>
+                        <KeyRound className="w-4 h-4 text-brand-600" />
+                        <span>Ganti Akun Operator (Switch)</span>
                       </button>
-                    )}
 
-                    <div className="my-1 border-t border-slate-100" />
+                      {canAccessBusinessReports && (
+                        <button
+                          onClick={() => {
+                            setIsUserDropdownOpen(false);
+                            setExportModalModule("executive");
+                            setIsExportModalOpen(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+                          <span>Pusat Ekspor & Laporan</span>
+                        </button>
+                      )}
 
-                    <button
-                      onClick={() => {
-                        setIsUserDropdownOpen(false);
-                        logout();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4 text-rose-600" />
-                      <span>Keluar (Logout)</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+                      <div className="my-1 border-t border-slate-100" />
+
+                      <button
+                        onClick={() => {
+                          setIsUserDropdownOpen(false);
+                          logout();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-600" />
+                        <span>Keluar (Logout)</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
 
+        {/* ─── FLUID RESPONSIVE DASHBOARD SUB-BAR (ADAPTIVE FOR ALL DEVICES & NOTCH) ─── */}
+        {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER"].includes(currentUser?.role || "") && (
+          <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-3 sm:px-6 py-2 sticky top-16 z-20 shadow-2xs flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner w-full sm:w-auto">
+              {DASHBOARD_TABS.map((tab) => {
+                const isActive = currentView === tab.id;
+                return (
+                  <motion.button
+                    key={tab.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onViewChange(tab.id)}
+                    className={`relative px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer select-none flex-1 sm:flex-initial text-center ${
+                      isActive
+                        ? "text-slate-900 font-bold"
+                        : "text-slate-500 hover:text-slate-800 font-medium"
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeDashboardSubPill"
+                        className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/80 z-0"
+                        transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                      />
+                    )}
+                    <span className="relative z-10">{tab.label}</span>
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            {/* Quick Live Status Hint on Desktop */}
+            <div className="hidden md:flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200/60 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Analitik Bisnis & Operasional Real-time</span>
+            </div>
+          </div>
+        )}
+
         {/* ─── MOBILE DRAWER MENU ─── */}
         {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="md:hidden fixed inset-0 z-50 flex safe-area-top safe-area-bottom">
             {/* Backdrop */}
             <div
               className="fixed inset-0 bg-black/40 backdrop-blur-xs"
@@ -1040,7 +1076,7 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar safe-area-bottom">
           {/* View-Only Alert for Owner */}
           {currentUser?.role === "OWNER" && (
             <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-brand-50/80 border border-brand-200 rounded-2xl text-brand-900 text-xs shadow-2xs">
@@ -1055,10 +1091,10 @@ export const Layout: React.FC<LayoutProps> = ({
           <AnimatePresence mode="wait">
             <motion.main
               key={currentView}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="max-w-7xl mx-auto h-full"
             >
               {children}

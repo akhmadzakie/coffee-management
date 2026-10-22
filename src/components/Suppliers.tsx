@@ -122,7 +122,7 @@ export const Suppliers = () => {
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           {!isReadOnly && (
             <>
               <CsvImportExport
@@ -146,9 +146,9 @@ export const Suppliers = () => {
               />
               <button
                 onClick={() => handleOpenModal()}
-                className="flex items-center justify-center px-4 py-2.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all shadow-xs text-xs font-bold w-full sm:w-auto cursor-pointer"
+                className="flex items-center justify-center px-4 py-2.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all shadow-xs text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <Plus className="h-4 w-4 mr-1.5" />
+                <Plus className="h-4 w-4 mr-1.5 shrink-0" />
                 Tambah Supplier
               </button>
             </>

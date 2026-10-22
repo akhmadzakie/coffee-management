@@ -317,7 +317,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       </AnimatePresence>
 
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200/60">
@@ -332,23 +332,23 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={handleBulkRecalculateHpp}
-            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-slate-200/90 shadow-2xs cursor-pointer active:scale-95"
+            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-slate-200/90 shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             title="Hitung ulang estimasi HPP seluruh produk berdasarkan harga bahan baku dan kemasan terbaru di inventori"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-brand-600" />
+            <RefreshCw className="w-3.5 h-3.5 text-brand-600 shrink-0" />
             <span>Sinkronkan HPP</span>
           </button>
 
           {onNavigate && (
             <button
               onClick={() => onNavigate("hpp_calculator")}
-              className="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-brand-200/70 shadow-2xs cursor-pointer active:scale-95"
+              className="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-brand-200/70 shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Calculator className="w-3.5 h-3.5 text-brand-600" />
+              <Calculator className="w-3.5 h-3.5 text-brand-600 shrink-0" />
               <span>Kalkulator HPP</span>
             </button>
           )}
@@ -359,9 +359,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 setEditingBatchPrep(null);
                 setIsBatchPrepModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4 text-white" />
+              <Plus className="w-4 h-4 text-white shrink-0" />
               <span>Resep Batch Baru</span>
             </button>
           ) : (
@@ -370,9 +370,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 setEditingProduct(null);
                 setIsProductModalOpen(true);
               }}
-              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4 text-white" />
+              <Plus className="w-4 h-4 text-white shrink-0" />
               <span>Produk {activeTab} Baru</span>
             </button>
           )}
@@ -1518,12 +1518,17 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                           const picked = recipes.find((r) => r.id === e.target.value);
                           if (picked) {
                             let rawCost = 0;
-                            picked.ingredients.forEach((ri) => {
+                            let safeList = picked.ingredients;
+                            if (typeof safeList === "string") {
+                              try { safeList = JSON.parse(safeList); } catch { safeList = []; }
+                            }
+                            const validList = Array.isArray(safeList) ? safeList : [];
+                            validList.forEach((ri) => {
                               const ing = ingredients.find((i) => i.id === ri.ingredientId);
-                              if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
+                              if (ing && ing.costPerUnit) rawCost += Number(ri.quantity || 0) * Number(ing.costPerUnit);
                             });
                             handleUpdateVariant(idx, {
-                              recipe: picked.ingredients,
+                              recipe: validList,
                               estimatedHpp: Math.round(rawCost + Number(v.packagingCost || 0)),
                             });
                           }
@@ -1531,11 +1536,16 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         className="w-full text-base sm:text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white cursor-pointer"
                       >
                         <option value="">-- Pilih Resep Toko (Opsional) --</option>
-                        {recipes.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.menuName} ({r.ingredients.length} bahan baku)
-                          </option>
-                        ))}
+                        {recipes.map((r) => {
+                          const rIngCount = Array.isArray(r.ingredients)
+                            ? r.ingredients.length
+                            : (typeof r.ingredients === "string" ? (() => { try { return JSON.parse(r.ingredients).length; } catch { return 0; } })() : 0);
+                          return (
+                            <option key={r.id} value={r.id}>
+                              {r.menuName} ({rIngCount} bahan baku)
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 

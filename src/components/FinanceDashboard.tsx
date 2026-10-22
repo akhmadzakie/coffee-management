@@ -44,6 +44,7 @@ import {
   Legend,
 } from "recharts";
 import { motion } from "motion/react";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
 
 interface FinanceDashboardProps {
   onNavigate: (view: ViewState) => void;
@@ -270,11 +271,11 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           {selectedPeriodStr && (
             <button
               onClick={() => onNavigate("finance_reports")}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold transition shadow-2xs border cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold transition shadow-2xs border cursor-pointer whitespace-nowrap shrink-0 ${
                 isSelectedPeriodClosed
                   ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                   : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50"
@@ -299,31 +300,15 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </button>
           )}
 
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-2xl p-1.5 shadow-2xs">
-            <select
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(Number(e.target.value))}
-              className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
-            >
-              <option value={-1}>Semua Bulan</option>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i}>
-                  {new Date(0, i).toLocaleString("id-ID", { month: "long" })}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(Number(e.target.value))}
-              className="bg-transparent border-none text-base sm:text-xs font-bold text-slate-800 focus:ring-0 cursor-pointer py-1.5 pl-2.5 pr-4"
-            >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomMonthPicker
+            month={filterMonth}
+            year={filterYear}
+            onMonthYearChange={(m, y) => {
+              setFilterMonth(m);
+              setFilterYear(y);
+            }}
+            allowAllMonths={true}
+          />
         </div>
       </div>
 

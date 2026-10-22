@@ -483,20 +483,20 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
           </div>
 
           {/* Quick Action Navigation */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <button
               onClick={() => onNavigate("attendance_clock")}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/30 flex items-center gap-2 shrink-0"
+              className="whitespace-nowrap px-4 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/30 flex items-center gap-2 shrink-0 cursor-pointer"
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-4 h-4 shrink-0" />
               <span>{isClockedIn && !isClockedOut ? "Absen Pulang (Clock Out)" : "Absen Masuk (Clock In)"}</span>
             </button>
             {isLeader && (
               <button
                 onClick={() => onNavigate("leader_checklist")}
-                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0"
+                className="whitespace-nowrap px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/15 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer"
               >
-                <CheckSquare className="w-4 h-4 text-emerald-400" />
+                <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Checklist Supervisi Leader</span>
               </button>
             )}

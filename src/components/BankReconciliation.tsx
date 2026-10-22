@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { formatCurrency } from "../utils/format";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomSelect } from "./common/CustomSelect";
 
 const generateId = () => {
   return "id_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
@@ -211,24 +213,25 @@ export const BankReconciliationComponent: React.FC = () => {
       </div>
 
       {/* ── Account & Period Selector Bar ──────────────────────────────────────── */}
-      <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[220px]">
+      <div className="p-4 sm:p-5 bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
+        <div className="flex-1">
           <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-brand-600" />
             Pilih Rekening Bank / Kas
           </label>
-          <select
-            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 text-base sm:text-xs focus:outline-none focus:border-brand-500 focus:bg-white transition cursor-pointer"
+          <CustomSelect
             value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
-            <option value="">-- Pilih Akun Bank / Dompet --</option>
-            {cashAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.type})
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedAccountId}
+            options={[
+              { value: "", label: "-- Pilih Akun Bank / Dompet --" },
+              ...cashAccounts.map((a) => ({
+                value: a.id,
+                label: `${a.name} (${a.type})`,
+              })),
+            ]}
+            placeholder="Pilih Akun Bank / Dompet"
+            buttonClassName="w-full py-2.5 px-3.5 rounded-xl border-slate-200"
+          />
         </div>
 
         <div className="w-full sm:w-auto">
@@ -236,11 +239,11 @@ export const BankReconciliationComponent: React.FC = () => {
             <Calendar className="w-3.5 h-3.5 text-brand-600" />
             Periode Mutasi
           </label>
-          <input
-            type="month"
-            className="w-full sm:w-auto px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 text-base sm:text-xs focus:outline-none focus:border-brand-500 focus:bg-white transition"
+          <CustomMonthPicker
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            onChange={setPeriod}
+            allowClear={false}
+            buttonClassName="w-full sm:w-auto py-2.5 px-3.5 rounded-xl border-slate-200"
           />
         </div>
       </div>

@@ -38,6 +38,7 @@ import {
   Activity,
 } from "lucide-react";
 import { useTranslation } from "../utils/i18n";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
 
 export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const {
@@ -357,29 +358,18 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           {view === "FINANCE" && (
-            <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-2xl p-1.5 shadow-2xs w-full sm:w-auto">
-              <select
-                value={filterMonth}
-                onChange={(e) => setFilterMonth(Number(e.target.value))}
-                className="bg-transparent border-none text-xs font-semibold text-stone-700 focus:ring-0 cursor-pointer py-1 pl-2 pr-4"
-              >
-                <option value={-1}>{isIndo ? "Semua Bulan" : "All Months"}</option>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {new Date(0, i).toLocaleString(isIndo ? "id-ID" : "en-US", { month: "long" })}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filterYear}
-                onChange={(e) => setFilterYear(Number(e.target.value))}
-                className="bg-transparent border-none text-xs font-semibold text-stone-700 focus:ring-0 cursor-pointer py-1 pl-2 pr-4"
-              >
-                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+            <CustomMonthPicker
+              month={filterMonth}
+              year={filterYear}
+              onMonthYearChange={(m, y) => {
+                setFilterMonth(m);
+                setFilterYear(y);
+              }}
+              allowAllMonths={true}
+              buttonClassName="border-stone-200 shadow-2xs py-1.5 px-3 whitespace-nowrap"
+            />
           )}
         </div>
       </div>

@@ -279,7 +279,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         </div>
 
         {/* Global Action on Header */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           <button
             onClick={() => {
               window.dispatchEvent(
@@ -288,10 +288,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 })
               );
             }}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-brand-50 to-indigo-50 hover:from-brand-100 hover:to-indigo-100 text-brand-800 border border-brand-200/80 rounded-2xl text-xs font-bold shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-brand-50 to-indigo-50 hover:from-brand-100 hover:to-indigo-100 text-brand-800 border border-brand-200/80 rounded-2xl text-xs font-bold shadow-2xs active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap shrink-0"
             title="Catat pengeluaran/pemasukan kas dengan kalimat bebas (AI Natural Input)"
           >
-            <Sparkles className="w-4 h-4 text-brand-600 fill-brand-600/20" />
+            <Sparkles className="w-4 h-4 text-brand-600 fill-brand-600/20 shrink-0" />
             <span>✨ Catat Cepat AI</span>
           </button>
           {!isReadOnly && (
@@ -300,9 +300,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 setTrxType("CASH_IN");
                 setIsModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span>Tambah Transaksi</span>
             </button>
           )}

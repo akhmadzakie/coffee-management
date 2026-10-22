@@ -235,9 +235,9 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
         </div>
 
         {/* Station Filters & Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
           {/* Station Pills */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shrink-0 flex-nowrap">
             {[
               { id: "ALL", label: "Semua Stasiun", icon: Sparkles },
               { id: "BAR", label: "Bar Minuman", icon: Coffee },
@@ -249,13 +249,13 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                 <button
                   key={st.id}
                   onClick={() => handleSelectStation(st.id)}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition ${
+                  className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                     stationFilter === st.id
                       ? "bg-white text-slate-950 font-black shadow-xs border border-slate-200"
                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
-                  <IconComp className="w-3.5 h-3.5 text-brand-600" />
+                  <IconComp className="w-3.5 h-3.5 text-brand-600 shrink-0" />
                   <span>{st.label}</span>
                 </button>
               );
@@ -265,7 +265,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {/* Sound Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2.5 rounded-xl border transition ${
+            className={`whitespace-nowrap shrink-0 p-2.5 rounded-xl border transition cursor-pointer ${
               soundEnabled
                 ? "bg-brand-50 text-brand-800 border-brand-200 shadow-2xs"
                 : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
@@ -278,7 +278,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {/* Refresh button */}
           <button
             onClick={fetchTickets}
-            className="p-2.5 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition"
+            className="whitespace-nowrap shrink-0 p-2.5 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition cursor-pointer"
             title="Refresh Tiket"
           >
             <RotateCcw className="w-4 h-4" />
@@ -287,7 +287,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           {onNavigateBack ? (
             <button
               onClick={onNavigateBack}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs transition"
+              className="whitespace-nowrap shrink-0 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer"
               title="Kembali ke Dashboard Manajemen"
             >
               Kembali ke Web
@@ -296,9 +296,9 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             <button
               onClick={logout}
               title="Keluar dari akun barista/kitchen"
-              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+              className="whitespace-nowrap shrink-0 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>Keluar</span>
             </button>
           )}

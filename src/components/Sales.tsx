@@ -33,6 +33,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportXlsx";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomDatePicker } from "./common/CustomDatePicker";
+import { CustomSelect } from "./common/CustomSelect";
 
 interface PosOrderDetail {
   id: string;
@@ -502,42 +505,35 @@ export const Sales = () => {
           {/* Top Actions for Daily Recap */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-500 font-semibold flex items-center gap-1.5">
+              <span className="text-slate-500 font-semibold flex items-center gap-1.5 whitespace-nowrap">
                 <Calendar className="w-3.5 h-3.5 text-brand-600" />
                 Filter Bulan / Periode:
               </span>
-              <input
-                type="month"
+              <CustomMonthPicker
                 value={recapDateFilter}
-                onChange={(e) => setRecapDateFilter(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 text-base sm:text-xs focus:outline-none focus:border-brand-500 focus:bg-white transition"
+                onChange={setRecapDateFilter}
+                allowClear={true}
+                placeholder="Semua Bulan"
+                buttonClassName="py-1 px-3 text-xs rounded-xl"
               />
-              {recapDateFilter && (
-                <button
-                  onClick={() => setRecapDateFilter("")}
-                  className="px-2 py-1 text-slate-500 hover:text-slate-900 text-xs font-semibold underline cursor-pointer"
-                >
-                  Reset
-                </button>
-              )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
               <button
                 onClick={handleExportDailyRecap}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
                 title="Unduh Rekap Omzet ke Excel (.xlsx)"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
                 <span>Ekspor Excel (.xlsx)</span>
               </button>
 
               {!isReadOnly && (
                 <button
                   onClick={() => setIsAddRecapOpen(true)}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                  className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
                   <span>Catat Omzet Harian</span>
                 </button>
               )}
@@ -962,39 +958,40 @@ export const Sales = () => {
               </div>
 
               {/* Status Filter */}
-              <select
+              <CustomSelect
                 value={posStatusFilter}
-                onChange={(e) => setPosStatusFilter(e.target.value)}
-                className="px-3 py-2 text-base sm:text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:border-brand-500 cursor-pointer"
-              >
-                <option value="ALL">Semua Status</option>
-                <option value="PAID">Lunas (PAID)</option>
-                <option value="OPEN">Open Bill</option>
-                <option value="VOID">Batal / Void</option>
-              </select>
+                onChange={setPosStatusFilter}
+                options={[
+                  { value: "ALL", label: "Semua Status" },
+                  { value: "PAID", label: "Lunas (PAID)" },
+                  { value: "OPEN", label: "Open Bill" },
+                  { value: "VOID", label: "Batal / Void" },
+                ]}
+                placeholder="Pilih Status"
+                buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
+              />
 
               {/* Date Filters */}
               <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={posStartDate}
-                  onChange={(e) => setPosStartDate(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-slate-700 focus:outline-none focus:border-brand-500"
+                  onChange={setPosStartDate}
+                  placeholder="Mulai"
+                  buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200 shadow-none rounded-xl"
                 />
-                <span>s/d</span>
-                <input
-                  type="date"
+                <span className="font-semibold text-slate-400">s/d</span>
+                <CustomDatePicker
                   value={posEndDate}
-                  onChange={(e) => setPosEndDate(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs text-slate-700 focus:outline-none focus:border-brand-500"
+                  onChange={setPosEndDate}
+                  placeholder="Sampai"
+                  buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200 shadow-none rounded-xl"
                 />
               </div>
             </div>
 
             <button
               onClick={fetchPosOrders}
-              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0 whitespace-nowrap"
             >
               <RotateCcw className={`w-3.5 h-3.5 text-brand-600 ${isLoadingPosOrders ? "animate-spin" : ""}`} />
               <span>Refresh Arsip</span>
@@ -1244,18 +1241,18 @@ export const Sales = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
               <button
                 onClick={handleExportSales}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
                 title="Unduh Data Penjualan Menu ke Excel (.xlsx)"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
                 <span>Ekspor Excel (.xlsx)</span>
               </button>
 
               {!isReadOnly && (
-                <div className="flex items-center">
+                <div className="flex items-center shrink-0">
                   <CsvImportExport
                     onImport={handleSalesImport}
                     templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
@@ -1768,28 +1765,30 @@ export const Sales = () => {
                     <label className="block text-slate-700 font-bold mb-1">
                       Tanggal Penjualan
                     </label>
-                    <input
-                      type="date"
-                      required
+                    <CustomDatePicker
                       value={recapForm.date}
-                      onChange={(e) => setRecapForm({ ...recapForm, date: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-medium text-base sm:text-xs"
+                      onChange={(val) => setRecapForm({ ...recapForm, date: val })}
+                      placeholder="Pilih Tanggal"
+                      allowClear={false}
+                      buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
                       Shift Operasional
                     </label>
-                    <select
+                    <CustomSelect
                       value={recapForm.shift}
-                      onChange={(e) => setRecapForm({ ...recapForm, shift: e.target.value as any })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-medium text-base sm:text-xs cursor-pointer"
-                    >
-                      <option value="ALL">Semua Shift (Full Day)</option>
-                      <option value="PAGI">Shift Pagi</option>
-                      <option value="SORE">Shift Sore</option>
-                      <option value="MALAM">Shift Malam</option>
-                    </select>
+                      onChange={(val) => setRecapForm({ ...recapForm, shift: val as any })}
+                      options={[
+                        { value: "ALL", label: "Semua Shift (Full Day)" },
+                        { value: "PAGI", label: "Shift Pagi (Opening)" },
+                        { value: "MIDDLE", label: "Shift Middle" },
+                        { value: "SORE", label: "Shift Sore (Closing)" },
+                      ]}
+                      placeholder="Pilih Shift"
+                      buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                    />
                   </div>
                 </div>
 

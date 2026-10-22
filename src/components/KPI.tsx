@@ -204,29 +204,29 @@ export const KPI: React.FC = () => {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 mt-5 border-b border-slate-200">
+        <div className="flex items-center gap-2 mt-5 border-b border-slate-200 overflow-x-auto no-scrollbar shrink-0">
           <button
             onClick={() => setActiveSubTab("guide")}
-            className={`pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors ${
+            className={`whitespace-nowrap shrink-0 pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer ${
               activeSubTab === "guide"
                 ? "border-indigo-600 text-indigo-700 bg-white rounded-t-lg border-t border-x border-slate-200"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            <BookOpen className="w-4 h-4 text-indigo-600" />
-            📖 Panduan & Alur Bonus Otomatis
+            <BookOpen className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>📖 Panduan & Alur Bonus Otomatis</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab("target")}
-            className={`pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors ${
+            className={`whitespace-nowrap shrink-0 pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer ${
               activeSubTab === "target"
                 ? "border-indigo-600 text-indigo-700 bg-white rounded-t-lg border-t border-x border-slate-200"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            <Target className="w-4 h-4 text-emerald-600" />
-            🎯 Bonus Tembus Target Toko
+            <Target className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>🎯 Bonus Tembus Target Toko</span>
             {targetBonusAmount > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] bg-emerald-100 text-emerald-800 font-bold rounded-full">
                 Aktif
@@ -236,14 +236,14 @@ export const KPI: React.FC = () => {
 
           <button
             onClick={() => setActiveSubTab("tasks")}
-            className={`pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors ${
+            className={`whitespace-nowrap shrink-0 pb-3 px-3 border-b-2 font-semibold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer ${
               activeSubTab === "tasks"
                 ? "border-indigo-600 text-indigo-700 bg-white rounded-t-lg border-t border-x border-slate-200"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            <Users className="w-4 h-4 text-indigo-600" />
-            👥 Rekapitulasi Insentif Tim
+            <Users className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>👥 Rekapitulasi Insentif Tim</span>
           </button>
         </div>
       </div>

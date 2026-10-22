@@ -390,6 +390,18 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     return groups;
   }, [ingredients]);
 
+  const getSafeRecipeIngredients = (r?: any): any[] => {
+    if (!r) return [];
+    if (Array.isArray(r.ingredients)) return r.ingredients;
+    if (typeof r.ingredients === "string") {
+      try {
+        const p = JSON.parse(r.ingredients);
+        if (Array.isArray(p)) return p;
+      } catch {}
+    }
+    return [];
+  };
+
   // Terapkan preset resep standar kafe
   const handleApplyPreset = (preset: StandardRecipePreset) => {
     setSelectedDivision(preset.division);
@@ -478,7 +490,8 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setMenuName(r.menuName);
 
     // Map ingredients from store
-    const mappedItems: RecipeIngredientItem[] = r.ingredients.map((ri, idx) => {
+    const safeIngs = getSafeRecipeIngredients(r);
+    const mappedItems: RecipeIngredientItem[] = safeIngs.map((ri, idx) => {
       const ing = ingredients.find((i) => i.id === ri.ingredientId);
       return {
         id: `item-${Date.now()}-${idx}`,
@@ -910,7 +923,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col xl:flex-row justify-between items-start xl:items-center gap-5">
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
@@ -920,11 +933,11 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               Manager Exclusive
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
               <Calculator className="w-5 h-5" />
             </div>
-            Simulasi & Kalkulator HPP Menu
+            <span>Simulasi & Kalkulator HPP Menu</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
             Hitung biaya bahan baku riil, kemasan takeaway, buffer penyusutan barista, serta simulasi margin laba & target harga jual menu.
@@ -932,8 +945,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         </div>
 
         {/* Tab Selector & Navigation */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+          <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto overflow-hidden">
             <button
               onClick={() => setActiveTab("simulator")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
@@ -1071,7 +1084,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       <option value="">-- Muat Resep Toko --</option>
                       {recipes.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.menuName} ({r.ingredients.length} bahan)
+                          {r.menuName} ({getSafeRecipeIngredients(r).length} bahan)
                         </option>
                       ))}
                     </select>
@@ -1804,13 +1817,14 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredRecipes.map((r) => {
-                  const recipeHpp = r.ingredients.reduce((sum, ri) => {
+                  const safeList = getSafeRecipeIngredients(r);
+                  const recipeHpp = safeList.reduce((sum, ri) => {
                     const ing = ingredients.find((i) => i.id === ri.ingredientId);
                     const cost = ing ? Number(ing.costPerUnit || 0) : 0;
-                    return sum + ri.quantity * cost;
+                    return sum + Number(ri.quantity || 0) * cost;
                   }, 0);
 
-                  const hasMissingCost = r.ingredients.some((ri) => {
+                  const hasMissingCost = safeList.some((ri) => {
                     const ing = ingredients.find((i) => i.id === ri.ingredientId);
                     return !ing || !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
                   });
@@ -1822,7 +1836,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
                         <div className="flex flex-wrap gap-1 max-w-md">
-                          {r.ingredients.map((ri, idx) => {
+                          {safeList.map((ri, idx) => {
                             const ing = ingredients.find((i) => i.id === ri.ingredientId);
                             return (
                               <span
@@ -1878,13 +1892,14 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
           {/* MOBILE CARD VIEW (Phone 360-480px) */}
           <div className="block md:hidden space-y-3">
             {filteredRecipes.map((r) => {
-              const recipeHpp = r.ingredients.reduce((sum, ri) => {
+              const safeList = getSafeRecipeIngredients(r);
+              const recipeHpp = safeList.reduce((sum, ri) => {
                 const ing = ingredients.find((i) => i.id === ri.ingredientId);
                 const cost = ing ? Number(ing.costPerUnit || 0) : 0;
-                return sum + ri.quantity * cost;
+                return sum + Number(ri.quantity || 0) * cost;
               }, 0);
 
-              const hasMissingCost = r.ingredients.some((ri) => {
+              const hasMissingCost = safeList.some((ri) => {
                 const ing = ingredients.find((i) => i.id === ri.ingredientId);
                 return !ing || !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
               });
@@ -1897,7 +1912,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <h3 className="font-bold text-slate-900 text-sm">{r.menuName}</h3>
-                      <p className="text-[11px] text-slate-500">{r.ingredients.length} bahan baku</p>
+                      <p className="text-[11px] text-slate-500">{safeList.length} bahan baku</p>
                     </div>
                     <div className="text-right">
                       <span className="text-[10px] text-slate-400 block">HPP Pokok:</span>
@@ -1909,7 +1924,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                   {/* Ingredients Tags */}
                   <div className="flex flex-wrap gap-1">
-                    {r.ingredients.map((ri, idx) => {
+                    {safeList.map((ri, idx) => {
                       const ing = ingredients.find((i) => i.id === ri.ingredientId);
                       return (
                         <span

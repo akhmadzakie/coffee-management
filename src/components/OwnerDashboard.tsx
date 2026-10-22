@@ -488,8 +488,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* ─── Header & Strategic Filters ───────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
-        <div className="space-y-1.5">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        <div className="space-y-1.5 max-w-2xl">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200/60 shadow-2xs">
               <Sparkles className="w-3.5 h-3.5 text-brand-600" />
@@ -510,9 +510,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Action & Period Selector */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
           {/* Animated Sliding Pill Period Tabs */}
-          <div className="bg-slate-100/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 text-xs shadow-inner overflow-x-auto no-scrollbar max-w-full">
+          <div className="bg-slate-100/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 text-xs shadow-inner overflow-x-auto no-scrollbar shrink-0">
             {[
               { id: "today", label: "Hari Ini" },
               { id: "this_month", label: "Bulan Ini" },
@@ -541,43 +541,45 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             })}
           </div>
 
-          {/* 1-Click Master Executive Report Exports */}
-          <button
-            onClick={handleExportExecutivePDF}
-            disabled={isExporting !== null}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
-            title="Unduh Laporan Eksekutif Lengkap Format PDF"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>{isExporting === "pdf" ? "Memproses..." : "PDF Eksekutif"}</span>
-          </button>
-          <button
-            onClick={handleExportExecutiveXlsx}
-            disabled={isExporting !== null}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
-            title="Unduh Laporan Eksekutif Lengkap Format Excel Multi-Sheet"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>{isExporting === "xlsx" ? "Memproses..." : "Excel Master"}</span>
-          </button>
+          {/* 1-Click Master Executive Report Exports & Jumps */}
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+            <button
+              onClick={handleExportExecutivePDF}
+              disabled={isExporting !== null}
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
+              title="Unduh Laporan Eksekutif Lengkap Format PDF"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span>{isExporting === "pdf" ? "Memproses..." : "PDF Eksekutif"}</span>
+            </button>
+            <button
+              onClick={handleExportExecutiveXlsx}
+              disabled={isExporting !== null}
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white shadow-xs hover:shadow-md transition-all cursor-pointer disabled:opacity-60"
+              title="Unduh Laporan Eksekutif Lengkap Format Excel Multi-Sheet"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+              <span>{isExporting === "xlsx" ? "Memproses..." : "Excel Master"}</span>
+            </button>
 
-          {/* Quick Jump Buttons for Owner */}
-          <button
-            onClick={() => onNavigate("finance_reports")}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
-          >
-            <FileText className="w-3.5 h-3.5 text-slate-500" />
-            Laporan P&L
-          </button>
+            {/* Quick Jump Buttons for Owner */}
+            <button
+              onClick={() => onNavigate("finance_reports")}
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span>Laporan P&L</span>
+            </button>
 
-          <button
-            onClick={() => handleOpenCopilot("insights")}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200/80 hover:bg-brand-100 hover:text-brand-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
-            title="Buka Audit & Rekomendasi Eksekutif Toko"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            Ringkasan Eksekutif AI
-          </button>
+            <button
+              onClick={() => handleOpenCopilot("insights")}
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200/80 hover:bg-brand-100 hover:text-brand-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+              title="Buka Audit & Rekomendasi Eksekutif Toko"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+              <span>Ringkasan Eksekutif AI</span>
+            </button>
+          </div>
         </div>
       </div>
 

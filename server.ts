@@ -647,8 +647,26 @@ async function startServer() {
   const sanitizeRecipe = (r: any) => ({
     id: String(r.id || crypto.randomUUID()),
     menuName: String(r.menuName || ""),
-    ingredients: String(r.ingredients || "[]"),
+    ingredients: Array.isArray(r.ingredients)
+      ? JSON.stringify(r.ingredients)
+      : (typeof r.ingredients === "string" ? r.ingredients : "[]"),
   });
+
+  const formatRecipesForClient = (recs: any[]) =>
+    (recs || []).map((r: any) => {
+      let ingList = r?.ingredients;
+      if (typeof ingList === "string") {
+        try {
+          ingList = JSON.parse(ingList);
+        } catch {
+          ingList = [];
+        }
+      }
+      return {
+        ...r,
+        ingredients: Array.isArray(ingList) ? ingList : [],
+      };
+    });
 
   const sanitizeStockMovement = (m: any) => ({
     id: String(m.id || crypto.randomUUID()),
@@ -1021,7 +1039,7 @@ async function startServer() {
     users: initialUsers,
     settings: initialSettings,
     ingredients: JSON.parse(JSON.stringify(initialIngredients)),
-    recipes: JSON.parse(JSON.stringify(initialRecipes)),
+    recipes: formatRecipesForClient(initialRecipes),
     products: JSON.parse(JSON.stringify(initialProducts)),
     cash_accounts: [{ id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true }],
     stock_movements: [],
@@ -1377,7 +1395,7 @@ async function startServer() {
         stock_movements,
         sales_transactions,
         sales_import_logs,
-        recipes,
+        recipes: formatRecipesForClient(recipes),
         audit_logs,
         suppliers,
         purchase_orders,

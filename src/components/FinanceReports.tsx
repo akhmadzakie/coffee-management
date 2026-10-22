@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ExportModal } from './ExportModal';
 import { motion } from 'motion/react';
+import { CustomMonthPicker } from './common/CustomMonthPicker';
 
 const FinanceReports: React.FC = () => {
   const { 
@@ -92,8 +93,8 @@ const FinanceReports: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
-      {/* ── HEADER SECTION ─────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ── HEADER BANNER ─────────────────────────────────────────────── */}
+      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-black uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full border border-brand-200/60">
@@ -114,23 +115,19 @@ const FinanceReports: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Month selector with iOS zoom prevention */}
-          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-slate-200/90 shadow-2xs">
-            <Calendar className="w-4 h-4 text-brand-600 shrink-0" />
-            <input 
-              type="month" 
-              className="border-none text-base sm:text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
-              value={period}
-              onChange={e => setPeriod(e.target.value)}
-            />
-          </div>
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+          {/* Custom Month & Year Picker */}
+          <CustomMonthPicker
+            value={period}
+            onChange={setPeriod}
+            allowClear={false}
+          />
 
           <button
             onClick={() => setIsExportOpen(true)}
-            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95"
+            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
           >
-            <Download className="w-3.5 h-3.5 text-white" />
+            <Download className="w-3.5 h-3.5 text-white shrink-0" />
             <span>Ekspor Laporan</span>
           </button>
         </div>

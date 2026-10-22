@@ -12,6 +12,8 @@ import { motion } from "framer-motion";
 import { getLocalDateString } from "../utils/dateUtils";
 import { TaskCategoryGroup, TaskItemDetail, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import { formatCurrency } from "../utils/format";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomDatePicker } from "./common/CustomDatePicker";
 
 export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
   {
@@ -1042,39 +1044,39 @@ export const LeaderChecklist: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab("monitoring")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monitoring"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Calendar className="w-4 h-4 text-amber-500" />
-              Pantau Harian
+              <Calendar className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Pantau Harian</span>
             </button>
             <button
               onClick={() => setActiveTab("monthly")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monthly"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-              Rekap Bulanan
+              <TrendingUp className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Rekap Bulanan</span>
             </button>
             <button
               onClick={() => setActiveTab("settings")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "settings"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Sliders className="w-4 h-4 text-emerald-600" />
-              Atur SOP & Grade
+              <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Atur SOP & Grade</span>
             </button>
           </div>
         </div>
@@ -1088,31 +1090,24 @@ export const LeaderChecklist: React.FC = () => {
                 <Calendar className="w-5 h-5 text-amber-400" />
                 <div>
                   <p className="text-xs text-slate-400 font-medium">Tanggal Pantauan Laporan</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <input
-                      type="date"
+                  <div className="flex items-center gap-2 mt-0.5 shrink-0 flex-nowrap">
+                    <CustomDatePicker
                       value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="bg-slate-800 border border-slate-700 text-white text-sm font-semibold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      onChange={setSelectedDate}
+                      allowClear={false}
+                      placeholder="Pilih Tanggal"
+                      buttonClassName="bg-slate-800 border-slate-700 text-white hover:bg-slate-700/80 rounded-xl py-1.5 px-3"
                     />
-                    {selectedDate !== today && (
-                      <button
-                        onClick={() => setSelectedDate(today)}
-                        className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-amber-400 border border-slate-700 transition-colors"
-                      >
-                        Hari Ini
-                      </button>
-                    )}
                     <button
                       onClick={() => {
                         const ym = selectedDate.slice(0, 7);
                         setSelectedMonth(ym);
                         setActiveTab("monthly");
                       }}
-                      className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors flex items-center gap-1.5"
+                      className="whitespace-nowrap shrink-0 text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Beralih ke tampilan rekapitulasi satu bulan penuh"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+                      <TrendingUp className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                       <span>Rekap 1 Bulan</span>
                     </button>
                   </div>
@@ -1388,31 +1383,22 @@ export const LeaderChecklist: React.FC = () => {
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">Bulan Periode Evaluasi</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="month"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="bg-slate-800 border border-slate-700 text-white text-sm font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      />
-                      {selectedMonth !== currentYearMonth && (
-                        <button
-                          onClick={() => setSelectedMonth(currentYearMonth)}
-                          className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors"
-                        >
-                          Bulan Ini
-                        </button>
-                      )}
-                    </div>
+                    <p className="text-xs text-slate-400 font-medium mb-1">Bulan Periode Evaluasi</p>
+                    <CustomMonthPicker
+                      value={selectedMonth}
+                      onChange={setSelectedMonth}
+                      allowClear={false}
+                      placeholder="Pilih Bulan Evaluasi"
+                      buttonClassName="bg-slate-800 border-slate-700 text-white hover:bg-slate-700/80 hover:border-slate-600 rounded-xl"
+                    />
                   </div>
                 </div>
 
                 {/* Filter Divisi */}
-                <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 sm:ml-4 mt-2 sm:mt-0 text-xs">
+                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700 sm:ml-4 mt-2 sm:mt-0 text-xs shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
                   <button
                     onClick={() => setMonthlyDivisionFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "ALL"
                         ? "bg-blue-600 text-white shadow-xs"
                         : "text-slate-400 hover:text-white"
@@ -1422,7 +1408,7 @@ export const LeaderChecklist: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setMonthlyDivisionFilter("BAR")}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAR"
                         ? "bg-amber-600 text-white shadow-xs"
                         : "text-slate-400 hover:text-white"
@@ -1432,7 +1418,7 @@ export const LeaderChecklist: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setMonthlyDivisionFilter("KITCHEN")}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "KITCHEN"
                         ? "bg-orange-600 text-white shadow-xs"
                         : "text-slate-400 hover:text-white"
@@ -1442,7 +1428,7 @@ export const LeaderChecklist: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setMonthlyDivisionFilter("BAKER")}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAKER"
                         ? "bg-emerald-600 text-white shadow-xs"
                         : "text-slate-400 hover:text-white"

@@ -36,7 +36,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
-import { Recipe, Ingredient, ViewState, StockOpname, StockOpnameItem } from "../types";
+import { CustomSelect } from "./common/CustomSelect";
+import { Recipe, RecipeIngredient, Ingredient, ViewState, StockOpname, StockOpnameItem } from "../types";
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
@@ -150,6 +151,18 @@ export function getIngredientUnitConversion(ing: Ingredient): UnitConversionInfo
     displayLabel: `1 ${ing.unit}`,
   };
 }
+
+export const getRecipeIngredients = (recipe?: Recipe | null): RecipeIngredient[] => {
+  if (!recipe) return [];
+  if (Array.isArray(recipe.ingredients)) return recipe.ingredients;
+  if (typeof recipe.ingredients === "string") {
+    try {
+      const parsed = JSON.parse(recipe.ingredients);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+  }
+  return [];
+};
 
 export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
   const {
@@ -1100,7 +1113,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
+        <div className="flex items-center gap-2 w-full xl:w-auto xl:justify-end overflow-x-auto no-scrollbar shrink-0">
           {activeTab === "ingredients" && !isReadOnly && currentUser?.role !== "LEADER" && (
             <>
               <CsvImportExport
@@ -1195,27 +1208,36 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   "Catatan Tambahan": i.notes || "",
                 }))}
               />
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
                 onClick={() => handleOpenTransferModal()}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
                 title="Keluarkan bahan dus/karton dari gudang ke stasiun Bar/Dapur"
               >
-                <ArrowRight className="w-4 h-4 text-brand-600" />
+                <ArrowRight className="w-4 h-4 text-brand-600 shrink-0" />
                 <span>Ambil ke Bar / Dapur</span>
-              </button>
-              <button
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
                 onClick={handleOpenAddIngredient}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Tambah Bahan Baku</span>
-              </button>
+              </motion.button>
             </>
           )}
 
           {activeTab === "movements" && !isReadOnly && (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
                 onClick={() => {
                   if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
                   setSelectedIngredientForMove(accessibleIngredients[0].id);
@@ -1223,13 +1245,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   setMovementNote("Kalibrasi Grinder Pagi");
                   setIsAddMovementOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-2xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                 <span>Catat Bahan Rusak / Waste</span>
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
                 onClick={() => {
                   if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
                   setSelectedIngredientForMove(accessibleIngredients[0].id);
@@ -1237,35 +1262,41 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                   setMovementNote("");
                   setIsAddMovementOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Catat Pemakaian Harian</span>
-              </button>
+              </motion.button>
             </div>
           )}
 
           {activeTab === "opnames" && !isReadOnly && !isOpnameMode && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
+              type="button"
               onClick={startOpname}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <ClipboardList className="w-4 h-4" />
               <span>Mulai Sesi Opname Fisik</span>
-            </button>
+            </motion.button>
           )}
 
           {activeTab === "recipes" && !isReadOnly && currentUser?.role !== "LEADER" && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
+              type="button"
               onClick={() => {
                 setEditingRecipe(null);
                 setIsAddRecipeOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Tambah Resep Baru</span>
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
@@ -1322,20 +1353,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               </div>
 
               {/* Filter Lokasi Simpan */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                <select
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="px-3 py-2.5 rounded-2xl border border-slate-200 text-base sm:text-xs bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                >
-                  {PRESET_LOCATIONS.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CustomSelect
+                value={selectedLocation}
+                onChange={setSelectedLocation}
+                options={PRESET_LOCATIONS.map((loc) => ({
+                  value: loc.id,
+                  label: loc.label,
+                }))}
+                icon={<MapPin className="w-4 h-4 text-slate-400" />}
+                placeholder="Pilih Lokasi"
+                buttonClassName="py-2.5 px-3.5 rounded-2xl border-slate-200"
+              />
 
               {/* Filter Status Stok */}
               <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl text-xs font-semibold w-full sm:w-auto">
@@ -2525,7 +2553,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                     <td className="p-4 font-bold text-slate-900">{recipe.menuName}</td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-1.5">
-                        {recipe.ingredients.map((ri, idx) => {
+                        {getRecipeIngredients(recipe).map((ri, idx) => {
                           const ing = ingredients.find((i) => i.id === ri.ingredientId);
                           return (
                             <span
@@ -2613,7 +2641,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {recipe.ingredients.map((ri, idx) => {
+                  {getRecipeIngredients(recipe).map((ri, idx) => {
                     const ing = ingredients.find((i) => i.id === ri.ingredientId);
                     return (
                       <span
@@ -2638,13 +2666,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
       )}
 
       {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
-      {isIngredientModalOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto">
+      <AnimatePresence>
+        {isIngredientModalOpen && createPortal(
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar my-auto border border-slate-200/90"
+            key="ingredient-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto"
           >
+            <motion.div
+              key="ingredient-modal-card"
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar my-auto border border-slate-200/90"
+            >
             {/* Modal Header */}
             <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-3">
@@ -2985,19 +3024,31 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </button>
               </div>
             </form>
-          </motion.div>
-        </div>,
-        document.body
-      )}
+            </motion.div>
+          </motion.div>,
+          document.body
+        )}
+      </AnimatePresence>
 
       {/* ── MODAL: CATAT PEMAKAIAN & WASTE ───────────────────────────────── */}
-      {isAddMovementOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto">
+      <AnimatePresence>
+        {isAddMovementOpen && createPortal(
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+            key="movement-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto"
           >
+            <motion.div
+              key="movement-modal-card"
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+            >
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-2.5">
                 <div
@@ -3306,10 +3357,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </button>
               </div>
             </form>
-          </motion.div>
-        </div>,
-        document.body
-      )}
+            </motion.div>
+          </motion.div>,
+          document.body
+        )}
+      </AnimatePresence>
 
       {/* Recipe Modal */}
       <RecipeModal
@@ -3327,9 +3379,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
       />
 
       {/* ── MODAL RINCIAN OPNAME DETAIL ───────────────────────────────────── */}
-      {selectedOpnameForView && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col">
+      <AnimatePresence>
+        {selectedOpnameForView && createPortal(
+          <motion.div
+            key="opname-detail-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+          >
+            <motion.div
+              key="opname-detail-card"
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="my-auto bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col"
+            >
             <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
@@ -3465,10 +3532,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>,
+          </motion.div>
+        </motion.div>,
         document.body
       )}
+    </AnimatePresence>
     </div>
   );
 };

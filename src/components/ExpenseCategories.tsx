@@ -831,7 +831,7 @@ export function ExpenseCategories() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           <CsvImportExport
             onImport={handleImportCategories}
             templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
@@ -858,9 +858,9 @@ export function ExpenseCategories() {
 
           <button
             onClick={handleAddRoot}
-            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-xs cursor-pointer active:scale-95"
+            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 shrink-0" />
             <span>Tambah Kategori</span>
           </button>
         </div>

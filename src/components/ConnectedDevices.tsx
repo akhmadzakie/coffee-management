@@ -173,16 +173,16 @@ export const ConnectedDevices: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 flex-nowrap">
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
             title={isIndo ? "Segarkan daftar sesi" : "Refresh session list"}
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-blue-600" : ""}`}
+              className={`w-3.5 h-3.5 shrink-0 ${isLoading ? "animate-spin text-blue-600" : ""}`}
             />
             <span>{isIndo ? "Segarkan" : "Refresh"}</span>
           </button>
@@ -191,9 +191,9 @@ export const ConnectedDevices: React.FC = () => {
             <button
               type="button"
               onClick={() => setConfirmRevokeOthers(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {isIndo
                   ? "Keluarkan Semua Perangkat Lain"

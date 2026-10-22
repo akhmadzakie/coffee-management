@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
 import {
   X,
@@ -47,6 +48,7 @@ import {
   exportMasterExecutiveReportXlsx,
 } from "../utils/exportXlsx";
 import { ImportFinanceModal } from "./ImportFinanceModal";
+import { CustomDatePicker } from "./common/CustomDatePicker";
 
 export type ExportModuleType =
   | "all_in_one"
@@ -216,7 +218,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     });
   }, [kpiRecords, startDate, endDate]);
 
-  if (!isOpen || !canAccessExport) return null;
+  if (!canAccessExport) return null;
 
   // ─── Export Triggers ────────────────────────────────────────────────────────
   const handleExportPDF = () => {
@@ -373,9 +375,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
       />
-      <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto">
-          {/* Header */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="export-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) onClose();
+            }}
+            className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
+          >
+            <motion.div
+              key="export-modal-card"
+              initial={{ scale: 0.94, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto"
+            >
+              {/* Header */}
           <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
@@ -642,22 +662,22 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <label className="text-[11px] text-slate-600 font-semibold block mb-1">
                       Tanggal Mulai:
                     </label>
-                    <input
-                      type="date"
+                    <CustomDatePicker
                       value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
+                      onChange={setCustomStartDate}
+                      placeholder="Mulai"
+                      buttonClassName="w-full text-xs p-2 border-slate-300 rounded-lg bg-white"
                     />
                   </div>
                   <div>
                     <label className="text-[11px] text-slate-600 font-semibold block mb-1">
                       Tanggal Selesai:
                     </label>
-                    <input
-                      type="date"
+                    <CustomDatePicker
                       value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
+                      onChange={setCustomEndDate}
+                      placeholder="Selesai"
+                      buttonClassName="w-full text-xs p-2 border-slate-300 rounded-lg bg-white"
                     />
                   </div>
                 </div>
@@ -876,8 +896,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </button>
             </div>
           </div>
-        </div>
-      </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };

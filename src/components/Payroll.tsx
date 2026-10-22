@@ -31,6 +31,7 @@ import { PayslipModal } from "./PayslipModal";
 import { ExportModal } from "./ExportModal";
 import { exportPayrollToXlsx } from "../utils/exportXlsx";
 import { motion, AnimatePresence } from "motion/react";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
 
 export function Payroll() {
   const {
@@ -531,14 +532,12 @@ export function Payroll() {
         </div>
 
         {/* Month Selector Pill */}
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200/80 shadow-2xs w-full sm:w-auto">
-          <Calendar className="w-4 h-4 text-brand-600 ml-2 shrink-0" />
-          <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Bulan:</span>
-          <input
-            type="month"
+        <div className="shrink-0">
+          <CustomMonthPicker
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-base sm:text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 w-full sm:w-auto cursor-pointer shadow-2xs"
+            onChange={setPeriod}
+            allowClear={false}
+            placeholder="Pilih Periode Penggajian"
           />
         </div>
       </div>
@@ -740,9 +739,9 @@ export function Payroll() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             {/* Quick Toggle for Store Bonus */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs shrink-0">
               <span className="text-xs font-semibold text-slate-700">Bonus Omzet:</span>
               <button
                 type="button"
@@ -766,7 +765,7 @@ export function Payroll() {
             </div>
 
             {/* Quick Toggle for Leader Allowance */}
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs shrink-0">
               <span className="text-xs font-semibold text-slate-700">Tunj. Leader:</span>
               <button
                 type="button"
@@ -853,33 +852,33 @@ export function Payroll() {
 
         {/* Toolbar Buttons */}
         {activeTab === "list" && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             {canEdit && (
               <button
                 onClick={() => setManualModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-brand-50 border border-brand-200/80 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-2 bg-brand-50 border border-brand-200/80 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
                 title="Buat slip gaji manual jika ada kekhususan data"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5 shrink-0" />
                 <span>+ Slip Manual</span>
               </button>
             )}
 
             <button
               onClick={handleQuickExportXlsx}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
               title="Unduh detail slip gaji periode ini dalam format Excel (.xlsx)"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Excel</span>
             </button>
 
             <button
               onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition-all shadow-2xs cursor-pointer active:scale-95"
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition-all shadow-2xs cursor-pointer active:scale-95"
               title="Buka opsi ekspor lengkap (PDF Rekap, CSV)"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               <span>Laporan</span>
             </button>
           </div>

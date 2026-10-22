@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
 import { User } from "../types";
 import {
@@ -194,11 +195,27 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-md overflow-hidden flex flex-col text-slate-900 my-auto max-h-[85vh] sm:max-h-[88vh]">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="switch-account-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm overflow-y-auto"
+        >
+          <motion.div
+            key="switch-account-card"
+            initial={{ scale: 0.94, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.94, opacity: 0, y: 15 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-md overflow-hidden flex flex-col text-slate-900 my-auto max-h-[85vh] sm:max-h-[88vh]"
+          >
         
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-[#FAFAFA] shrink-0">
@@ -395,8 +412,10 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
           </div>
         </div>
 
-      </div>
-    </div>,
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

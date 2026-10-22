@@ -55,6 +55,20 @@
     scrollbar-width: none; /* Firefox */
   }
 
+  /* Notch & Safe Area Insets for Mobile / Tablet Devices (iOS / Android) */
+  .safe-area-top {
+    padding-top: max(env(safe-area-inset-top, 0px), 0px);
+  }
+  .safe-area-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+  }
+  .safe-area-left {
+    padding-left: max(env(safe-area-inset-left, 0px), 0px);
+  }
+  .safe-area-right {
+    padding-right: max(env(safe-area-inset-right, 0px), 0px);
+  }
+
   /* Julia's Brand Gradient (Sidebar Header, Hero Card, Big CTA) */
   .bg-brand-gradient {
     background: linear-gradient(135deg, #1b2cc0 0%, #121d80 60%, #0a1040 100%);
