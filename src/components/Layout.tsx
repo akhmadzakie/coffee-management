@@ -469,7 +469,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const roleTheme = getRoleTheme(currentUser?.role);
 
   return (
-    <div className="min-h-screen bg-[#f6f8ff] flex antialiased text-slate-900 safe-area-left safe-area-right">
+    <div className="h-[100dvh] min-h-[100dvh] bg-[#f6f8ff] flex antialiased text-slate-900 overflow-hidden">
       {/* ─── Switch Account Modal ─── */}
       <SwitchAccountModal
         isOpen={isSwitchAccountOpen}
@@ -740,9 +740,9 @@ export const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       {/* ─── MAIN CONTENT WRAPPER ─── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#f6f8ff]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#f6f8ff] h-[100dvh] overflow-hidden">
         {/* ─── MODERN HEADER BAR (RESPONSIVE & NOTCH-SAFE) ─── */}
-        <header className="h-16 min-h-[4rem] px-3 sm:px-6 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs gap-2 safe-area-top">
+        <header className="pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-2.5 sm:py-0 sm:h-16 min-h-[3.75rem] px-3 sm:px-6 bg-white border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-2xs gap-2 shrink-0">
           {/* Left: Sidebar Toggle & Page Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Desktop / Tablet Sidebar Toggle */}
@@ -1029,46 +1029,37 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
 
-        {/* ─── MOBILE DRAWER MENU (ULTRA SMOOTH 60/120FPS GPU SPRING ANIMATION & SWIPE-TO-CLOSE) ─── */}
+        {/* ─── MOBILE DRAWER MENU (ULTRA SMOOTH 60/120FPS GPU SPRING ANIMATION & NOTCH-PERFECT) ─── */}
         <AnimatePresence>
           {isMobileMenuOpen && (
-            <div className="md:hidden fixed inset-0 z-50 flex">
-              {/* Backdrop with smooth fade transition */}
+            <div className="md:hidden fixed inset-0 z-50 flex h-[100dvh] w-full overflow-hidden">
+              {/* Backdrop: Solid dark scrim with smooth fade (no heavy blur lag on mobile GPU) */}
               <motion.div
                 key="mobile-drawer-backdrop"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.22, ease: "easeInOut" }}
-                className="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px]"
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="fixed inset-0 bg-slate-950/65"
                 onClick={() => setIsMobileMenuOpen(false)}
                 aria-hidden="true"
               />
 
-              {/* Drawer Container with iOS-style spring easing and hardware acceleration */}
+              {/* Drawer Container: Pure hardware-accelerated tween slide with native iOS curve */}
               <motion.div
                 key="mobile-drawer-panel"
                 initial={{ x: "-100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}
                 transition={{
-                  type: "spring",
-                  damping: 32,
-                  stiffness: 340,
-                  mass: 0.75,
+                  type: "tween",
+                  ease: [0.16, 1, 0.3, 1],
+                  duration: 0.28,
                 }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={{ left: 0.4, right: 0 }}
-                onDragEnd={(_, info) => {
-                  if (info.offset.x < -60 || info.velocity.x < -300) {
-                    setIsMobileMenuOpen(false);
-                  }
-                }}
-                className="relative w-76 max-w-[85vw] bg-white border-r border-slate-200 text-slate-800 h-full flex flex-col z-10 shadow-2xl safe-area-top safe-area-bottom will-change-transform touch-pan-y"
+                className="relative w-80 max-w-[85vw] bg-white border-r border-slate-200 text-slate-800 h-[100dvh] flex flex-col z-10 shadow-2xl overflow-hidden will-change-transform"
               >
-                {/* Drawer Header */}
-                <div className="p-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white shrink-0">
+                {/* Drawer Header: Brand Gradient coating behind the notch/status bar completely */}
+                <div className="pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 px-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white shrink-0 shadow-xs">
                   <div className="flex items-center gap-2.5">
                     <img
                       src={settings.logoDataUrl || "/logo-name-white.png"}
@@ -1147,8 +1138,8 @@ export const Layout: React.FC<LayoutProps> = ({
                   })()}
                 </nav>
 
-                {/* Mobile Drawer Footer */}
-                <div className="p-3 border-t border-slate-100 bg-slate-50 space-y-2 shrink-0">
+                {/* Mobile Drawer Footer with Safe Area padding for iPhone home indicator */}
+                <div className="p-3 pb-[max(env(safe-area-inset-bottom,0px),1.25rem)] border-t border-slate-100 bg-slate-50 space-y-2 shrink-0">
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     onClick={() => {
@@ -1178,7 +1169,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </AnimatePresence>
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar safe-area-bottom">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
           {/* View-Only Alert for Owner */}
           {currentUser?.role === "OWNER" && (
             <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-brand-50/80 border border-brand-200 rounded-2xl text-brand-900 text-xs shadow-2xs">
