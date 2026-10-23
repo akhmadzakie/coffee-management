@@ -109,6 +109,28 @@ export const Layout: React.FC<LayoutProps> = ({
     };
   }, []);
 
+  // ─── Prevent background body scroll when mobile menu is open ───
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isMobileMenuOpen]);
+
+  // ─── Close mobile drawer on Escape key ───
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobileMenuOpen]);
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -723,23 +745,53 @@ export const Layout: React.FC<LayoutProps> = ({
         <header className="h-16 min-h-[4rem] px-3 sm:px-6 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-xs gap-2 safe-area-top">
           {/* Left: Sidebar Toggle & Page Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            <button
-              onClick={() => {
-                if (window.innerWidth >= 768) {
-                  setIsSidebarCollapsed(!isSidebarCollapsed);
-                } else {
-                  setIsMobileMenuOpen(!isMobileMenuOpen);
-                }
-              }}
-              className="text-slate-500 hover:text-slate-900 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs shrink-0"
+            {/* Desktop / Tablet Sidebar Toggle */}
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="hidden md:flex text-slate-500 hover:text-slate-900 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs shrink-0"
               aria-label="Toggle Sidebar"
+              title={isSidebarCollapsed ? "Perluas Sidebar" : "Ciutkan Sidebar"}
             >
               {isSidebarCollapsed ? (
-                <PanelLeft className="w-4 h-4" />
+                <PanelLeft className="w-4 h-4 text-brand-600" />
               ) : (
-                <Menu className="w-4 h-4" />
+                <PanelLeftClose className="w-4 h-4" />
               )}
-            </button>
+            </motion.button>
+
+            {/* Mobile Hamburger Burger Button (Smooth Touch Ergonomics & Icon Morph) */}
+            <motion.button
+              whileTap={{ scale: 0.90 }}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200/70 transition-colors cursor-pointer shadow-2xs shrink-0 focus-visible:ring-2 focus-visible:ring-brand-500"
+              aria-label={isMobileMenuOpen ? "Tutup Menu Navigasi" : "Buka Menu Navigasi"}
+              aria-expanded={isMobileMenuOpen}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {isMobileMenuOpen ? (
+                  <motion.div
+                    key="close"
+                    initial={{ rotate: -90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: 90, opacity: 0 }}
+                    transition={{ duration: 0.16 }}
+                  >
+                    <X className="w-5 h-5 text-slate-800" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="menu"
+                    initial={{ rotate: 90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: -90, opacity: 0 }}
+                    transition={{ duration: 0.16 }}
+                  >
+                    <Menu className="w-5 h-5 text-slate-800" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.button>
 
             {/* Breadcrumb Title */}
             <div className="min-w-0 flex-1">
@@ -977,103 +1029,153 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
 
-        {/* ─── MOBILE DRAWER MENU ─── */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 flex safe-area-top safe-area-bottom">
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
+        {/* ─── MOBILE DRAWER MENU (ULTRA SMOOTH 60/120FPS GPU SPRING ANIMATION & SWIPE-TO-CLOSE) ─── */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <div className="md:hidden fixed inset-0 z-50 flex">
+              {/* Backdrop with smooth fade transition */}
+              <motion.div
+                key="mobile-drawer-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px]"
+                onClick={() => setIsMobileMenuOpen(false)}
+                aria-hidden="true"
+              />
 
-            {/* Drawer Container */}
-            <div className="relative w-72 max-w-[85vw] bg-white border-r border-slate-200 text-slate-800 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
-              {/* Drawer Header */}
-              <div className="p-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white">
-                <div className="flex items-center gap-2.5">
-                  <img
-                    src={settings.logoDataUrl || "/logo-name-white.png"}
-                    alt={settings.brandName || "Julia's"}
-                    className="h-8 w-auto object-contain rounded-md"
-                  />
+              {/* Drawer Container with iOS-style spring easing and hardware acceleration */}
+              <motion.div
+                key="mobile-drawer-panel"
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{
+                  type: "spring",
+                  damping: 32,
+                  stiffness: 340,
+                  mass: 0.75,
+                }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={{ left: 0.4, right: 0 }}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x < -60 || info.velocity.x < -300) {
+                    setIsMobileMenuOpen(false);
+                  }
+                }}
+                className="relative w-76 max-w-[85vw] bg-white border-r border-slate-200 text-slate-800 h-full flex flex-col z-10 shadow-2xl safe-area-top safe-area-bottom will-change-transform touch-pan-y"
+              >
+                {/* Drawer Header */}
+                <div className="p-4 border-b border-brand-800 flex items-center justify-between bg-brand-gradient text-white shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={settings.logoDataUrl || "/logo-name-white.png"}
+                      alt={settings.brandName || "Julia's"}
+                      className="h-8 w-auto object-contain rounded-md"
+                    />
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-1.5 text-white/80 hover:text-white rounded-xl hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+                    aria-label="Tutup Menu"
+                  >
+                    <X className="w-5 h-5" />
+                  </motion.button>
                 </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
 
-              {/* Mobile Navigation List */}
-              <nav className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                {(() => {
-                  const groupedNav = navigation.reduce((acc, item) => {
-                    const g = item.group || "Lainnya";
-                    if (!acc[g]) acc[g] = [];
-                    acc[g].push(item);
-                    return acc;
-                  }, {} as Record<string, typeof navigation>);
-
-                  return Object.entries(groupedNav).map(([group, items]) => (
-                    <div key={group} className="space-y-1">
-                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        {group}
-                      </div>
-                      {items.map((item) => {
-                        const Icon = item.icon;
-                        const isActive =
-                          currentView === item.view ||
-                          (item.group === "Dasbor" && currentView.startsWith("dashboard_"));
-                        return (
-                          <button
-                            key={item.view}
-                            onClick={() => {
-                              onViewChange(item.view);
-                              setIsMobileMenuOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                              isActive
-                                ? "bg-brand-50 text-brand-900 font-bold border-l-3 border-brand-600 shadow-2xs"
-                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                            }`}
-                          >
-                            <Icon className={`w-4 h-4 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
-                            <span>{item.name}</span>
-                          </button>
-                        );
-                      })}
+                {/* Operator Profile Capsule in Mobile Drawer */}
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3 shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+                    {currentUser?.name?.charAt(0).toUpperCase() || "U"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {currentUser?.name}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${roleTheme.bg}`}>
+                        {roleTheme.icon} {roleTheme.label}
+                      </span>
                     </div>
-                  ));
-                })()}
-              </nav>
+                  </div>
+                </div>
 
-              {/* Mobile Drawer Footer */}
-              <div className="p-3 border-t border-slate-100 bg-slate-50 space-y-2">
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsSwitchAccountOpen(true);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-2xs"
-                >
-                  <KeyRound className="w-4 h-4 text-brand-600" />
-                  Ganti Akun
-                </button>
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-xl border border-rose-200"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Keluar
-                </button>
-              </div>
+                {/* Mobile Navigation List */}
+                <nav className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                  {(() => {
+                    const groupedNav = navigation.reduce((acc, item) => {
+                      const g = item.group || "Lainnya";
+                      if (!acc[g]) acc[g] = [];
+                      acc[g].push(item);
+                      return acc;
+                    }, {} as Record<string, typeof navigation>);
+
+                    return Object.entries(groupedNav).map(([group, items]) => (
+                      <div key={group} className="space-y-1">
+                        <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {group}
+                        </div>
+                        {items.map((item) => {
+                          const Icon = item.icon;
+                          const isActive =
+                            currentView === item.view ||
+                            (item.group === "Dasbor" && currentView.startsWith("dashboard_"));
+                          return (
+                            <motion.button
+                              key={item.view}
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => {
+                                onViewChange(item.view);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                isActive
+                                  ? "bg-brand-50 text-brand-950 font-bold border-l-3 border-brand-600 shadow-2xs"
+                                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100"
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-brand-600" : "text-slate-400"}`} />
+                              <span className="truncate">{item.name}</span>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    ));
+                  })()}
+                </nav>
+
+                {/* Mobile Drawer Footer */}
+                <div className="p-3 border-t border-slate-100 bg-slate-50 space-y-2 shrink-0">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsSwitchAccountOpen(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-2xs active:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4 text-brand-600" />
+                    Ganti Akun
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-xl border border-rose-200 active:bg-rose-100 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Keluar
+                  </motion.button>
+                </div>
+              </motion.div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
 
         {/* ─── PAGE BODY CONTAINER ─── */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar safe-area-bottom">
