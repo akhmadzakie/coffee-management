@@ -835,21 +835,21 @@ export const Layout: React.FC<LayoutProps> = ({
               </span>
             </div>
 
-            {/* AI Assistant Button */}
+            {/* AI Assistant Button (Desktop & Tablet) */}
             {canAccessAIAssistant && (
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsAIAssistantOpen(true)}
                 title="Julia Coffee AI Copilot & Business Consultant"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-brand-600 stroke-[2.2]" />
                 <span className="hidden xl:inline">AI Copilot</span>
               </motion.button>
             )}
 
-            {/* Export Center Button */}
+            {/* Export Center Button (Desktop & Tablet) */}
             {canAccessBusinessReports && (
               <motion.button
                 whileHover={{ scale: 1.03 }}
@@ -870,7 +870,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setIsExportModalOpen(true);
                 }}
                 title="Pusat Ekspor Multi-Format"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
                 <span className="hidden xl:inline">Ekspor & Laporan</span>
@@ -1093,6 +1093,37 @@ export const Layout: React.FC<LayoutProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Mobile Drawer Quick Tools (AI & Export) */}
+                {(canAccessAIAssistant || canAccessBusinessReports) && (
+                  <div className="px-3 py-2 grid grid-cols-2 gap-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
+                    {canAccessAIAssistant && (
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          setIsAIAssistantOpen(true);
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs font-bold text-brand-900 bg-brand-50 hover:bg-brand-100 border border-brand-200/90 rounded-xl transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                        <span>AI Copilot</span>
+                      </button>
+                    )}
+                    {canAccessBusinessReports && (
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          setExportModalModule("executive");
+                          setIsExportModalOpen(true);
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Download className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Ekspor Data</span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Mobile Navigation List */}
                 <nav className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">

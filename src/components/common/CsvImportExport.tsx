@@ -43,6 +43,19 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const [dropdownAlign, setDropdownAlign] = useState<"left" | "right">("right");
+
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      if (window.innerWidth - rect.left >= 280) {
+        setDropdownAlign("left");
+      } else {
+        setDropdownAlign("right");
+      }
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -129,12 +142,16 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
+          <div
+            className={`absolute ${
+              dropdownAlign === "left" ? "left-0" : "right-0"
+            } mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150`}
+          >
             <div className="py-1">
               <button
                 onClick={handleDownloadTemplate}
                 disabled={isGenerating}
-                className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left disabled:opacity-50"
+                className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left disabled:opacity-50 cursor-pointer"
               >
                 {isGenerating ? (
                   <Loader2 className="w-4 h-4 mr-3 text-slate-400 shrink-0 animate-spin" />
@@ -148,7 +165,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
                 <button
                   onClick={handleDownloadInteractive}
                   disabled={isGenerating}
-                  className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100 disabled:opacity-50"
+                  className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100 disabled:opacity-50 cursor-pointer"
                 >
                   <Database className="w-4 h-4 mr-3 text-blue-500 shrink-0" />
                   Download Template & Data Saat Ini (Edit Massal)
@@ -160,7 +177,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
                   setIsOpen(false);
                   setIsModalOpen(true);
                 }}
-                className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
+                className="flex items-center w-full px-4 py-3 text-xs sm:text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors text-left border-t border-slate-100 cursor-pointer"
               >
                 <Upload className="w-4 h-4 mr-3 text-emerald-600 shrink-0" />
                 Upload Excel / CSV

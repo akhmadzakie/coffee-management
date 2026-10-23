@@ -1044,10 +1044,10 @@ export const LeaderChecklist: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+          <div className="w-full md:w-auto flex items-center gap-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar scroll-smooth">
             <button
               onClick={() => setActiveTab("monitoring")}
-              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monitoring"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -1058,7 +1058,7 @@ export const LeaderChecklist: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab("monthly")}
-              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monthly"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -1069,7 +1069,7 @@ export const LeaderChecklist: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab("settings")}
-              className={`whitespace-nowrap shrink-0 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "settings"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -1755,29 +1755,29 @@ export const LeaderChecklist: React.FC = () => {
         {activeTab === "settings" && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
             {/* Sub-Navigasi Pengaturan Manager: SOP Tugas vs Aturan Tunjangan Jabatan */}
-            <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start overflow-x-auto no-scrollbar flex-nowrap gap-1">
               <button
                 type="button"
                 onClick={() => setSettingsSubTab("TASKS")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`whitespace-nowrap shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   settingsSubTab === "TASKS"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <ClipboardList className="w-4 h-4 text-amber-600" />
+                <ClipboardList className="w-4 h-4 text-amber-600 shrink-0" />
                 📋 Master SOP & Tugas Jobdesk
               </button>
               <button
                 type="button"
                 onClick={() => setSettingsSubTab("ALLOWANCE_RULES")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`whitespace-nowrap shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   settingsSubTab === "ALLOWANCE_RULES"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <Award className="w-4 h-4 text-emerald-600" />
+                <Award className="w-4 h-4 text-emerald-600 shrink-0" />
                 🎯 Batas Persenan Tunjangan Jabatan ({allowanceRules.length})
               </button>
             </div>
