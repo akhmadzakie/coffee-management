@@ -415,6 +415,12 @@ export const orders = pgTable("orders", {
   paidAt: text("paid_at"),
   voidReason: text("void_reason"),
   voidApprovedBy: varchar("void_approved_by", { length: 255 }),
+  refundReason: text("refund_reason"),
+  refundApprovedBy: varchar("refund_approved_by", { length: 255 }),
+  refundAmount: real("refund_amount"),
+  refundMethod: varchar("refund_method", { length: 50 }),
+  refundAt: text("refund_at"),
+  refundRestockOption: varchar("refund_restock_option", { length: 50 }),
   kitchenStatus: varchar("kitchen_status", { length: 50 }).default("QUEUED").notNull(), // 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED'
   appliedPromotionId: varchar("applied_promotion_id", { length: 255 }),
   appliedPromotionName: text("applied_promotion_name"),

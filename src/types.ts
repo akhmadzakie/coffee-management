@@ -708,6 +708,12 @@ export interface Order {
   paidAt?: string | null;
   voidReason?: string | null;
   voidApprovedBy?: string | null;
+  refundReason?: string | null;
+  refundApprovedBy?: string | null;
+  refundAmount?: number | null;
+  refundMethod?: string | null;
+  refundAt?: string | null;
+  refundRestockOption?: "RETURN_TO_STOCK" | "WASTE" | "NONE" | null;
   appliedPromotionId?: string | null;
   appliedPromotionName?: string | null;
   items?: OrderItem[];

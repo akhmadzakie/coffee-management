@@ -61,6 +61,34 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
               <p className="text-[10px] text-slate-600">
                 {settings?.bankDetails || ""}
               </p>
+
+              {orderData.status === "REFUNDED" && (
+                <div className="mt-2 p-2 bg-rose-50 border border-dashed border-rose-300 rounded text-center text-rose-800">
+                  <span className="font-black text-xs block tracking-wider">*** BUKTI PENGEMBALIAN DANA (REFUND) ***</span>
+                  <span className="text-[9px] block mt-0.5 font-bold">
+                    Dana Dikembalikan: {formatCurrency(orderData.refundAmount || orderData.totalAmount)} ({orderData.refundMethod || "CASH"})
+                  </span>
+                  <span className="text-[9px] block">
+                    Disetujui: {orderData.refundApprovedBy || "Manager"}
+                  </span>
+                  {orderData.refundReason && (
+                    <span className="text-[9px] block italic text-rose-600">
+                      Alasan: {orderData.refundReason}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {orderData.status === "VOID" && (
+                <div className="mt-2 p-2 bg-rose-50 border border-dashed border-rose-300 rounded text-center text-rose-800">
+                  <span className="font-black text-xs block tracking-wider">*** TRANSAKSI DI-VOID (BATAL) ***</span>
+                  {orderData.voidReason && (
+                    <span className="text-[9px] block italic text-rose-600">
+                      Alasan: {orderData.voidReason}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Meta Order */}

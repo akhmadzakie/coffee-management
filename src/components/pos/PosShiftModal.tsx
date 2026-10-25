@@ -121,6 +121,17 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
       .filter((t) => t.type === "CASH_OUT")
       .reduce((s, t) => s + t.amount, 0);
 
+    const refundCash = recentCashMovements
+      .filter(
+        (t) =>
+          t.type === "CASH_OUT" &&
+          (t.description?.toLowerCase().includes("refund") ||
+            t.description?.toLowerCase().includes("void"))
+      )
+      .reduce((s, t) => s + t.amount, 0);
+
+    const otherCashOut = Math.max(0, cashOut - refundCash);
+
     const expectedEndingCash =
       activeShift.startingCash + cashSales + cashIn - cashOut;
 
@@ -132,6 +143,8 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
       transactionCount: txList.length,
       cashIn,
       cashOut,
+      refundCash,
+      otherCashOut,
       expectedEndingCash,
     };
   }, [activeShift, salesTransactions, cashTransactions]);
@@ -347,7 +360,19 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       <span>{formatCurrency(closedShiftData.cashIn)}</span>
                     </div>
                   )}
-                  {closedShiftData.cashOut > 0 && (
+                  {closedShiftData.refundCash > 0 && (
+                    <div className="flex justify-between text-rose-600">
+                      <span>- Refund Tunai POS:</span>
+                      <span>({formatCurrency(closedShiftData.refundCash)})</span>
+                    </div>
+                  )}
+                  {closedShiftData.otherCashOut > 0 && (
+                    <div className="flex justify-between">
+                      <span>- Kas Keluar Lain:</span>
+                      <span>({formatCurrency(closedShiftData.otherCashOut)})</span>
+                    </div>
+                  )}
+                  {closedShiftData.cashOut > 0 && !closedShiftData.refundCash && !closedShiftData.otherCashOut && (
                     <div className="flex justify-between">
                       <span>- Kas Keluar Laci:</span>
                       <span>({formatCurrency(closedShiftData.cashOut)})</span>
@@ -726,7 +751,19 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     <span className="font-semibold">{formatCurrency(shiftStats.cashIn)}</span>
                   </div>
                 )}
-                {shiftStats.cashOut > 0 && (
+                {shiftStats.refundCash > 0 && (
+                  <div className="flex justify-between text-rose-700">
+                    <span>- Refund Tunai POS:</span>
+                    <span className="font-semibold">({formatCurrency(shiftStats.refundCash)})</span>
+                  </div>
+                )}
+                {shiftStats.otherCashOut > 0 && (
+                  <div className="flex justify-between text-rose-700">
+                    <span>- Kas Keluar Lain:</span>
+                    <span className="font-semibold">({formatCurrency(shiftStats.otherCashOut)})</span>
+                  </div>
+                )}
+                {shiftStats.cashOut > 0 && !shiftStats.refundCash && !shiftStats.otherCashOut && (
                   <div className="flex justify-between text-rose-700">
                     <span>- Kas Keluar Manual:</span>
                     <span className="font-semibold">({formatCurrency(shiftStats.cashOut)})</span>

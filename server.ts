@@ -483,6 +483,12 @@ async function ensureTables() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'QUEUED'`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS applied_promotion_id TEXT`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS applied_promotion_name TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_reason TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_approved_by TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount REAL`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_method TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_at TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_restock_option TEXT`,
     `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_id TEXT`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_name TEXT`,
@@ -4059,6 +4065,337 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     }
   });
 
+  // 4b. Refund Paid Order with Manager PIN Approval & Inventory Strategy
+  app.post("/api/pos/orders/:id/refund", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const {
+        managerPin,
+        refundReason,
+        refundMethod = "CASH",
+        refundRestockOption = "RETURN_TO_STOCK",
+        refundAmount: customRefundAmount,
+      } = req.body;
+
+      if (!managerPin) {
+        return res.status(400).json({ error: "PIN Manager / Owner wajib diisi untuk otorisasi refund." });
+      }
+
+      if (!refundReason || !refundReason.trim()) {
+        return res.status(400).json({ error: "Alasan refund wajib diisi untuk catatan pembukuan & audit." });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = offlineState.orders || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.audit_logs = offlineState.audit_logs || [];
+
+        const approver = (offlineState.users || []).find(
+          (u: any) =>
+            (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
+            (u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN")
+        );
+        if (!approver) {
+          return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+        }
+
+        const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
+        if (!targetOrder) {
+          return res.status(404).json({ error: "Order tidak ditemukan" });
+        }
+        if (targetOrder.status !== "PAID") {
+          return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
+        }
+
+        const finalRefundAmount = Number(customRefundAmount) > 0 ? Number(customRefundAmount) : (Number(targetOrder.totalAmount) || 0);
+
+        // Inventory adjustment
+        if (refundRestockOption === "RETURN_TO_STOCK") {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
+          for (const item of items) {
+            let rec = (offlineState.recipes || []).find(
+              (r: any) =>
+                (item.recipeId && r.id === item.recipeId) ||
+                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+            );
+            if (rec) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch {}
+              for (const rIng of recIngredients) {
+                const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (returnQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "RETURN",
+                    quantity: returnQty,
+                    date: nowIso,
+                    note: `Refund Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+                    createdBy: approver.name,
+                    referenceId: orderId,
+                  });
+                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                  if (ing) {
+                    ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
+                  }
+                }
+              }
+            }
+          }
+        } else if (refundRestockOption === "WASTE") {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
+          for (const item of items) {
+            let rec = (offlineState.recipes || []).find(
+              (r: any) =>
+                (item.recipeId && r.id === item.recipeId) ||
+                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+            );
+            if (rec) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch {}
+              for (const rIng of recIngredients) {
+                const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (wasteQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "WASTE",
+                    quantity: -wasteQty,
+                    date: nowIso,
+                    note: `Kerusakan / Basi Refund #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+                    createdBy: approver.name,
+                    referenceId: orderId,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        // Cash / Payment adjustment
+        const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === orderId);
+        const cashAccId = existingPayments[0]?.cashAccountId || "default";
+        offlineState.cash_transactions.push({
+          id: crypto.randomUUID(),
+          accountId: cashAccId,
+          type: "CASH_OUT",
+          date: nowIso,
+          amount: finalRefundAmount,
+          description: `Refund ${refundMethod} Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+          category: "PENGELUARAN",
+          referenceId: orderId,
+        });
+
+        // Audit Log
+        offlineState.audit_logs.push({
+          id: crypto.randomUUID(),
+          action: "ORDER_REFUND",
+          userName: approver.name,
+          target: targetOrder.receiptNo,
+          details: `Refund #${targetOrder.receiptNo} Rp ${finalRefundAmount.toLocaleString("id-ID")} via ${refundMethod}. Alasan: ${refundReason.trim()}. Restock: ${refundRestockOption}`,
+          createdAt: nowIso,
+        });
+
+        targetOrder.status = "REFUNDED";
+        targetOrder.refundReason = refundReason.trim();
+        targetOrder.refundApprovedBy = approver.name;
+        targetOrder.refundAmount = finalRefundAmount;
+        targetOrder.refundMethod = refundMethod;
+        targetOrder.refundAt = nowIso;
+        targetOrder.refundRestockOption = refundRestockOption;
+        targetOrder.updatedAt = nowIso;
+
+        return res.json({
+          success: true,
+          message: `Order #${targetOrder.receiptNo} berhasil di-refund sebesar Rp ${finalRefundAmount.toLocaleString("id-ID")}`,
+          approvedBy: approver.name,
+          order: targetOrder,
+        });
+      }
+
+      // DB Connected mode
+      const authUsers = await db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.pin, String(managerPin)),
+            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "OWNER"), eq(schema.users.role, "SUPER_ADMIN"))
+          )
+        )
+        .limit(1);
+
+      if (authUsers.length === 0) {
+        return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+      }
+
+      const approver = authUsers[0];
+      const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
+      if (orderList.length === 0) {
+        return res.status(404).json({ error: "Order tidak ditemukan" });
+      }
+      const targetOrder = orderList[0];
+
+      if (targetOrder.status !== "PAID") {
+        return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
+      }
+
+      const finalRefundAmount = Number(customRefundAmount) > 0 ? Number(customRefundAmount) : (Number(targetOrder.totalAmount) || 0);
+
+      await db.transaction(async (tx) => {
+        // 1. Inventory Stock Adjustment
+        if (refundRestockOption === "RETURN_TO_STOCK") {
+          const items = await tx
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, orderId));
+
+          for (const item of items) {
+            if (item.recipeId) {
+              const rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.id, item.recipeId))
+                .limit(1);
+              if (rec.length > 0) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+                } catch {}
+
+                for (const rIng of recIngredients) {
+                  const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (returnQty > 0) {
+                    await tx.insert(schema.stockMovements).values({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "RETURN",
+                      quantity: returnQty,
+                      date: nowIso,
+                      note: `Refund Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+                      createdBy: approver.name,
+                      referenceId: orderId,
+                    });
+
+                    const currentIng = await tx
+                      .select()
+                      .from(schema.ingredients)
+                      .where(eq(schema.ingredients.id, rIng.ingredientId))
+                      .limit(1);
+                    if (currentIng.length > 0) {
+                      const newStock = (currentIng[0].currentStock || 0) + returnQty;
+                      await tx
+                        .update(schema.ingredients)
+                        .set({ currentStock: newStock })
+                        .where(eq(schema.ingredients.id, rIng.ingredientId));
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else if (refundRestockOption === "WASTE") {
+          const items = await tx
+            .select()
+            .from(schema.orderItems)
+            .where(eq(schema.orderItems.orderId, orderId));
+
+          for (const item of items) {
+            if (item.recipeId) {
+              const rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.id, item.recipeId))
+                .limit(1);
+              if (rec.length > 0) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+                } catch {}
+
+                for (const rIng of recIngredients) {
+                  const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (wasteQty > 0) {
+                    await tx.insert(schema.stockMovements).values({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "WASTE",
+                      quantity: -wasteQty,
+                      date: nowIso,
+                      note: `Kerusakan / Basi Refund #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+                      createdBy: approver.name,
+                      referenceId: orderId,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Cash Transaction (CASH_OUT)
+        const existingPayments = await tx
+          .select()
+          .from(schema.payments)
+          .where(eq(schema.payments.orderId, orderId));
+
+        const cashAccId = existingPayments[0]?.cashAccountId || "default";
+
+        await tx.insert(schema.cashTransactions).values({
+          id: crypto.randomUUID(),
+          accountId: cashAccId,
+          type: "CASH_OUT",
+          date: nowIso,
+          amount: finalRefundAmount,
+          description: `Refund ${refundMethod} POS #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+          category: "PENGELUARAN",
+          referenceId: orderId,
+        });
+
+        // 3. Update Order Status
+        await tx
+          .update(schema.orders)
+          .set({
+            status: "REFUNDED",
+            refundReason: refundReason.trim(),
+            refundApprovedBy: approver.name,
+            refundAmount: finalRefundAmount,
+            refundMethod,
+            refundAt: nowIso,
+            refundRestockOption,
+            updatedAt: nowIso,
+          })
+          .where(eq(schema.orders.id, orderId));
+
+        // 4. Audit Log
+        await tx.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          userId: approver.id,
+          action: "REFUND",
+          tableName: "orders",
+          recordId: orderId,
+          timestamp: nowIso,
+        });
+      });
+
+      res.json({
+        success: true,
+        message: `Order #${targetOrder.receiptNo} berhasil di-refund sebesar Rp ${finalRefundAmount.toLocaleString("id-ID")}`,
+        approvedBy: approver.name,
+      });
+    } catch (e: any) {
+      console.error("Refund order error:", e);
+      res.status(500).json({ error: e?.message || "Failed to refund order" });
+    }
+  });
+
   // 5. Get Active Open Bills
   app.get("/api/pos/orders/active", async (req, res) => {
     try {
@@ -4111,6 +4448,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         let paidCount = 0;
         let openCount = 0;
         let voidCount = 0;
+        let refundCount = 0;
+        let refundTotal = 0;
 
         for (const ord of todayOrders) {
           if (ord.status === "PAID") {
@@ -4120,15 +4459,23 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             openCount++;
           } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
             voidCount++;
+          } else if (ord.status === "REFUNDED") {
+            refundCount++;
+            refundTotal += Number(ord.refundAmount) || Number(ord.totalAmount) || 0;
           }
         }
+
+        const netRevenue = Math.max(0, totalRevenue - refundTotal);
 
         return res.json({
           date: todayPrefix,
           totalRevenue,
+          refundTotal,
+          netRevenue,
           paidCount,
           openCount,
           voidCount,
+          refundCount,
           orders: todayOrders,
         });
       }
@@ -4144,6 +4491,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       let paidCount = 0;
       let openCount = 0;
       let voidCount = 0;
+      let refundCount = 0;
+      let refundTotal = 0;
 
       for (const ord of todayOrders) {
         if (ord.status === "PAID") {
@@ -4153,15 +4502,23 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           openCount++;
         } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
           voidCount++;
+        } else if (ord.status === "REFUNDED") {
+          refundCount++;
+          refundTotal += Number(ord.refundAmount) || Number(ord.totalAmount) || 0;
         }
       }
+
+      const netRevenue = Math.max(0, totalRevenue - refundTotal);
 
       res.json({
         date: todayPrefix,
         totalRevenue,
+        refundTotal,
+        netRevenue,
         paidCount,
         openCount,
         voidCount,
+        refundCount,
         orders: todayOrders,
       });
     } catch (e: any) {
