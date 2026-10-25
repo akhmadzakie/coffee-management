@@ -621,6 +621,9 @@ export interface ShiftSession {
   actualEndingCash: number | null;
   difference: number | null;
   status: "OPEN" | "CLOSED";
+  picEmployeeId?: string;
+  picEmployeeName?: string;
+  teamMembers?: string[];
 }
 
 export interface ClosedPeriod {

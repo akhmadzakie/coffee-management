@@ -540,6 +540,9 @@ export const ShiftManagement = () => {
                       {isIndo ? "Waktu Buka" : "Started"}
                     </th>
                     <th className="px-6 py-3.5 text-left uppercase tracking-wider">
+                      {isIndo ? "PIC / Tim Shift" : "PIC & Team"}
+                    </th>
+                    <th className="px-6 py-3.5 text-left uppercase tracking-wider">
                       {isIndo ? "Waktu Tutup" : "Ended"}
                     </th>
                     <th className="px-6 py-3.5 text-right uppercase tracking-wider">
@@ -561,6 +564,16 @@ export const ShiftManagement = () => {
                     <tr key={shift.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
                         {new Date(shift.startTime).toLocaleString("id-ID")}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-800 font-sans">
+                        <span className="font-bold block text-slate-900">
+                          {shift.picEmployeeName || "-"}
+                        </span>
+                        {shift.teamMembers && shift.teamMembers.length > 0 && (
+                          <span className="text-[10px] text-slate-500 block truncate max-w-[160px]">
+                            {shift.teamMembers.join(", ")}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
                         {shift.endTime ? new Date(shift.endTime).toLocaleString("id-ID") : "-"}
@@ -600,7 +613,7 @@ export const ShiftManagement = () => {
                   ))}
                   {pastShifts.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400 text-xs font-sans">
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-400 text-xs font-sans">
                         {isIndo ? "Belum ada riwayat shift" : "No shift history"}
                       </td>
                     </tr>
@@ -629,6 +642,15 @@ export const ShiftManagement = () => {
                         {new Date(shift.startTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} -{" "}
                         {shift.endTime ? new Date(shift.endTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
                       </span>
+                      {shift.picEmployeeName && (
+                        <div className="text-[11px] text-slate-700 mt-1">
+                          <span className="font-semibold text-slate-500">PIC:</span>{" "}
+                          <strong className="text-slate-900">{shift.picEmployeeName}</strong>
+                          {shift.teamMembers && shift.teamMembers.length > 0 && (
+                            <span className="text-slate-400 text-[10px]"> ({shift.teamMembers.join(", ")})</span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {shift.difference != null && (

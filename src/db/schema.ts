@@ -351,6 +351,9 @@ export const shifts = pgTable("shifts", {
   actualEndingCash: real("actual_ending_cash"),
   difference: real("difference"),
   status: varchar("status", { length: 50 }).notNull(),
+  picEmployeeId: varchar("pic_employee_id", { length: 255 }),
+  picEmployeeName: text("pic_employee_name"),
+  teamMembers: text("team_members"), // JSON string array
 });
 
 

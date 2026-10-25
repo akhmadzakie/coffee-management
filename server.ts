@@ -482,6 +482,9 @@ async function ensureTables() {
       )`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'QUEUED'`,
     `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`,
+    `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_id TEXT`,
+    `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_name TEXT`,
+    `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS team_members TEXT`,
     `CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -619,6 +622,8 @@ async function startServer() {
         return schema.employeeShifts;
       case "kpi_records":
         return schema.kpiRecords;
+      case "shifts":
+        return schema.shifts;
       // POS & Kasir
       case "orders":
         return schema.orders;
@@ -665,6 +670,22 @@ async function startServer() {
       return {
         ...r,
         ingredients: Array.isArray(ingList) ? ingList : [],
+      };
+    });
+
+  const formatShiftsForClient = (shiftList: any[]) =>
+    (shiftList || []).map((s: any) => {
+      let tm = s?.teamMembers;
+      if (typeof tm === "string") {
+        try {
+          tm = JSON.parse(tm);
+        } catch {
+          tm = [];
+        }
+      }
+      return {
+        ...s,
+        teamMembers: Array.isArray(tm) ? tm : [],
       };
     });
 
@@ -1032,6 +1053,13 @@ async function startServer() {
         ? Number(s.difference)
         : null,
     status: String(s.status || "OPEN"),
+    picEmployeeId: s.picEmployeeId ? String(s.picEmployeeId) : null,
+    picEmployeeName: s.picEmployeeName ? String(s.picEmployeeName) : null,
+    teamMembers: Array.isArray(s.teamMembers)
+      ? JSON.stringify(s.teamMembers)
+      : s.teamMembers
+      ? String(s.teamMembers)
+      : null,
   });
 
   // In-memory fallback state for offline usage
@@ -1399,7 +1427,7 @@ async function startServer() {
         audit_logs,
         suppliers,
         purchase_orders,
-        shifts,
+        shifts: formatShiftsForClient(shifts),
         employees,
         contracts: employee_contracts,
         employeeShifts: employee_shifts,

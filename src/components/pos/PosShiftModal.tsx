@@ -41,14 +41,24 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
     salesTransactions,
     cashTransactions,
     settings,
+    employees,
   } = useStore();
 
   const [startingCashInput, setStartingCashInput] = useState<string>("200000");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [selectedPicId, setSelectedPicId] = useState<string>("");
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [picError, setPicError] = useState<string>("");
   const [actualCashInput, setActualCashInput] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [isZReportOpen, setIsZReportOpen] = useState(false);
   const [closedShiftData, setClosedShiftData] = useState<any | null>(null);
+
+  const activeEmployees = useMemo(() => {
+    return (employees || []).filter(
+      (e) => e.status === "AKTIF" || (e.status as any) === "ACTIVE" || !e.status
+    );
+  }, [employees]);
 
   const cashOnlyAccounts = useMemo(() => {
     return cashAccounts.filter((a) => a.type === "CASH");
@@ -137,6 +147,11 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
   // Aksi Buka Shift
   const handleOpenShiftSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedPicId) {
+      setPicError("Wajib memilih penanggung jawab shift (PIC).");
+      return;
+    }
+    const pic = activeEmployees.find((emp) => emp.id === selectedPicId);
     const amount = Number(startingCashInput.replace(/\D/g, ""));
     const accountId = selectedAccountId || cashOnlyAccounts[0]?.id || "default";
 
@@ -150,6 +165,9 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
       actualEndingCash: null,
       difference: null,
       status: "OPEN",
+      picEmployeeId: selectedPicId,
+      picEmployeeName: pic?.name || currentUser?.name || "Staff",
+      teamMembers: selectedTeamMembers,
     });
 
     onShiftChanged?.();
@@ -170,7 +188,9 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
     // Siapkan data untuk Z-Report slip
     const zData = {
       shiftId: activeShift.id,
-      cashierName: currentUser?.name || "Kasir",
+      cashierName: activeShift.picEmployeeName || currentUser?.name || "Kasir",
+      picEmployeeName: activeShift.picEmployeeName || currentUser?.name || "Kasir",
+      teamMembers: activeShift.teamMembers || [],
       startTime: activeShift.startTime,
       endTime: new Date().toISOString(),
       startingCash: activeShift.startingCash,
@@ -248,8 +268,20 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 
                 <div className="space-y-1 pb-2 border-b border-dashed border-gray-400 text-[10px]">
                   <div className="flex justify-between">
-                    <span>Kasir:</span>
-                    <span className="font-bold">{closedShiftData.cashierName}</span>
+                    <span>PIC Shift:</span>
+                    <span className="font-bold">{closedShiftData.picEmployeeName || closedShiftData.cashierName}</span>
+                  </div>
+                  {closedShiftData.teamMembers && closedShiftData.teamMembers.length > 0 && (
+                    <div className="flex justify-between">
+                      <span>Kru Bertugas:</span>
+                      <span className="font-medium text-right max-w-[170px] truncate">
+                        {closedShiftData.teamMembers.join(", ")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Terminal / Akun:</span>
+                    <span>{closedShiftData.cashierName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Mulai Shift:</span>
@@ -351,9 +383,9 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 <div className="pt-4 text-center text-[9px] text-gray-500">
                   <div className="flex justify-between pt-6 px-2 text-center">
                     <div>
-                      <p>Kasir,</p>
+                      <p>PIC Kasir,</p>
                       <br />
-                      <p className="font-bold">({closedShiftData.cashierName})</p>
+                      <p className="font-bold">({closedShiftData.picEmployeeName || closedShiftData.cashierName})</p>
                     </div>
                     <div>
                       <p>Supervisor / SPV,</p>
@@ -417,7 +449,10 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 {activeShift ? "Tutup Shift Kasir (Z-Report)" : "Buka Shift Kasir Baru"}
               </h2>
               <p className="text-[11px] text-slate-500">
-                Kasir: <span className="text-brand-700 font-bold">{currentUser?.name || "Kasir"}</span> • Peran: {currentUser?.role || "Staff"}
+                Terminal POS: <span className="text-brand-700 font-bold">{currentUser?.name || "Kasir"}</span>
+                {activeShift?.picEmployeeName && (
+                  <span> • PIC: <strong className="text-slate-800">{activeShift.picEmployeeName}</strong></span>
+                )}
               </p>
             </div>
           </div>
@@ -437,8 +472,96 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
               <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2.5">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                 <p>
-                  Shift kasir belum aktif. Masukkan uang modal awal (float) untuk uang kembalian sebelum memulai transaksi kasir.
+                  Shift kasir belum aktif. Tentukan penanggung jawab shift (PIC) dan modal awal laci sebelum memulai transaksi.
                 </p>
+              </div>
+
+              {/* Penanggung Jawab Shift (PIC) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-brand-600" />
+                    <span>Penanggung Jawab Shift (PIC Kasir) *</span>
+                  </span>
+                  <span className="text-[10px] text-brand-600 font-semibold bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200">
+                    Wajib Dipilih
+                  </span>
+                </label>
+                <select
+                  value={selectedPicId}
+                  onChange={(e) => {
+                    setSelectedPicId(e.target.value);
+                    if (picError) setPicError("");
+                  }}
+                  className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 transition ${
+                    picError
+                      ? "border-rose-400 focus:ring-rose-500/20"
+                      : "border-slate-300 focus:ring-brand-500/20 focus:border-brand-600"
+                  }`}
+                  required
+                >
+                  <option value="">-- Pilih Karyawan Bertanggung Jawab --</option>
+                  {activeEmployees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.position || "Staff"})
+                    </option>
+                  ))}
+                </select>
+                {picError ? (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                    {picError}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Karyawan ini bertanggung jawab penuh atas uang laci dan rekonsiliasi saat tutup kasir.
+                  </p>
+                )}
+              </div>
+
+              {/* Kru / Tim Bertugas */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Kru / Tim Kasir Bertugas (Opsional)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {selectedTeamMembers.length} Terpilih
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                  {activeEmployees
+                    .filter((e) => e.id !== selectedPicId)
+                    .map((emp) => {
+                      const isSelected = selectedTeamMembers.includes(emp.name);
+                      return (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeamMembers((prev) =>
+                              isSelected
+                                ? prev.filter((n) => n !== emp.name)
+                                : [...prev, emp.name]
+                            );
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer ${
+                            isSelected
+                              ? "bg-brand-600 text-white shadow-xs"
+                              : "bg-white text-slate-700 border border-slate-200 hover:border-brand-300"
+                          }`}
+                        >
+                          <span>{isSelected ? "✓" : "+"}</span>
+                          <span>{emp.name}</span>
+                        </button>
+                      );
+                    })}
+                  {activeEmployees.filter((e) => e.id !== selectedPicId).length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic py-1">
+                      Tidak ada karyawan tambahan lain.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Pilihan Akun Kas Laci */}
@@ -515,6 +638,24 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
             <form onSubmit={handleCloseShiftSubmit} className="space-y-4">
               {/* Info Shift Berjalan */}
               <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="col-span-2 p-3 rounded-2xl bg-brand-50/60 border border-brand-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-brand-700 flex items-center gap-1 font-bold">
+                      <User className="w-3.5 h-3.5 text-brand-600" />
+                      Penanggung Jawab Shift (PIC):
+                    </p>
+                    <span className="font-extrabold text-brand-900 text-xs">
+                      {activeShift.picEmployeeName || currentUser?.name || "Kasir"}
+                    </span>
+                  </div>
+                  {activeShift.teamMembers && activeShift.teamMembers.length > 0 && (
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      <span className="font-semibold text-slate-500">Kru Bertugas:</span>{" "}
+                      {activeShift.teamMembers.join(", ")}
+                    </p>
+                  )}
+                </div>
+
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                   <p className="text-[10px] text-slate-500 flex items-center gap-1 mb-1 font-semibold">
                     <Clock className="w-3 h-3 text-brand-600" />

@@ -27,12 +27,26 @@ mindmap
       Resep dan BOM 🆕
       Stock Opname 🆕
       Waste dan Spoilage 🆕
-      Import Penjualan
+      Import Penjualan (Data Historis/Arsip)
     Operasional
+      POS Kasir 🆕
+        Pesanan dan Pembayaran
+        Dine In Meja dan Open Bill
+        Pilih Promo Aktif (Tanpa Diskon Manual Bebas) 🆕
+        Kunci Layar Terminal (Lock Screen) 🆕
+        Persetujuan Void Refund Jarak Jauh 🆕
+      Manajemen Promo dan Diskon 🆕
+        Daftar Promo Aktif dan Nonaktif
+        Diskon Persen dan Nominal
+      Layar Antrean Dapur KDS 🆕
+        Bar
+        Kitchen
+        Bakery
       Manajemen Shift Kasir
-        Buka Kas
-        Tutup Kas
-        Selisih Kas 🆕
+        1 Akun Terminal POS Bersama 🆕
+        Buka Kas (Pilih PIC Kasir Dropdown dan Tim) 🆕
+        Tutup Kas dan Rekonsiliasi Laci Fisik
+        Selisih Kas Fisik vs Sistem 🆕
       Supplier
       Pembelian
     SDM
@@ -80,7 +94,11 @@ Tabel ini usulan. Sesuaikan dengan `Layout.tsx` dan `App.tsx`.
 | Tutup Periode 🆕 | ✅ | – | ✅ (approve) | ✅ (proses) | – | – | – | – |
 | Inventori / Resep | ✅ | – | ✅ | – | – | – | – | – |
 | Pembelian / Supplier | ✅ | – | ✅ | ✅ | – | – | – | – |
-| Import Penjualan | ✅ | – | ✅ | – | ✅ | – | – | – |
+| POS Kasir 🆕 | ✅ | – | ✅ | – | ✅ | – | – | – |
+| Layar KDS (Bar/Kitchen/Baker) 🆕 | ✅ | – | ✅ | – | – | ✅ | ✅ | ✅ |
+| Approval Void / Refund (Remote) 🆕 | ✅ | – | ✅ (approve) | – | ❌ (pemohon) | – | – | – |
+| Manajemen Promo & Diskon 🆕 | ✅ | 👁️ | ✅ | – | – (hanya memilih) | – | – | – |
+| Import Penjualan (Arsip) | ✅ | – | ✅ | – | ✅ | – | – | – |
 | Shift Kasir | ✅ | – | ✅ | 👁️ | ✅ | – | – | – |
 | Data Karyawan / Jadwal / KPI | ✅ | – | ✅ | – | – | – | – | – |
 | Input Lembur | ✅ | – | ✅ | – | – | – | – | – |
@@ -102,26 +120,41 @@ Poin yang perlu diputuskan:
 
 ## 3. Alur Data Utama (dipecah per rantai)
 
-### 3A. Rantai Penjualan → Stok → Keuangan
+### 3A. Rantai Penjualan (POS) → Stok → Keuangan
 
 ```mermaid
 graph TD
-  SAL["Import Penjualan"] --> VAL["Validasi: duplikat dan periode terbuka 🆕"]
-  VAL --> BOM["Resep dan BOM 🆕"]
-  BOM --> STK["Potong Stok Bahan"]
-  STK --> HPP["HPP per periode 🆕"]
-  VAL --> REV["Pendapatan"]
-  REV --> CF["Cash Flow"]
-  OPEN["Buka Kas - modal awal"] --> CLOSE["Tutup Kas"]
-  CLOSE --> DIFF["Selisih kas fisik vs penjualan tunai 🆕"]
+  POS["POS Kasir (Transaksi Langsung) 🆕"] --> PAY{"Pembayaran Lunas"}
+  PAY -->|Tunai/QRIS/EDC| REV["Pendapatan Tercatat"]
+  REV --> CF["Cash Flow (CASH_IN Otomatis)"]
+  PAY --> BOM["Resep dan BOM 🆕"]
+  BOM --> STK["Potong Stok Bahan Otomatis"]
+  STK --> HPP["HPP Realtime per Menu 🆕"]
+  POS --> KDS["Tiket Pesanan Masuk Layar Dapur/Bar (KDS) 🆕"]
+  
+  VOID["Permintaan Void / Refund Kasir"] --> RMGR["Remote Approval di HP Manajer 🆕"]
+  RMGR -->|Setujui: Belum Dibuat| STKR["Kembalikan Stok"]
+  RMGR -->|Setujui: Terlanjur Dibuat| WST["Catat sebagai Waste / Rugi 🆕"]
+  RMGR -->|Setujui: Refund Kas| CFR["Cash Flow (CASH_OUT Refund)"]
+  RMGR --> AUD["Audit Log: Penyetuju, Alasan, Jam"]
+  
+  OPEN["Buka Kas (Modal Awal)"] --> CLOSE["Tutup Kas"]
+  CLOSE --> DIFF["Selisih Kas Fisik vs Sistem 🆕"]
   DIFF --> CF
+  
+  IMP["Import Penjualan (Khusus Arsip/Migrasi)"] -.->|Bukan Harian| VAL["Cek Duplikat"]
+  
   HPP --> REP["Laporan dan Dashboard"]
   CF --> REP
 ```
 
-Masalah di v1: Import Penjualan **dan** Shift Kasir sama-sama masuk ke Cash Flow. Tanpa aturan jelas, pendapatan bisa **terhitung dua kali**. Usulan: pendapatan hanya dari Import Penjualan, sedangkan Shift Kasir hanya mencatat **selisih/setoran kas**.
-
-Masalah lain: Import Penjualan → Stok tidak bisa jalan tanpa **Resep/BOM** (menu X memakai berapa gram bahan Y).
+Prinsip Penjualan & Kasir:
+- **POS Kasir adalah sumber pendapatan primer**: Setiap transaksi lunas langsung memotong stok bahan dan mencatat cash in di akun kas yang sesuai.
+- **Promo Terotorisasi (No Freeform Discount)**: Kasir tidak bisa mengetik angka diskon bebas. Kasir hanya bisa memilih promo yang sedang berstatus AKTIF yang dikelola Manajer/Admin di back-office. Diskon dihitung sebelum pajak.
+- **1 Akun Terminal POS + Dropdown PIC Shift**: Tablet kasir menggunakan 1 akun terminal permanen dengan PIN yang diatur Admin/Manager. Saat Buka Kas, staf memilih Penanggung Jawab Shift (PIC) dan kru pendamping lewat dropdown. Laporan Tutup Kas dan struk mengikat tanggung jawab fisik uang ke PIC tersebut.
+- **Pengamanan Layar POS**: Tidak ada tombol keluar bebas di kasir. Kasir yang rehat menggunakan tombol *Kunci Layar*. Keluar hanya bisa melalui alur resmi *Tutup Shift*.
+- **Remote In-App Approval**: Kasir tidak memasukkan PIN manajer di tablet bersama (mencegah PIN diintip). Permintaan void/refund terkirim langsung ke HP/dashboard manajer. Jika dibatalkan setelah terlanjur dibuat, bahan baku masuk ke laporan `Waste`.
+- **Import Penjualan**: HANYA untuk arsip/migrasi historis atau darurat, bukan dijalankan harian bersamaan dengan POS (mencegah *double count* pendapatan dan pemotongan stok ganda).
 
 ### 3B. Rantai Pembelian
 
@@ -194,7 +227,7 @@ Audit Log minimal mencatat: edit/hapus transaksi, penyesuaian stok, koreksi abse
 
 | # | Aturan | Alasan |
 |---|---|---|
-| 1 | Pendapatan hanya dari satu sumber (Import Penjualan); Shift Kasir hanya mencatat selisih kas | Hindari double count |
+| 1 | Pendapatan operasional harian berasal dari POS Kasir; Import Penjualan hanya untuk arsip/migrasi; Shift Kasir mencatat selisih kas fisik vs sistem | Hindari double count penjualan dan stok |
 | 2 | Cash Flow dicatat saat uang keluar/masuk, bukan saat dokumen dibuat | Laporan kas akurat |
 | 3 | Clock Out lupa → status "perlu koreksi" dan hanya Manager yang bisa mengoreksi (tercatat di Audit Log) | Payroll tidak salah hitung |
 | 4 | Durasi < 8 jam → kurang/izin; > 8 jam → hanya menjadi lembur jika disetujui Manager | Lembur tidak otomatis cair |
@@ -204,6 +237,11 @@ Audit Log minimal mencatat: edit/hapus transaksi, penyesuaian stok, koreksi abse
 | 7 | Import Penjualan menolak file/baris duplikat (kunci: tanggal + nomor transaksi) | Cegah penjualan ganda |
 | 8 | Stok minimum per bahan memunculkan peringatan di Dashboard Inventori | Cegah kehabisan bahan |
 | 9 | Semua waktu disimpan UTC dan ditampilkan sesuai zona waktu kafe | Server Railway biasanya UTC; absensi di sekitar tengah malam bisa salah tanggal |
+| 10 | Void dan Refund di POS wajib melalui Remote In-App Approval dari HP/dashboard Manajer (bukan ketik PIN di kasir) + wajib menyertakan alasan pembatalan | Mencegah PIN manajer diintip kasir (anti-shoulder surfing) dan mencegah manipulasi pembatalan sepihak |
+| 10b | Jika order dibatalkan setelah terlanjur dibuat di bar/dapur, bahan baku dicatat sebagai WASTE (bukan dikembalikan ke stok) | Mencegah selisih stok fisik vs sistem |
+| 11 | Terminal POS menggunakan 1 akun perangkat bersama; Buka Kasir wajib memilih Penanggung Jawab Shift (PIC) dan kru via dropdown; Laporan Tutup Kas & struk mengikat kas fisik ke PIC tersebut | Praktis tanpa repot banyak akun, namun akuntabilitas uang laci kasir tetap 100% terkunci per orang |
+| 12 | Kasir DILARANG menginput diskon manual bebas; Kasir hanya bisa memilih dari daftar Promo/Diskon resmi yang diaktifkan Manajer/Admin; Diskon dihitung sebelum pajak | Mencegah diskon siluman/favoritisme kasir, mencegah salah hitung manual, dan menjaga akurasi laporan laba rugi |
+| 13 | Layar POS tidak menyediakan tombol keluar langsung; Kasir yang izin rehat menggunakan tombol "Kunci Layar"; Logout hanya melalui alur resmi "Tutup Shift" setelah hitung kas fisik | Mencegah laci kas menggantung tanpa pertanggungjawaban (orphan shift) dan mencegah salah pencet saat jam ramai |
 
 ## 5. Arsitektur Teknis
 
