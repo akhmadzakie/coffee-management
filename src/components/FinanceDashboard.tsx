@@ -29,6 +29,9 @@ import {
   Upload,
   Lock,
   Unlock,
+  Eye,
+  Package,
+  BarChart3,
 } from "lucide-react";
 import {
   AreaChart,
@@ -52,6 +55,8 @@ interface FinanceDashboardProps {
 
 export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }) => {
   const {
+    currentUser,
+    isReadOnly,
     cashAccounts,
     cashTransactions,
     salesTransactions,
@@ -132,11 +137,40 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       .reduce((sum, f) => sum + f.amount, 0);
   }, [filteredFinance]);
 
+  const isOwner = currentUser?.role === "OWNER" || isReadOnly;
+
+  // Hitung HPP Bahan Baku Riil
+  const totalHpp = useMemo(() => {
+    return filteredFinance
+      .filter((t) => {
+        if (t.type !== "CASH_OUT") return false;
+        const cat = expenseCategories.find((c) => c.id === t.categoryId);
+        return (
+          cat?.type === "BAHAN_BAKU" ||
+          cat?.parentId === "cat-bahan-baku" ||
+          t.categoryId === "cat-bahan-baku" ||
+          (t.category && t.category.toLowerCase().includes("bahan"))
+        );
+      })
+      .reduce((sum, f) => sum + f.amount, 0);
+  }, [filteredFinance, expenseCategories]);
+
   const netProfit = totalCashIn - totalCashOut;
   const totalSalesRevenue = filteredSales.reduce((sum, s) => sum + s.totalPrice, 0);
+  const netSalesRevenue = totalSalesRevenue > 0 ? totalSalesRevenue : totalCashIn;
 
-  // Margin Laba Operasional
-  const profitMarginPercent = totalCashIn > 0 ? ((netProfit / totalCashIn) * 100).toFixed(1) : "0.0";
+  // Food Cost & Margin
+  const foodCostPercent = netSalesRevenue > 0 ? ((totalHpp / netSalesRevenue) * 100).toFixed(1) : "0.0";
+  const grossProfit = Math.max(0, netSalesRevenue - totalHpp);
+  const grossProfitMargin = netSalesRevenue > 0 ? ((grossProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
+
+  // Margin Laba Operasional Bersih
+  const profitMarginPercent =
+    netSalesRevenue > 0
+      ? ((netProfit / netSalesRevenue) * 100).toFixed(1)
+      : totalCashIn > 0
+      ? ((netProfit / totalCashIn) * 100).toFixed(1)
+      : "0.0";
 
   // Data Grafik Arus Masuk vs Arus Keluar
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -347,59 +381,87 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </button>
           </div>
 
-          {/* Quick Ask / Data Entry Input Box */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (financeAiInput.trim()) {
-                handleOpenCopilot("quick-input", financeAiInput);
-              }
-            }}
-            className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-            <input
-              type="text"
-              value={financeAiInput}
-              onChange={(e) => setFinanceAiInput(e.target.value)}
-              placeholder="Ketik catatan pengeluaran cepat (misal: Beli susu 6L 111rb kas laci, es kristal 2 bal 30rb)..."
-              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-300 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!financeAiInput.trim()}
-              className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+          {/* Quick Ask / Data Entry Input Box (Hidden for OWNER read-only) */}
+          {!isOwner ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (financeAiInput.trim()) {
+                  handleOpenCopilot("quick-input", financeAiInput);
+                }
+              }}
+              className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
             >
-              <span>Proses</span>
-              <Send className="w-3 h-3" />
-            </button>
-          </form>
+              <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+              <input
+                type="text"
+                value={financeAiInput}
+                onChange={(e) => setFinanceAiInput(e.target.value)}
+                placeholder="Ketik catatan pengeluaran cepat (misal: Beli susu 6L 111rb kas laci, es kristal 2 bal 30rb)..."
+                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-300 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!financeAiInput.trim()}
+                className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Proses</span>
+                <Send className="w-3 h-3" />
+              </button>
+            </form>
+          ) : (
+            <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-amber-300 shrink-0" />
+                <span className="text-slate-200">
+                  Mode Owner: Memantau likuiditas kas, food cost bahan baku, dan audit margin toko secara berkala.
+                </span>
+              </div>
+              <button
+                onClick={() => onNavigate("finance_reports")}
+                className="px-3 py-1.5 rounded-xl bg-white text-brand-900 font-bold text-xs hover:bg-slate-100 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Buka Laporan P&L →</span>
+              </button>
+            </div>
+          )}
 
           {/* Finance Action Pills */}
           <div className="flex items-center gap-2 flex-wrap pt-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mr-1">
-              Aksi Cepat Finance:
+              {isOwner ? "Navigasi Eksekutif Owner:" : "Aksi Cepat Finance:"}
             </span>
-            <button
-              onClick={() => handleOpenCopilot("quick-input")}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>⚡ Catat Pengeluaran Cepat</span>
-            </button>
-            <button
-              onClick={() => handleOpenCopilot("receipt")}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Receipt className="w-3.5 h-3.5 text-brand-200" />
-              <span>📸 Pindai Nota / Dokumen (OCR)</span>
-            </button>
+            {!isOwner && (
+              <>
+                <button
+                  onClick={() => handleOpenCopilot("quick-input")}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <span>⚡ Catat Pengeluaran Cepat</span>
+                </button>
+                <button
+                  onClick={() => handleOpenCopilot("receipt")}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-brand-200" />
+                  <span>📸 Pindai Nota / Dokumen (OCR)</span>
+                </button>
+              </>
+            )}
             <button
               onClick={() => handleOpenCopilot("insights")}
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
               <span>📊 Audit Margin & Laba Toko</span>
+            </button>
+            <button
+              onClick={() => onNavigate("finance_reports")}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300" />
+              <span>📑 Laporan Laba Rugi (P&L)</span>
             </button>
             <button
               onClick={() =>
@@ -410,16 +472,39 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               }
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-sky-200" />
+              <Sparkles className="w-3.5 h-3.5 text-sky-200" />
               <span>💡 Konsultasi Penghematan Biaya</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── HERO FINANCIAL KPI CARDS ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        {/* Total Likuiditas Kas */}
+      {/* ── OWNER MONITORING ADVISORY BANNER (Aturan #5b) ───────────────── */}
+      {isOwner && (
+        <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold">Mode Pengawasan Finansial Owner (Read-Only)</p>
+              <p className="text-[11px] text-amber-800">
+                Memantau likuiditas kas, efisiensi rasio food cost bahan baku, dan margin laba bersih toko secara real-time tanpa mengubah data pembukuan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate("finance_reports")}
+            className="self-start sm:self-auto px-4 py-2 rounded-2xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <span>Buka Laporan P&L Lengkap →</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── HERO FINANCIAL KPI CARDS (5 BENTO PILLARS) ───────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        {/* 1. Total Likuiditas Kas */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -429,12 +514,12 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-brand-200">
               Total Likuiditas Kas
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-white/10 text-white flex items-center justify-center border border-white/20">
-              <DollarSign className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
+              <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="relative z-10">
-            <p className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight">
+            <p className="text-xl sm:text-2xl font-black font-mono text-white tracking-tight">
               {formatCurrency(totalLiquidity)}
             </p>
             <p className="text-[11px] text-brand-100/70 mt-1">
@@ -443,7 +528,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           </div>
         </motion.div>
 
-        {/* Laba Bersih & Margin */}
+        {/* 2. Total Arus Masuk (In) */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -452,41 +537,14 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Laba Bersih Operasional
-            </span>
-            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${netProfit >= 0 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-rose-50 text-rose-600 border border-rose-100"}`}>
-              <Activity className="w-5 h-5" />
-            </div>
-          </div>
-          <div>
-            <p className={`text-2xl font-bold font-mono tracking-tight ${netProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {formatCurrency(netProfit)}
-            </p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full ${netProfit >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
-                Margin: {profitMarginPercent}%
-              </span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Total Arus Masuk */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Total Arus Masuk (In)
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-bold font-mono tracking-tight text-slate-900">
+            <p className="text-xl font-bold font-mono tracking-tight text-slate-900">
               {formatCurrency(totalCashIn)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
@@ -495,7 +553,42 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           </div>
         </motion.div>
 
-        {/* Total Arus Keluar */}
+        {/* 3. HPP Bahan Baku & Food Cost % */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              HPP Bahan Baku (COGS)
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
+              <Package className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xl font-bold font-mono tracking-tight text-slate-900">
+              {formatCurrency(totalHpp)}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span
+                className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
+                  Number(foodCostPercent) <= 35
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : Number(foodCostPercent) <= 40
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                Food Cost: {foodCostPercent}%
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* 4. Total Beban Keluar (Out) */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -506,17 +599,60 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Total Beban Keluar (Out)
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
-              <TrendingDown className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
+              <TrendingDown className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+            <p className="text-xl font-bold font-mono tracking-tight text-rose-600">
               {formatCurrency(totalCashOut)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Bahan baku, utilitas & operasional
+              Bahan baku, gaji & operasional
             </p>
+          </div>
+        </motion.div>
+
+        {/* 5. Laba Bersih & Margin */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Laba Bersih (Net Profit)
+            </span>
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                netProfit >= 0
+                  ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                  : "bg-rose-50 text-rose-600 border border-rose-100"
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <p
+              className={`text-xl font-bold font-mono tracking-tight ${
+                netProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+              }`}
+            >
+              {formatCurrency(netProfit)}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span
+                className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
+                  netProfit >= 0
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                Margin: {profitMarginPercent}%
+              </span>
+            </div>
           </div>
         </motion.div>
       </div>
