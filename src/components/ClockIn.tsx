@@ -74,7 +74,9 @@ export function ClockIn() {
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+        },
         audio: false,
       });
       if (videoRef.current) {
@@ -136,20 +138,35 @@ export function ClockIn() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const vWidth = video.videoWidth || 640;
+    const vHeight = video.videoHeight || 480;
+
+    // Crop center square (1:1) persis seperti yang terlihat di kotak viewfinder
+    const squareSize = Math.min(vWidth, vHeight);
+    const startX = (vWidth - squareSize) / 2;
+    const startY = (vHeight - squareSize) / 2;
+
+    canvas.width = squareSize;
+    canvas.height = squareSize;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Flip horizontal (mirror) agar hasil jepretan sesuai dengan tampilan cermin di layar
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, startX, startY, squareSize, squareSize, 0, 0, squareSize, squareSize);
+    ctx.restore();
 
-    // Add Watermark
-    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
-    ctx.fillRect(0, canvas.height - 55, canvas.width, 55);
+    // Add Watermark (digambar dengan orientasi normal/tidak terbalik)
+    const barHeight = Math.max(50, Math.round(canvas.height * 0.085));
+    ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
+    ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
 
+    const fontSize = Math.max(12, Math.round(canvas.width * 0.026));
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 14px 'Plus Jakarta Sans', Arial, sans-serif";
+    ctx.font = `bold ${fontSize}px 'Plus Jakarta Sans', Arial, sans-serif`;
 
     const now = new Date();
     const timeStr = now.toLocaleDateString("id-ID", {
@@ -166,10 +183,14 @@ export function ClockIn() {
 
     ctx.fillText(
       `${activeEmployee?.name || currentUser?.name || "Karyawan"} • Shift ${scheduledShift} • ${timeStr}`,
-      14,
-      canvas.height - 30
+      Math.round(canvas.width * 0.035),
+      canvas.height - Math.round(barHeight * 0.55)
     );
-    ctx.fillText(`${locStr} • Julia's Coffee & Eatery`, 14, canvas.height - 12);
+    ctx.fillText(
+      `${locStr} • Julia's Coffee & Eatery`,
+      Math.round(canvas.width * 0.035),
+      canvas.height - Math.round(barHeight * 0.2)
+    );
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     setPhotoDataUrl(dataUrl);
@@ -610,7 +631,7 @@ export function ClockIn() {
             </div>
 
             {/* Camera Viewfinder */}
-            <div className="bg-slate-900 rounded-3xl overflow-hidden relative aspect-video flex items-center justify-center border-2 border-slate-200 shadow-inner group">
+            <div className="bg-slate-900 rounded-3xl overflow-hidden relative w-full max-w-sm aspect-square mx-auto flex items-center justify-center border-2 border-slate-200 shadow-inner group">
               {photoDataUrl ? (
                 <div className="relative w-full h-full">
                   <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
@@ -625,13 +646,14 @@ export function ClockIn() {
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-full object-cover ${isCameraActive ? "block" : "hidden"}`}
+                    style={{ transform: "scaleX(-1)" }}
+                    className={`w-full h-full object-cover -scale-x-100 ${isCameraActive ? "block" : "hidden"}`}
                   />
 
                   {/* Face Guide Overlay when Camera Active */}
                   {isCameraActive && (
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="w-48 h-60 sm:w-56 sm:h-64 border-2 border-dashed border-white/60 rounded-full flex items-center justify-center">
+                      <div className="w-44 h-56 sm:w-48 sm:h-60 border-2 border-dashed border-white/70 rounded-full flex items-center justify-center">
                         <span className="text-[11px] text-white/80 bg-black/40 backdrop-blur-xs px-3 py-1 rounded-full font-semibold">
                           Posisikan Wajah di Sini
                         </span>
