@@ -497,9 +497,11 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                   {(payroll.overtimePay || 0) > 0 && (
                     <div className="flex justify-between py-1 border-b border-slate-100">
                       <div>
-                        <span className="font-medium text-slate-700">Lembur / Insentif Tambahan</span>
+                        <span className="font-medium text-slate-700">Lembur Disetujui (Aturan #4)</span>
                         <span className="text-[10px] text-slate-400 block">
-                          Jam lembur atau penugasan khusus
+                          {payroll.overtimeHours
+                            ? `${payroll.overtimeHours} jam × ${formatCurrency(payroll.overtimeRate || 0)}/jam`
+                            : "Jam lembur telah disahkan Manager"}
                         </span>
                       </div>
                       <span className="font-mono font-bold text-emerald-600 self-center">
@@ -620,11 +622,17 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
               </div>
 
               <div>
-                <p className="text-slate-400 text-[11px] mb-12">Manajemen / Keuangan,</p>
-                <p className="font-bold text-slate-900 underline underline-offset-4">
-                  {settings.brandName || "Julia's"}
+                <p className="text-slate-400 text-[11px] mb-12">
+                  {payroll.approvedBy ? `Disahkan oleh ${payroll.approvedBy},` : "Manajemen / Keuangan,"}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Otorisasi Resmi Outlet</p>
+                <p className="font-bold text-slate-900 underline underline-offset-4">
+                  {payroll.approvedBy || settings.brandName || "Julia's"}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {payroll.approvedAt
+                    ? `Disetujui pada ${new Date(payroll.approvedAt).toLocaleDateString("id-ID")}`
+                    : "Otorisasi Resmi Outlet"}
+                </p>
               </div>
             </div>
 

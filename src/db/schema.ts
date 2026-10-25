@@ -94,6 +94,10 @@ export const payrollRecords = pgTable("payroll_records", {
   grossPay: real("gross_pay").notNull(),
   netPay: real("net_pay").notNull(),
   status: varchar("status", { length: 50 }).default("DRAFT").notNull(), // DRAFT | APPROVED | PAID
+  approvedBy: varchar("approved_by", { length: 255 }),
+  approvedAt: text("approved_at"),
+  overtimeHours: real("overtime_hours").default(0),
+  overtimeRate: real("overtime_rate").default(0),
   paidDate: text("paid_date"),
   paidVia: varchar("paid_via", { length: 255 }), // accountId
   notes: text("notes"),
@@ -290,6 +294,8 @@ export const dailyAttendances = pgTable("daily_attendances", {
   clockOutPhotoUrl: text("clock_out_photo_url"),
   status: varchar("status", { length: 50 }).notNull(),
   approvalStatus: varchar("approval_status", { length: 50 }).default("PENDING"),
+  overtimeHours: real("overtime_hours").default(0),
+  overtimeApproved: boolean("overtime_approved").default(false),
   notes: text("notes"),
 });
 

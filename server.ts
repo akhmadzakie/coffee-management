@@ -397,8 +397,14 @@ async function ensureTables() {
       )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
         `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_rate NUMERIC DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS approved_by TEXT`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS approved_at TEXT`,
     `ALTER TABLE daily_checklists ADD COLUMN IF NOT EXISTS leader_tasks TEXT DEFAULT '[]'`,
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'PENDING'`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC DEFAULT 0`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS overtime_approved BOOLEAN DEFAULT FALSE`,
     `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
@@ -878,10 +884,14 @@ async function startServer() {
     kpiBonus: Number(p.kpiBonus) || 0,
     alphaDeduction: Number(p.alphaDeduction) || 0,
     overtimePay: Number(p.overtimePay) || 0,
+    overtimeHours: Number(p.overtimeHours) || 0,
+    overtimeRate: Number(p.overtimeRate) || 0,
     otherDeductions: Number(p.otherDeductions) || 0,
     grossPay: Number(p.grossPay) || 0,
     netPay: Number(p.netPay) || 0,
     status: String(p.status || "DRAFT"),
+    approvedBy: p.approvedBy ? String(p.approvedBy) : null,
+    approvedAt: p.approvedAt ? String(p.approvedAt) : null,
     paidDate: p.paidDate ? String(p.paidDate) : null,
     paidVia: p.paidVia ? String(p.paidVia) : null,
     notes: p.notes ? String(p.notes) : null,
@@ -1044,6 +1054,8 @@ async function startServer() {
     clockOutPhotoUrl: a.clockOutPhotoUrl ? String(a.clockOutPhotoUrl) : null,
     status: String(a.status || "HADIR"),
     approvalStatus: a.approvalStatus ? String(a.approvalStatus) : "PENDING",
+    overtimeHours: Number(a.overtimeHours) || 0,
+    overtimeApproved: Boolean(a.overtimeApproved),
     notes: String(a.notes || ""),
   });
 
@@ -1729,6 +1741,13 @@ async function startServer() {
       } = req.body;
 
       // ── ATURAN PEMBATASAN TABEL BERDASARKAN ROLE ─────────────────────────
+      if (requestUser.role === "OWNER") {
+        // Aturan #5b: Owner hanya read-only, server menolak seluruh request tulis dari OWNER
+        return res.status(403).json({
+          error: "Akses Ditolak: Akun OWNER berstatus strictly read-only dan tidak diizinkan mengubah data sistem.",
+        });
+      }
+
       if (requestUser.role === "KASIR") {
         // Kasir hanya diizinkan memperbarui data shift, absensi, dan sesi terminal
         // Cegah tablet kasir menimpa tabel master, payroll, keuangan, atau pengaturan

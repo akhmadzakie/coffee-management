@@ -101,7 +101,10 @@ export interface PayrollRecord {
   kpiBonus: number;
   targetBonus?: number; // Bonus tembus target omzet toko
   transportAllowance: number;
-  overtimePay: number; // Lembur / Tambahan Manual
+  overtimeHours?: number; // Jam lembur yang disetujui
+  overtimeRate?: number; // Upah lembur per jam
+  overtimeApproved?: boolean; // Status persetujuan lembur oleh Manager
+  overtimePay: number; // Lembur / Tambahan Manual yang disahkan
   alphaDeduction: number;
   lateDeduction?: number; // Potongan Keterlambatan proporsional jam kerja
   lateHours?: number; // Total jam keterlambatan
@@ -109,7 +112,9 @@ export interface PayrollRecord {
   otherDeductions: number;
   grossPay: number;
   netPay: number;
-  status: PayrollStatus;
+  status: PayrollStatus; // DRAFT | APPROVED (Final) | PAID (Dibayar)
+  approvedBy?: string | null;
+  approvedAt?: string | null;
   paidDate: string | null;
   paidVia: string | null; // accountId
   notes: string | null;
@@ -243,6 +248,8 @@ export interface DailyAttendance {
   clockOutPhotoUrl: string | null;
   status: "HADIR" | "TERLAMBAT" | "IZIN" | "SAKIT" | "ALPHA";
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  overtimeHours?: number; // Jam kerja di atas 8 jam
+  overtimeApproved?: boolean; // Persetujuan lembur oleh Manager
   notes: string;
 }
 
