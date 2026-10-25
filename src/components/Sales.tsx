@@ -170,6 +170,34 @@ export const Sales = () => {
       return;
     }
 
+    // ── ATURAN ANTI DOUBLE COUNT (Rekap Omzet vs POS Kasir Langsung) ────────
+    // 1. Cek apakah tanggal dan shift ini sudah ada entri rekap omzet sebelumnya
+    const existingRecap = dailySalesRecaps.find(
+      (r) => r.date === recapForm.date && r.shift === recapForm.shift
+    );
+    if (existingRecap) {
+      alert(
+        `Peringatan Anti-Double Count:\n\nRekap omzet untuk tanggal ${recapForm.date} dengan shift "${recapForm.shift}" sudah tercatat sebelumnya senilai ${formatCurrency(existingRecap.totalAmount)}.\n\nHarap edit atau hapus rekap sebelumnya terlebih dahulu untuk mencegah duplikasi pendapatan.`
+      );
+      return;
+    }
+
+    // 2. Cek apakah pada tanggal tersebut sudah ada transaksi POS Kasir langsung
+    const posPaidOnDate = posOrders.filter(
+      (o) => o.createdAt.startsWith(recapForm.date) && o.status === "PAID"
+    );
+    const posTotalRevenue = posPaidOnDate.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+    if (posTotalRevenue > 0) {
+      const proceed = window.confirm(
+        `⚠️ Peringatan Risiko Double Count:\n\n` +
+        `Sistem mendeteksi ada transaksi kasir POS langsung senilai ${formatCurrency(posTotalRevenue)} (${posPaidOnDate.length} order lunas) pada tanggal ${recapForm.date}.\n\n` +
+        `Setiap transaksi POS otomatis mencatat uang masuk (CASH_IN) di Buku Kas saat pembayaran dilakukan.\n\n` +
+        `Menambahkan Rekap Omzet Harian manual pada tanggal yang sama berisiko mendobelkan catatan pendapatan di Buku Kas & Laba Rugi.\n\n` +
+        `Apakah Anda yakin ingin tetap menyimpan rekap omzet manual ini?`
+      );
+      if (!proceed) return;
+    }
+
     addDailySalesRecap({
       date: recapForm.date,
       shift: recapForm.shift,
@@ -286,8 +314,21 @@ export const Sales = () => {
       new Date(b.importDate).getTime() - new Date(a.importDate).getTime()
   );
 
-  const handleSalesImport = (parsedData: any[]) => {
+  const handleSalesImport = (parsedData: any[], fileName?: string) => {
     if (!parsedData || parsedData.length === 0) return;
+
+    const actualFileName = fileName || `Import Penjualan Excel (${parsedData.length} baris)`;
+
+    // ── ATURAN ANTI DOUBLE COUNT (Import Arsip vs Data Berulang) ───────────
+    const alreadyImported = salesImportLogs.some(
+      (l) => l.fileName === actualFileName && l.status === "SUCCESS"
+    );
+    if (alreadyImported) {
+      alert(
+        `Peringatan Anti-Double Count:\n\nFile "${actualFileName}" sudah pernah diimpor ke sistem sebelumnya.\n\nImpor dibatalkan demi menjaga konsistensi pembukuan dan mencegah pemotongan stok bahan baku berulang.`
+      );
+      return;
+    }
 
     const newTransactions = parsedData
       .map((row) => {
@@ -318,10 +359,22 @@ export const Sales = () => {
       return;
     }
 
-    addSalesTransactions(newTransactions, `Import Penjualan Excel (${newTransactions.length} baris)`);
+    // Cek jika tanggal di file impor bertabrakan dengan transaksi POS kasir langsung
+    const importDates = Array.from(new Set(newTransactions.map((t) => t.date)));
+    const overlappingWithPos = importDates.filter((d) =>
+      posOrders.some((po) => po.createdAt.startsWith(d) && po.status === "PAID")
+    );
+    if (overlappingWithPos.length > 0) {
+      const confirmOverlap = window.confirm(
+        `⚠️ Peringatan Overlapping Data:\n\nTanggal [${overlappingWithPos.join(", ")}] yang ada di file impor sudah memiliki transaksi kasir POS langsung.\n\nPastikan file ini adalah data arsip historis dan bukan transaksi harian yang sudah di-input lewat tablet kasir.\n\nLanjutkan impor?`
+      );
+      if (!confirmOverlap) return;
+    }
+
+    addSalesTransactions(newTransactions, actualFileName);
     setUploadStatus({
       type: "success",
-      message: `Berhasil mengimpor ${newTransactions.length} baris penjualan menu ke sistem.`,
+      message: `Berhasil mengimpor ${newTransactions.length} baris penjualan (${actualFileName}) ke sistem.`,
     });
   };
 

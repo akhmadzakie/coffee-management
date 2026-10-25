@@ -10,7 +10,7 @@ import {
 const ID_HEADER = "ID_SISTEM (JANGAN DIUBAH)";
 
 interface CsvImportExportProps {
-  onImport: (data: any[]) => void;
+  onImport: (data: any[], fileName?: string) => void;
   templateHeaders: string[];
   templateExampleRow?: string[];
   templateFilename?: string;

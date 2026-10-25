@@ -1683,26 +1683,15 @@ async function startServer() {
         return res.status(401).json({ error: "Unauthorized: User not found" });
       }
 
-      if (!isDbConnected && offlineState) {
-        const b = req.body;
-        if (b.ingredients !== undefined) offlineState.ingredients = b.ingredients;
-        if (b.recipes !== undefined) offlineState.recipes = b.recipes;
-        if (b.products !== undefined) offlineState.products = b.products;
-        if (b.cash_accounts !== undefined) offlineState.cash_accounts = b.cash_accounts;
-        if (b.cash_transactions !== undefined) offlineState.cash_transactions = b.cash_transactions;
-        if (b.stock_movements !== undefined) offlineState.stock_movements = b.stock_movements;
-        if (b.sales_transactions !== undefined) offlineState.sales_transactions = b.sales_transactions;
-        if (b.shifts !== undefined) offlineState.shifts = b.shifts;
-        if (b.users !== undefined) offlineState.users = b.users;
-        if (b.settings !== undefined) offlineState.settings = Array.isArray(b.settings) ? b.settings : [b.settings];
-        if (b.expense_categories !== undefined) offlineState.expense_categories = b.expense_categories;
-        if (b.budgets !== undefined) offlineState.budgets = b.budgets;
-        if (b.payroll_records !== undefined) offlineState.payroll_records = b.payroll_records;
-        if (b.promotions !== undefined) offlineState.promotions = b.promotions;
-        return res.json({ success: true, serverTime: new Date().toISOString() });
+      // ── ATURAN #5b: OWNER READ-ONLY ENFORCEMENT ──────────────────────────
+      // Owner berstatus Read-Only (Pengawasan). Seluruh mutasi data via API ditolak di sisi server.
+      if (requestUser.role === "OWNER") {
+        return res.status(403).json({
+          error: "Forbidden: Akun Owner berstatus Read-Only (Pengawasan). Tidak diizinkan melakukan perubahan data operasional.",
+        });
       }
 
-      const {
+      let {
         cash_accounts,
         cash_transactions,
         settings,
@@ -1722,11 +1711,10 @@ async function startServer() {
         employeeShifts,
         attendances,
         dailyChecklists,
-  kpiTasks,
-  kpiBonusRules,
+        kpiTasks,
+        kpiBonusRules,
         dailyAttendances,
         kpiRecords,
-        // Fase 1-4
         expense_categories,
         budgets,
         bank_reconciliations,
@@ -1739,6 +1727,76 @@ async function startServer() {
         batch_preparations,
         promotions,
       } = req.body;
+
+      // ── ATURAN PEMBATASAN TABEL BERDASARKAN ROLE ─────────────────────────
+      if (requestUser.role === "KASIR") {
+        // Kasir hanya diizinkan memperbarui data shift, absensi, dan sesi terminal
+        // Cegah tablet kasir menimpa tabel master, payroll, keuangan, atau pengaturan
+        users = undefined;
+        settings = undefined;
+        payroll_records = undefined;
+        budgets = undefined;
+        bank_reconciliations = undefined;
+        bank_statement_lines = undefined;
+        closed_periods = undefined;
+        expense_categories = undefined;
+        promotions = undefined;
+        employees = undefined;
+        contracts = undefined;
+        kpiRecords = undefined;
+        kpiTasks = undefined;
+        kpiBonusRules = undefined;
+        suppliers = undefined;
+        purchase_orders = undefined;
+        ingredients = undefined;
+        recipes = undefined;
+        products = undefined;
+        batch_preparations = undefined;
+        stock_opnames = undefined;
+        stock_opname_items = undefined;
+      } else if (requestUser.role === "FINANCE") {
+        // Finance fokus pada keuangan & pembukuan, dilarang menimpa menu dan resep
+        users = undefined;
+        recipes = undefined;
+        products = undefined;
+        batch_preparations = undefined;
+        promotions = undefined;
+      } else if (["BARISTA", "KITCHEN", "BAKER", "LEADER"].includes(requestUser.role)) {
+        // Staff operasional hanya boleh checklist, absensi, dan sesi
+        users = undefined;
+        settings = undefined;
+        payroll_records = undefined;
+        budgets = undefined;
+        bank_reconciliations = undefined;
+        bank_statement_lines = undefined;
+        closed_periods = undefined;
+        expense_categories = undefined;
+        cash_accounts = undefined;
+        cash_transactions = undefined;
+        promotions = undefined;
+        employees = undefined;
+        contracts = undefined;
+        suppliers = undefined;
+        purchase_orders = undefined;
+      }
+
+      if (!isDbConnected && offlineState) {
+        if (ingredients !== undefined) offlineState.ingredients = ingredients;
+        if (recipes !== undefined) offlineState.recipes = recipes;
+        if (products !== undefined) offlineState.products = products;
+        if (cash_accounts !== undefined) offlineState.cash_accounts = cash_accounts;
+        if (cash_transactions !== undefined) offlineState.cash_transactions = cash_transactions;
+        if (stock_movements !== undefined) offlineState.stock_movements = stock_movements;
+        if (sales_transactions !== undefined) offlineState.sales_transactions = sales_transactions;
+        if (shifts !== undefined) offlineState.shifts = shifts;
+        if (users !== undefined) offlineState.users = users;
+        if (settings !== undefined) offlineState.settings = Array.isArray(settings) ? settings : [settings];
+        if (expense_categories !== undefined) offlineState.expense_categories = expense_categories;
+        if (budgets !== undefined) offlineState.budgets = budgets;
+        if (payroll_records !== undefined) offlineState.payroll_records = payroll_records;
+        if (promotions !== undefined) offlineState.promotions = promotions;
+        return res.json({ success: true, serverTime: new Date().toISOString() });
+      }
 
       await db.transaction(async (tx) => {
         // --- PHASE 1: DELETES (Child -> Parent) ---
@@ -2408,6 +2466,36 @@ async function startServer() {
       }
 
       const { sales_transactions, log } = req.body;
+
+      // ── ATURAN ANTI DOUBLE COUNT (Import Arsip) ──────────────────────────
+      // Cek apakah file dengan nama yang sama sudah pernah berhasil diimpor
+      if (log?.fileName) {
+        if (isDbConnected) {
+          try {
+            const existingLogs = await db
+              .select()
+              .from(schema.salesImportLogs)
+              .where(and(eq(schema.salesImportLogs.fileName, log.fileName), eq(schema.salesImportLogs.status, "SUCCESS")));
+            if (existingLogs.length > 0) {
+              return res.status(400).json({
+                error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existingLogs[0].importDate).toLocaleString("id-ID")}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
+              });
+            }
+          } catch (chkErr) {
+            console.warn("Could not check duplicate import logs in DB:", chkErr);
+          }
+        } else if (offlineState) {
+          const existing = (offlineState.sales_import_logs || []).find(
+            (l: any) => l.fileName === log.fileName && l.status === "SUCCESS"
+          );
+          if (existing) {
+            return res.status(400).json({
+              error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existing.importDate).toLocaleString("id-ID")}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
+            });
+          }
+        }
+      }
+
       const logId = crypto.randomUUID();
 
       await db.transaction(async (tx) => {
@@ -3878,13 +3966,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.payments = offlineState.payments || [];
 
+        const ownerUser = (offlineState.users || []).find(
+          (u: any) =>
+            (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
+            u.role === "OWNER"
+        );
+        if (ownerUser) {
+          return res.status(403).json({
+            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
+          });
+        }
+
         const approver = (offlineState.users || []).find(
           (u: any) =>
             (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-            (u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN")
+            (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
         );
         if (!approver) {
-          return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+          return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
         }
 
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
@@ -3966,20 +4065,38 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      // Verify PIN against MANAGER or OWNER
+      // Check if PIN belongs to OWNER (Owner is strictly read-only)
+      const ownerCheck = await db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.pin, String(managerPin)),
+            eq(schema.users.role, "OWNER")
+          )
+        )
+        .limit(1);
+
+      if (ownerCheck.length > 0) {
+        return res.status(403).json({
+          error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
+        });
+      }
+
+      // Verify PIN against MANAGER or SUPER_ADMIN
       const authUsers = await db
         .select()
         .from(schema.users)
         .where(
           and(
             eq(schema.users.pin, String(managerPin)),
-            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "OWNER"), eq(schema.users.role, "SUPER_ADMIN"))
+            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
           )
         )
         .limit(1);
 
       if (authUsers.length === 0) {
-        return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+        return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
       }
 
       const approver = authUsers[0];
@@ -4129,13 +4246,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.audit_logs = offlineState.audit_logs || [];
 
+        const ownerUser = (offlineState.users || []).find(
+          (u: any) =>
+            (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
+            u.role === "OWNER"
+        );
+        if (ownerUser) {
+          return res.status(403).json({
+            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
+          });
+        }
+
         const approver = (offlineState.users || []).find(
           (u: any) =>
             (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-            (u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN")
+            (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
         );
         if (!approver) {
-          return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+          return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
         }
 
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
@@ -4256,20 +4384,38 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      // DB Connected mode
+      // Check if PIN belongs to OWNER (Owner is strictly read-only)
+      const ownerCheck = await db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.pin, String(managerPin)),
+            eq(schema.users.role, "OWNER")
+          )
+        )
+        .limit(1);
+
+      if (ownerCheck.length > 0) {
+        return res.status(403).json({
+          error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
+        });
+      }
+
+      // Verify PIN against MANAGER or SUPER_ADMIN
       const authUsers = await db
         .select()
         .from(schema.users)
         .where(
           and(
             eq(schema.users.pin, String(managerPin)),
-            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "OWNER"), eq(schema.users.role, "SUPER_ADMIN"))
+            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
           )
         )
         .limit(1);
 
       if (authUsers.length === 0) {
-        return res.status(403).json({ error: "PIN Manager/Owner tidak valid atau Anda tidak memiliki hak otorisasi." });
+        return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
       }
 
       const approver = authUsers[0];
@@ -4568,7 +4714,46 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   app.post("/api/pos/approvals/:id/respond", async (req, res) => {
     try {
       const { id } = req.params;
-      const { action, managerName = "Manager", responseNote = "" } = req.body;
+      let { action, managerName = "Manager", responseNote = "" } = req.body;
+
+      // Autentikasi sesi & otorisasi role
+      const authHeader = req.headers["authorization"] as string;
+      const token = authHeader?.split(" ")[1];
+      let authUser: any = null;
+
+      if (token) {
+        if (isDbConnected) {
+          try {
+            const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
+            if (sessions[0]) {
+              const usersList = await db.select().from(schema.users).where(eq(schema.users.id, sessions[0].userId));
+              authUser = usersList[0];
+            }
+          } catch {}
+        }
+        if (!authUser && offlineState) {
+          const s = (offlineState.device_sessions || []).find((ds: any) => ds.id === token);
+          if (s) {
+            authUser = (offlineState.users || []).find((u: any) => u.id === s.userId);
+          }
+        }
+      }
+
+      if (authUser?.role === "OWNER") {
+        return res.status(403).json({
+          error: "Forbidden: Akun Owner berstatus Read-Only (Pengawasan). Persetujuan otorisasi operasional adalah wewenang Manager.",
+        });
+      }
+
+      if (authUser && authUser.role !== "MANAGER" && authUser.role !== "SUPER_ADMIN") {
+        return res.status(403).json({
+          error: "Forbidden: Hanya Manager atau Super Admin yang berwenang memberikan otorisasi kasir.",
+        });
+      }
+
+      if (authUser?.name) {
+        managerName = authUser.name;
+      }
 
       if (action !== "APPROVE" && action !== "REJECT") {
         return res.status(400).json({ error: "Action harus APPROVE atau REJECT" });

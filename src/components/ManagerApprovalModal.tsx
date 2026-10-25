@@ -68,9 +68,13 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
     setActionMessage(null);
 
     try {
+      const token = localStorage.getItem("node_session_id");
       const res = await fetch(`/api/pos/approvals/${reqId}/respond`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           action,
           managerName: currentUser?.name || "Manager",

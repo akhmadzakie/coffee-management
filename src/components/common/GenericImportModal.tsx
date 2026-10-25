@@ -15,7 +15,7 @@ interface GenericImportModalProps {
   onClose: () => void;
   title: string;
   expectedHeaders: string[];
-  onImport: (data: any[]) => void;
+  onImport: (data: any[], fileName?: string) => void;
 }
 
 type Step = "upload" | "preview" | "done";
@@ -32,6 +32,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [parsedRows, setParsedRows] = useState<ParsedGenericRow[]>([]);
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const [importedCount, setImportedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +41,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
       setStep("upload");
       setParsedRows([]);
       setParseErrors([]);
+      setUploadedFileName("");
       setImportedCount(0);
     }
   }, [isOpen]);
@@ -64,6 +66,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
 
       setIsLoading(true);
       setParseErrors([]);
+      setUploadedFileName(file.name);
       try {
         const { rows, errors } = await parseGenericImportFile(file, expectedHeaders);
         setParsedRows(rows);
@@ -98,7 +101,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
     try {
       // Small delay to let the UI show "Mengimport..."
       await new Promise((resolve) => setTimeout(resolve, 500));
-      onImport(parsedRows);
+      onImport(parsedRows, uploadedFileName);
       setImportedCount(parsedRows.length);
       setStep("done");
     } catch (err: any) {

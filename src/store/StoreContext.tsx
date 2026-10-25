@@ -1288,7 +1288,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    if (!isLoaded || isApplyingServerUpdate.current || !hasLocalChanges.current)
+    if (!isLoaded || isApplyingServerUpdate.current || !hasLocalChanges.current || currentUser?.role === "OWNER")
       return;
     const timer = setTimeout(async () => {
       try {
@@ -1388,12 +1388,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   ]);
 
   const markChanged = () => {
-    if (!isApplyingServerUpdate.current) {
+    if (!isApplyingServerUpdate.current && currentUser?.role !== "OWNER") {
       hasLocalChanges.current = true;
     }
   };
 
   const updateSettings = (newSettings: Settings) => {
+    if (currentUser?.role === "OWNER") {
+      alert("Akun Owner berstatus Read-Only (Pengawasan). Anda tidak diizinkan mengubah konfigurasi toko.");
+      return;
+    }
     setSettings(newSettings);
     try {
       localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
