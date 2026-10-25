@@ -16,6 +16,7 @@ import {
   Check,
   ShieldCheck,
   Layers,
+  FlipHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DailyAttendance, DEFAULT_SHIFT_DEFINITIONS } from "../types";
@@ -37,6 +38,7 @@ export function ClockIn() {
   const [locationError, setLocationError] = useState<string>("");
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isMirrored, setIsMirrored] = useState(true);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -152,12 +154,16 @@ export function ClockIn() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Flip horizontal (mirror) agar hasil jepretan sesuai dengan tampilan cermin di layar
-    ctx.save();
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, startX, startY, squareSize, squareSize, 0, 0, squareSize, squareSize);
-    ctx.restore();
+    if (isMirrored) {
+      // Flip horizontal (mirror) agar hasil jepretan sesuai dengan tampilan cermin di layar
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, startX, startY, squareSize, squareSize, 0, 0, squareSize, squareSize);
+      ctx.restore();
+    } else {
+      ctx.drawImage(video, startX, startY, squareSize, squareSize, 0, 0, squareSize, squareSize);
+    }
 
     // Add Watermark (digambar dengan orientasi normal/tidak terbalik)
     const barHeight = Math.max(50, Math.round(canvas.height * 0.085));
@@ -632,6 +638,19 @@ export function ClockIn() {
 
             {/* Camera Viewfinder */}
             <div className="bg-slate-900 rounded-3xl overflow-hidden relative w-full max-w-sm aspect-square mx-auto flex items-center justify-center border-2 border-slate-200 shadow-inner group">
+              {/* Tombol Toggle Mirror Cermin saat kamera aktif */}
+              {isCameraActive && !photoDataUrl && (
+                <button
+                  type="button"
+                  onClick={() => setIsMirrored((prev) => !prev)}
+                  className="absolute top-3 left-3 z-20 px-3 py-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-semibold rounded-full flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                  title="Klik untuk membalik cermin horizontal"
+                >
+                  <FlipHorizontal className="w-3.5 h-3.5 text-brand-300" />
+                  <span>{isMirrored ? "Cermin: Aktif" : "Cermin: Mati"}</span>
+                </button>
+              )}
+
               {photoDataUrl ? (
                 <div className="relative w-full h-full">
                   <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
@@ -646,8 +665,8 @@ export function ClockIn() {
                     autoPlay
                     playsInline
                     muted
-                    style={{ transform: "scaleX(-1)" }}
-                    className={`w-full h-full object-cover -scale-x-100 ${isCameraActive ? "block" : "hidden"}`}
+                    style={{ transform: isMirrored ? "scaleX(-1)" : "none" }}
+                    className={`w-full h-full object-cover ${isCameraActive ? "block" : "hidden"}`}
                   />
 
                   {/* Face Guide Overlay when Camera Active */}
