@@ -169,7 +169,7 @@ function AppContent() {
     OWNER:       "dashboard_owner",
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
-    KASIR:       "import_sales",
+    KASIR:       "pos_cashier",
     LEADER:      "leader_checklist",
     BAR:         "attendance_clock",
     KITCHEN:     "attendance_clock",
@@ -236,11 +236,9 @@ function AppContent() {
       "pos_cashier",
     ],
     KASIR: [
-      "dashboard_employee",
-      "import_sales",
-      "attendance_clock",
       "pos_cashier",
       "kitchen_display",
+      "attendance_clock",
     ],
     LEADER: [
       "dashboard_employee",

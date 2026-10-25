@@ -45,6 +45,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   UtensilsCrossed,
+  Utensils,
 } from "lucide-react";
 
 const DASHBOARD_TABS: { id: ViewState; label: string }[] = [
@@ -143,6 +144,8 @@ export const Layout: React.FC<LayoutProps> = ({
       case "MANAGER":
       case "SUPER_ADMIN":
         return "dashboard_manager";
+      case "KASIR":
+        return "pos_cashier";
       default:
         return "dashboard_employee";
     }
@@ -150,6 +153,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Dasbor: true,
+    "Operasional POS": true,
     "Menu & Produk": true,
     "Stok & Pengadaan": true,
     "Keuangan & Kas": true,
@@ -204,6 +208,20 @@ export const Layout: React.FC<LayoutProps> = ({
       name: "Dasbor Utama",
       view: getPrimaryDashboard(currentUser?.role),
       icon: LayoutDashboard,
+    },
+
+    // ─── 1b. Operasional Kasir & Dapur (POS & KDS) ───────────────
+    { 
+      group: "Operasional POS",
+      name: "Terminal Kasir",
+      view: "pos_cashier" as ViewState,
+      icon: Store,
+    },
+    { 
+      group: "Operasional POS",
+      name: "Layar Dapur (KDS)",
+      view: "kitchen_display" as ViewState,
+      icon: Utensils,
     },
 
     // ─── 2. Menu & Produk (Dikelola Manager & Super Admin) ───────
@@ -322,6 +340,7 @@ export const Layout: React.FC<LayoutProps> = ({
   // ─── Role Access Matrix (Tepat Sesuai SOP Julia's Coffee) ─────────
   const ALL_VIEWS: ViewState[] = [
     "dashboard_owner", "dashboard_finance", "dashboard_manager", "dashboard_inventory", "dashboard_employee",
+    "pos_cashier", "kitchen_display",
     "menu_management", "hpp_calculator", "promotions",
     "import_sales",
     "inventory", "purchases", "suppliers",
@@ -350,6 +369,8 @@ export const Layout: React.FC<LayoutProps> = ({
     MANAGER: [
       "dashboard_manager",
       "dashboard_inventory",
+      "pos_cashier",
+      "kitchen_display",
       "import_sales",
       "menu_management",
       "hpp_calculator",
@@ -374,10 +395,10 @@ export const Layout: React.FC<LayoutProps> = ({
       "payroll",
     ],
 
-    // Kasir: Rekap penjualan, presensi
+    // Kasir: POS Terminal & Presensi
     KASIR: [
-      "dashboard_employee",
-      "import_sales",
+      "pos_cashier",
+      "kitchen_display",
       "attendance_clock",
     ],
 

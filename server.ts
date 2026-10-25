@@ -47,6 +47,14 @@ const initialUsers = [
     role: "SUPER_ADMIN",
     department: "Management",
   },
+  {
+    id: "pos-terminal-1",
+    username: "kasir",
+    pin: "123456",
+    name: "Terminal Kasir POS",
+    role: "KASIR",
+    department: "Bar & Kasir",
+  },
 ];
 
 const initialIngredients = [
@@ -572,6 +580,16 @@ async function ensureTables() {
       `UPDATE users SET pin = $1 WHERE pin = '1234' OR pin = $2`,
       [pin123456Hash, pin1234Hash]
     );
+
+    // Pastikan user default POS Kasir ada
+    const checkKasir = await pool.query(`SELECT id FROM users WHERE username = 'kasir' LIMIT 1`);
+    if (checkKasir.rowCount === 0) {
+      await pool.query(
+        `INSERT INTO users (id, username, pin, name, role, department)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        ["pos-terminal-1", "kasir", pin123456Hash, "Terminal Kasir POS", "KASIR", "Bar & Kasir"]
+      );
+    }
   } catch (migErr: any) {
     // Abaikan jika tabel users belum terisi atau database offline
   }

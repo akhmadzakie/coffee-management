@@ -1087,6 +1087,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                 name: "Super Admin (Offline)",
                 role: "SUPER_ADMIN",
               },
+              {
+                id: "pos-terminal-1",
+                username: "kasir",
+                pin: "123456",
+                name: "Terminal Kasir POS",
+                role: "KASIR",
+              },
             ]
           : prev,
       );
