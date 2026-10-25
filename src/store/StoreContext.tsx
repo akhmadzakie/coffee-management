@@ -499,7 +499,13 @@ interface StoreContextType {
     notes?: string;
   }) => PurchaseOrder;
   updatePOStatus: (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => void;
-  payPurchaseOrder: (id: string, amount: number, cashAccountId: string) => void;
+  payPurchaseOrder: (
+    id: string,
+    amount: number,
+    cashAccountId: string,
+    notes?: string,
+    date?: string,
+  ) => void;
   markPOAsReceived: (id: string) => void;
   deletePurchaseOrder: (id: string) => void;
 
@@ -2098,6 +2104,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     // Auto potong kas jika status PAID dan ada cashAccountId
     if (newPO.status === "PAID" && newPO.cashAccountId && newPO.totalAmount > 0) {
       const cashTrxId = generateId();
+      const bahanBakuCat = expenseCategories.find(
+        (c) => c.type === "BAHAN_BAKU" || c.id === "cat-bahan-baku" || c.name.toLowerCase().includes("bahan")
+      );
       setCashTransactions((prev) => [
         ...prev,
         {
@@ -2106,8 +2115,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           date: newPO.date || new Date().toISOString(),
           type: "CASH_OUT",
           amount: newPO.totalAmount,
-          category: "Pembelian Bahan",
+          category: bahanBakuCat?.name || "Pembelian Bahan",
+          categoryId: bahanBakuCat?.id || "cat-bahan-baku",
           description: `Pembelian PO: ${newPO.poNumber} (${newPO.supplierName || "Supplier"})`,
+          referenceId: newPO.id,
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
@@ -2181,6 +2192,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     // Auto catat kas keluar pada akun kas yang dipilih
     if (data.cashAccountId && data.totalAmount > 0) {
       const cashTrxId = generateId();
+      const bahanBakuCat = expenseCategories.find(
+        (c) => c.type === "BAHAN_BAKU" || c.id === "cat-bahan-baku" || c.name.toLowerCase().includes("bahan")
+      );
       setCashTransactions((prev) => [
         ...prev,
         {
@@ -2189,8 +2203,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           date: nowISO,
           type: "CASH_OUT",
           amount: data.totalAmount,
-          category: "Pembelian Bahan",
+          category: bahanBakuCat?.name || "Pembelian Bahan",
+          categoryId: bahanBakuCat?.id || "cat-bahan-baku",
           description: `Belanja Pasar (${data.marketName || "Eceran"}): ${data.items.length} item bahan [${poNumber}]`,
+          referenceId: id,
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
@@ -2200,7 +2216,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     return newPO;
   };
 
-  const updatePOStatus = (id: string, status: "PAID" | "UNPAID") => {
+  const updatePOStatus = (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => {
     setPurchaseOrders((prev) =>
       prev.map((po) => (po.id === id ? { ...po, status } : po)),
     );
@@ -2208,7 +2224,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
-  const payPurchaseOrder = (id: string, amount: number, cashAccountId: string) => {
+  const payPurchaseOrder = (
+    id: string,
+    amount: number,
+    cashAccountId: string,
+    notes?: string,
+    date?: string,
+  ) => {
     const po = purchaseOrders.find((p) => p.id === id);
     if (!po) return;
 
@@ -2216,17 +2238,31 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const isPaid = newAmountPaid >= po.totalAmount;
 
     setPurchaseOrders((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, amountPaid: newAmountPaid, status: isPaid ? "PAID" : "PARTIAL" } : p)),
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              amountPaid: newAmountPaid,
+              status: isPaid ? "PAID" : "PARTIAL",
+            }
+          : p,
+      ),
+    );
+
+    const bahanBakuCat = expenseCategories.find(
+      (c) => c.type === "BAHAN_BAKU" || c.id === "cat-bahan-baku" || c.name.toLowerCase().includes("bahan")
     );
 
     // Create Cash Transaction for this payment
     addCashTransaction({
       accountId: cashAccountId,
-      date: new Date().toISOString(),
+      date: date || new Date().toISOString(),
       type: "CASH_OUT",
       amount: amount,
-      category: "Payable",
-      description: `Pembayaran PO ${po.poNumber}`,
+      category: bahanBakuCat?.name || "Pembelian Bahan",
+      categoryId: bahanBakuCat?.id || "cat-bahan-baku",
+      description: `Pelunasan Hutang PO ${po.poNumber} (${po.supplierName || "Supplier"})${notes ? ` - ${notes}` : ""}`,
+      referenceId: po.id,
     });
 
     writeAuditLog("UPDATE", "purchase_orders", id);

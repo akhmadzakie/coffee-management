@@ -49,10 +49,22 @@ export const Purchases = () => {
 
   const isFinance =
     currentUser?.role === "FINANCE" ||
-    currentUser?.role === "SUPER_ADMIN" ||
-    currentUser?.role === "OWNER";
+    currentUser?.role === "SUPER_ADMIN";
 
-  const [activeTab, setActiveTab] = useState<"new_po" | "history">("new_po");
+  const isManager =
+    currentUser?.role === "MANAGER" ||
+    currentUser?.role === "SUPER_ADMIN";
+
+  const canProcessPayment = !isReadOnly && isFinance;
+  const canManagePurchases = !isReadOnly && (isManager || isFinance);
+
+  const [activeTab, setActiveTab] = useState<"new_po" | "history" | "payables">(
+    isReadOnly ? "payables" : "new_po"
+  );
+  const [payableFilter, setPayableFilter] = useState<
+    "ALL" | "OVERDUE" | "DUE_SOON" | "PARTIAL" | "UNPAID"
+  >("ALL");
+  const [payableSupplierFilter, setPayableSupplierFilter] = useState<string>("");
 
   // Purchase Mode: Formal Distributor PO vs Direct Market/Cash Purchase
   const [purchaseMode, setPurchaseMode] = useState<"DISTRIBUTOR" | "MARKET">("DISTRIBUTOR");
@@ -72,6 +84,10 @@ export const Purchases = () => {
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState<number>(0);
   const [payAccountId, setPayAccountId] = useState<string>("");
+  const [payNotes, setPayNotes] = useState<string>("");
+  const [payDate, setPayDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
   const [selectedPOForPay, setSelectedPOForPay] = useState<any>(null);
   const [currentInvoiceData, setCurrentInvoiceData] = useState<any>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null);
@@ -81,6 +97,100 @@ export const Purchases = () => {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
   const isIndo = settings.language === "id";
+
+  const getDueStatus = (dueDateStr?: string) => {
+    if (!dueDateStr) return { label: "Tanpa Tempo", variant: "default" as const, days: 0 };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDateStr);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return {
+        label: `Lewat ${Math.abs(diffDays)} Hari`,
+        variant: "overdue" as const,
+        days: diffDays,
+      };
+    }
+    if (diffDays === 0) {
+      return {
+        label: "Jatuh Tempo Hari Ini",
+        variant: "due_today" as const,
+        days: 0,
+      };
+    }
+    if (diffDays <= 3) {
+      return {
+        label: `Jatuh Tempo dlm ${diffDays} Hari`,
+        variant: "due_soon" as const,
+        days: diffDays,
+      };
+    }
+    return {
+      label: `Tempo: ${new Date(dueDateStr).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}`,
+      variant: "normal" as const,
+      days: diffDays,
+    };
+  };
+
+  // AP / Debt KPI calculations
+  const unpaidPOs = purchaseOrders.filter(
+    (po) => po.status === "UNPAID" || po.status === "PARTIAL"
+  );
+  const totalUnpaidDebt = unpaidPOs.reduce(
+    (sum, po) => sum + (po.totalAmount - (po.amountPaid || 0)),
+    0
+  );
+
+  const overduePOs = unpaidPOs.filter((po) => {
+    const status = getDueStatus(po.dueDate);
+    return status.variant === "overdue";
+  });
+  const overdueDebt = overduePOs.reduce(
+    (sum, po) => sum + (po.totalAmount - (po.amountPaid || 0)),
+    0
+  );
+
+  const dueSoonPOs = unpaidPOs.filter((po) => {
+    const status = getDueStatus(po.dueDate);
+    return status.variant === "due_today" || status.variant === "due_soon";
+  });
+
+  const pendingDeliveryCount = purchaseOrders.filter(
+    (po) => po.deliveryStatus !== "RECEIVED"
+  ).length;
+
+  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  const currentMonthPOs = purchaseOrders.filter((po) =>
+    po.date.startsWith(currentMonthStr)
+  );
+  const currentMonthPurchasesTotal = currentMonthPOs.reduce(
+    (sum, po) => sum + po.totalAmount,
+    0
+  );
+
+  const filteredPayables = unpaidPOs.filter((po) => {
+    const supplier = suppliers.find((s) => s.id === po.supplierId);
+    const supName = supplier?.name || po.supplierName || "";
+    const matchesSearch =
+      po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      supName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSupplier =
+      !payableSupplierFilter || po.supplierId === payableSupplierFilter;
+
+    const dueStatus = getDueStatus(po.dueDate);
+    let matchesStatus = true;
+    if (payableFilter === "OVERDUE") matchesStatus = dueStatus.variant === "overdue";
+    else if (payableFilter === "DUE_SOON")
+      matchesStatus =
+        dueStatus.variant === "due_today" || dueStatus.variant === "due_soon";
+    else if (payableFilter === "PARTIAL") matchesStatus = po.status === "PARTIAL";
+    else if (payableFilter === "UNPAID") matchesStatus = po.status === "UNPAID";
+
+    return matchesSearch && matchesSupplier && matchesStatus;
+  });
 
   useEffect(() => {
     if (cashAccounts.length > 0 && !selectedCashAccountId) {
@@ -189,6 +299,11 @@ export const Purchases = () => {
     const isPaid = status === "PAID";
     const poNumber = `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const calculatedDueDate = isPaid
+      ? undefined
+      : dueDate ||
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
     const newPO = {
       poNumber,
       supplierId: selectedSupplier,
@@ -200,7 +315,7 @@ export const Purchases = () => {
       status: isPaid ? ("PAID" as const) : ("UNPAID" as const),
       deliveryStatus: deliveryOption,
       paymentMethod: isPaid ? ("CASH" as const) : ("TEMPO" as const),
-      dueDate: isPaid ? undefined : dueDate,
+      dueDate: calculatedDueDate,
       amountPaid: isPaid ? totalAmount : 0,
       cashAccountId: isPaid ? (selectedCashAccountId || cashAccounts[0]?.id) : undefined,
     };
@@ -210,6 +325,7 @@ export const Purchases = () => {
     setIsInvoiceModalOpen(true);
     setCart([]);
     setSelectedSupplier("");
+    setDueDate("");
     setIsMobileCartOpen(false);
   };
 
@@ -281,6 +397,31 @@ export const Purchases = () => {
               </span>
             </button>
           )}
+
+          <button
+            onClick={() => setActiveTab("payables")}
+            className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer truncate ${
+              activeTab === "payables" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {activeTab === "payables" && (
+              <motion.div
+                layoutId="purchasesMainTab"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <CreditCard className="w-3.5 h-3.5 text-amber-600 relative z-10 shrink-0" />
+            <span className="relative z-10 truncate flex items-center gap-1.5">
+              <span>{isIndo ? "Hutang Supplier" : "Accounts Payable"}</span>
+              {unpaidPOs.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white leading-none">
+                  {unpaidPOs.length}
+                </span>
+              )}
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveTab("history")}
             className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer truncate ${
@@ -307,6 +448,104 @@ export const Purchases = () => {
             </span>
           </button>
         </div>
+      </div>
+
+      {/* ─── 4 BENTO KPI SUMMARY CARDS ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Total Hutang Supplier */}
+        <motion.div
+          whileHover={{ y: -2 }}
+          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Hutang Dagang (AP)
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 flex items-center justify-center shrink-0">
+              <CreditCard className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+            {formatCurrency(totalUnpaidDebt)}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+            <span className="font-bold text-amber-700">{unpaidPOs.length} tagihan</span>
+            <span>belum lunas</span>
+          </p>
+        </motion.div>
+
+        {/* Card 2: Tagihan Lewat Tempo */}
+        <motion.div
+          whileHover={{ y: -2 }}
+          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Lewat Jatuh Tempo
+            </span>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+              overduePOs.length > 0
+                ? "bg-rose-50 text-rose-600 border-rose-200/80"
+                : "bg-slate-50 text-slate-400 border-slate-200/80"
+            }`}>
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-lg sm:text-2xl font-black font-mono tracking-tight ${
+            overduePOs.length > 0 ? "text-rose-600" : "text-slate-900"
+          }`}>
+            {formatCurrency(overdueDebt)}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {overduePOs.length > 0 ? (
+              <span className="font-bold text-rose-600">{overduePOs.length} faktur mendesak dibayar</span>
+            ) : (
+              "Semua tagihan tempo aman"
+            )}
+          </p>
+        </motion.div>
+
+        {/* Card 3: Penerimaan Stok Menunggu */}
+        <motion.div
+          whileHover={{ y: -2 }}
+          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Tunggu Terima Stok
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/80 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+            {pendingDeliveryCount} <span className="text-xs font-medium text-slate-400">PO</span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {pendingDeliveryCount > 0 ? "Menunggu verifikasi barang di outlet" : "Semua PO telah diterima"}
+          </p>
+        </motion.div>
+
+        {/* Card 4: Total Belanja Bulan Ini */}
+        <motion.div
+          whileHover={{ y: -2 }}
+          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Total Belanja Bulan Ini
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 flex items-center justify-center shrink-0">
+              <Coins className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+            {formatCurrency(currentMonthPurchasesTotal)}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {currentMonthPOs.length} transaksi restock bahan
+          </p>
+        </motion.div>
       </div>
 
       {/* ─── TAB 1: NEW PURCHASE (RESTOCK) ────────────────────────────────────────── */}
@@ -576,6 +815,109 @@ export const Purchases = () => {
                   </select>
                 </div>
 
+                {/* Payment Method: Tunai vs Tempo */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Metode Pembayaran
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("CASH")}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        paymentMethod === "CASH"
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-900 ring-2 ring-emerald-500/20"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-[11px]">Tunai Langsung</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("TEMPO");
+                        if (!dueDate) {
+                          setDueDate(
+                            new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+                              .toISOString()
+                              .split("T")[0]
+                          );
+                        }
+                      }}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        paymentMethod === "TEMPO"
+                          ? "bg-amber-50 border-amber-300 text-amber-900 ring-2 ring-amber-500/20"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-amber-600" />
+                      <span className="text-[11px]">Hutang / Tempo</span>
+                    </button>
+                  </div>
+
+                  {paymentMethod === "CASH" ? (
+                    <div className="space-y-1.5 p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100 text-xs">
+                      <label className="block text-[11px] font-bold text-emerald-900">
+                        Pilih Pos Kas / Rekening Pengeluaran:
+                      </label>
+                      <select
+                        value={selectedCashAccountId}
+                        onChange={(e) => setSelectedCashAccountId(e.target.value)}
+                        className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-emerald-500 outline-none font-medium"
+                      >
+                        {cashAccounts.map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} ({formatCurrency(acc.balance || 0)})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-emerald-700 leading-tight">
+                        Kas keluar otomatis tercatat saat PO disimpan.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 p-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-xs">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-[11px] font-bold text-amber-900">
+                          Jatuh Tempo Pembayaran:
+                        </label>
+                        <div className="flex gap-1">
+                          {[
+                            { label: "+7H", days: 7 },
+                            { label: "+14H", days: 14 },
+                            { label: "+30H", days: 30 },
+                          ].map((p) => (
+                            <button
+                              key={p.days}
+                              type="button"
+                              onClick={() => {
+                                setDueDate(
+                                  new Date(Date.now() + p.days * 24 * 60 * 60 * 1000)
+                                    .toISOString()
+                                    .split("T")[0]
+                                );
+                              }}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 cursor-pointer"
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="w-full border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-amber-500 outline-none font-medium"
+                      />
+                      <p className="text-[10px] text-amber-800 leading-tight">
+                        Kas TIDAK dipotong sekarang. Tagihan masuk ke daftar Hutang Supplier (AP).
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Delivery Option */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -711,30 +1053,378 @@ export const Purchases = () => {
                   <span>Simpan Belanja & Potong Kas Tunai</span>
                 </button>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={!selectedSupplier || cart.length === 0}
-                    onClick={() => handleCheckout("UNPAID")}
-                    className="py-3 px-2 bg-slate-100 border border-slate-200 text-slate-800 font-bold rounded-2xl hover:bg-slate-200 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
-                  >
-                    Simpan Belum Lunas
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selectedSupplier || cart.length === 0}
-                    onClick={() => handleCheckout("PAID")}
-                    className="py-3 px-2 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs cursor-pointer"
-                  >
-                    Bayar Sekarang
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  disabled={!selectedSupplier || cart.length === 0}
+                  onClick={() =>
+                    handleCheckout(paymentMethod === "CASH" ? "PAID" : "UNPAID")
+                  }
+                  className={`w-full py-3 px-3 font-bold rounded-2xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-xs shadow-xs flex items-center justify-center gap-2 cursor-pointer ${
+                    paymentMethod === "CASH"
+                      ? "bg-brand-600 hover:bg-brand-700 text-white"
+                      : "bg-amber-600 hover:bg-amber-700 text-white"
+                  }`}
+                >
+                  {paymentMethod === "CASH" ? (
+                    <>
+                      <Coins className="w-4 h-4" />
+                      <span>Buat PO & Bayar Kas ({formatCurrency(totalAmount)})</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      <span>Simpan PO Hutang / Tempo (Catat ke AP)</span>
+                    </>
+                  )}
+                </button>
               )}
             </div>
           </div>
         </div>
+      ) : activeTab === "payables" ? (
+        /* ─── TAB 2: HUTANG SUPPLIER (ACCOUNTS PAYABLE) ────────────────────────── */
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                  Accounts Payable
+                </span>
+                <span className="text-xs text-slate-400 font-bold">•</span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {unpaidPOs.length} Tagihan Aktif
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                {isIndo ? "Hutang Supplier & Tempo Pengadaan" : "Supplier Payables & Credit Terms"}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Monitoring jatuh tempo faktur tempo, realisasi cicilan bertahap, dan pelunasan kas pengadaan bahan baku.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const dataToExport = unpaidPOs.map((po) => {
+                    const supplier = suppliers.find((s) => s.id === po.supplierId);
+                    const remaining = po.totalAmount - (po.amountPaid || 0);
+                    const dueStatus = getDueStatus(po.dueDate);
+                    return {
+                      PONumber: po.poNumber,
+                      Date: new Date(po.date).toLocaleDateString(),
+                      DueDate: po.dueDate || "-",
+                      DueStatus: dueStatus.label,
+                      Supplier: supplier?.name || po.supplierName || "Unknown",
+                      TotalAmount: po.totalAmount,
+                      AmountPaid: po.amountPaid || 0,
+                      RemainingDebt: remaining,
+                      Status: po.status,
+                    };
+                  });
+                  exportToCSV("Hutang_Supplier_AP", dataToExport);
+                }}
+                className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5 text-slate-500 shrink-0" />
+                <span>Ekspor Hutang (CSV)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar: Status Pill & Search */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/70">
+            {/* Filter Status Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+              {[
+                { id: "ALL", label: `Semua (${unpaidPOs.length})` },
+                { id: "OVERDUE", label: `⚠️ Lewat Tempo (${overduePOs.length})`, alert: overduePOs.length > 0 },
+                { id: "DUE_SOON", label: `⏳ < 7 Hari (${dueSoonPOs.length})` },
+                { id: "PARTIAL", label: `Dicicil (${unpaidPOs.filter(p => p.status === "PARTIAL").length})` },
+                { id: "UNPAID", label: `Belum Dicicil (${unpaidPOs.filter(p => p.status === "UNPAID").length})` },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setPayableFilter(pill.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                    payableFilter === pill.id
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : pill.alert
+                      ? "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Supplier Select & Search */}
+            <div className="flex items-center gap-2">
+              <select
+                value={payableSupplierFilter}
+                onChange={(e) => setPayableSupplierFilter(e.target.value)}
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                <option value="">Semua Supplier</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="relative flex-1 md:w-56">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Cari PO / Supplier..."
+                  className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE VIEW (Desktop / Tablet) */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50/70 text-slate-500 font-bold border-b border-slate-200">
+                  <th className="px-4 py-3 rounded-l-xl">No PO</th>
+                  <th className="px-4 py-3">Tanggal PO</th>
+                  <th className="px-4 py-3">Supplier Rekanan</th>
+                  <th className="px-4 py-3">Jatuh Tempo</th>
+                  <th className="px-4 py-3">Penerimaan Stok</th>
+                  <th className="px-4 py-3 text-right">Total Tagihan</th>
+                  <th className="px-4 py-3 text-right">Terbayar</th>
+                  <th className="px-4 py-3 text-right">Sisa Hutang</th>
+                  <th className="px-4 py-3 text-center rounded-r-xl">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredPayables.map((po) => {
+                  const supplier = suppliers.find((s) => s.id === po.supplierId);
+                  const remaining = po.totalAmount - (po.amountPaid || 0);
+                  const dueStatus = getDueStatus(po.dueDate);
+                  const pctPaid = Math.min(100, Math.round(((po.amountPaid || 0) / (po.totalAmount || 1)) * 100));
+
+                  return (
+                    <tr key={po.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-4 py-3.5 whitespace-nowrap font-bold">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 rounded-md bg-amber-50 text-amber-700">
+                            <Building2 className="w-3.5 h-3.5" />
+                          </span>
+                          <span className="text-brand-700 font-mono font-bold">
+                            {po.poNumber}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
+                        {new Date(po.date).toLocaleDateString("id-ID")}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div>
+                          <p className="font-bold text-slate-800">
+                            {supplier?.name || po.supplierName || "Unknown"}
+                          </p>
+                          {supplier?.picName && (
+                            <p className="text-[10px] text-slate-400">
+                              PIC: {supplier.picName} {supplier.contact ? `(${supplier.contact})` : ""}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            dueStatus.variant === "overdue"
+                              ? "bg-rose-100 text-rose-800 border border-rose-300"
+                              : dueStatus.variant === "due_today" || dueStatus.variant === "due_soon"
+                              ? "bg-amber-100 text-amber-900 border border-amber-300"
+                              : "bg-slate-100 text-slate-700 border border-slate-200"
+                          }`}
+                        >
+                          {dueStatus.variant === "overdue" && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                          {dueStatus.variant === "due_today" && <Clock className="w-3 h-3 text-amber-600" />}
+                          {dueStatus.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            po.deliveryStatus === "RECEIVED"
+                              ? "bg-brand-50 text-brand-800 border border-brand-200"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {po.deliveryStatus === "RECEIVED" ? "Masuk Stok" : "Menunggu"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono text-slate-700">
+                        {formatCurrency(po.totalAmount)}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono text-emerald-700">
+                        <div>
+                          <span>{formatCurrency(po.amountPaid || 0)}</span>
+                          {pctPaid > 0 && (
+                            <span className="text-[10px] text-slate-400 block font-normal">
+                              {pctPaid}% terbayar
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono text-rose-600">
+                        {formatCurrency(remaining)}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {canProcessPayment && (
+                            <button
+                              onClick={() => {
+                                setSelectedPOForPay(po);
+                                setPayAmount(remaining);
+                                setPayModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Bayar / Cicil</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setCurrentInvoiceData(po);
+                              setIsInvoiceModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-600 transition-colors cursor-pointer"
+                            title="Lihat Faktur PO"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredPayables.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
+                      🎉 Tidak ada hutang supplier yang cocok dengan filter saat ini.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* CARD FEED VIEW (Mobile Phone) */}
+          <div className="block md:hidden space-y-3">
+            {filteredPayables.map((po) => {
+              const supplier = suppliers.find((s) => s.id === po.supplierId);
+              const remaining = po.totalAmount - (po.amountPaid || 0);
+              const dueStatus = getDueStatus(po.dueDate);
+              const pctPaid = Math.min(100, Math.round(((po.amountPaid || 0) / (po.totalAmount || 1)) * 100));
+
+              return (
+                <div
+                  key={po.id}
+                  className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-brand-600" />
+                        <span className="font-bold font-mono text-xs text-slate-900">
+                          {po.poNumber}
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5">
+                        {supplier?.name || po.supplierName || "Supplier"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Tgl PO: {new Date(po.date).toLocaleDateString("id-ID")}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block">Sisa Hutang:</span>
+                      <span className="font-black font-mono text-sm text-rose-600 block">
+                        {formatCurrency(remaining)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                      <span>Total: {formatCurrency(po.totalAmount)}</span>
+                      <span>Terbayar: {formatCurrency(po.amountPaid || 0)} ({pctPaid}%)</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: `${pctPaid}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        dueStatus.variant === "overdue"
+                          ? "bg-rose-100 text-rose-800 border border-rose-300"
+                          : dueStatus.variant === "due_today" || dueStatus.variant === "due_soon"
+                          ? "bg-amber-100 text-amber-900 border border-amber-300"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {dueStatus.variant === "overdue" && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                      {dueStatus.label}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {canProcessPayment && (
+                        <button
+                          onClick={() => {
+                            setSelectedPOForPay(po);
+                            setPayAmount(remaining);
+                            setPayModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-brand-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 flex items-center gap-1"
+                        >
+                          <CreditCard className="w-3 h-3" />
+                          <span>Bayar</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setCurrentInvoiceData(po);
+                          setIsInvoiceModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredPayables.length === 0 && (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                Tidak ada hutang supplier yang cocok dengan filter saat ini.
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
-        /* ─── TAB 2: PURCHASE ORDERS HISTORY ───────────────────────────────────────── */
+        /* ─── TAB 3: PURCHASE ORDERS HISTORY ───────────────────────────────────────── */
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
             <div>
@@ -825,12 +1515,14 @@ export const Purchases = () => {
                               className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                 po.status === "PAID"
                                   ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  : po.status === "PARTIAL"
+                                  ? "bg-blue-50 text-blue-800 border border-blue-200"
                                   : "bg-amber-50 text-amber-800 border border-amber-200"
                               }`}
                             >
-                              {po.status === "PAID" ? "Lunas" : "Belum Lunas"}
+                              {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Belum Lunas"}
                             </span>
-                            {po.status === "UNPAID" && isFinance && (
+                            {(po.status === "UNPAID" || po.status === "PARTIAL") && isFinance && (
                               <button
                                 onClick={() => {
                                   setSelectedPOForPay(po);
@@ -839,7 +1531,7 @@ export const Purchases = () => {
                                 }}
                                 className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
                               >
-                                Lunasi
+                                {po.status === "PARTIAL" ? "Bayar/Cicil" : "Lunasi"}
                               </button>
                             )}
                           </div>
@@ -951,10 +1643,12 @@ export const Purchases = () => {
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           po.status === "PAID"
                             ? "bg-emerald-100 text-emerald-800"
+                            : po.status === "PARTIAL"
+                            ? "bg-blue-100 text-blue-800"
                             : "bg-amber-100 text-amber-800"
                         }`}
                       >
-                        {po.status === "PAID" ? "Lunas" : "Hutang"}
+                        {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Hutang"}
                       </span>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -969,7 +1663,7 @@ export const Purchases = () => {
 
                     <div className="flex items-center justify-between pt-1">
                       <div className="flex items-center gap-2">
-                        {po.status === "UNPAID" && isFinance && (
+                        {(po.status === "UNPAID" || po.status === "PARTIAL") && isFinance && (
                           <button
                             onClick={() => {
                               setSelectedPOForPay(po);
@@ -978,7 +1672,7 @@ export const Purchases = () => {
                             }}
                             className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
                           >
-                            Lunasi
+                            {po.status === "PARTIAL" ? "Bayar Cicilan" : "Lunasi"}
                           </button>
                         )}
                         {po.deliveryStatus !== "RECEIVED" && (
@@ -1234,67 +1928,167 @@ export const Purchases = () => {
       )}
 
       {/* ─── MODAL: Pay PO (Hutang Dagang) ─────────────────────────────────────────── */}
-      {payModalOpen && selectedPOForPay && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-base font-bold text-slate-900">Bayar Hutang PO</h3>
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-1">
-              <span className="text-slate-500">Sisa Tagihan:</span>
-              <div className="text-lg font-black font-mono text-rose-600">
-                {formatCurrency(selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0))}
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Jumlah Dibayar (Rp)</label>
-                <input
-                  type="number"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Dari Akun Kas / Bank</label>
-                <select
-                  value={payAccountId}
-                  onChange={(e) => setPayAccountId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+      {payModalOpen && selectedPOForPay && (() => {
+        const remaining = selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0);
+        const supplier = suppliers.find((s) => s.id === selectedPOForPay.supplierId);
+        return (
+          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-brand-600" />
+                    <span>Pembayaran Hutang Supplier</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                    {selectedPOForPay.poNumber} • {supplier?.name || selectedPOForPay.supplierName || "Supplier"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPayModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                 >
-                  <option value="">-- Pilih Akun Kas/Bank --</option>
-                  {cashAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({formatCurrency(a.balance || 0)})
-                    </option>
-                  ))}
-                </select>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setPayModalOpen(false)}
-                className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl text-xs cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  if (payAmount > 0 && payAccountId) {
-                    payPurchaseOrder(selectedPOForPay.id, payAmount, payAccountId);
-                    setPayModalOpen(false);
-                  }
-                }}
-                disabled={!payAccountId || payAmount <= 0}
-                className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 active:scale-95 transition-all text-xs disabled:opacity-40 shadow-xs cursor-pointer"
-              >
-                Konfirmasi Pembayaran
-              </button>
+              {/* Tagihan Summary Card */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
+                <div className="flex justify-between text-slate-600">
+                  <span>Total Tagihan PO:</span>
+                  <span className="font-mono font-bold text-slate-900">{formatCurrency(selectedPOForPay.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Sudah Dibayar:</span>
+                  <span className="font-mono font-bold text-emerald-600">{formatCurrency(selectedPOForPay.amountPaid || 0)}</span>
+                </div>
+                <div className="flex justify-between text-xs pt-2 border-t border-slate-200/60 items-center">
+                  <span className="font-bold text-slate-700">Sisa Hutang:</span>
+                  <span className="text-lg font-black font-mono text-rose-600">
+                    {formatCurrency(remaining)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                {/* Nominal Bayar + Presets */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block font-bold text-slate-700">Jumlah Dibayar (Rp)</label>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPayAmount(remaining)}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 cursor-pointer"
+                      >
+                        Lunas (100%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayAmount(Math.round(remaining / 2))}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                      >
+                        50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayAmount(Math.round(remaining / 4))}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                      >
+                        25%
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max={remaining}
+                    value={payAmount || ""}
+                    onChange={(e) => setPayAmount(Math.min(remaining, Math.max(0, Number(e.target.value))))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+                    placeholder="Masukkan jumlah pembayaran..."
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Terbilang: {formatCurrency(payAmount || 0)}
+                  </p>
+                </div>
+
+                {/* Pilih Sumber Kas / Bank */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Dari Akun Kas / Bank</label>
+                  <select
+                    value={payAccountId}
+                    onChange={(e) => setPayAccountId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+                  >
+                    <option value="">-- Pilih Akun Kas/Bank --</option>
+                    {cashAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({formatCurrency(a.balance || 0)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Tanggal Bayar */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Tanggal Pembayaran</label>
+                  <input
+                    type="date"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+                  />
+                </div>
+
+                {/* Catatan / No Referensi Transfer */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Catatan / Bukti Transfer (Opsional)</label>
+                  <input
+                    type="text"
+                    value={payNotes}
+                    onChange={(e) => setPayNotes(e.target.value)}
+                    placeholder="Misal: Transfer BCA Ref #88910, Cicilan ke-1..."
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPayModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (payAmount > 0 && payAccountId) {
+                      payPurchaseOrder(
+                        selectedPOForPay.id,
+                        payAmount,
+                        payAccountId,
+                        payNotes.trim() || undefined,
+                        payDate ? new Date(payDate).toISOString() : undefined
+                      );
+                      setPayModalOpen(false);
+                      setPayNotes("");
+                    }
+                  }}
+                  disabled={!payAccountId || payAmount <= 0}
+                  className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 active:scale-95 transition-all text-xs disabled:opacity-40 shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Konfirmasi Pembayaran ({formatCurrency(payAmount || 0)})</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
