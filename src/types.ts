@@ -251,6 +251,10 @@ export interface DailyAttendance {
   overtimeHours?: number; // Jam kerja di atas 8 jam
   overtimeApproved?: boolean; // Persetujuan lembur oleh Manager
   notes: string;
+  isCorrected?: boolean;
+  correctedBy?: string | null;
+  correctedAt?: string | null;
+  correctionReason?: string | null;
 }
 
 
