@@ -1683,6 +1683,27 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         />
       )}
 
+      {/* ── Modal Otorisasi PIN Manager untuk Diskon Khusus Manual ─── */}
+      {isPinModalOpen && (
+        <PosManagerPinModal
+          title={`Otorisasi Diskon Khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : formatCurrency(pendingDiscountValue)})`}
+          description={`Kasir mengajukan diskon manual dengan alasan: "${pendingDiscountReason || 'Diskon Khusus'}". Masukkan PIN Manager untuk menyetujui.`}
+          requireReason={false}
+          onClose={() => setIsPinModalOpen(false)}
+          onSuccess={(manager) => {
+            setIsPinModalOpen(false);
+            setDiscountType(pendingDiscountType);
+            setDiscountValue(pendingDiscountValue);
+            setDiscountReason(pendingDiscountReason || `Diskon Khusus (Disetujui ${manager.name})`);
+            setAppliedPromotionId(null);
+            setAppliedPromotionName(null);
+            setAppliedPromoMaxDiscount(undefined);
+            setIsDiscountModalOpen(false);
+            alert(`Diskon khusus berhasil disetujui oleh Manager (${manager.name}).`);
+          }}
+        />
+      )}
+
       {/* ── Overlay Kunci Layar POS (Terminal Lock Screen) ────────────── */}
       <AnimatePresence>
         {isTerminalLocked && (

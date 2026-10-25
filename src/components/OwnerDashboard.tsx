@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
 import { useStore } from "../store/StoreContext";
-import { ViewState } from "../types";
+import { ViewState, ManagerApprovalRequest } from "../types";
 import {
   AreaChart,
   Area,
@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ShieldAlert,
+  ShieldCheck,
   Wallet,
   Clock,
   Target,
@@ -49,6 +50,9 @@ import {
   CheckSquare,
   Zap,
   Send,
+  RotateCcw,
+  Trash2,
+  Lock,
 } from "lucide-react";
 import { exportMasterExecutiveReportPDF } from "../utils/export";
 import { exportMasterExecutiveReportXlsx } from "../utils/exportXlsx";
@@ -82,6 +86,62 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
   const [saveTargetToast, setSaveTargetToast] = useState<string | null>(null);
+
+  // Data Pengawasan Loss Prevention & Fraud
+  const [approvalHistory, setApprovalHistory] = useState<ManagerApprovalRequest[]>([]);
+  const [posTodayStats, setPosTodayStats] = useState<{
+    grossSales: number;
+    totalRefund: number;
+    netSales: number;
+    paidCount: number;
+    refundCount: number;
+    voidCount: number;
+  }>({
+    grossSales: 0,
+    totalRefund: 0,
+    netSales: 0,
+    paidCount: 0,
+    refundCount: 0,
+    voidCount: 0,
+  });
+
+  useEffect(() => {
+    const fetchLossPreventionData = async () => {
+      try {
+        const [resHist, resToday] = await Promise.all([
+          fetch("/api/pos/approvals/history"),
+          fetch("/api/pos/orders/today"),
+        ]);
+        if (resHist.ok) {
+          setApprovalHistory(await resHist.json());
+        }
+        if (resToday.ok) {
+          const data = await resToday.json();
+          if (data.summary) {
+            setPosTodayStats(data.summary);
+          }
+        }
+      } catch (e) {
+        console.warn("Gagal mengambil data loss prevention:", e);
+      }
+    };
+    fetchLossPreventionData();
+  }, []);
+
+  const activeShift = useMemo(() => {
+    return shifts.find((s) => s.status === "OPEN");
+  }, [shifts]);
+
+  const cancellationMetrics = useMemo(() => {
+    const totalTransactions = posTodayStats.paidCount + posTodayStats.refundCount + posTodayStats.voidCount;
+    const cancelledCount = posTodayStats.refundCount + posTodayStats.voidCount;
+    const ratio = totalTransactions > 0 ? (cancelledCount / totalTransactions) * 100 : 0;
+    return {
+      totalTransactions,
+      cancelledCount,
+      ratio,
+    };
+  }, [posTodayStats]);
 
   const handleOpenCopilot = (
     tab: "quick-input" | "receipt" | "consultant" | "insights",
@@ -1391,6 +1451,209 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ─── Pengawasan Fraud, Void & Refund (Loss Prevention) ───────────── */}
+      <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200/60 flex items-center justify-center text-rose-600 shadow-2xs shrink-0">
+              <ShieldAlert className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+                  Pengawasan Fraud, Void & Refund (Loss Prevention)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-700 font-bold border border-emerald-200/60">
+                  Audit Terintegrasi POS
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengawasan pembatalan pesanan kasir, refund dana fisik, dan akuntabilitas laci kas (SOP #10).
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigate("audit_log")}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+            <span>Audit Log Aktivitas Lengkap →</span>
+          </button>
+        </div>
+
+        {/* 4 Loss Prevention KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total Refund Hari Ini */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Total Refund
+              </span>
+              <div className="w-7 h-7 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                <RotateCcw className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg font-black text-slate-900 tracking-tight">
+              {formatCurrency(posTodayStats.totalRefund)}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              {posTodayStats.refundCount} transaksi dikembalikan
+            </p>
+          </div>
+
+          {/* Card 2: Order Void (Dibatalkan) */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Order Void (Batal)
+              </span>
+              <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Trash2 className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-lg font-black text-slate-900 tracking-tight">
+              {posTodayStats.voidCount} Transaksi
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Open bill & tiket dibatalkan
+            </p>
+          </div>
+
+          {/* Card 3: Rasio Pembatalan (Cancellation Ratio) */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Rasio Pembatalan
+              </span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                cancellationMetrics.ratio <= 2
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : cancellationMetrics.ratio <= 5
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-rose-50 text-rose-700 border-rose-200"
+              }`}>
+                {cancellationMetrics.ratio <= 2
+                  ? "Normal (<2%)"
+                  : cancellationMetrics.ratio <= 5
+                  ? "Waspada"
+                  : "Investigasi (>5%)"}
+              </span>
+            </div>
+            <p className="text-lg font-black text-slate-900 tracking-tight">
+              {cancellationMetrics.ratio.toFixed(1)}%
+            </p>
+            <p className="text-[11px] text-slate-500">
+              {cancellationMetrics.cancelledCount} dari {cancellationMetrics.totalTransactions} total order
+            </p>
+          </div>
+
+          {/* Card 4: Status Shift Kasir & PIC */}
+          <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Shift Kasir Aktif
+              </span>
+              <div className="w-7 h-7 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
+                <Users className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <p className="text-xs font-black text-slate-900 truncate">
+              {activeShift ? activeShift.picEmployeeName || "Kasir Bertugas" : "Tidak Ada Shift Aktif"}
+            </p>
+            <p className="text-[11px] text-slate-500 truncate">
+              {activeShift
+                ? `Modal Kas: ${formatCurrency(activeShift.startingCash || 0)}`
+                : "Terminal kasir tertutup"}
+            </p>
+          </div>
+        </div>
+
+        {/* Tabel Log Otorisasi Terkini */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Log Otorisasi Manager Terkini (Void & Refund)
+            </h4>
+            <span className="text-[11px] text-slate-400">
+              Menampilkan {approvalHistory.slice(0, 5).length} riwayat terbaru
+            </span>
+          </div>
+
+          {approvalHistory.length === 0 ? (
+            <div className="py-8 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-1.5" />
+              <p className="text-xs font-bold text-slate-700">Belum Ada Riwayat Void / Refund</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Semua transaksi kasir berjalan normal tanpa insiden pembatalan.
+              </p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3.5">Waktu & Struk</th>
+                      <th className="py-2.5 px-3.5">Tipe</th>
+                      <th className="py-2.5 px-3.5">Meja / Tamu</th>
+                      <th className="py-2.5 px-3.5">Nominal</th>
+                      <th className="py-2.5 px-3.5">Alasan Pemohon</th>
+                      <th className="py-2.5 px-3.5">Penyetuju</th>
+                      <th className="py-2.5 px-3.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {approvalHistory.slice(0, 5).map((req) => (
+                      <tr key={req.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
+                          <div>#{req.receiptNo}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">
+                            {req.respondedAt ? new Date(req.respondedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                            req.type === "REFUND"
+                              ? "bg-rose-50 text-rose-700 border border-rose-200"
+                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                          }`}>
+                            {req.type}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 text-slate-600 whitespace-nowrap">
+                          {req.tableNumber} ({req.customerName || "Tamu"})
+                        </td>
+                        <td className="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
+                          {req.amount > 0 ? formatCurrency(req.amount) : "-"}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-slate-600 max-w-xs truncate" title={req.reason}>
+                          {req.reason}
+                        </td>
+                        <td className="py-2.5 px-3.5 text-slate-800 whitespace-nowrap font-semibold">
+                          {req.respondedBy || "Manager"}
+                        </td>
+                        <td className="py-2.5 px-3.5 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            req.status === "APPROVED"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : req.status === "REJECTED"
+                              ? "bg-rose-50 text-rose-700 border border-rose-200"
+                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                          }`}>
+                            {req.status === "APPROVED" ? "Disetujui" : req.status === "REJECTED" ? "Ditolak" : "Pending"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

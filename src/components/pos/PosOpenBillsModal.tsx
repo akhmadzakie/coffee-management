@@ -15,8 +15,14 @@ import {
   Check,
   Plus,
   Minus,
+  Smartphone,
+  ShieldAlert,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  Lock,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { PosManagerPinModal } from "./PosManagerPinModal";
 
 interface PosOpenBillsModalProps {
@@ -34,6 +40,15 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVoidOrder, setSelectedVoidOrder] = useState<any | null>(null);
+
+  // State Void & Remote In-App Approval
+  const [voidReason, setVoidReason] = useState("");
+  const [voidError, setVoidError] = useState<string | null>(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [isRequestingRemote, setIsRequestingRemote] = useState(false);
+  const [remoteRequestId, setRemoteRequestId] = useState<string | null>(null);
+  const [remoteStatus, setRemoteStatus] = useState<"PENDING" | "APPROVED" | "REJECTED" | null>(null);
+  const [remoteResponseNote, setRemoteResponseNote] = useState<string | null>(null);
 
   // State Split Bill
   const [selectedSplitOrder, setSelectedSplitOrder] = useState<any | null>(null);
@@ -75,7 +90,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           managerPin: manager.pin,
-          voidReason: reason || "Dibatalkan oleh kasir/manager",
+          voidReason: reason || voidReason || "Dibatalkan oleh kasir/manager",
           cancelledBy: manager.name,
         }),
       });
@@ -87,12 +102,93 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
 
       alert(`Order #${selectedVoidOrder.receiptNo} berhasil dibatalkan.`);
       setSelectedVoidOrder(null);
+      setShowPinModal(false);
+      setVoidReason("");
       fetchActiveOrders();
       onOrderVoided();
     } catch (e: any) {
       alert(`Error: ${e.message}`);
+      setShowPinModal(false);
     }
   };
+
+  // Kirim Permintaan Remote Approval ke HP/Dashboard Manager
+  const handleRequestRemoteApproval = async () => {
+    if (!selectedVoidOrder) return;
+    if (!voidReason.trim()) {
+      setVoidError("Alasan pembatalan (void) wajib diisi agar manager dapat memverifikasi.");
+      return;
+    }
+    setIsRequestingRemote(true);
+    setVoidError(null);
+
+    try {
+      const res = await fetch("/api/pos/approvals/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: selectedVoidOrder.id,
+          receiptNo: selectedVoidOrder.receiptNo,
+          type: "VOID",
+          amount: selectedVoidOrder.totalAmount || 0,
+          reason: voidReason.trim(),
+          cashierName: selectedVoidOrder.cashierName || "Kasir",
+          tableNumber: selectedVoidOrder.tableNumber || "-",
+          customerName: selectedVoidOrder.customerName || "Tamu",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setVoidError(data.error || "Gagal mengirim permintaan remote approval");
+        setIsRequestingRemote(false);
+        return;
+      }
+
+      setRemoteRequestId(data.request.id);
+      setRemoteStatus("PENDING");
+    } catch (e: any) {
+      setVoidError(e?.message || "Gagal menghubungi server");
+    } finally {
+      setIsRequestingRemote(false);
+    }
+  };
+
+  // Polling status remote approval setiap 2 detik
+  useEffect(() => {
+    if (!remoteRequestId || remoteStatus !== "PENDING") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pos/approvals/${remoteRequestId}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "APPROVED") {
+            setRemoteStatus("APPROVED");
+            setRemoteResponseNote(data.responseNote || null);
+            clearInterval(interval);
+            setTimeout(() => {
+              alert(`Order #${selectedVoidOrder?.receiptNo || ""} berhasil dibatalkan oleh Manager.`);
+              setSelectedVoidOrder(null);
+              setRemoteRequestId(null);
+              setRemoteStatus(null);
+              setVoidReason("");
+              fetchActiveOrders();
+              onOrderVoided();
+            }, 1200);
+          } else if (data.status === "REJECTED") {
+            setRemoteStatus("REJECTED");
+            setRemoteResponseNote(data.responseNote || "Tidak ada catatan");
+            clearInterval(interval);
+          }
+        }
+      } catch (e) {
+        console.error("Gagal polling status approval:", e);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [remoteRequestId, remoteStatus, selectedVoidOrder]);
 
   return (
     <motion.div
@@ -247,7 +343,14 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                           <span>Split Bill</span>
                         </button>
                         <button
-                          onClick={() => setSelectedVoidOrder(bill)}
+                          onClick={() => {
+                            setSelectedVoidOrder(bill);
+                            setVoidReason("");
+                            setVoidError(null);
+                            setRemoteRequestId(null);
+                            setRemoteStatus(null);
+                            setShowPinModal(false);
+                          }}
                           className="p-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 transition"
                           title="Batalkan / Void Bill"
                         >
@@ -280,14 +383,230 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
         </div>
       </motion.div>
 
-      {/* Modal Otorisasi PIN untuk Void Bill */}
-      {selectedVoidOrder && (
+      {/* ─── Modal Otorisasi Void Bill (Remote In-App + PIN di Tempat) ─── */}
+      <AnimatePresence>
+        {selectedVoidOrder && !showPinModal && (
+          <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4"
+            >
+              {/* Header Void */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Batalkan Open Bill #{selectedVoidOrder.receiptNo}
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Otorisasi pembatalan pesanan meja kasir (SOP #10)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedVoidOrder(null)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Ringkasan Order */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Meja & Tamu
+                  </span>
+                  <span className="text-xs font-extrabold text-slate-800">
+                    {selectedVoidOrder.tableNumber} • {selectedVoidOrder.customerName || "Tamu"}
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">
+                    {selectedVoidOrder.items?.length || 0} Menu dalam pesanan
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Total Tagihan
+                  </span>
+                  <span className="text-sm font-black text-rose-600">
+                    {formatCurrency(selectedVoidOrder.totalAmount)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {voidError && (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{voidError}</span>
+                </div>
+              )}
+
+              {/* Input Alasan Void */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                  Alasan Pembatalan (Void) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Tamu batal pesan / walkout, salah input meja"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  disabled={remoteStatus === "PENDING"}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-600 disabled:opacity-50"
+                />
+
+                {/* Preset Chips */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[
+                    "Tamu Batal / Walk-out",
+                    "Salah Input Meja",
+                    "Duplikat Pesanan",
+                    "Ganti Menu Penuh",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={remoteStatus === "PENDING"}
+                      onClick={() => setVoidReason(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition border cursor-pointer ${
+                        voidReason === preset
+                          ? "bg-brand-50 border-brand-300 text-brand-700 shadow-2xs"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Polling Remote Approval Radar */}
+              {remoteRequestId && (
+                <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70 text-center space-y-3">
+                  {remoteStatus === "PENDING" && (
+                    <>
+                      <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
+                        <span className="absolute inset-0 rounded-full bg-amber-400/30 animate-ping" />
+                        <span className="relative w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
+                          <Smartphone className="w-5 h-5 animate-pulse" />
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-amber-900">
+                          Menunggu Respon Manager di HP / Dashboard...
+                        </h4>
+                        <p className="text-[11px] text-amber-700 mt-0.5">
+                          Permintaan void telah dikirim ke Manager On-Duty. Polling status otomatis setiap 2 detik.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoteRequestId(null);
+                          setRemoteStatus(null);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition shadow-2xs"
+                      >
+                        Batal Menunggu (Gunakan PIN Fisik)
+                      </button>
+                    </>
+                  )}
+
+                  {remoteStatus === "APPROVED" && (
+                    <div className="py-2 text-center text-emerald-800 space-y-1">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                      <p className="text-xs font-bold">Permintaan Void Disetujui!</p>
+                      <p className="text-[11px] text-emerald-600">
+                        {remoteResponseNote ? `Catatan: ${remoteResponseNote}` : "Memperbarui daftar open bill..."}
+                      </p>
+                    </div>
+                  )}
+
+                  {remoteStatus === "REJECTED" && (
+                    <div className="py-2 text-center text-rose-800 space-y-2">
+                      <AlertTriangle className="w-8 h-8 text-rose-600 mx-auto" />
+                      <p className="text-xs font-bold">Permintaan Void Ditolak oleh Manager</p>
+                      <p className="text-[11px] text-rose-600">
+                        {remoteResponseNote ? `Alasan: "${remoteResponseNote}"` : "Tidak ada catatan."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoteRequestId(null);
+                          setRemoteStatus(null);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-rose-300 text-rose-700 text-[11px] font-bold hover:bg-rose-50 transition"
+                      >
+                        Kembali
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons jika belum mengirim remote request */}
+              {!remoteRequestId && (
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleRequestRemoteApproval}
+                    disabled={isRequestingRemote || !voidReason.trim()}
+                    className="w-full py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    {isRequestingRemote ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Mengirim Permintaan ke Manager...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Smartphone className="w-4 h-4" />
+                        <span>Kirim ke HP / Dashboard Manager (Remote Approval)</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="shrink mx-3 text-[10px] text-slate-400 font-semibold uppercase">atau jika manager di kasir</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!voidReason.trim()) {
+                        setVoidError("Isi alasan pembatalan terlebih dahulu.");
+                        return;
+                      }
+                      setShowPinModal(true);
+                    }}
+                    className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Lock className="w-4 h-4 text-slate-500" />
+                    <span>Input PIN Manager di Tempat</span>
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Fallback PIN Manager di Tempat */}
+      {selectedVoidOrder && showPinModal && (
         <PosManagerPinModal
           title={`Batalkan Open Bill #${selectedVoidOrder.receiptNo}`}
           description={`Anda akan membatalkan tagihan ${selectedVoidOrder.tableNumber} (${selectedVoidOrder.customerName || "Tamu"}). Masukkan PIN Manager untuk otorisasi.`}
-          requireReason={true}
-          onClose={() => setSelectedVoidOrder(null)}
-          onSuccess={(manager, reason) => handleConfirmVoid(manager, reason || "")}
+          requireReason={false}
+          onClose={() => setShowPinModal(false)}
+          onSuccess={(manager) => handleConfirmVoid(manager, voidReason)}
         />
       )}
 

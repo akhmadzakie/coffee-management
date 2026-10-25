@@ -203,6 +203,7 @@ function AppContent() {
       "promotions",
       "payroll",
       "inventory",
+      "audit_log",
       "pos_cashier",
       "kitchen_display",
     ],

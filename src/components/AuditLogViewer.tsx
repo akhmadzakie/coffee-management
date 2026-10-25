@@ -39,6 +39,9 @@ const TABLE_LABELS: Record<string, string> = {
   shifts: "Shift Kasir",
   sales_transactions: "Transaksi Penjualan",
   daily_checklists: "Checklist Supervisi",
+  orders: "Order Kasir (Void & Refund)",
+  manager_approval_requests: "Otorisasi Manager (Remote)",
+  promotions: "Promo & Diskon Kasir",
 };
 
 type DateFilterType =
