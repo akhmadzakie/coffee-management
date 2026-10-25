@@ -32,6 +32,12 @@ import {
   ChevronRight,
   Eye,
   Clock,
+  TrendingDown,
+  Filter,
+  Calendar,
+  FileSpreadsheet,
+  AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -41,6 +47,7 @@ import { Recipe, RecipeIngredient, Ingredient, ViewState, StockOpname, StockOpna
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
+  initialTab?: "ingredients" | "movements" | "opnames" | "recipes" | "waste";
 }
 
 export const PRESET_CATEGORIES = [
@@ -85,6 +92,22 @@ export const WASTE_REASONS = [
   "Salah Buat Pesanan (Barista Mistake)",
   "Kemasan Rusak / Bocor",
   "Bahan Menggumpal / Lembab",
+];
+
+export interface WasteReasonInfo {
+  id: "KALIBRASI" | "SALAH_BUAT" | "TUMPAH" | "KEDALUWARSA" | "RUSAK" | "LAINNYA";
+  label: string;
+  badge: string;
+  desc: string;
+}
+
+export const WASTE_REASONS_DETAIL: WasteReasonInfo[] = [
+  { id: "KALIBRASI", label: "Kalibrasi / Dialing Espresso", badge: "bg-blue-50 text-blue-700 border-blue-200", desc: "Setting grind size & yield ekstraksi pagi" },
+  { id: "SALAH_BUAT", label: "Salah Buat Pesanan (Human Error)", badge: "bg-amber-50 text-amber-700 border-amber-200", desc: "Salah takaran, salah sirup, atau salah varian menu" },
+  { id: "TUMPAH", label: "Tumpah / Overheat Steaming", badge: "bg-orange-50 text-orange-700 border-orange-200", desc: "Susu atau sirup tumpah saat operasional bar sibuk" },
+  { id: "KEDALUWARSA", label: "Kedaluwarsa / Basi (Expired)", badge: "bg-rose-50 text-rose-700 border-rose-200", desc: "Melewati shelf-life atau basi di chiller" },
+  { id: "RUSAK", label: "Kemasan Rusak / Bocor", badge: "bg-red-50 text-red-700 border-red-200", desc: "Bocor kemasan supplier, pecah, atau cacat fisik" },
+  { id: "LAINNYA", label: "Lainnya / Kontaminasi", badge: "bg-slate-100 text-slate-700 border-slate-300", desc: "Bahan menggumpal, terkena air, atau insiden lain" },
 ];
 
 export interface UnitConversionInfo {
@@ -164,7 +187,7 @@ export const getRecipeIngredients = (recipe?: Recipe | null): RecipeIngredient[]
   return [];
 };
 
-export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
+export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) => {
   const {
     ingredients,
     stockMovements,
@@ -320,12 +343,78 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
     return "ALL";
   }, [userDivision]);
 
-  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes">("ingredients");
+  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes" | "waste">(
+    initialTab || "ingredients"
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDivision, setSelectedDivision] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(defaultDivisionFilter);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedLocation, setSelectedLocation] = useState<string>("ALL");
   const [selectedStockStatus, setSelectedStockStatus] = useState<"ALL" | "LOW_STOCK" | "SAFE">("ALL");
+
+  // Quick Waste Modal State (F&B Spoilage & Dial-in Tracking)
+  const [isQuickWasteOpen, setIsQuickWasteOpen] = useState(false);
+  const [wasteIngredientId, setWasteIngredientId] = useState("");
+  const [wasteQuantity, setWasteQuantity] = useState<number>(1);
+  const [wasteUnitMode, setWasteUnitMode] = useState<"BASE" | "PURCHASE">("BASE");
+  const [wasteReason, setWasteReason] = useState<string>("KALIBRASI");
+  const [wasteCustomNote, setWasteCustomNote] = useState("");
+  const [wasteFilterReason, setWasteFilterReason] = useState<string>("ALL");
+  const [wasteFilterPeriod, setWasteFilterPeriod] = useState<"ALL" | "THIS_MONTH" | "LAST_7_DAYS" | "TODAY">("THIS_MONTH");
+  const [wasteSearch, setWasteSearch] = useState("");
+
+  const handleOpenQuickWaste = (targetId?: string) => {
+    const id = targetId || (accessibleIngredients.length > 0 ? accessibleIngredients[0].id : "");
+    setWasteIngredientId(id);
+    const ing = ingredients.find((i) => i.id === id);
+    const conv = ing ? getIngredientUnitConversion(ing) : null;
+    setWasteUnitMode(conv?.hasConversion ? "BASE" : "BASE");
+    setWasteQuantity(1);
+    setWasteReason("KALIBRASI");
+    setWasteCustomNote("");
+    setIsQuickWasteOpen(true);
+  };
+
+  const handleSaveQuickWaste = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wasteIngredientId || wasteQuantity <= 0) return;
+
+    const ing = ingredients.find((i) => i.id === wasteIngredientId);
+    if (!ing) return;
+
+    const conv = getIngredientUnitConversion(ing);
+    let actualQty = Number(wasteQuantity);
+    if (wasteUnitMode === "PURCHASE" && conv.hasConversion) {
+      actualQty = Number(wasteQuantity) * conv.conversionFactor;
+    }
+
+    const unitCost = ing.costPerUnit || 0;
+    const totalLoss = Math.round(actualQty * unitCost);
+    const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === wasteReason) || { label: wasteReason };
+    const fullNote = `[${wasteReason}] ${reasonObj.label}${wasteCustomNote.trim() ? ` • ${wasteCustomNote.trim()}` : ""}`;
+
+    addStockMovement({
+      ingredientId: ing.id,
+      type: "WASTE",
+      quantity: actualQty,
+      date: new Date().toISOString(),
+      note: fullNote,
+      unitCost: unitCost,
+      totalCost: totalLoss,
+      createdBy: currentUser?.name || "Staff Barista",
+      location: (ing.storageLocation as any) || "BAR",
+    } as any);
+
+    const newStock = Math.max(0, ing.currentStock - actualQty);
+    updateIngredient({
+      ...ing,
+      currentStock: newStock,
+    });
+
+    setIsQuickWasteOpen(false);
+    setWasteQuantity(1);
+    setWasteCustomNote("");
+  };
 
   // Keep division filters synchronized with user station on mount/login change
   useEffect(() => {
@@ -584,6 +673,208 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [stockMovements, ingredients, searchTerm]);
+
+  // Waste Analytics & Incident Logs
+  const wasteMovements = useMemo(() => {
+    return stockMovements
+      .filter((m) => m.type === "WASTE")
+      .map((m) => {
+        const ing = ingredients.find((i) => i.id === m.ingredientId);
+        const qty = Math.abs(Number(m.quantity) || 0);
+        const unitCost = m.unitCost || (ing ? ing.costPerUnit : 0) || 0;
+        const totalCost = m.totalCost !== undefined && m.totalCost !== null ? m.totalCost : Math.round(qty * unitCost);
+
+        let reasonKey = "LAINNYA";
+        let cleanNote = m.note || "";
+        const match = m.note?.match(/^\[([A-Z_]+)\]\s*(.*)$/);
+        if (match) {
+          reasonKey = match[1];
+          cleanNote = match[2];
+        } else if (m.note?.toLowerCase().includes("kalibrasi") || m.note?.toLowerCase().includes("dialing")) {
+          reasonKey = "KALIBRASI";
+        } else if (m.note?.toLowerCase().includes("salah") || m.note?.toLowerCase().includes("mistake")) {
+          reasonKey = "SALAH_BUAT";
+        } else if (m.note?.toLowerCase().includes("tumpah") || m.note?.toLowerCase().includes("spill") || m.note?.toLowerCase().includes("steaming")) {
+          reasonKey = "TUMPAH";
+        } else if (m.note?.toLowerCase().includes("expired") || m.note?.toLowerCase().includes("basi") || m.note?.toLowerCase().includes("kedaluwarsa")) {
+          reasonKey = "KEDALUWARSA";
+        } else if (m.note?.toLowerCase().includes("rusak") || m.note?.toLowerCase().includes("bocor") || m.note?.toLowerCase().includes("refund")) {
+          reasonKey = "RUSAK";
+        }
+
+        return {
+          ...m,
+          ingredient: ing,
+          actualQty: qty,
+          unitCost,
+          totalCost,
+          reasonKey,
+          cleanNote,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [stockMovements, ingredients]);
+
+  // Scoped & Filtered Waste Movements
+  const filteredWasteMovements = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    return wasteMovements.filter((m) => {
+      if (m.ingredient && !isIngredientAllowedForUser(m.ingredient, userDivision)) {
+        return false;
+      }
+      if (wasteFilterReason !== "ALL" && m.reasonKey !== wasteFilterReason) {
+        return false;
+      }
+      const mTime = new Date(m.date).getTime();
+      if (wasteFilterPeriod === "TODAY" && mTime < startOfToday) return false;
+      if (wasteFilterPeriod === "LAST_7_DAYS" && mTime < sevenDaysAgo) return false;
+      if (wasteFilterPeriod === "THIS_MONTH" && mTime < startOfMonth) return false;
+
+      if (wasteSearch.trim()) {
+        const q = wasteSearch.toLowerCase();
+        const matchIng = m.ingredient?.name.toLowerCase().includes(q) || false;
+        const matchNote = m.note?.toLowerCase().includes(q) || false;
+        const matchUser = m.createdBy?.toLowerCase().includes(q) || false;
+        if (!matchIng && !matchNote && !matchUser) return false;
+      }
+
+      return true;
+    });
+  }, [wasteMovements, userDivision, wasteFilterReason, wasteFilterPeriod, wasteSearch]);
+
+  // Waste KPI Statistics
+  const wasteKpis = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthRecords = wasteMovements.filter((m) => new Date(m.date).getTime() >= startOfMonth);
+    const totalLossMonth = monthRecords.reduce((sum, m) => sum + (m.totalCost || 0), 0);
+    const totalIncidentsMonth = monthRecords.length;
+
+    // Reason breakdown for month
+    const reasonMap: Record<string, number> = {};
+    monthRecords.forEach((m) => {
+      reasonMap[m.reasonKey] = (reasonMap[m.reasonKey] || 0) + (m.totalCost || 0);
+    });
+    const sortedReasons = Object.entries(reasonMap).sort((a, b) => b[1] - a[1]);
+    const topReasonKey = sortedReasons[0]?.[0];
+    const topReasonLoss = sortedReasons[0]?.[1] || 0;
+    const topReasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === topReasonKey);
+    const topReasonPercent = totalLossMonth > 0 ? Math.round((topReasonLoss / totalLossMonth) * 100) : 0;
+
+    // Ratio vs Total Valuation
+    const ratio = totalValuation > 0 ? (totalLossMonth / totalValuation) * 100 : 0;
+
+    // Top wasted ingredient
+    const ingMap: Record<string, { name: string; cost: number; qty: number; unit: string }> = {};
+    monthRecords.forEach((m) => {
+      if (!m.ingredient) return;
+      if (!ingMap[m.ingredientId]) {
+        ingMap[m.ingredientId] = { name: m.ingredient.name, cost: 0, qty: 0, unit: m.ingredient.unit };
+      }
+      ingMap[m.ingredientId].cost += m.totalCost || 0;
+      ingMap[m.ingredientId].qty += m.actualQty;
+    });
+    const topIng = Object.values(ingMap).sort((a, b) => b.cost - a.cost)[0] || null;
+
+    return {
+      totalLossMonth,
+      totalIncidentsMonth,
+      topReasonLabel: topReasonObj ? topReasonObj.label : topReasonKey || "-",
+      topReasonPercent,
+      ratio,
+      topIng,
+    };
+  }, [wasteMovements, totalValuation]);
+
+  // Anomaly warnings: ingredients wasted >= 3 times or >= Rp 50.000 in past 7 days
+  const wasteAnomalies = useMemo(() => {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const recentWaste = wasteMovements.filter((m) => new Date(m.date).getTime() >= sevenDaysAgo);
+    const countByIng: Record<string, { count: number; totalCost: number; name: string; unit: string; totalQty: number; reasons: Set<string> }> = {};
+
+    recentWaste.forEach((m) => {
+      if (!m.ingredient) return;
+      if (!countByIng[m.ingredientId]) {
+        countByIng[m.ingredientId] = {
+          count: 0,
+          totalCost: 0,
+          name: m.ingredient.name,
+          unit: m.ingredient.unit,
+          totalQty: 0,
+          reasons: new Set(),
+        };
+      }
+      countByIng[m.ingredientId].count += 1;
+      countByIng[m.ingredientId].totalCost += m.totalCost || 0;
+      countByIng[m.ingredientId].totalQty += m.actualQty;
+      countByIng[m.ingredientId].reasons.add(m.reasonKey);
+    });
+
+    return Object.values(countByIng)
+      .filter((item) => item.count >= 3 || item.totalCost >= 50000)
+      .map((item) => ({
+        ...item,
+        reasonList: Array.from(item.reasons)
+          .map((rKey) => WASTE_REASONS_DETAIL.find((r) => r.id === rKey)?.label || rKey)
+          .join(", "),
+      }));
+  }, [wasteMovements]);
+
+  // Export Waste Logs to CSV
+  const handleExportWasteCsv = () => {
+    const headers = [
+      "Tanggal",
+      "Waktu",
+      "Kode Bahan",
+      "Nama Bahan",
+      "Kategori",
+      "Lokasi Simpan",
+      "Alasan Terstandar",
+      "Jumlah Terbuang",
+      "Satuan",
+      "Biaya Modal Satuan (Rp)",
+      "Total Nilai Kerugian (Rp)",
+      "Operator",
+      "Catatan",
+    ];
+
+    const rows = filteredWasteMovements.map((m) => {
+      const d = new Date(m.date);
+      const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === m.reasonKey);
+      return [
+        d.toLocaleDateString("id-ID"),
+        d.toLocaleTimeString("id-ID"),
+        m.ingredient?.code || "-",
+        m.ingredient?.name || "Bahan Terhapus",
+        m.ingredient?.category || "-",
+        m.ingredient?.storageLocation || "-",
+        reasonObj?.label || m.reasonKey,
+        m.actualQty,
+        m.ingredient?.unit || "unit",
+        m.unitCost,
+        m.totalCost,
+        m.createdBy || "-",
+        m.cleanNote || "-",
+      ];
+    });
+
+    const csvContent =
+      "data:text/csv;charset=utf-8,\uFEFF" +
+      [headers.join(","), ...rows.map((e) => e.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))].join(
+        "\n"
+      );
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `laporan_waste_kerusakan_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Import CSV / Excel
   const handleImportIngredients = (data: any[]) => {
@@ -1089,6 +1380,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
             { id: "movements", label: "Mutasi & Pemakaian" },
             { id: "opnames", label: "Stok Opname" },
             { id: "recipes", label: `Resep Baku (${recipes.length})` },
+            { id: "waste", label: `Waste & Kerusakan (${wasteMovements.length})` },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -1297,6 +1589,26 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
               <Plus className="w-4 h-4" />
               <span>Tambah Resep Baru</span>
             </motion.button>
+          )}
+
+          {activeTab === "waste" && (
+            isReadOnly || currentUser?.role === "OWNER" ? (
+              <div className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 border border-amber-200/80 rounded-2xl text-[11px] font-bold text-amber-800 shrink-0">
+                <ShieldCheck className="w-4 h-4 text-amber-600" />
+                <span>Mode Pantau & Audit Waste (Owner)</span>
+              </div>
+            ) : (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
+                onClick={() => handleOpenQuickWaste()}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>+ Catat Waste / Rusak</span>
+              </motion.button>
+            )
           )}
         </div>
       </div>
@@ -2665,6 +2977,375 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
         </div>
       )}
 
+      {/* ── TAB 5: WASTE & KERUSAKAN BAHAN BAKU ─────────────────────────── */}
+      {activeTab === "waste" && (
+        <div className="space-y-6">
+          {/* Bento KPI Summary Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Total Loss Month */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Kerugian Waste Bulan Ini
+                </span>
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 shadow-2xs">
+                  <TrendingDown className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-2xl sm:text-3xl font-extrabold text-rose-700 tracking-tight font-mono">
+                  {formatCurrency(wasteKpis.totalLossMonth)}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Dari <strong>{wasteKpis.totalIncidentsMonth}</strong> catatan insiden bulan ini
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Top Reason */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Penyebab Terbesar
+                </span>
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shadow-2xs">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
+                  {wasteKpis.topReasonLabel}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Menyumbang <strong>{wasteKpis.topReasonPercent}%</strong> dari seluruh kerugian
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Ratio vs Inventory */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Rasio Waste vs Inventori
+                </span>
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 shadow-2xs">
+                  <Coins className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-mono">
+                    {wasteKpis.ratio.toFixed(2)}%
+                  </p>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    wasteKpis.ratio <= 1
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : wasteKpis.ratio <= 2.5
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
+                  }`}>
+                    {wasteKpis.ratio <= 1 ? "Sangat Terkendali" : wasteKpis.ratio <= 2.5 ? "Wajar F&B" : "Evaluasi SOP"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Tolok ukur F&B kafe: aman di bawah 2.0% - 2.5%
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Top Wasted Ingredient */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Bahan Terbanyak Terbuang
+                </span>
+                <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100 shadow-2xs">
+                  <Flame className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
+                  {wasteKpis.topIng ? wasteKpis.topIng.name : "Belum Ada"}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {wasteKpis.topIng ? (
+                    <>
+                      {wasteKpis.topIng.qty.toLocaleString("id-ID")} {wasteKpis.topIng.unit} •{" "}
+                      <span className="font-mono font-bold text-rose-600">
+                        {formatCurrency(wasteKpis.topIng.cost)}
+                      </span>
+                    </>
+                  ) : (
+                    "Tidak ada bahan terbuang"
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Operational Anomaly Warning (skill requirement: peringatan pola tak biasa sebagai informasi) */}
+          {wasteAnomalies.length > 0 && (
+            <div className="p-5 rounded-3xl bg-amber-50/80 border border-amber-200/90 shadow-2xs">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-950">
+                      Catatan Evaluasi Operasional (Pola Waste Berulang 7 Hari Terakhir)
+                    </h4>
+                    <p className="text-xs text-amber-800/90 mt-0.5">
+                      Berikut bahan dengan frekuensi waste &ge; 3 kali atau nilai akumulasi &ge; Rp 50.000. Jadikan bahan tinjauan kalibrasi grinder, suhu chiller, atau rotasi stok FIFO:
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                    {wasteAnomalies.map((anom, idx) => (
+                      <div key={idx} className="p-3 bg-white/90 rounded-2xl border border-amber-200/70 text-xs shadow-2xs">
+                        <div className="flex justify-between items-start gap-1">
+                          <strong className="text-slate-900 font-bold">{anom.name}</strong>
+                          <span className="text-[10px] font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            {anom.count}x Catatan
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex justify-between items-center text-[11px] text-slate-500 font-mono">
+                          <span>Vol: {anom.totalQty.toLocaleString("id-ID")} {anom.unit}</span>
+                          <span className="font-bold text-slate-800">{formatCurrency(anom.totalCost)}</span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-amber-800/80 truncate">
+                          Alasan: {anom.reasonList}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filter Bar & Export Toolbar */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari bahan, barista, atau catatan waste..."
+                  value={wasteSearch}
+                  onChange={(e) => setWasteSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 focus:bg-white transition-all"
+                />
+              </div>
+
+              {/* Period Filters */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60 shrink-0">
+                {[
+                  { id: "THIS_MONTH", label: "Bulan Ini" },
+                  { id: "LAST_7_DAYS", label: "7 Hari Terakhir" },
+                  { id: "TODAY", label: "Hari Ini" },
+                  { id: "ALL", label: "Semua Waktu" },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setWasteFilterPeriod(p.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      wasteFilterPeriod === p.id
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Export CSV Button */}
+              <button
+                type="button"
+                onClick={handleExportWasteCsv}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Ekspor CSV ({filteredWasteMovements.length})</span>
+              </button>
+            </div>
+
+            {/* Standard Reason Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
+                Filter Alasan:
+              </span>
+              <button
+                onClick={() => setWasteFilterReason("ALL")}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  wasteFilterReason === "ALL"
+                    ? "bg-slate-900 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Semua Alasan
+              </button>
+              {WASTE_REASONS_DETAIL.map((r) => {
+                const isSelected = wasteFilterReason === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setWasteFilterReason(r.id)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                      isSelected
+                        ? "bg-rose-600 text-white border-rose-700 shadow-2xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Table (Desktop & Tablet) & Cards (Mobile) */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Riwayat & Log Waste Bahan Baku</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Setiap catatan memotong stok riil dan merekam snapshot nilai kerugian saat kejadian.
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold text-slate-500 bg-white px-2.5 py-1 rounded-xl border border-slate-200">
+                {filteredWasteMovements.length} Catatan
+              </span>
+            </div>
+
+            {/* DESKTOP & TABLET VIEW: Structured Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-bold uppercase text-[10px]">
+                    <th className="p-3.5">Waktu Kejadian</th>
+                    <th className="p-3.5">Bahan Baku</th>
+                    <th className="p-3.5">Alasan Terstandar</th>
+                    <th className="p-3.5 text-center">Jumlah Terbuang</th>
+                    <th className="p-3.5 text-right">Nilai Kerugian (HPP)</th>
+                    <th className="p-3.5">Operator</th>
+                    <th className="p-3.5">Catatan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredWasteMovements.map((m) => {
+                    const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === m.reasonKey);
+                    const d = new Date(m.date);
+                    return (
+                      <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-bold text-slate-900">
+                            {d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-900">{m.ingredient?.name || "Bahan Terhapus"}</div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            <span>{m.ingredient?.category || "Umum"}</span>
+                            {m.ingredient?.storageLocation && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono text-[9px]">
+                                {m.ingredient.storageLocation}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-bold border ${
+                            reasonObj?.badge || "bg-slate-100 text-slate-700 border-slate-200"
+                          }`}>
+                            {reasonObj?.label || m.reasonKey}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-center font-mono font-bold text-slate-900">
+                          {m.actualQty.toLocaleString("id-ID")} {m.ingredient?.unit || "unit"}
+                        </td>
+                        <td className="p-3.5 text-right font-mono font-bold text-rose-600">
+                          {formatCurrency(m.totalCost)}
+                        </td>
+                        <td className="p-3.5 text-slate-700 font-medium">
+                          {m.createdBy || "Barista"}
+                        </td>
+                        <td className="p-3.5 text-slate-500 text-[11px] max-w-xs truncate">
+                          {m.cleanNote || "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* MOBILE VIEW: Touch-Friendly Cards */}
+            <div className="block md:hidden divide-y divide-slate-100">
+              {filteredWasteMovements.map((m) => {
+                const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === m.reasonKey);
+                const d = new Date(m.date);
+                return (
+                  <div key={m.id} className="p-4 space-y-2 hover:bg-slate-50/50 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          {m.ingredient?.name || "Bahan Terhapus"}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          {d.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} • {d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono font-black text-rose-600 text-sm">
+                          {formatCurrency(m.totalCost)}
+                        </p>
+                        <p className="font-mono text-xs font-bold text-slate-700">
+                          {m.actualQty.toLocaleString("id-ID")} {m.ingredient?.unit || "unit"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${
+                        reasonObj?.badge || "bg-slate-100 text-slate-700 border-slate-200"
+                      }`}>
+                        {reasonObj?.label || m.reasonKey}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Opr: {m.createdBy || "Barista"}
+                      </span>
+                    </div>
+
+                    {m.cleanNote && (
+                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200/50">
+                        {m.cleanNote}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredWasteMovements.length === 0 && (
+              <div className="p-12 text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <Package className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-slate-800 text-sm">Tidak Ada Catatan Waste</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Tidak ditemukan catatan waste atau bahan rusak untuk periode dan filter yang dipilih.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
       <AnimatePresence>
         {isIngredientModalOpen && createPortal(
@@ -3532,6 +4213,233 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate }) => {
                 </button>
               </div>
             </div>
+          </motion.div>
+        </motion.div>,
+        document.body
+      )}
+    </AnimatePresence>
+
+    {/* ── MODAL: CATAT CEPAT WASTE & SPOILAGE ─────────────────────────── */}
+    <AnimatePresence>
+      {isQuickWasteOpen && createPortal(
+        <motion.div
+          key="quick-waste-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto"
+        >
+          <motion.div
+            key="quick-waste-card"
+            initial={{ opacity: 0, scale: 0.92, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 15 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-auto max-h-[88vh] overflow-y-auto custom-scrollbar"
+          >
+            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-rose-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 border border-rose-200 shadow-2xs">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                    Catat Waste / Bahan Rusak
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Pencatatan cepat kalibrasi, racikan salah, atau bahan kedaluwarsa.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickWasteOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickWaste} className="p-4 sm:p-5 space-y-4 text-xs">
+              {/* Select Ingredient */}
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Pilih Bahan Baku <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={wasteIngredientId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setWasteIngredientId(id);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
+                >
+                  {accessibleIngredients.map((ing) => (
+                    <option key={ing.id} value={ing.id}>
+                      {ing.name} (Stok: {ing.currentStock.toLocaleString("id-ID")} {ing.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity & Unit Selection */}
+              {(() => {
+                const currentIng = ingredients.find((i) => i.id === wasteIngredientId);
+                const conv = currentIng ? getIngredientUnitConversion(currentIng) : null;
+                const hasConv = conv?.hasConversion;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="font-bold text-slate-800">
+                        Jumlah Bahan Terbuang <span className="text-rose-500">*</span>
+                      </label>
+
+                      {hasConv && (
+                        <div className="flex gap-1 p-0.5 bg-slate-100 rounded-lg text-[10px] font-bold border border-slate-200/60">
+                          <button
+                            type="button"
+                            onClick={() => setWasteUnitMode("BASE")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              wasteUnitMode === "BASE"
+                                ? "bg-brand-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {currentIng?.unit} (Resep)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWasteUnitMode("PURCHASE")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              wasteUnitMode === "PURCHASE"
+                                ? "bg-brand-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {conv.purchaseUnit} (Kemasan)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        required
+                        min="0.01"
+                        step="any"
+                        value={wasteQuantity || ""}
+                        onChange={(e) => setWasteQuantity(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                        placeholder="0"
+                      />
+                      <span className="font-bold text-slate-700 shrink-0 text-xs px-2.5 py-2.5 bg-slate-100 rounded-xl border border-slate-200/80">
+                        {hasConv && wasteUnitMode === "PURCHASE" ? conv.purchaseUnit : currentIng?.unit || "unit"}
+                      </span>
+                    </div>
+
+                    {hasConv && wasteUnitMode === "PURCHASE" && wasteQuantity > 0 && (
+                      <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex justify-between items-center">
+                        <span>Konversi Satuan:</span>
+                        <span className="font-mono font-bold text-brand-700">
+                          {wasteQuantity} {conv.purchaseUnit} = {(wasteQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Standard Reason Selection */}
+              <div>
+                <label className="block font-bold text-slate-800 mb-1.5">
+                  Alasan Terstandar <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {WASTE_REASONS_DETAIL.map((r) => {
+                    const isSelected = wasteReason === r.id;
+                    return (
+                      <button
+                        type="button"
+                        key={r.id}
+                        onClick={() => setWasteReason(r.id)}
+                        className={`p-2.5 rounded-xl text-left transition-all border cursor-pointer active:scale-95 ${
+                          isSelected
+                            ? "bg-rose-50 border-rose-300 ring-2 ring-rose-500/20 text-rose-950 font-bold shadow-2xs"
+                            : "bg-slate-50 border-slate-200/80 hover:bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        <div className="font-bold text-[11px] leading-tight">{r.label}</div>
+                        <div className="text-[9px] text-slate-400 mt-0.5 truncate">{r.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Estimated Loss Live Calculation */}
+              {(() => {
+                const currentIng = ingredients.find((i) => i.id === wasteIngredientId);
+                const conv = currentIng ? getIngredientUnitConversion(currentIng) : null;
+                let actualQty = Number(wasteQuantity) || 0;
+                if (wasteUnitMode === "PURCHASE" && conv?.hasConversion) {
+                  actualQty = actualQty * conv.conversionFactor;
+                }
+                const unitCost = currentIng?.costPerUnit || 0;
+                const estimatedLoss = Math.round(actualQty * unitCost);
+
+                return (
+                  <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/80 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-rose-900 block">
+                        Taksiran Nilai Kerugian (Rp)
+                      </span>
+                      <span className="text-[10px] text-rose-700 font-mono">
+                        {actualQty.toLocaleString("id-ID")} {currentIng?.unit} &times; {formatCurrency(unitCost)}
+                      </span>
+                    </div>
+                    <span className="text-base sm:text-lg font-black font-mono text-rose-700">
+                      {formatCurrency(estimatedLoss)}
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Custom Note */}
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Catatan Tambahan (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={wasteCustomNote}
+                  onChange={(e) => setWasteCustomNote(e.target.value)}
+                  placeholder="e.g. Kalibrasi beans gayo pagi, susu overheat saat rush..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickWasteOpen(false)}
+                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Simpan & Potong Stok</span>
+                </button>
+              </div>
+            </form>
           </motion.div>
         </motion.div>,
         document.body
