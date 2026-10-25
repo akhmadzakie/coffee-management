@@ -8,7 +8,7 @@ import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq, not, desc, like, and, or } from "drizzle-orm";
+import { eq, ne, not, desc, like, and, or } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const initialSettings = {
@@ -507,6 +507,24 @@ async function ensureTables() {
         description TEXT,
         created_at TEXT NOT NULL,
         created_by TEXT
+      )`,
+    `CREATE TABLE IF NOT EXISTS manager_approval_requests (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL,
+        receipt_no TEXT NOT NULL,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        reason TEXT NOT NULL,
+        cashier_name TEXT NOT NULL,
+        table_number TEXT,
+        customer_name TEXT,
+        refund_method TEXT,
+        refund_restock_option TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        requested_at TEXT NOT NULL,
+        responded_at TEXT,
+        responded_by TEXT,
+        response_note TEXT
       )`,
     `CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
@@ -4393,6 +4411,449 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     } catch (e: any) {
       console.error("Refund order error:", e);
       res.status(500).json({ error: e?.message || "Failed to refund order" });
+    }
+  });
+
+  // 4c. Remote In-App Approval: Kasir Request Otorisasi ke HP/Dashboard Manager
+  app.post("/api/pos/approvals/request", async (req, res) => {
+    try {
+      const {
+        orderId,
+        receiptNo,
+        type = "REFUND",
+        amount = 0,
+        reason,
+        cashierName = "Kasir",
+        tableNumber = "-",
+        customerName = "Tamu",
+        refundMethod = "CASH",
+        refundRestockOption = "RETURN_TO_STOCK",
+      } = req.body;
+
+      if (!orderId || !reason || !reason.trim()) {
+        return res.status(400).json({ error: "Order ID dan alasan wajib disertakan." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const requestId = crypto.randomUUID();
+
+      const newRequest = {
+        id: requestId,
+        orderId,
+        receiptNo,
+        type,
+        amount: Number(amount) || 0,
+        reason: reason.trim(),
+        cashierName,
+        tableNumber,
+        customerName,
+        refundMethod,
+        refundRestockOption,
+        status: "PENDING",
+        requestedAt: nowIso,
+        respondedAt: null,
+        respondedBy: null,
+        responseNote: null,
+      };
+
+      if (!isDbConnected && offlineState) {
+        offlineState.manager_approval_requests = offlineState.manager_approval_requests || [];
+        offlineState.manager_approval_requests.unshift(newRequest);
+        return res.json({ success: true, request: newRequest });
+      }
+
+      await db.insert(schema.managerApprovalRequests).values(newRequest);
+      res.json({ success: true, request: newRequest });
+    } catch (e: any) {
+      console.error("Create approval request error:", e);
+      res.status(500).json({ error: e?.message || "Failed to create approval request" });
+    }
+  });
+
+  // 4d. Remote In-App Approval: Get Pending Requests (Untuk Dashboard Manager)
+  app.get("/api/pos/approvals/pending", async (req, res) => {
+    try {
+      if (!isDbConnected && offlineState) {
+        const list = (offlineState.manager_approval_requests || [])
+          .filter((r: any) => r.status === "PENDING")
+          .sort((a: any, b: any) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+        return res.json(list);
+      }
+
+      const list = await db
+        .select()
+        .from(schema.managerApprovalRequests)
+        .where(eq(schema.managerApprovalRequests.status, "PENDING"))
+        .orderBy(desc(schema.managerApprovalRequests.requestedAt));
+
+      res.json(list);
+    } catch (e: any) {
+      console.error("Get pending approvals error:", e);
+      res.status(500).json({ error: e?.message || "Failed to get pending approvals" });
+    }
+  });
+
+  // 4e. Remote In-App Approval: Get Single Request Status (Polling Kasir)
+  app.get("/api/pos/approvals/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isDbConnected && offlineState) {
+        const reqItem = (offlineState.manager_approval_requests || []).find((r: any) => r.id === id);
+        if (!reqItem) return res.status(404).json({ error: "Permintaan otorisasi tidak ditemukan" });
+        return res.json(reqItem);
+      }
+
+      const list = await db
+        .select()
+        .from(schema.managerApprovalRequests)
+        .where(eq(schema.managerApprovalRequests.id, id))
+        .limit(1);
+
+      if (list.length === 0) {
+        return res.status(404).json({ error: "Permintaan otorisasi tidak ditemukan" });
+      }
+
+      res.json(list[0]);
+    } catch (e: any) {
+      console.error("Get approval status error:", e);
+      res.status(500).json({ error: e?.message || "Failed to get approval status" });
+    }
+  });
+
+  // 4f. Remote In-App Approval: Get Approval History (Untuk Audit Log Dashboard)
+  app.get("/api/pos/approvals/history", async (req, res) => {
+    try {
+      if (!isDbConnected && offlineState) {
+        const history = (offlineState.manager_approval_requests || [])
+          .filter((r: any) => r.status !== "PENDING")
+          .sort((a: any, b: any) => new Date(b.respondedAt || b.requestedAt).getTime() - new Date(a.respondedAt || a.requestedAt).getTime())
+          .slice(0, 30);
+        return res.json(history);
+      }
+
+      const history = await db
+        .select()
+        .from(schema.managerApprovalRequests)
+        .where(ne(schema.managerApprovalRequests.status, "PENDING"))
+        .orderBy(desc(schema.managerApprovalRequests.requestedAt))
+        .limit(30);
+
+      res.json(history);
+    } catch (e: any) {
+      console.error("Get approval history error:", e);
+      res.status(500).json({ error: e?.message || "Failed to get approval history" });
+    }
+  });
+
+  // 4g. Remote In-App Approval: Manager Respond (APPROVE / REJECT)
+  app.post("/api/pos/approvals/:id/respond", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, managerName = "Manager", responseNote = "" } = req.body;
+
+      if (action !== "APPROVE" && action !== "REJECT") {
+        return res.status(400).json({ error: "Action harus APPROVE atau REJECT" });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      if (!isDbConnected && offlineState) {
+        const reqItem = (offlineState.manager_approval_requests || []).find((r: any) => r.id === id);
+        if (!reqItem) return res.status(404).json({ error: "Permintaan otorisasi tidak ditemukan" });
+        if (reqItem.status !== "PENDING") {
+          return res.status(400).json({ error: `Permintaan sudah diproses sebelumnya (${reqItem.status})` });
+        }
+
+        if (action === "REJECT") {
+          reqItem.status = "REJECTED";
+          reqItem.respondedAt = nowIso;
+          reqItem.respondedBy = managerName;
+          reqItem.responseNote = responseNote;
+          return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
+        }
+
+        // Action is APPROVE -> Execute Refund / Void
+        reqItem.status = "APPROVED";
+        reqItem.respondedAt = nowIso;
+        reqItem.respondedBy = managerName;
+        reqItem.responseNote = responseNote;
+
+        const targetOrder = (offlineState.orders || []).find((o: any) => o.id === reqItem.orderId);
+        if (targetOrder) {
+          if (reqItem.type === "REFUND") {
+            const finalRefundAmount = Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0;
+            // Stock adjustment
+            if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
+              const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
+              for (const item of items) {
+                const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
+                if (rec) {
+                  let ings: any[] = [];
+                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch {}
+                  for (const ri of ings) {
+                    const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
+                    if (returnQty > 0) {
+                      offlineState.stock_movements.push({
+                        id: crypto.randomUUID(),
+                        ingredientId: ri.ingredientId,
+                        type: "RETURN",
+                        quantity: returnQty,
+                        date: nowIso,
+                        note: `Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                        createdBy: managerName,
+                        referenceId: targetOrder.id,
+                      });
+                      const ing = (offlineState.ingredients || []).find((i: any) => i.id === ri.ingredientId);
+                      if (ing) ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
+                    }
+                  }
+                }
+              }
+            } else if (reqItem.refundRestockOption === "WASTE") {
+              const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
+              for (const item of items) {
+                const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
+                if (rec) {
+                  let ings: any[] = [];
+                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch {}
+                  for (const ri of ings) {
+                    const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
+                    if (wasteQty > 0) {
+                      offlineState.stock_movements.push({
+                        id: crypto.randomUUID(),
+                        ingredientId: ri.ingredientId,
+                        type: "WASTE",
+                        quantity: -wasteQty,
+                        date: nowIso,
+                        note: `Kerusakan Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                        createdBy: managerName,
+                        referenceId: targetOrder.id,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+
+            // Cash out if CASH
+            if (reqItem.refundMethod === "CASH") {
+              const pay = (offlineState.payments || []).find((p: any) => p.orderId === targetOrder.id);
+              const cashAccId = pay?.cashAccountId || "default";
+              offlineState.cash_transactions.push({
+                id: crypto.randomUUID(),
+                accountId: cashAccId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: finalRefundAmount,
+                description: `Remote Refund CASH POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                category: "PENGELUARAN",
+                referenceId: targetOrder.id,
+              });
+            }
+
+            targetOrder.status = "REFUNDED";
+            targetOrder.refundReason = reqItem.reason;
+            targetOrder.refundApprovedBy = managerName;
+            targetOrder.refundAmount = finalRefundAmount;
+            targetOrder.refundMethod = reqItem.refundMethod;
+            targetOrder.refundRestockOption = reqItem.refundRestockOption;
+            targetOrder.refundAt = nowIso;
+            targetOrder.updatedAt = nowIso;
+          } else if (reqItem.type === "VOID") {
+            targetOrder.status = "VOID";
+            targetOrder.voidReason = reqItem.reason;
+            targetOrder.voidApprovedBy = managerName;
+            targetOrder.updatedAt = nowIso;
+          }
+        }
+
+        return res.json({ success: true, status: "APPROVED", message: `Permintaan ${reqItem.type} berhasil disetujui` });
+      }
+
+      // DB Connected mode
+      const reqList = await db
+        .select()
+        .from(schema.managerApprovalRequests)
+        .where(eq(schema.managerApprovalRequests.id, id))
+        .limit(1);
+
+      if (reqList.length === 0) {
+        return res.status(404).json({ error: "Permintaan otorisasi tidak ditemukan" });
+      }
+
+      const reqItem = reqList[0];
+      if (reqItem.status !== "PENDING") {
+        return res.status(400).json({ error: `Permintaan sudah diproses sebelumnya (${reqItem.status})` });
+      }
+
+      if (action === "REJECT") {
+        await db
+          .update(schema.managerApprovalRequests)
+          .set({
+            status: "REJECTED",
+            respondedAt: nowIso,
+            respondedBy: managerName,
+            responseNote: responseNote,
+          })
+          .where(eq(schema.managerApprovalRequests.id, id));
+
+        return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
+      }
+
+      // Action is APPROVE
+      await db.transaction(async (tx) => {
+        const orderList = await tx.select().from(schema.orders).where(eq(schema.orders.id, reqItem.orderId)).limit(1);
+        if (orderList.length > 0) {
+          const targetOrder = orderList[0];
+          const finalRefundAmount = Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0;
+
+          if (reqItem.type === "REFUND") {
+            if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
+              const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
+              for (const item of items) {
+                if (item.recipeId) {
+                  const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
+                  if (rec.length > 0) {
+                    let ings: any[] = [];
+                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch {}
+                    for (const ri of ings) {
+                      const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
+                      if (returnQty > 0) {
+                        await tx.insert(schema.stockMovements).values({
+                          id: crypto.randomUUID(),
+                          ingredientId: ri.ingredientId,
+                          type: "RETURN",
+                          quantity: returnQty,
+                          date: nowIso,
+                          note: `Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                          createdBy: managerName,
+                          referenceId: targetOrder.id,
+                        });
+
+                        const currentIng = await tx.select().from(schema.ingredients).where(eq(schema.ingredients.id, ri.ingredientId)).limit(1);
+                        if (currentIng.length > 0) {
+                          await tx
+                            .update(schema.ingredients)
+                            .set({ currentStock: (currentIng[0].currentStock || 0) + returnQty })
+                            .where(eq(schema.ingredients.id, ri.ingredientId));
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } else if (reqItem.refundRestockOption === "WASTE") {
+              const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
+              for (const item of items) {
+                if (item.recipeId) {
+                  const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
+                  if (rec.length > 0) {
+                    let ings: any[] = [];
+                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch {}
+                    for (const ri of ings) {
+                      const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
+                      if (wasteQty > 0) {
+                        await tx.insert(schema.stockMovements).values({
+                          id: crypto.randomUUID(),
+                          ingredientId: ri.ingredientId,
+                          type: "WASTE",
+                          quantity: -wasteQty,
+                          date: nowIso,
+                          note: `Kerusakan Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                          createdBy: managerName,
+                          referenceId: targetOrder.id,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Cash Transaction (CASH_OUT)
+            if (reqItem.refundMethod === "CASH") {
+              const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
+              const cashAccId = existingPayments[0]?.cashAccountId || "default";
+
+              await tx.insert(schema.cashTransactions).values({
+                id: crypto.randomUUID(),
+                accountId: cashAccId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: finalRefundAmount,
+                description: `Remote Refund CASH POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                category: "PENGELUARAN",
+                referenceId: targetOrder.id,
+              });
+            }
+
+            // Update Order Status
+            await tx
+              .update(schema.orders)
+              .set({
+                status: "REFUNDED",
+                refundReason: reqItem.reason,
+                refundApprovedBy: managerName,
+                refundAmount: finalRefundAmount,
+                refundMethod: reqItem.refundMethod,
+                refundAt: nowIso,
+                refundRestockOption: reqItem.refundRestockOption,
+                updatedAt: nowIso,
+              })
+              .where(eq(schema.orders.id, targetOrder.id));
+
+            // Audit Log
+            await tx.insert(schema.auditLogs).values({
+              id: crypto.randomUUID(),
+              userId: managerName,
+              action: "REFUND",
+              tableName: "orders",
+              recordId: targetOrder.id,
+              timestamp: nowIso,
+            });
+          } else if (reqItem.type === "VOID") {
+            await tx
+              .update(schema.orders)
+              .set({
+                status: "VOID",
+                voidReason: reqItem.reason,
+                voidApprovedBy: managerName,
+                updatedAt: nowIso,
+              })
+              .where(eq(schema.orders.id, targetOrder.id));
+
+            await tx.insert(schema.auditLogs).values({
+              id: crypto.randomUUID(),
+              userId: managerName,
+              action: "VOID",
+              tableName: "orders",
+              recordId: targetOrder.id,
+              timestamp: nowIso,
+            });
+          }
+        }
+
+        // Update Approval Request record
+        await tx
+          .update(schema.managerApprovalRequests)
+          .set({
+            status: "APPROVED",
+            respondedAt: nowIso,
+            respondedBy: managerName,
+            responseNote: responseNote,
+          })
+          .where(eq(schema.managerApprovalRequests.id, id));
+      });
+
+      res.json({
+        success: true,
+        status: "APPROVED",
+        message: `Permintaan ${reqItem.type} #${reqItem.receiptNo} berhasil disetujui`,
+      });
+    } catch (e: any) {
+      console.error("Respond approval error:", e);
+      res.status(500).json({ error: e?.message || "Failed to respond to approval" });
     }
   });
 

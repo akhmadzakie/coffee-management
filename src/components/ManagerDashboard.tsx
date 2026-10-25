@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -56,8 +56,14 @@ import {
   ArrowUpRight,
   Send,
   Zap,
+  Radio,
+  Tag,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ManagerApprovalModal } from "./ManagerApprovalModal";
+import { ManagerApprovalRequest } from "../types";
 
 interface ManagerDashboardProps {
   onNavigate: (view: ViewState) => void;
@@ -80,6 +86,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     employeeShifts,
     currentUser,
     updateDailyAttendance,
+    promotions,
   } = useStore();
 
   const [selectedAttendancePhoto, setSelectedAttendancePhoto] = useState<DailyAttendance | null>(null);
@@ -87,6 +94,32 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     "overview" | "sales" | "inventory" | "team"
   >("overview");
   const [managerAiInput, setManagerAiInput] = useState("");
+  const [pendingApprovals, setPendingApprovals] = useState<ManagerApprovalRequest[]>([]);
+  const [approvalHistory, setApprovalHistory] = useState<ManagerApprovalRequest[]>([]);
+  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+
+  const fetchApprovalsData = async () => {
+    try {
+      const [resPending, resHistory] = await Promise.all([
+        fetch("/api/pos/approvals/pending"),
+        fetch("/api/pos/approvals/history"),
+      ]);
+      if (resPending.ok) {
+        setPendingApprovals(await resPending.json());
+      }
+      if (resHistory.ok) {
+        setApprovalHistory(await resHistory.json());
+      }
+    } catch (e) {
+      console.warn("Gagal memuat remote approvals:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchApprovalsData();
+    const interval = setInterval(fetchApprovalsData, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleOpenCopilot = (
     tab: "quick-input" | "receipt" | "consultant" | "insights",
@@ -573,6 +606,35 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           </span>
         </div>
       </div>
+
+      {/* Remote Approval Alert Banner */}
+      {pendingApprovals.length > 0 && (
+        <div className="p-4 px-6 bg-gradient-to-r from-amber-500 via-rose-500 to-rose-600 rounded-3xl text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse-subtle">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+              <Radio className="w-5 h-5 text-white animate-pulse" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm flex items-center gap-2">
+                <span>Ada {pendingApprovals.length} Permintaan Otorisasi Kasir (Remote In-App)</span>
+                <span className="px-2 py-0.5 rounded-full bg-white text-rose-700 text-[10px] font-black uppercase">
+                  Perlu Tindakan
+                </span>
+              </p>
+              <p className="text-xs text-white/90">
+                Kasir mengajukan refund atau void nota yang memerlukan persetujuan Manager.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsApprovalModalOpen(true)}
+            className="px-5 py-2.5 rounded-2xl bg-white hover:bg-rose-50 text-rose-700 font-extrabold text-xs shadow-md transition flex items-center gap-2 shrink-0 cursor-pointer"
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-600" />
+            <span>Buka & Putuskan Otorisasi</span>
+          </button>
+        </div>
+      )}
 
       {/* 4 Smart Executive Management Health Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1524,15 +1586,23 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
                 {activeShift ? (
                   <div className="space-y-4">
-                    <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200/60">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs text-stone-500">Kasir Bertugas:</span>
+                    <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200/60 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-stone-500 font-semibold">Penanggung Jawab (PIC):</span>
                         <span className="font-bold text-stone-900 text-sm">
-                          {cashierUser?.name || "Kasir"}
+                          {activeShift.picEmployeeName || cashierUser?.name || "Kasir"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-stone-500">Waktu Mulai Shift:</span>
+                      {activeShift.teamMembers && activeShift.teamMembers.length > 0 && (
+                        <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between text-xs">
+                          <span className="text-stone-500 text-[11px]">Kru Bertugas:</span>
+                          <span className="font-semibold text-stone-700 text-[11px] truncate max-w-[200px]" title={activeShift.teamMembers.join(", ")}>
+                            {activeShift.teamMembers.join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-xs pt-1 border-t border-stone-200/40">
+                        <span className="text-stone-500">Mulai Shift:</span>
                         <span className="font-semibold text-stone-700">
                           {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
                             hour: "2-digit",
@@ -1873,6 +1943,184 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
           </div>
 
+          {/* Bagian Pengawasan Otorisasi & Promo Kasir (Fase 4) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Card 1: Log Otorisasi Terkini (Void & Refund) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-600" />
+                      Log Otorisasi Terkini (Void & Refund)
+                    </h2>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Persetujuan pembatalan transaksi & pengembalian dana kasir.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsApprovalModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition flex items-center gap-1 border border-amber-200 cursor-pointer"
+                  >
+                    <span>Pusat Otorisasi</span>
+                    {pendingApprovals.length > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-black">
+                        {pendingApprovals.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                  {approvalHistory.slice(0, 5).map((item) => {
+                    const isApproved = item.status === "APPROVED";
+                    const timeStr = item.respondedAt
+                      ? new Date(item.respondedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : "-";
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-2xl bg-stone-50/80 border border-stone-200/60 flex items-center justify-between text-xs gap-3"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase shrink-0 ${
+                              item.type === "REFUND"
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : "bg-amber-100 text-amber-800 border border-amber-200"
+                            }`}
+                          >
+                            {item.type}
+                          </span>
+                          <div className="truncate">
+                            <p className="font-bold text-stone-900 truncate">
+                              #{item.receiptNo} • {formatCurrency(item.amount)}
+                            </p>
+                            <p className="text-[11px] text-stone-500 truncate">
+                              Kasir: {item.cashierName} · {item.reason}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              isApproved
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {isApproved ? `Disetujui (${timeStr})` : `Ditolak (${timeStr})`}
+                          </span>
+                          <p className="text-[10px] text-stone-400 mt-0.5">
+                            Oleh: {item.respondedBy || "Manager"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {approvalHistory.length === 0 && (
+                    <div className="py-8 text-center text-xs text-stone-400">
+                      <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      Belum ada riwayat otorisasi void atau refund yang tercatat hari ini.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 mt-4 flex justify-between items-center text-xs">
+                <span className="text-stone-500">
+                  Total Log: <strong>{approvalHistory.length} Otorisasi</strong>
+                </span>
+                <button
+                  onClick={() => setIsApprovalModalOpen(true)}
+                  className="font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Buka Dialog Otorisasi</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2: Efektivitas Promo & Diskon POS */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-emerald-600" />
+                      Promo & Diskon Kasir Aktif
+                    </h2>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Promosi resmi yang dapat dipilih staf di terminal POS.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("promotions")}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition flex items-center gap-1 border border-emerald-200 cursor-pointer"
+                  >
+                    <span>Kelola Promo</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                  {(promotions || []).filter((p) => p.isActive).map((promo) => (
+                    <div
+                      key={promo.id}
+                      className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200/60 flex items-center justify-between text-xs gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-stone-900 truncate">{promo.name}</span>
+                          {promo.code && (
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold">
+                              {promo.code}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          Potongan:{" "}
+                          <strong className="text-emerald-700">
+                            {promo.type === "PERCENT" ? `${promo.value}%` : formatCurrency(promo.value)}
+                          </strong>
+                          {promo.minSpend ? ` · Min Belanja ${formatCurrency(promo.minSpend)}` : ""}
+                        </p>
+                      </div>
+
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase shrink-0">
+                        AKTIF DI KASIR
+                      </span>
+                    </div>
+                  ))}
+
+                  {(promotions || []).filter((p) => p.isActive).length === 0 && (
+                    <div className="py-8 text-center text-xs text-stone-400">
+                      <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      Tidak ada promo yang sedang aktif di terminal kasir saat ini.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100 mt-4 flex justify-between items-center text-xs">
+                <span className="text-stone-500">
+                  Total Promo Aktif:{" "}
+                  <strong>{(promotions || []).filter((p) => p.isActive).length} Promo</strong>
+                </span>
+                <button
+                  onClick={() => onNavigate("promotions")}
+                  className="font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Atur Promo & Diskon</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Snapshot Menu Terlaris Hari Ini */}
           <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
             <div className="flex justify-between items-center mb-4">
@@ -2103,6 +2351,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           document.body
         )}
       </AnimatePresence>
+
+      {/* Modal Pusat Otorisasi Remote (Remote In-App Approval) */}
+      <ManagerApprovalModal
+        isOpen={isApprovalModalOpen}
+        onClose={() => setIsApprovalModalOpen(false)}
+        onProcessed={fetchApprovalsData}
+      />
     </div>
   );
 };

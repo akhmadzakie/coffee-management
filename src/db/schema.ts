@@ -514,3 +514,23 @@ export const promotions = pgTable("promotions", {
   createdBy: varchar("created_by", { length: 255 }),
 });
 
+// ─── Remote In-App Approval Requests ────────────────────────────────────────
+export const managerApprovalRequests = pgTable("manager_approval_requests", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  receiptNo: varchar("receipt_no", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // 'REFUND' | 'VOID' | 'DISCOUNT'
+  amount: real("amount").notNull(),
+  reason: text("reason").notNull(),
+  cashierName: varchar("cashier_name", { length: 255 }).notNull(),
+  tableNumber: varchar("table_number", { length: 50 }),
+  customerName: text("customer_name"),
+  refundMethod: varchar("refund_method", { length: 50 }), // 'CASH' | 'TRANSFER' | 'QRIS'
+  refundRestockOption: varchar("refund_restock_option", { length: 50 }), // 'RETURN_TO_STOCK' | 'WASTE' | 'NONE'
+  status: varchar("status", { length: 50 }).default("PENDING").notNull(), // 'PENDING' | 'APPROVED' | 'REJECTED'
+  requestedAt: text("requested_at").notNull(),
+  respondedAt: text("responded_at"),
+  respondedBy: varchar("responded_by", { length: 255 }),
+  responseNote: text("response_note"),
+});
+

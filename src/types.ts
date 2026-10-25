@@ -752,3 +752,26 @@ export interface Promotion {
   createdBy?: string | null;
 }
 
+// ─── Remote In-App Approval (Void, Refund, Diskon) ──────────────────────────
+export type ApprovalRequestType = "REFUND" | "VOID" | "DISCOUNT";
+export type ApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface ManagerApprovalRequest {
+  id: string;
+  orderId: string;
+  receiptNo: string;
+  type: ApprovalRequestType;
+  amount: number;
+  reason: string;
+  cashierName: string;
+  tableNumber?: string | null;
+  customerName?: string | null;
+  refundMethod?: string | null;
+  refundRestockOption?: "RETURN_TO_STOCK" | "WASTE" | "NONE" | null;
+  status: ApprovalRequestStatus;
+  requestedAt: string;
+  respondedAt?: string | null;
+  respondedBy?: string | null;
+  responseNote?: string | null;
+}
+
