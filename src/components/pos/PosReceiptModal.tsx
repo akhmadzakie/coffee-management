@@ -125,7 +125,15 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
 
               {orderData.discountAmount > 0 && (
                 <div className="flex justify-between text-slate-700">
-                  <span>Diskon:</span>
+                  <span>
+                    Diskon{" "}
+                    {orderData.appliedPromotionName
+                      ? `(${orderData.appliedPromotionName})`
+                      : orderData.discountReason
+                      ? `(${orderData.discountReason})`
+                      : ""}
+                    :
+                  </span>
                   <span>-{formatCurrency(orderData.discountAmount)}</span>
                 </div>
               )}

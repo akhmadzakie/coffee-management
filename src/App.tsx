@@ -92,6 +92,9 @@ const KitchenDisplaySystem = React.lazy(() =>
 const MenuManagement = React.lazy(() =>
   import("./components/MenuManagement").then((m) => ({ default: m.MenuManagement })),
 );
+const PromotionsManagement = React.lazy(() =>
+  import("./components/PromotionsManagement").then((m) => ({ default: m.PromotionsManagement })),
+);
 
 // Page loading skeleton — shown while a lazy chunk is downloading
 const PageLoader = () => (
@@ -182,7 +185,7 @@ function AppContent() {
     "expense_categories", "finance_reports", "bank_reconciliation",
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
-    "attendance_clock", "menu_management", "hpp_calculator", "pos_cashier", "kitchen_display"
+    "attendance_clock", "menu_management", "hpp_calculator", "promotions", "pos_cashier", "kitchen_display"
   ];
 
   const roleAllowedViews: Record<string, ViewState[]> = {
@@ -197,6 +200,7 @@ function AppContent() {
       "import_sales",
       "menu_management",
       "hpp_calculator",
+      "promotions",
       "payroll",
       "inventory",
       "pos_cashier",
@@ -207,6 +211,7 @@ function AppContent() {
       "dashboard_inventory",
       "menu_management",
       "hpp_calculator",
+      "promotions",
       "inventory",
       "purchases",
       "suppliers",
@@ -360,6 +365,8 @@ function AppContent() {
         return <HppCalculator onNavigate={setCurrentView} />;
       case "menu_management":
         return <MenuManagement onNavigate={setCurrentView} />;
+      case "promotions":
+        return <PromotionsManagement />;
       default:
         return <Dashboard view="FINANCE" />;
     }

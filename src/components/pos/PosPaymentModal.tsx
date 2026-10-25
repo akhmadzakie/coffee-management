@@ -44,6 +44,8 @@ interface PosPaymentModalProps {
   orderNotes?: string;
   discountReason?: string;
   discountPercent?: number;
+  appliedPromotionId?: string | null;
+  appliedPromotionName?: string | null;
   editingOrderId?: string | null;
   onClose: () => void;
   onSuccess: (orderData: any) => void;
@@ -63,6 +65,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
   orderNotes,
   discountReason,
   discountPercent,
+  appliedPromotionId,
+  appliedPromotionName,
   editingOrderId,
   onClose,
   onSuccess,
@@ -174,6 +178,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           discountPercent: discountPercent || 0,
           discountAmount,
           discountReason: discountReason || null,
+          appliedPromotionId: appliedPromotionId || null,
+          appliedPromotionName: appliedPromotionName || null,
           taxPercent,
           taxAmount,
           taxMode,
@@ -288,7 +294,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           </h1>
           {discountAmount > 0 && (
             <p className="text-xs font-semibold text-emerald-700 mt-0.5">
-              Hemat {formatCurrency(discountAmount)} ({discountReason || "Diskon"})
+              Hemat {formatCurrency(discountAmount)} ({appliedPromotionName || discountReason || "Diskon"})
             </p>
           )}
         </div>

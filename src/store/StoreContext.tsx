@@ -46,6 +46,7 @@ import {
   ProductVariant,
   BatchPreparation,
   DEFAULT_DIVISION_PACKAGING,
+  Promotion,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { get, set, del } from "idb-keyval";
@@ -458,6 +459,13 @@ interface StoreContextType {
   state: any;
   dispatch: (action: any) => void;
 
+  // Promo & Diskon (Pre-authorized Whitelist)
+  promotions: Promotion[];
+  addPromotion: (promo: Omit<Promotion, "id" | "createdAt">) => void;
+  updatePromotion: (id: string, promo: Partial<Promotion>) => void;
+  deletePromotion: (id: string) => void;
+  togglePromotionStatus: (id: string) => void;
+
   addEmployee: (emp: Omit<Employee, "id" | "createdAt">) => string;
   updateEmployee: (emp: Employee) => void;
   deleteEmployee: (id: string) => void;
@@ -667,6 +675,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return saved ? JSON.parse(saved) : DEFAULT_BATCH_PREPARATIONS;
     } catch {
       return DEFAULT_BATCH_PREPARATIONS;
+    }
+  });
+  const [promotions, setPromotions] = useState<Promotion[]>(() => {
+    try {
+      const saved = localStorage.getItem("coffee_promotions");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
   });
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
@@ -1038,6 +1054,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.stock_opnames)) setStockOpnames(data.stock_opnames);
         if (Array.isArray(data.stock_opname_items)) setStockOpnameItems(data.stock_opname_items);
         if (Array.isArray(data.payroll_records)) setPayrollRecords(data.payroll_records);
+        if (Array.isArray(data.promotions)) {
+          setPromotions(data.promotions);
+          try {
+            localStorage.setItem("coffee_promotions", JSON.stringify(data.promotions));
+          } catch {}
+        }
         if (Array.isArray(data.closed_periods)) setClosedPeriods(data.closed_periods);
         if (Array.isArray(data.products) && data.products.length > 0) {
           setProducts(data.products);
@@ -1304,6 +1326,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             closed_periods: closedPeriods,
             products,
             batch_preparations: batchPreparations,
+            promotions,
           }),
         });
         if (res.ok) {
@@ -1354,6 +1377,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     stockOpnameItems,
     payrollRecords,
     closedPeriods,
+    promotions,
   ]);
 
   const markChanged = () => {
@@ -2274,6 +2298,60 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged();
   };
 
+  const addPromotion = (promo: Omit<Promotion, "id" | "createdAt">) => {
+    const id = generateId();
+    const newPromo: Promotion = {
+      ...promo,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setPromotions((prev) => {
+      const updated = [...prev, newPromo];
+      try {
+        localStorage.setItem("coffee_promotions", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    writeAuditLog("CREATE", "promotions", id);
+    markChanged();
+  };
+
+  const updatePromotion = (id: string, promoData: Partial<Promotion>) => {
+    setPromotions((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, ...promoData } : p));
+      try {
+        localStorage.setItem("coffee_promotions", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    writeAuditLog("UPDATE", "promotions", id);
+    markChanged();
+  };
+
+  const deletePromotion = (id: string) => {
+    setPromotions((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem("coffee_promotions", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    writeAuditLog("DELETE", "promotions", id);
+    markChanged();
+  };
+
+  const togglePromotionStatus = (id: string) => {
+    setPromotions((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p));
+      try {
+        localStorage.setItem("coffee_promotions", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    writeAuditLog("UPDATE", "promotions", id);
+    markChanged();
+  };
+
   const addStockMovement = (mov: Omit<StockMovement, "id">) => {
     setStockMovements((prev) => [...prev, { ...mov, id: generateId() }]);
 
@@ -2543,6 +2621,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         closedPeriods,
         closePeriod: (period: string, user: string, notes?: string) => dispatch({ type: "CLOSE_PERIOD", payload: { period, user, notes } }),
         reopenPeriod: (period: string) => dispatch({ type: "REOPEN_PERIOD", payload: period }),
+        promotions,
+        addPromotion,
+        updatePromotion,
+        deletePromotion,
+        togglePromotionStatus,
         dispatch,
       }}
     >

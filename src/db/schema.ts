@@ -416,6 +416,8 @@ export const orders = pgTable("orders", {
   voidReason: text("void_reason"),
   voidApprovedBy: varchar("void_approved_by", { length: 255 }),
   kitchenStatus: varchar("kitchen_status", { length: 50 }).default("QUEUED").notNull(), // 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED'
+  appliedPromotionId: varchar("applied_promotion_id", { length: 255 }),
+  appliedPromotionName: text("applied_promotion_name"),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -487,5 +489,22 @@ export const batchPreparations = pgTable("batch_preparations", {
   ingredients: jsonb("ingredients").notNull(), // [{ ingredientId, quantity }]
   notes: text("notes"),
   lastPreparedDate: text("last_prepared_date"),
+});
+
+// ─── Promo & Diskon (Pre-authorized Whitelist) ─────────────────────────────
+export const promotions = pgTable("promotions", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  name: text("name").notNull(),
+  code: varchar("code", { length: 100 }),
+  type: varchar("type", { length: 50 }).notNull(), // 'PERCENT' | 'NOMINAL'
+  value: real("value").notNull(),
+  minSpend: real("min_spend"),
+  maxDiscount: real("max_discount"),
+  isActive: boolean("is_active").default(true).notNull(),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
+  description: text("description"),
+  createdAt: text("created_at").notNull(),
+  createdBy: varchar("created_by", { length: 255 }),
 });
 

@@ -46,7 +46,8 @@ export type ViewState =
   | "hpp_calculator"
   | "menu_management"
   | "pos_cashier"
-  | "kitchen_display";
+  | "kitchen_display"
+  | "promotions";
 
 export type EmploymentType = "TETAP" | "KONTRAK" | "PARUH_WAKTU" | "MAGANG";
 export type EmployeeStatus = "AKTIF" | "TIDAK_AKTIF" | "RESIGN" | "PHK";
@@ -707,6 +708,8 @@ export interface Order {
   paidAt?: string | null;
   voidReason?: string | null;
   voidApprovedBy?: string | null;
+  appliedPromotionId?: string | null;
+  appliedPromotionName?: string | null;
   items?: OrderItem[];
   payments?: Payment[];
 }
@@ -723,3 +726,23 @@ export interface PosPrinter {
   isActive: boolean;
   createdAt: string;
 }
+
+// ─── Promo & Diskon (Pre-authorized Whitelist) ─────────────────────────────
+export type PromotionType = "PERCENT" | "NOMINAL";
+
+export interface Promotion {
+  id: string;
+  name: string;
+  code?: string | null;
+  type: PromotionType;
+  value: number; // Persentase (e.g. 20) atau Nominal Rp (e.g. 10000)
+  minSpend?: number | null; // Minimal subtotal belanja agar promo dapat digunakan
+  maxDiscount?: number | null; // Plafon maksimal potongan diskon (khusus tipe PERCENT)
+  isActive: boolean; // Jika aktif, kasir bisa memilih promo ini di POS
+  startDate?: string | null;
+  endDate?: string | null;
+  description?: string | null;
+  createdAt: string;
+  createdBy?: string | null;
+}
+

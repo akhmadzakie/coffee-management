@@ -481,10 +481,27 @@ async function ensureTables() {
         created_at TEXT NOT NULL
       )`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'QUEUED'`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS applied_promotion_id TEXT`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS applied_promotion_name TEXT`,
     `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_status TEXT DEFAULT 'QUEUED'`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_id TEXT`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS pic_employee_name TEXT`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS team_members TEXT`,
+    `CREATE TABLE IF NOT EXISTS promotions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        code TEXT,
+        type TEXT NOT NULL,
+        value REAL NOT NULL,
+        min_spend REAL,
+        max_discount REAL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        start_date TEXT,
+        end_date TEXT,
+        description TEXT,
+        created_at TEXT NOT NULL,
+        created_by TEXT
+      )`,
     `CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -633,6 +650,8 @@ async function startServer() {
         return schema.payments;
       case "pos_printers":
         return schema.posPrinters;
+      case "promotions":
+        return schema.promotions;
 
       default:
         return null;
@@ -1062,6 +1081,51 @@ async function startServer() {
       : null,
   });
 
+  const sanitizePromotion = (p: any) => ({
+    id: String(p.id || crypto.randomUUID()),
+    name: String(p.name || ""),
+    code: p.code ? String(p.code) : null,
+    type: String(p.type || "PERCENT"),
+    value: Number(p.value) || 0,
+    minSpend: p.minSpend !== null && p.minSpend !== undefined ? Number(p.minSpend) : null,
+    maxDiscount: p.maxDiscount !== null && p.maxDiscount !== undefined ? Number(p.maxDiscount) : null,
+    isActive: Boolean(p.isActive !== undefined ? p.isActive : true),
+    startDate: p.startDate ? String(p.startDate) : null,
+    endDate: p.endDate ? String(p.endDate) : null,
+    description: p.description ? String(p.description) : null,
+    createdAt: String(p.createdAt || new Date().toISOString()),
+    createdBy: p.createdBy ? String(p.createdBy) : null,
+  });
+
+  const initialPromotions = [
+    {
+      id: "promo-welcome-10",
+      name: "Diskon Member Baru 10%",
+      code: "MEMBER10",
+      type: "PERCENT",
+      value: 10,
+      minSpend: 30000,
+      maxDiscount: 20000,
+      isActive: true,
+      description: "Diskon 10% untuk member dengan belanja min. Rp 30.000 (Maks Rp 20.000)",
+      createdAt: new Date().toISOString(),
+      createdBy: "System",
+    },
+    {
+      id: "promo-jumat-berkah",
+      name: "Jumat Berkah Potongan Rp 5.000",
+      code: "BERKAH5K",
+      type: "NOMINAL",
+      value: 5000,
+      minSpend: 35000,
+      maxDiscount: null,
+      isActive: true,
+      description: "Potongan langsung Rp 5.000 untuk pembelian min. Rp 35.000",
+      createdAt: new Date().toISOString(),
+      createdBy: "System",
+    },
+  ];
+
   // In-memory fallback state for offline usage
   let offlineState: any = {
     users: initialUsers,
@@ -1069,6 +1133,7 @@ async function startServer() {
     ingredients: JSON.parse(JSON.stringify(initialIngredients)),
     recipes: formatRecipesForClient(initialRecipes),
     products: JSON.parse(JSON.stringify(initialProducts)),
+    promotions: initialPromotions,
     cash_accounts: [{ id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true }],
     stock_movements: [],
     sales_transactions: [],
@@ -1163,6 +1228,7 @@ async function startServer() {
       let closed_periods: any[] = [];
       let products: any[] = [];
       let batch_preparations: any[] = [];
+      let promotions: any[] = [];
 
       try {
         [
@@ -1197,6 +1263,7 @@ async function startServer() {
           closed_periods,
           products,
           batch_preparations,
+          promotions,
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -1229,7 +1296,18 @@ async function startServer() {
           db.select().from(schema.closedPeriods),
           db.select().from(schema.products),
           db.select().from(schema.batchPreparations),
+          db.select().from(schema.promotions),
         ]);
+
+        // Seed default promotions if empty
+        if (promotions.length === 0) {
+          try {
+            await db.insert(schema.promotions).values(initialPromotions);
+            promotions = initialPromotions;
+          } catch (seedErr) {
+            console.warn("Could not seed default promotions:", seedErr);
+          }
+        }
 
         // Seed default expense categories if empty
         if (expense_categories.length === 0) {
@@ -1446,6 +1524,7 @@ async function startServer() {
         closed_periods,
         products,
         batch_preparations,
+        promotions,
         v: serverDataVersion,
         serverTime: new Date().toISOString(),
       });
@@ -1577,6 +1656,7 @@ async function startServer() {
         if (b.expense_categories !== undefined) offlineState.expense_categories = b.expense_categories;
         if (b.budgets !== undefined) offlineState.budgets = b.budgets;
         if (b.payroll_records !== undefined) offlineState.payroll_records = b.payroll_records;
+        if (b.promotions !== undefined) offlineState.promotions = b.promotions;
         return res.json({ success: true, serverTime: new Date().toISOString() });
       }
 
@@ -1615,11 +1695,15 @@ async function startServer() {
         closed_periods,
         products,
         batch_preparations,
+        promotions,
       } = req.body;
 
       await db.transaction(async (tx) => {
         // --- PHASE 1: DELETES (Child -> Parent) ---
         let existingPaidIds = new Set<string>();
+        if (promotions !== undefined) {
+          await tx.delete(schema.promotions);
+        }
         if (products !== undefined) {
           await tx.delete(schema.products);
         }
@@ -1919,6 +2003,11 @@ async function startServer() {
               notes: bp.notes || null,
               lastPreparedDate: bp.lastPreparedDate || null,
             })));
+          }
+        }
+        if (promotions !== undefined) {
+          if (Array.isArray(promotions) && promotions.length > 0) {
+            await tx.insert(schema.promotions).values(promotions.map(sanitizePromotion));
           }
         }
       });
@@ -3114,6 +3203,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         shiftId,
         status = "OPEN",
         payment,
+        appliedPromotionId,
+        appliedPromotionName,
       } = req.body;
 
       // Idempotency check: prevent duplicate orders
@@ -3196,6 +3287,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           createdAt: nowIso,
           updatedAt: nowIso,
           paidAt: status === "PAID" ? nowIso : null,
+          appliedPromotionId: appliedPromotionId || null,
+          appliedPromotionName: appliedPromotionName || null,
         };
         offlineState.orders.push(newOrder);
 
@@ -3328,6 +3421,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           createdAt: nowIso,
           updatedAt: nowIso,
           paidAt: status === "PAID" ? nowIso : null,
+          appliedPromotionId: appliedPromotionId || null,
+          appliedPromotionName: appliedPromotionName || null,
         });
 
         // Insert items

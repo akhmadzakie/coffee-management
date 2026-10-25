@@ -35,6 +35,8 @@ import {
   LogOut,
   Wifi,
   WifiOff,
+  Tag,
+  ShieldAlert,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PosPaymentModal } from "./PosPaymentModal";
@@ -72,7 +74,7 @@ interface CartItem {
 }
 
 export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavigateBack }) => {
-  const { currentUser, settings, shifts, cashAccounts, recipes, logout, users } = useStore();
+  const { currentUser, settings, shifts, cashAccounts, recipes, logout, users, promotions } = useStore();
 
   // State menu & catalog
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
@@ -91,7 +93,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [discountType, setDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [discountReason, setDiscountReason] = useState("");
+  const [appliedPromotionId, setAppliedPromotionId] = useState<string | null>(null);
+  const [appliedPromotionName, setAppliedPromotionName] = useState<string | null>(null);
+  const [appliedPromoMaxDiscount, setAppliedPromoMaxDiscount] = useState<number | undefined>(undefined);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [discountModalTab, setDiscountModalTab] = useState<"WHITELIST" | "MANUAL">("WHITELIST");
+  const [manualDiscountType, setManualDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
+  const [manualDiscountValue, setManualDiscountValue] = useState<number>(0);
+  const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
+  const [pendingDiscountType, setPendingDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
+  const [pendingDiscountReason, setPendingDiscountReason] = useState<string>("");
 
   // Modals
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -352,10 +363,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   const discountAmount = useMemo(() => {
     if (discountType === "PERCENT") {
-      return Math.round((subtotal * discountValue) / 100);
+      let calc = Math.round((subtotal * discountValue) / 100);
+      if (appliedPromoMaxDiscount && appliedPromoMaxDiscount > 0 && calc > appliedPromoMaxDiscount) {
+        calc = appliedPromoMaxDiscount;
+      }
+      return calc;
     }
     return Math.min(subtotal, discountValue);
-  }, [subtotal, discountType, discountValue]);
+  }, [subtotal, discountType, discountValue, appliedPromoMaxDiscount]);
 
   const afterDiscount = Math.max(0, subtotal - discountAmount);
 
@@ -467,6 +482,9 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       setCustomerName("");
       setDiscountValue(0);
       setDiscountReason("");
+      setAppliedPromotionId(null);
+      setAppliedPromotionName(null);
+      setAppliedPromoMaxDiscount(undefined);
       setCurrentEditingOrderId(null);
     }
   };
@@ -520,6 +538,8 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         discountPercent: discountType === "PERCENT" ? discountValue : 0,
         discountAmount,
         discountReason: discountReason || null,
+        appliedPromotionId: appliedPromotionId || null,
+        appliedPromotionName: appliedPromotionName || null,
         taxPercent: taxEnabled ? taxRate : 0,
         taxAmount,
         taxMode,
@@ -544,6 +564,11 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         setCart([]);
         setTableNumber("");
         setCustomerName("");
+        setDiscountValue(0);
+        setDiscountReason("");
+        setAppliedPromotionId(null);
+        setAppliedPromotionName(null);
+        setAppliedPromoMaxDiscount(undefined);
         return;
       }
 
@@ -566,6 +591,9 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       setCustomerName("");
       setDiscountValue(0);
       setDiscountReason("");
+      setAppliedPromotionId(null);
+      setAppliedPromotionName(null);
+      setAppliedPromoMaxDiscount(undefined);
       setCurrentEditingOrderId(null);
       fetchActiveBillsCount();
     } catch (e: any) {
@@ -581,6 +609,8 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     setDiscountValue(billOrder.discountPercent || 0);
     setDiscountType("PERCENT");
     setDiscountReason(billOrder.discountReason || "");
+    setAppliedPromotionId(billOrder.appliedPromotionId || null);
+    setAppliedPromotionName(billOrder.appliedPromotionName || null);
 
     const mappedCart: CartItem[] = (billOrder.items || []).map((it: any) => ({
       cartId: crypto.randomUUID(),
@@ -1062,17 +1092,34 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               </div>
 
               <div className="flex justify-between items-center text-slate-500">
-                <button
-                  onClick={() => setIsDiscountModalOpen(true)}
-                  className="text-brand-600 hover:underline flex items-center gap-1 text-[11px] font-semibold"
-                >
-                  <Percent className="w-3 h-3" />
-                  <span>
-                    {discountAmount > 0
-                      ? `Diskon (${discountType === "PERCENT" ? `${discountValue}%` : "Rp"})`
-                      : "+ Tambah Diskon"}
-                  </span>
-                </button>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setIsDiscountModalOpen(true)}
+                    className="text-brand-600 hover:underline flex items-center gap-1 text-[11px] font-semibold cursor-pointer"
+                  >
+                    <Percent className="w-3 h-3" />
+                    <span>
+                      {discountAmount > 0
+                        ? `${appliedPromotionName || discountReason || "Diskon"} (${discountType === "PERCENT" ? `${discountValue}%` : "Rp"})`
+                        : "+ Tambah Diskon / Promo"}
+                    </span>
+                  </button>
+                  {discountAmount > 0 && (
+                    <button
+                      onClick={() => {
+                        setDiscountValue(0);
+                        setDiscountReason("");
+                        setAppliedPromotionId(null);
+                        setAppliedPromotionName(null);
+                        setAppliedPromoMaxDiscount(undefined);
+                      }}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition cursor-pointer"
+                      title="Hapus Diskon"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <span className="text-rose-600 font-semibold">
                   {discountAmount > 0 ? `-${formatCurrency(discountAmount)}` : "Rp 0"}
                 </span>
@@ -1146,6 +1193,8 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             orderNotes={orderNotes}
             discountReason={discountReason}
             discountPercent={discountType === "PERCENT" ? discountValue : 0}
+            appliedPromotionId={appliedPromotionId}
+            appliedPromotionName={appliedPromotionName}
             editingOrderId={currentEditingOrderId}
             onClose={() => setIsPaymentModalOpen(false)}
             onSuccess={(paidOrder) => {
@@ -1157,6 +1206,9 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               setCustomerName("");
               setDiscountValue(0);
               setDiscountReason("");
+              setAppliedPromotionId(null);
+              setAppliedPromotionName(null);
+              setAppliedPromoMaxDiscount(undefined);
               setCurrentEditingOrderId(null);
               fetchActiveBillsCount();
             }}
@@ -1177,16 +1229,21 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           title={pinActionType === "DISCOUNT" ? "Otorisasi Diskon Khusus" : "Otorisasi Void Transaksi"}
           description={
             pinActionType === "DISCOUNT"
-              ? `Diskon yang diberikan melebihi batas plafon kasir (${maxCashierDiscount}%). Masukkan PIN Manager/Owner.`
+              ? `Diskon manual khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : `Rp ${pendingDiscountValue.toLocaleString("id-ID")}`}) memerlukan otorisasi PIN Manager/Owner.`
               : "Pembatalan / VOID transaksi memerlukan otorisasi Manager."
           }
           onClose={() => setIsPinModalOpen(false)}
           onSuccess={(manager) => {
             setIsPinModalOpen(false);
             if (pinActionType === "DISCOUNT") {
+              setDiscountType(pendingDiscountType);
               setDiscountValue(pendingDiscountValue);
+              setDiscountReason(pendingDiscountReason || `Diskon Manual (${manager.name})`);
+              setAppliedPromotionId(null);
+              setAppliedPromotionName(`Diskon Manual (${manager.name})`);
+              setAppliedPromoMaxDiscount(undefined);
               setIsDiscountModalOpen(false);
-              alert(`Diskon disetujui oleh: ${manager.name}`);
+              alert(`Diskon manual berhasil disetujui oleh: ${manager.name}`);
             }
           }}
         />
@@ -1224,108 +1281,314 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
               transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-5 shadow-2xl"
+              className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Percent className="w-4 h-4 text-brand-600" />
-                  Atur Diskon Pesanan
-                </h3>
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-brand-100 text-brand-700 rounded-xl">
+                    <Tag className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      Promo & Diskon Kasir
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Pilih promo whitelist aktif atau otorisasi diskon manual
+                    </p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setIsDiscountModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Tipe Diskon</label>
-                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                    <button
-                      onClick={() => setDiscountType("PERCENT")}
-                      className={`py-1.5 text-xs font-semibold rounded-lg transition ${
-                        discountType === "PERCENT"
-                          ? "bg-white text-slate-900 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Persentase (%)
-                    </button>
-                    <button
-                      onClick={() => setDiscountType("NOMINAL")}
-                      className={`py-1.5 text-xs font-semibold rounded-lg transition ${
-                        discountType === "NOMINAL"
-                          ? "bg-white text-slate-900 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Nominal (Rp)
-                    </button>
-                  </div>
-                </div>
+              {/* Subtotal Indicator Banner */}
+              <div className="mt-3 px-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between shrink-0">
+                <span className="text-xs text-slate-600 font-medium">Subtotal Belanja Saat Ini:</span>
+                <span className="text-sm font-bold text-slate-900">{formatCurrency(subtotal)}</span>
+              </div>
 
-                {discountType === "PERCENT" && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {[5, 10, 15, 20].map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => handleApplyDiscount(p, "PERCENT")}
-                        className="py-1.5 rounded-lg bg-slate-50 hover:bg-brand-50 hover:border-brand-300 text-xs font-bold text-slate-700 border border-slate-200 transition"
-                      >
-                        {p}%
-                      </button>
-                    ))}
+              {/* Tab Navigation */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl my-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDiscountModalTab("WHITELIST")}
+                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                    discountModalTab === "WHITELIST"
+                      ? "bg-white text-brand-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Promo Whitelist ({promotions.filter((p) => p.isActive).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountModalTab("MANUAL")}
+                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                    discountModalTab === "MANUAL"
+                      ? "bg-white text-amber-800 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Diskon Manual (PIN)</span>
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="overflow-y-auto space-y-3 pr-1 flex-1">
+                {discountModalTab === "WHITELIST" ? (
+                  /* ── TAB 1: WHITELIST PROMOTIONS ── */
+                  promotions.filter((p) => p.isActive).length === 0 ? (
+                    <div className="py-10 text-center text-slate-400">
+                      <Tag className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                      <p className="font-semibold text-slate-700 text-sm">Tidak Ada Promo Aktif</p>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                        Manager atau Admin belum mengaktifkan promo whitelist di menu Promo & Diskon.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {promotions
+                        .filter((p) => p.isActive)
+                        .map((promo) => {
+                          const isEligible = !promo.minSpend || subtotal >= promo.minSpend;
+                          const isSelected = appliedPromotionId === promo.id;
+
+                          return (
+                            <div
+                              key={promo.id}
+                              className={`p-3.5 rounded-2xl border transition-all ${
+                                isSelected
+                                  ? "bg-brand-50/70 border-brand-400 shadow-xs ring-1 ring-brand-300"
+                                  : isEligible
+                                  ? "bg-white border-slate-200 hover:border-brand-200 hover:bg-slate-50/80"
+                                  : "bg-slate-50 border-slate-200/60 opacity-60"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-900 text-sm">{promo.name}</span>
+                                    {promo.code && (
+                                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[10px] font-bold rounded border border-slate-200">
+                                        {promo.code}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {promo.description && (
+                                    <p className="text-xs text-slate-500">{promo.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap pt-0.5">
+                                    {promo.minSpend && promo.minSpend > 0 ? (
+                                      <span>Min. Belanja: <strong>Rp {promo.minSpend.toLocaleString("id-ID")}</strong></span>
+                                    ) : (
+                                      <span className="text-emerald-700 font-semibold">Tanpa Min. Belanja</span>
+                                    )}
+                                    {promo.type === "PERCENT" && promo.maxDiscount && promo.maxDiscount > 0 && (
+                                      <span>• Maks: <strong>Rp {promo.maxDiscount.toLocaleString("id-ID")}</strong></span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <span
+                                    className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
+                                      promo.type === "PERCENT"
+                                        ? "bg-purple-100 text-purple-800"
+                                        : "bg-blue-100 text-blue-800"
+                                    }`}
+                                  >
+                                    {promo.type === "PERCENT" ? `${promo.value}% OFF` : `-Rp ${promo.value.toLocaleString("id-ID")}`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                                {!isEligible ? (
+                                  <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    <span>Kurang Rp {((promo.minSpend || 0) - subtotal).toLocaleString("id-ID")} lagi</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Memenuhi syarat promo</span>
+                                  </span>
+                                )}
+
+                                {isSelected ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDiscountValue(0);
+                                      setDiscountReason("");
+                                      setAppliedPromotionId(null);
+                                      setAppliedPromotionName(null);
+                                      setAppliedPromoMaxDiscount(undefined);
+                                      setIsDiscountModalOpen(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 text-xs font-bold transition flex items-center gap-1"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    <span>Lepas Promo</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={!isEligible}
+                                    onClick={() => {
+                                      setDiscountType(promo.type);
+                                      setDiscountValue(promo.value);
+                                      setDiscountReason(promo.name);
+                                      setAppliedPromotionId(promo.id);
+                                      setAppliedPromotionName(promo.name);
+                                      setAppliedPromoMaxDiscount(promo.maxDiscount);
+                                      setIsDiscountModalOpen(false);
+                                    }}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                                      isEligible
+                                        ? "bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
+                                        : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                    }`}
+                                  >
+                                    Pilih Promo
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )
+                ) : (
+                  /* ── TAB 2: MANUAL DISCOUNT WITH MANAGER PIN ── */
+                  <div className="space-y-4 pt-1">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-800 leading-relaxed">
+                        <strong className="text-amber-900 block mb-0.5">Wajib Otorisasi PIN Manager:</strong>
+                        Kasir dilarang menginput diskon manual secara bebas. Pastikan Manager atau Supervisor telah menyetujui nominal & alasan diskon ini.
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 mb-1.5 block">Tipe Diskon Manual</label>
+                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setManualDiscountType("PERCENT")}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                            manualDiscountType === "PERCENT"
+                              ? "bg-white text-slate-900 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          Persentase (%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setManualDiscountType("NOMINAL")}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                            manualDiscountType === "NOMINAL"
+                              ? "bg-white text-slate-900 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          Nominal (Rp)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                        {manualDiscountType === "PERCENT" ? "Persentase Diskon (%)" : "Jumlah Potongan (Rp)"}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={manualDiscountType === "PERCENT" ? 100 : undefined}
+                        placeholder={manualDiscountType === "PERCENT" ? "e.g. 15" : "e.g. 25000"}
+                        value={manualDiscountValue || ""}
+                        onChange={(e) => setManualDiscountValue(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-brand-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 mb-1.5 block">
+                        Alasan Diskon Khusus <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Komplain Pesanan, Kerabat Owner, Event Khusus"
+                        value={manualDiscountReason}
+                        onChange={(e) => setManualDiscountReason(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-brand-600"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Alasan wajib dicantumkan dalam audit log transaksi.</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!manualDiscountValue || manualDiscountValue <= 0) {
+                          alert("Masukkan nilai diskon yang valid.");
+                          return;
+                        }
+                        if (!manualDiscountReason.trim()) {
+                          alert("Alasan diskon wajib diisi untuk otorisasi Manager.");
+                          return;
+                        }
+                        setPendingDiscountValue(manualDiscountValue);
+                        setPendingDiscountType(manualDiscountType);
+                        setPendingDiscountReason(manualDiscountReason.trim());
+                        setPinActionType("DISCOUNT");
+                        setIsPinModalOpen(true);
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Minta Otorisasi PIN Manager</span>
+                    </button>
                   </div>
                 )}
+              </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                    {discountType === "PERCENT" ? "Persentase Diskon (%)" : "Jumlah Nominal Potongan (Rp)"}
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    defaultValue={discountValue || ""}
-                    id="customDiscountInput"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Alasan Diskon</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Promo Member, Teman Owner, Event"
-                    value={discountReason}
-                    onChange={(e) => setDiscountReason(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
+                {discountAmount > 0 ? (
                   <button
+                    type="button"
                     onClick={() => {
                       setDiscountValue(0);
                       setDiscountReason("");
+                      setAppliedPromotionId(null);
+                      setAppliedPromotionName(null);
+                      setAppliedPromoMaxDiscount(undefined);
                       setIsDiscountModalOpen(false);
                     }}
-                    className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition"
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
                   >
-                    Hapus Diskon
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Semua Diskon</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      const el = document.getElementById("customDiscountInput") as HTMLInputElement;
-                      const val = Number(el?.value) || 0;
-                      handleApplyDiscount(val, discountType);
-                    }}
-                    className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-xs font-bold text-white shadow-xs transition"
-                  >
-                    Terapkan
-                  </button>
-                </div>
+                ) : (
+                  <span />
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsDiscountModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Tutup
+                </button>
               </div>
             </motion.div>
           </motion.div>

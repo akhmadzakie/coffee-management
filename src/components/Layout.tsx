@@ -219,6 +219,12 @@ export const Layout: React.FC<LayoutProps> = ({
       view: "hpp_calculator" as ViewState,
       icon: Calculator,
     },
+    { 
+      group: "Menu & Produk",
+      name: "Promo & Diskon",
+      view: "promotions" as ViewState,
+      icon: BadgePercent,
+    },
 
     // ─── 3. Stok & Pengadaan (Tugas Leader & Manager) ───────────
     { 
@@ -316,7 +322,7 @@ export const Layout: React.FC<LayoutProps> = ({
   // ─── Role Access Matrix (Tepat Sesuai SOP Julia's Coffee) ─────────
   const ALL_VIEWS: ViewState[] = [
     "dashboard_owner", "dashboard_finance", "dashboard_manager", "dashboard_inventory", "dashboard_employee",
-    "menu_management", "hpp_calculator",
+    "menu_management", "hpp_calculator", "promotions",
     "import_sales",
     "inventory", "purchases", "suppliers",
     "cash_flow", "expense_categories", "finance_reports", "bank_reconciliation",
@@ -335,6 +341,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "finance_reports",
       "cash_flow",
       "expense_categories",
+      "promotions",
       "payroll",
       "audit_log",
     ],
@@ -346,6 +353,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "import_sales",
       "menu_management",
       "hpp_calculator",
+      "promotions",
       "inventory",
       "purchases",
       "suppliers",
