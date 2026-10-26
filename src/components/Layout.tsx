@@ -365,9 +365,11 @@ export const Layout: React.FC<LayoutProps> = ({
       "audit_log",
     ],
 
-    // Manager: Mengelola operasional harian toko, menu, stok, dan tim (keuangan & omzet dipantau via Dasbor Utama, tidak perlu clock in)
+    // Manager: Mengelola operasional harian toko, menu, stok, dan tim (akses penuh dasbor eksekutif: Operasional, Bisnis & Omzet, Keuangan, Inventori)
     MANAGER: [
       "dashboard_manager",
+      "dashboard_owner",
+      "dashboard_finance",
       "dashboard_inventory",
       "pos_cashier",
       "kitchen_display",
@@ -379,9 +381,13 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "suppliers",
       "expense_categories",
+      "cash_flow",
+      "finance_reports",
+      "shifts",
       "hr",
       "leader_checklist",
       "users",
+      "audit_log",
     ],
 
     // Finance: Penjualan, arus kas, laba rugi, nota belanja, payroll
@@ -826,9 +832,9 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="min-w-0 flex-1">
               <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                 {{
-                  dashboard_owner: "Dashboard Eksekutif Owner",
+                  dashboard_owner: currentUser?.role === "MANAGER" ? "Dashboard Bisnis & Omzet" : "Dashboard Eksekutif Owner",
                   dashboard_employee: "Portal Karyawan & Tim",
-                  dashboard_manager: "Dashboard Operasional Manajer",
+                  dashboard_manager: "Dashboard Operasional",
                   dashboard_finance: "Dashboard Keuangan",
                   dashboard_inventory: "Dashboard Inventori",
                   cash_flow: "Buku Kas & Arus Kas",
@@ -1021,7 +1027,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </header>
 
         {/* ─── FLUID RESPONSIVE DASHBOARD SUB-BAR (ADAPTIVE FOR ALL DEVICES & NOTCH) ─── */}
-        {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER"].includes(currentUser?.role || "") && (
+        {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER", "MANAGER"].includes(currentUser?.role || "") && (
           <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-3 sm:px-6 py-2 sticky top-16 z-20 shadow-2xs flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner w-full sm:w-auto">
               {DASHBOARD_TABS.map((tab) => {
@@ -1237,6 +1243,17 @@ export const Layout: React.FC<LayoutProps> = ({
               <div>
                 <strong className="font-bold">Mode Pantau (View Only): </strong>
                 <span>Anda masuk sebagai <strong>Owner</strong> — melihat laporan dan analitik real-time.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Operational & Control Alert for Manager */}
+          {currentUser?.role === "MANAGER" && currentView.startsWith("dashboard_") && (
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50/80 border border-amber-200/90 rounded-2xl text-amber-950 text-xs shadow-2xs">
+              <ShieldCheck className="w-4 h-4 shrink-0 text-amber-700" />
+              <div>
+                <strong className="font-bold">Mode Manajerial (Operasional & Kontrol): </strong>
+                <span>Anda masuk sebagai <strong>Manager</strong> — mengawasi operasional harian, otorisasi kasir, performa omzet, keuangan, dan inventori toko.</span>
               </div>
             </div>
           )}
