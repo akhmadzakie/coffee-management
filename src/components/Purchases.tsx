@@ -25,6 +25,7 @@ import {
   X,
   CreditCard,
   Layers,
+  Lock,
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
 import { exportToCSV } from "../utils/export";
@@ -42,10 +43,17 @@ export const Purchases = () => {
     updatePOStatus,
     markPOAsReceived,
     deletePurchaseOrder,
+    closedPeriods = [],
     settings,
     isReadOnly,
     currentUser,
   } = useStore();
+
+  const isPeriodClosed = (dateStr: string) => {
+    if (!dateStr) return false;
+    const period = dateStr.slice(0, 7);
+    return closedPeriods.some((p) => p.period === period);
+  };
 
   const isFinance =
     currentUser?.role === "FINANCE" ||
@@ -275,6 +283,14 @@ export const Purchases = () => {
 
   const handleCheckout = (status: "PAID" | "UNPAID") => {
     if (cart.length === 0) return;
+
+    const currentPeriod = new Date().toISOString().substring(0, 7);
+    if (isPeriodClosed(currentPeriod)) {
+      alert(
+        `Periode ${currentPeriod} telah ditutup buku resmi. Pembuatan Purchase Order / Belanja Pasar baru untuk periode ini dikunci.`
+      );
+      return;
+    }
 
     // Mode Belanja Pasar / Eceran (Langsung Lunas & Masuk Stok)
     if (purchaseMode === "MARKET") {
@@ -1492,6 +1508,15 @@ export const Purchases = () => {
                             >
                               {po.poNumber}
                             </span>
+                            {isPeriodClosed(po.date) && (
+                              <span
+                                title={`Periode ${po.date.substring(0, 7)} telah ditutup buku`}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded"
+                              >
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>Terkunci</span>
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
@@ -1548,12 +1573,16 @@ export const Purchases = () => {
                               {po.deliveryStatus === "RECEIVED" ? "Diterima (Stok Masuk)" : "Menunggu"}
                             </span>
                             {po.deliveryStatus !== "RECEIVED" && (
-                              <button
-                                onClick={() => setPoToReceive(po)}
-                                className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
-                              >
-                                Terima Barang
-                              </button>
+                              isPeriodClosed(po.date) ? (
+                                <span className="text-[11px] text-slate-400 italic">Periode Ditutup</span>
+                              ) : (
+                                <button
+                                  onClick={() => setPoToReceive(po)}
+                                  className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
+                                >
+                                  Terima Barang
+                                </button>
+                              )
                             )}
                           </div>
                         </td>
@@ -1572,13 +1601,24 @@ export const Purchases = () => {
                             >
                               <Printer className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => setInvoiceToDelete(po)}
-                              className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 transition-colors cursor-pointer"
-                              title="Hapus PO"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!isReadOnly && (
+                              isPeriodClosed(po.date) ? (
+                                <span
+                                  className="p-1.5 text-slate-300 cursor-not-allowed"
+                                  title={`Periode ${po.date.substring(0, 7)} telah ditutup buku dan terkunci dari perubahan.`}
+                                >
+                                  <Lock className="w-4 h-4 text-slate-400" />
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => setInvoiceToDelete(po)}
+                                  className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 transition-colors cursor-pointer"
+                                  title="Hapus PO"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1676,12 +1716,16 @@ export const Purchases = () => {
                           </button>
                         )}
                         {po.deliveryStatus !== "RECEIVED" && (
-                          <button
-                            onClick={() => setPoToReceive(po)}
-                            className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
-                          >
-                            Terima Stok
-                          </button>
+                          isPeriodClosed(po.date) ? (
+                            <span className="text-[10px] text-slate-400 italic">Periode Ditutup</span>
+                          ) : (
+                            <button
+                              onClick={() => setPoToReceive(po)}
+                              className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                            >
+                              Terima Stok
+                            </button>
+                          )
                         )}
                       </div>
 
@@ -1696,12 +1740,23 @@ export const Purchases = () => {
                           <Printer className="w-3.5 h-3.5" />
                           <span>Faktur</span>
                         </button>
-                        <button
-                          onClick={() => setInvoiceToDelete(po)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isReadOnly && (
+                          isPeriodClosed(po.date) ? (
+                            <span
+                              className="p-1.5 text-slate-300 cursor-not-allowed"
+                              title={`Periode ${po.date.substring(0, 7)} telah ditutup buku.`}
+                            >
+                              <Lock className="w-3.5 h-3.5 text-slate-400" />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setInvoiceToDelete(po)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1741,8 +1796,15 @@ export const Purchases = () => {
               </button>
               <button
                 onClick={() => {
-                  markPOAsReceived(poToReceive.id);
-                  setPoToReceive(null);
+                  if (poToReceive) {
+                    if (isPeriodClosed(poToReceive.date)) {
+                      alert(`PO ${poToReceive.poNumber} berada pada periode ${poToReceive.date.substring(0, 7)} yang telah ditutup buku.`);
+                      setPoToReceive(null);
+                      return;
+                    }
+                    markPOAsReceived(poToReceive.id);
+                    setPoToReceive(null);
+                  }
                 }}
                 className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
@@ -1915,8 +1977,15 @@ export const Purchases = () => {
               </button>
               <button
                 onClick={() => {
-                  deletePurchaseOrder(invoiceToDelete.id);
-                  setInvoiceToDelete(null);
+                  if (invoiceToDelete) {
+                    if (isPeriodClosed(invoiceToDelete.date)) {
+                      alert(`PO ${invoiceToDelete.poNumber} berada pada periode ${invoiceToDelete.date.substring(0, 7)} yang telah ditutup buku dan tidak dapat dihapus.`);
+                      setInvoiceToDelete(null);
+                      return;
+                    }
+                    deletePurchaseOrder(invoiceToDelete.id);
+                    setInvoiceToDelete(null);
+                  }
                 }}
                 className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
@@ -2067,6 +2136,13 @@ export const Purchases = () => {
                   type="button"
                   onClick={() => {
                     if (payAmount > 0 && payAccountId) {
+                      const payPeriod = (payDate || new Date().toISOString().split("T")[0]).substring(0, 7);
+                      if (isPeriodClosed(payPeriod)) {
+                        alert(
+                          `Tanggal pembayaran (${payPeriod}) berada pada periode yang telah ditutup buku. Silakan pilih tanggal pada periode buku aktif.`
+                        );
+                        return;
+                      }
                       payPurchaseOrder(
                         selectedPOForPay.id,
                         payAmount,

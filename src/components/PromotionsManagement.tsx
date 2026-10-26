@@ -22,11 +22,40 @@ import { useStore } from "../store/StoreContext";
 import { Promotion, PromotionType } from "../types";
 
 export const PromotionsManagement: React.FC = () => {
-  const { promotions, addPromotion, updatePromotion, deletePromotion, togglePromotionStatus, currentUser } = useStore();
+  const {
+    promotions,
+    addPromotion,
+    updatePromotion,
+    deletePromotion,
+    togglePromotionStatus,
+    currentUser,
+    isReadOnly,
+  } = useStore();
+
+  const isOwner = currentUser?.role === "OWNER" || isReadOnly;
+  const canManage =
+    !isOwner &&
+    (currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER");
+
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const getPromoStatus = (
+    promo: Promotion
+  ): "ACTIVE" | "UPCOMING" | "EXPIRED" | "INACTIVE" => {
+    if (!promo.isActive) return "INACTIVE";
+    if (promo.endDate && promo.endDate.slice(0, 10) < todayStr) return "EXPIRED";
+    if (promo.startDate && promo.startDate.slice(0, 10) > todayStr)
+      return "UPCOMING";
+    return "ACTIVE";
+  };
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"ALL" | "PERCENT" | "NOMINAL">("ALL");
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [filterType, setFilterType] = useState<"ALL" | "PERCENT" | "NOMINAL">(
+    "ALL"
+  );
+  const [filterStatus, setFilterStatus] = useState<
+    "ALL" | "ACTIVE" | "UPCOMING" | "EXPIRED" | "INACTIVE"
+  >("ALL");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,23 +84,32 @@ export const PromotionsManagement: React.FC = () => {
       const matchSearch =
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.code && p.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        (p.description &&
+          p.description.toLowerCase().includes(searchTerm.toLowerCase()));
 
       const matchType = filterType === "ALL" || p.type === filterType;
+      const status = getPromoStatus(p);
       const matchStatus =
         filterStatus === "ALL" ||
-        (filterStatus === "ACTIVE" && p.isActive) ||
-        (filterStatus === "INACTIVE" && !p.isActive);
+        (filterStatus === "ACTIVE" && status === "ACTIVE") ||
+        (filterStatus === "UPCOMING" && status === "UPCOMING") ||
+        (filterStatus === "EXPIRED" && status === "EXPIRED") ||
+        (filterStatus === "INACTIVE" && status === "INACTIVE");
 
       return matchSearch && matchType && matchStatus;
     });
-  }, [promotions, searchTerm, filterType, filterStatus]);
+  }, [promotions, searchTerm, filterType, filterStatus, todayStr]);
 
   // KPIs
   const totalCount = promotions.length;
-  const activeCount = promotions.filter((p) => p.isActive).length;
+  const activeCount = promotions.filter(
+    (p) => getPromoStatus(p) === "ACTIVE"
+  ).length;
   const percentCount = promotions.filter((p) => p.type === "PERCENT").length;
   const nominalCount = promotions.filter((p) => p.type === "NOMINAL").length;
+  const expiredCount = promotions.filter(
+    (p) => getPromoStatus(p) === "EXPIRED"
+  ).length;
 
   const handleOpenAddModal = () => {
     setEditingPromo(null);
@@ -204,31 +242,60 @@ export const PromotionsManagement: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tambah Promo Baru</span>
-        </button>
+        {canManage ? (
+          <button
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Promo Baru</span>
+          </button>
+        ) : isOwner ? (
+          <div className="inline-flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
+            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Mode Pemantauan Owner (Read-Only)</span>
+          </div>
+        ) : null}
       </div>
 
+      {/* ── Owner Read-Only Guard Banner ── */}
+      {isOwner && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start justify-between gap-3.5 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 mt-0.5">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="text-sm">
+              <span className="font-bold text-amber-900">
+                Mode Pemantauan Owner (Read-Only):
+              </span>
+              <p className="text-amber-800 mt-0.5 leading-relaxed">
+                Sesuai aturan bisnis kafe, akun Owner berstatus read-only. Anda dapat meninjau katalog promo, syarat belanja, dan efektivitas diskon kasir, namun wewenang penambahan, perubahan, dan aktivasi promo dikelola oleh Manager dan Super Admin.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/80 border border-amber-200 text-amber-800 shrink-0">
+            Read-Only Guard
+          </span>
+        </div>
+      )}
+
       {/* ── Policy Banner ── */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5 shadow-xs">
-        <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 mt-0.5">
-          <ShieldAlert className="w-5 h-5" />
+      <div className="bg-brand-50/60 border border-brand-200/80 rounded-2xl p-4 flex items-start gap-3.5 shadow-xs">
+        <div className="p-2 bg-brand-100 text-brand-800 rounded-lg shrink-0 mt-0.5">
+          <Sparkles className="w-5 h-5" />
         </div>
         <div className="text-sm">
-          <span className="font-bold text-amber-900">Kebijakan Otorisasi POS Julia's Coffee:</span>
-          <p className="text-amber-800 mt-0.5 leading-relaxed">
-            Kasir hanya dapat memilih promo yang statusnya <strong>Aktif</strong> pada tabel di bawah. 
+          <span className="font-bold text-brand-950">Kebijakan Otorisasi POS Julia's Coffee (Aturan #12):</span>
+          <p className="text-brand-800 mt-0.5 leading-relaxed">
+            Kasir hanya dapat memilih promo yang statusnya <strong>Aktif Berlaku</strong> pada tabel di bawah. 
             Kasir <strong>tidak dapat</strong> menginput diskon manual secara bebas. Setiap diskon manual di luar daftar ini wajib mendapat persetujuan PIN Manajer.
           </p>
         </div>
       </div>
 
       {/* ── KPI Stats ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Promo</span>
@@ -270,13 +337,36 @@ export const PromotionsManagement: React.FC = () => {
 
         <div className="bg-white p-4 rounded-2xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Potongan Nominal</span>
+            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Potongan Flat</span>
             <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-blue-800">{nominalCount}</div>
           <p className="text-xs text-blue-600 mt-1">Potongan flat Rp</p>
+        </div>
+
+        <div className={`p-4 rounded-2xl border shadow-xs ${
+          expiredCount > 0
+            ? "bg-rose-50/60 border-rose-200 text-rose-900"
+            : "bg-white border-slate-200/80 text-slate-700"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-xs font-semibold uppercase tracking-wider ${
+              expiredCount > 0 ? "text-rose-700" : "text-slate-500"
+            }`}>Kedaluwarsa</span>
+            <div className={`p-2 rounded-lg ${
+              expiredCount > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"
+            }`}>
+              <AlertCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`mt-2 text-2xl font-bold ${expiredCount > 0 ? "text-rose-800" : "text-slate-800"}`}>
+            {expiredCount}
+          </div>
+          <p className={`text-xs mt-1 ${expiredCount > 0 ? "text-rose-600 font-medium" : "text-slate-400"}`}>
+            {expiredCount > 0 ? "Nonaktif otomatis di POS" : "Semua masa berlaku aman"}
+          </p>
         </div>
       </div>
 
@@ -314,8 +404,10 @@ export const PromotionsManagement: React.FC = () => {
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-brand-500"
           >
             <option value="ALL">Semua Status</option>
-            <option value="ACTIVE">Hanya Aktif di Kasir</option>
-            <option value="INACTIVE">Hanya Nonaktif</option>
+            <option value="ACTIVE">Aktif Berlaku di Kasir</option>
+            <option value="UPCOMING">Akan Datang (Terjadwal)</option>
+            <option value="EXPIRED">Kedaluwarsa</option>
+            <option value="INACTIVE">Nonaktif Manual</option>
           </select>
         </div>
       </div>
@@ -330,7 +422,7 @@ export const PromotionsManagement: React.FC = () => {
                 <th className="py-3.5 px-4">Tipe & Nilai Diskon</th>
                 <th className="py-3.5 px-4">Syarat Belanja</th>
                 <th className="py-3.5 px-4">Masa Berlaku</th>
-                <th className="py-3.5 px-4 text-center">Tersedia di Kasir</th>
+                <th className="py-3.5 px-4 text-center">Status di Kasir</th>
                 <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
@@ -349,6 +441,7 @@ export const PromotionsManagement: React.FC = () => {
                 </tr>
               ) : (
                 filteredPromos.map((promo) => {
+                  const status = getPromoStatus(promo);
                   return (
                     <tr key={promo.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Name & Code */}
@@ -427,12 +520,19 @@ export const PromotionsManagement: React.FC = () => {
                       {/* Dates */}
                       <td className="py-3.5 px-4 text-xs text-slate-600">
                         {promo.startDate || promo.endDate ? (
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                            <span>
-                              {promo.startDate ? promo.startDate.slice(0, 10) : "Mulai"} s/d{" "}
-                              {promo.endDate ? promo.endDate.slice(0, 10) : "Seterusnya"}
-                            </span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              <span>
+                                {promo.startDate ? promo.startDate.slice(0, 10) : "Mulai"} s/d{" "}
+                                {promo.endDate ? promo.endDate.slice(0, 10) : "Seterusnya"}
+                              </span>
+                            </div>
+                            {status === "EXPIRED" && (
+                              <span className="inline-block text-[10px] text-rose-600 font-semibold">
+                                Lewat masa berlaku
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-slate-400 italic">Selalu Berlaku</span>
@@ -441,48 +541,116 @@ export const PromotionsManagement: React.FC = () => {
 
                       {/* Whitelist Toggle */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => togglePromotionStatus(promo.id)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                            promo.isActive
-                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                          }`}
-                          title={promo.isActive ? "Klik untuk nonaktifkan dari kasir" : "Klik untuk aktifkan ke kasir"}
-                        >
-                          {promo.isActive ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Aktif di POS</span>
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Nonaktif</span>
-                            </>
-                          )}
-                        </button>
+                        {canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (status === "EXPIRED") {
+                                handleOpenEditModal(promo);
+                              } else {
+                                togglePromotionStatus(promo.id);
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                              status === "ACTIVE"
+                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                : status === "EXPIRED"
+                                ? "bg-rose-100 text-rose-800 hover:bg-rose-200"
+                                : status === "UPCOMING"
+                                ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
+                            title={
+                              status === "ACTIVE"
+                                ? "Klik untuk nonaktifkan dari kasir"
+                                : status === "EXPIRED"
+                                ? "Masa berlaku telah lewat. Klik untuk perbarui tanggal berakhir."
+                                : status === "UPCOMING"
+                                ? "Promo akan otomatis aktif sesuai tanggal mulai."
+                                : "Klik untuk aktifkan ke kasir"
+                            }
+                          >
+                            {status === "ACTIVE" ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Aktif di POS</span>
+                              </>
+                            ) : status === "EXPIRED" ? (
+                              <>
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Kedaluwarsa</span>
+                              </>
+                            ) : status === "UPCOMING" ? (
+                              <>
+                                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Akan Datang</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Nonaktif</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+                              status === "ACTIVE"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : status === "EXPIRED"
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : status === "UPCOMING"
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : "bg-slate-100 text-slate-500 border border-slate-200"
+                            }`}
+                          >
+                            {status === "ACTIVE" ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Aktif di POS</span>
+                              </>
+                            ) : status === "EXPIRED" ? (
+                              <>
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Kedaluwarsa</span>
+                              </>
+                            ) : status === "UPCOMING" ? (
+                              <>
+                                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Akan Datang</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Nonaktif</span>
+                              </>
+                            )}
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => handleOpenEditModal(promo)}
-                            className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                            title="Edit Promo"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(promo.id)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Hapus Promo"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {canManage ? (
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEditModal(promo)}
+                              className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Promo"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(promo.id)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Promo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic font-medium">Read-Only</span>
+                        )}
                       </td>
                     </tr>
                   );

@@ -104,6 +104,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [pendingDiscountType, setPendingDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
   const [pendingDiscountReason, setPendingDiscountReason] = useState<string>("");
 
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const activeWhitelistPromos = useMemo(() => {
+    return (promotions || []).filter((p) => {
+      if (!p.isActive) return false;
+      if (p.startDate && p.startDate.slice(0, 10) > todayStr) return false;
+      if (p.endDate && p.endDate.slice(0, 10) < todayStr) return false;
+      return true;
+    });
+  }, [promotions, todayStr]);
+
   // Modals
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isOpenBillsModalOpen, setIsOpenBillsModalOpen] = useState(false);
@@ -1324,7 +1334,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                   }`}
                 >
                   <Tag className="w-3.5 h-3.5" />
-                  <span>Promo Whitelist ({promotions.filter((p) => p.isActive).length})</span>
+                  <span>Promo Whitelist ({activeWhitelistPromos.length})</span>
                 </button>
                 <button
                   type="button"
@@ -1344,126 +1354,124 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               <div className="overflow-y-auto space-y-3 pr-1 flex-1">
                 {discountModalTab === "WHITELIST" ? (
                   /* ── TAB 1: WHITELIST PROMOTIONS ── */
-                  promotions.filter((p) => p.isActive).length === 0 ? (
+                  activeWhitelistPromos.length === 0 ? (
                     <div className="py-10 text-center text-slate-400">
                       <Tag className="w-10 h-10 mx-auto text-slate-300 mb-2" />
                       <p className="font-semibold text-slate-700 text-sm">Tidak Ada Promo Aktif</p>
                       <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                        Manager atau Admin belum mengaktifkan promo whitelist di menu Promo & Diskon.
+                        Manager belum mengaktifkan promo whitelist atau semua masa berlaku promo telah lewat di menu Promo & Diskon.
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      {promotions
-                        .filter((p) => p.isActive)
-                        .map((promo) => {
-                          const isEligible = !promo.minSpend || subtotal >= promo.minSpend;
-                          const isSelected = appliedPromotionId === promo.id;
+                      {activeWhitelistPromos.map((promo) => {
+                        const isEligible = !promo.minSpend || subtotal >= promo.minSpend;
+                        const isSelected = appliedPromotionId === promo.id;
 
-                          return (
-                            <div
-                              key={promo.id}
-                              className={`p-3.5 rounded-2xl border transition-all ${
-                                isSelected
-                                  ? "bg-brand-50/70 border-brand-400 shadow-xs ring-1 ring-brand-300"
-                                  : isEligible
-                                  ? "bg-white border-slate-200 hover:border-brand-200 hover:bg-slate-50/80"
-                                  : "bg-slate-50 border-slate-200/60 opacity-60"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-bold text-slate-900 text-sm">{promo.name}</span>
-                                    {promo.code && (
-                                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[10px] font-bold rounded border border-slate-200">
-                                        {promo.code}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {promo.description && (
-                                    <p className="text-xs text-slate-500">{promo.description}</p>
+                        return (
+                          <div
+                            key={promo.id}
+                            className={`p-3.5 rounded-2xl border transition-all ${
+                              isSelected
+                                ? "bg-brand-50/70 border-brand-400 shadow-xs ring-1 ring-brand-300"
+                                : isEligible
+                                ? "bg-white border-slate-200 hover:border-brand-200 hover:bg-slate-50/80"
+                                : "bg-slate-50 border-slate-200/60 opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm">{promo.name}</span>
+                                  {promo.code && (
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[10px] font-bold rounded border border-slate-200">
+                                      {promo.code}
+                                    </span>
                                   )}
-                                  <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap pt-0.5">
-                                    {promo.minSpend && promo.minSpend > 0 ? (
-                                      <span>Min. Belanja: <strong>Rp {promo.minSpend.toLocaleString("id-ID")}</strong></span>
-                                    ) : (
-                                      <span className="text-emerald-700 font-semibold">Tanpa Min. Belanja</span>
-                                    )}
-                                    {promo.type === "PERCENT" && promo.maxDiscount && promo.maxDiscount > 0 && (
-                                      <span>• Maks: <strong>Rp {promo.maxDiscount.toLocaleString("id-ID")}</strong></span>
-                                    )}
-                                  </div>
                                 </div>
-
-                                <div className="text-right shrink-0">
-                                  <span
-                                    className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
-                                      promo.type === "PERCENT"
-                                        ? "bg-purple-100 text-purple-800"
-                                        : "bg-blue-100 text-blue-800"
-                                    }`}
-                                  >
-                                    {promo.type === "PERCENT" ? `${promo.value}% OFF` : `-Rp ${promo.value.toLocaleString("id-ID")}`}
-                                  </span>
+                                {promo.description && (
+                                  <p className="text-xs text-slate-500">{promo.description}</p>
+                                )}
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap pt-0.5">
+                                  {promo.minSpend && promo.minSpend > 0 ? (
+                                    <span>Min. Belanja: <strong>Rp {promo.minSpend.toLocaleString("id-ID")}</strong></span>
+                                  ) : (
+                                    <span className="text-emerald-700 font-semibold">Tanpa Min. Belanja</span>
+                                  )}
+                                  {promo.type === "PERCENT" && promo.maxDiscount && promo.maxDiscount > 0 && (
+                                    <span>• Maks: <strong>Rp {promo.maxDiscount.toLocaleString("id-ID")}</strong></span>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                                {!isEligible ? (
-                                  <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    <span>Kurang Rp {((promo.minSpend || 0) - subtotal).toLocaleString("id-ID")} lagi</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Memenuhi syarat promo</span>
-                                  </span>
-                                )}
-
-                                {isSelected ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDiscountValue(0);
-                                      setDiscountReason("");
-                                      setAppliedPromotionId(null);
-                                      setAppliedPromotionName(null);
-                                      setAppliedPromoMaxDiscount(undefined);
-                                      setIsDiscountModalOpen(false);
-                                    }}
-                                    className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 text-xs font-bold transition flex items-center gap-1"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Lepas Promo</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    disabled={!isEligible}
-                                    onClick={() => {
-                                      setDiscountType(promo.type);
-                                      setDiscountValue(promo.value);
-                                      setDiscountReason(promo.name);
-                                      setAppliedPromotionId(promo.id);
-                                      setAppliedPromotionName(promo.name);
-                                      setAppliedPromoMaxDiscount(promo.maxDiscount);
-                                      setIsDiscountModalOpen(false);
-                                    }}
-                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                                      isEligible
-                                        ? "bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
-                                        : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                                    }`}
-                                  >
-                                    Pilih Promo
-                                  </button>
-                                )}
+                              <div className="text-right shrink-0">
+                                <span
+                                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
+                                    promo.type === "PERCENT"
+                                      ? "bg-purple-100 text-purple-800"
+                                      : "bg-blue-100 text-blue-800"
+                                  }`}
+                                >
+                                  {promo.type === "PERCENT" ? `${promo.value}% OFF` : `-Rp ${promo.value.toLocaleString("id-ID")}`}
+                                </span>
                               </div>
                             </div>
-                          );
-                        })}
+
+                            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                              {!isEligible ? (
+                                <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>Kurang Rp {((promo.minSpend || 0) - subtotal).toLocaleString("id-ID")} lagi</span>
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Memenuhi syarat promo</span>
+                                </span>
+                              )}
+
+                              {isSelected ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDiscountValue(0);
+                                    setDiscountReason("");
+                                    setAppliedPromotionId(null);
+                                    setAppliedPromotionName(null);
+                                    setAppliedPromoMaxDiscount(undefined);
+                                    setIsDiscountModalOpen(false);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 text-xs font-bold transition flex items-center gap-1"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Lepas Promo</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={!isEligible}
+                                  onClick={() => {
+                                    setDiscountType(promo.type);
+                                    setDiscountValue(promo.value);
+                                    setDiscountReason(promo.name);
+                                    setAppliedPromotionId(promo.id);
+                                    setAppliedPromotionName(promo.name);
+                                    setAppliedPromoMaxDiscount(promo.maxDiscount);
+                                    setIsDiscountModalOpen(false);
+                                  }}
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                                    isEligible
+                                      ? "bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
+                                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                  }`}
+                                >
+                                  Pilih Promo
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )
                 ) : (
