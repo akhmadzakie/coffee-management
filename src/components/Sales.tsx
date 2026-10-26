@@ -28,6 +28,7 @@ import {
   Clock,
   User,
   Coffee,
+  Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
@@ -89,7 +90,14 @@ export const Sales = () => {
     products,
     addSalesTransactions,
     isReadOnly,
+    closedPeriods = [],
   } = useStore();
+
+  const isPeriodClosed = (dateStr: string) => {
+    if (!dateStr) return false;
+    const period = dateStr.slice(0, 7);
+    return closedPeriods.some((p) => p.period === period);
+  };
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
   const [activeTab, setActiveTab] = useState<"daily_recap" | "pos_orders" | "sales" | "logs">("daily_recap");
@@ -170,6 +178,16 @@ export const Sales = () => {
       return;
     }
 
+    // ── ATURAN #6: CEK PERIODE TUTUP BUKU ──────────────────────────────────
+    if (isPeriodClosed(recapForm.date)) {
+      alert(
+        `⛔ Periode Telah Ditutup (Aturan #6):\n\n` +
+        `Bulan ${recapForm.date.slice(0, 7)} sudah ditutup buku secara permanen oleh Manajemen/Finance.\n\n` +
+        `Pencatatan omzet harian baru untuk periode yang sudah dikunci tidak diizinkan demi menjaga integritas laporan keuangan.`
+      );
+      return;
+    }
+
     // ── ATURAN ANTI DOUBLE COUNT (Rekap Omzet vs POS Kasir Langsung) ────────
     // 1. Cek apakah tanggal dan shift ini sudah ada entri rekap omzet sebelumnya
     const existingRecap = dailySalesRecaps.find(
@@ -228,6 +246,13 @@ export const Sales = () => {
   };
 
   const handleDeleteRecap = (id: string, date: string, amount: number) => {
+    if (isPeriodClosed(date)) {
+      alert(
+        `⛔ Periode Telah Ditutup (Aturan #6):\n\n` +
+        `Bulan ${date.slice(0, 7)} sudah dikunci/tutup buku. Rekapitulasi omzet pada periode terkunci tidak dapat dihapus demi menjaga integritas pembukuan.`
+      );
+      return;
+    }
     if (window.confirm(`Yakin ingin menghapus rekap omzet tanggal ${date} (${formatCurrency(amount)})?`)) {
       deleteDailySalesRecap(id);
     }
@@ -359,8 +384,50 @@ export const Sales = () => {
       return;
     }
 
+    // ── ATURAN #6: CEK PERIODE TUTUP BUKU (Closed Periods) ────────────────
+    const closedDates = Array.from(new Set(newTransactions.map((t) => t.date))).filter((d) => isPeriodClosed(d));
+    if (closedDates.length > 0) {
+      alert(
+        `⛔ Periode Telah Ditutup (Aturan #6):\n\n` +
+        `File impor memuat transaksi pada periode yang telah ditutup buku:\n` +
+        `${closedDates.slice(0, 5).join(", ")}${closedDates.length > 5 ? ` (+${closedDates.length - 5} lainnya)` : ""}\n\n` +
+        `Impor dibatalkan demi menjaga integritas data keuangan yang telah terkunci.`
+      );
+      return;
+    }
+
+    // ── ATURAN #7: ANTI-DUPLIKASI BARIS TRANSAKSI (Compound Key Deduplication) ──
+    const existingSignatures = new Set(
+      salesTransactions.map(
+        (s) => `${s.date.slice(0, 10)}_${s.menuName.toLowerCase().trim()}_${s.quantitySold}_${Math.round(s.totalPrice)}`
+      )
+    );
+
+    const batchSignatures = new Set<string>();
+    const uniqueTransactions: typeof newTransactions = [];
+    let duplicateRowsCount = 0;
+
+    for (const trx of newTransactions) {
+      const sig = `${trx.date.slice(0, 10)}_${trx.menuName.toLowerCase().trim()}_${trx.quantitySold}_${Math.round(trx.totalPrice)}`;
+      if (existingSignatures.has(sig) || batchSignatures.has(sig)) {
+        duplicateRowsCount++;
+      } else {
+        batchSignatures.add(sig);
+        uniqueTransactions.push(trx);
+      }
+    }
+
+    if (uniqueTransactions.length === 0) {
+      alert(
+        `⚠️ Seluruh Baris Terdeteksi Duplikat (Aturan #7):\n\n` +
+        `Semua ${newTransactions.length} baris penjualan pada file "${actualFileName}" sudah ada di database atau duplikat di dalam batch file impor.\n\n` +
+        `Impor dibatalkan 100% untuk mencegah duplikasi pendapatan dan pemotongan stok bahan baku berulang.`
+      );
+      return;
+    }
+
     // Cek jika tanggal di file impor bertabrakan dengan transaksi POS kasir langsung
-    const importDates = Array.from(new Set(newTransactions.map((t) => t.date)));
+    const importDates = Array.from(new Set(uniqueTransactions.map((t) => t.date)));
     const overlappingWithPos = importDates.filter((d) =>
       posOrders.some((po) => po.createdAt.startsWith(d) && po.status === "PAID")
     );
@@ -371,10 +438,12 @@ export const Sales = () => {
       if (!confirmOverlap) return;
     }
 
-    addSalesTransactions(newTransactions, actualFileName);
+    addSalesTransactions(uniqueTransactions, actualFileName);
     setUploadStatus({
       type: "success",
-      message: `Berhasil mengimpor ${newTransactions.length} baris penjualan (${actualFileName}) ke sistem.`,
+      message: duplicateRowsCount > 0
+        ? `Berhasil mengimpor ${uniqueTransactions.length} baris penjualan (${actualFileName}). ${duplicateRowsCount} baris duplikat dilewati secara otomatis (Aturan #7).`
+        : `Berhasil mengimpor ${uniqueTransactions.length} baris penjualan (${actualFileName}) ke sistem.`,
     });
   };
 
@@ -746,15 +815,27 @@ export const Sales = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredRecaps.map((item) => (
+                    filteredRecaps.map((item) => {
+                      const locked = isPeriodClosed(item.date);
+                      return (
                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-3.5 font-bold text-slate-900 whitespace-nowrap">
-                          {new Date(item.date).toLocaleDateString("id-ID", {
-                            weekday: "short",
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
+                          <div className="flex items-center gap-2">
+                            <span>
+                              {new Date(item.date).toLocaleDateString("id-ID", {
+                                weekday: "short",
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                            {locked && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                <Lock className="w-3 h-3 text-amber-600" />
+                                <span>Terkunci</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3.5">
                           <span
@@ -796,17 +877,27 @@ export const Sales = () => {
                         </td>
                         {!isReadOnly && (
                           <td className="p-3.5 text-center">
-                            <button
-                              onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
-                              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                              title="Hapus Rekap Omzet"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {locked ? (
+                              <span
+                                className="inline-block p-1.5 text-slate-300 cursor-not-allowed"
+                                title="Periode Telah Ditutup (Aturan #6)"
+                              >
+                                <Lock className="w-4 h-4 mx-auto text-slate-300" />
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                title="Hapus Rekap Omzet"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </td>
                         )}
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>
@@ -823,21 +914,31 @@ export const Sales = () => {
                   </p>
                 </div>
               ) : (
-                filteredRecaps.map((item) => (
+                filteredRecaps.map((item) => {
+                  const locked = isPeriodClosed(item.date);
+                  return (
                   <div
                     key={item.id}
                     className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-bold text-slate-900">
-                          {new Date(item.date).toLocaleDateString("id-ID", {
-                            weekday: "short",
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-slate-900">
+                            {new Date(item.date).toLocaleDateString("id-ID", {
+                              weekday: "short",
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                          {locked && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
+                              <Lock className="w-2.5 h-2.5 text-amber-600" />
+                              <span>Terkunci</span>
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.shift === "PAGI"
@@ -891,17 +992,27 @@ export const Sales = () => {
                         <span className="block text-[10px] text-slate-400">Dicatat: {item.recordedBy || "Kasir"}</span>
                       </div>
                       {!isReadOnly && (
-                        <button
-                          onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        locked ? (
+                          <span
+                            className="p-1.5 text-slate-300 cursor-not-allowed shrink-0"
+                            title="Periode Telah Ditutup (Aturan #6)"
+                          >
+                            <Lock className="w-4 h-4 text-slate-300" />
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
-                ))
+                );
+              })
               )}
             </div>
           </div>
@@ -1825,6 +1936,12 @@ export const Sales = () => {
                       allowClear={false}
                       buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
                     />
+                    {isPeriodClosed(recapForm.date) && (
+                      <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center gap-1.5 text-amber-800 text-[11px] font-semibold">
+                        <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Periode bulan {recapForm.date.slice(0, 7)} sudah ditutup buku (Aturan #6).</span>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
@@ -1963,7 +2080,7 @@ export const Sales = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={currentFormTotal <= 0}
+                    disabled={currentFormTotal <= 0 || isPeriodClosed(recapForm.date)}
                     className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:opacity-50 text-white font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <CheckCircle className="w-4 h-4" />
