@@ -43,15 +43,28 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [dropdownAlign, setDropdownAlign] = useState<"left" | "right">("right");
+  const [dropdownPos, setDropdownPos] = useState<{
+    align: "left" | "right" | "custom";
+    customLeft?: number;
+    width: number;
+  }>({ align: "left", width: 288 });
 
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
-      if (window.innerWidth - rect.left >= 280) {
-        setDropdownAlign("left");
+      const screenW = window.innerWidth;
+      const idealWidth = Math.min(288, screenW - 24);
+
+      if (rect.left + idealWidth <= screenW - 12) {
+        // Fits comfortably to the left
+        setDropdownPos({ align: "left", width: idealWidth });
+      } else if (rect.right - idealWidth >= 12) {
+        // Fits comfortably to the right
+        setDropdownPos({ align: "right", width: idealWidth });
       } else {
-        setDropdownAlign("right");
+        // Clamps cleanly relative to button so dropdown stays at least 12px from left screen edge
+        const customLeft = 12 - rect.left;
+        setDropdownPos({ align: "custom", customLeft, width: idealWidth });
       }
     }
   }, [isOpen]);
@@ -143,9 +156,16 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
 
         {isOpen && (
           <div
-            className={`absolute ${
-              dropdownAlign === "left" ? "left-0" : "right-0"
-            } mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150`}
+            style={{
+              width: `${dropdownPos.width}px`,
+              maxWidth: "calc(100vw - 1.5rem)",
+              ...(dropdownPos.align === "left"
+                ? { left: 0, right: "auto" }
+                : dropdownPos.align === "right"
+                ? { right: 0, left: "auto" }
+                : { left: `${dropdownPos.customLeft}px`, right: "auto" }),
+            }}
+            className="absolute mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
           >
             <div className="py-1">
               <button

@@ -1026,56 +1026,56 @@ export const LeaderChecklist: React.FC = () => {
     const selectedDivisionStat = divisionStats.find((d) => d.key === inspectedDivision) || divisionStats[0];
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-7xl mx-auto w-full min-w-0">
         {/* Header Manager */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
                 Supervisor Dashboard
               </span>
               <h2 className="text-xl font-bold text-slate-800">
                 Monitoring & Pengaturan Jobdesk Leader
               </h2>
             </div>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-slate-500 text-xs sm:text-sm mt-1">
               Pantau laporan terperinci per kategori tugas (Kebersihan, Alat, Bahan, dll) & atur SOP rincian jobdesk.
             </p>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="w-full md:w-auto flex items-center gap-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar scroll-smooth">
+          <div className="w-full md:w-auto flex items-center gap-1 bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar flex-nowrap scroll-smooth">
             <button
               onClick={() => setActiveTab("monitoring")}
-              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap shrink-0 flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monitoring"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Calendar className="w-4 h-4 text-amber-500 shrink-0" />
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 shrink-0" />
               <span>Pantau Harian</span>
             </button>
             <button
               onClick={() => setActiveTab("monthly")}
-              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap shrink-0 flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "monthly"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <TrendingUp className="w-4 h-4 text-blue-600 shrink-0" />
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
               <span>Rekap Bulanan</span>
             </button>
             <button
               onClick={() => setActiveTab("settings")}
-              className={`whitespace-nowrap flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`whitespace-nowrap shrink-0 flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === "settings"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
+              <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
               <span>Atur SOP & Grade</span>
             </button>
           </div>
@@ -1753,44 +1753,44 @@ export const LeaderChecklist: React.FC = () => {
 
         {/* TAB 2: PENGATURAN KATEGORI, RINCIAN TUGAS & TARGET BONUS JOBDESK */}
         {activeTab === "settings" && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-6 overflow-hidden min-w-0 max-w-full">
             {/* Sub-Navigasi Pengaturan Manager: SOP Tugas vs Aturan Tunjangan Jabatan */}
-            <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start overflow-x-auto no-scrollbar flex-nowrap gap-1">
+            <div className="flex bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start overflow-x-auto no-scrollbar flex-nowrap gap-1">
               <button
                 type="button"
                 onClick={() => setSettingsSubTab("TASKS")}
-                className={`whitespace-nowrap shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`whitespace-nowrap shrink-0 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   settingsSubTab === "TASKS"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 <ClipboardList className="w-4 h-4 text-amber-600 shrink-0" />
-                📋 Master SOP & Tugas Jobdesk
+                <span>📋 Master SOP & Tugas Jobdesk</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSettingsSubTab("ALLOWANCE_RULES")}
-                className={`whitespace-nowrap shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`whitespace-nowrap shrink-0 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   settingsSubTab === "ALLOWANCE_RULES"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 <Award className="w-4 h-4 text-emerald-600 shrink-0" />
-                🎯 Batas Persenan Tunjangan Jabatan ({allowanceRules.length})
+                <span>🎯 Batas Persenan Tunjangan Jabatan ({allowanceRules.length})</span>
               </button>
             </div>
 
             {settingsSubTab === "ALLOWANCE_RULES" ? (
-              <div className="space-y-6">
+              <div className="space-y-6 min-w-0">
                 {/* Penjelasan Sistem Batas Persenan */}
-                <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 p-5 rounded-2xl">
+                <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/80 p-4 sm:p-5 rounded-2xl">
                   <div className="flex items-start gap-3.5">
                     <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h4 className="text-sm font-bold text-emerald-950">
                         Penetapan Batas Persenan Tunjangan Jabatan Leader (Berdasarkan Capaian Jobdesk)
                       </h4>
@@ -1798,16 +1798,19 @@ export const LeaderChecklist: React.FC = () => {
                         Leader (Head Bar, Head Kitchen, Head Baker, Supervisor) memegang tanggung jawab supervisi operasional dan kontrol kualitas (QC). Tunjangan Jabatan di kontrak kerja Leader akan dicairkan di modul <strong>Payroll (Penggajian)</strong> secara bertingkat berdasarkan persentase kepatuhan checklist harian yang mereka selesaikan selama bulan berjalan.
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-emerald-900">
-                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                        <span className="bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300">
                           Contoh Tunjangan di Kontrak: Rp 500.000
                         </span>
-                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                        <span className="bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300">
                           Grade A (90–100%) ➔ Cair 100% (Rp 500.000)
                         </span>
-                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                        <span className="bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300">
                           Grade B (80–89%) ➔ Cair 80% (Rp 400.000)
                         </span>
-                        <span className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-300">
+                        <span className="bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300">
+                          Grade C (70–79%) ➔ Cair 50% (Rp 250.000)
+                        </span>
+                        <span className="bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300">
                           Grade D (&lt;70%) ➔ 0% (Hangus)
                         </span>
                       </div>
@@ -1824,11 +1827,11 @@ export const LeaderChecklist: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                     <button
                       type="button"
                       onClick={handleResetRulesToDefault}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5"
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Kembalikan ke standar sistem (Grade A/B/C/D)"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -1837,7 +1840,7 @@ export const LeaderChecklist: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleOpenAddRule}
-                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>+ Tambah Grade Baru</span>
@@ -1845,8 +1848,9 @@ export const LeaderChecklist: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Tabel Aturan */}
-                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-xs">
+                {/* Dual-View Tabel & Kartu Aturan */}
+                {/* Desktop View */}
+                <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-2xl shadow-xs">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                       <tr>
@@ -1896,7 +1900,7 @@ export const LeaderChecklist: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleToggleRuleStatus(rule.id)}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
                                   rule.isActive !== false
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                     : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200"
@@ -1910,7 +1914,7 @@ export const LeaderChecklist: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenEditRule(rule)}
-                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                                   title="Edit aturan ini"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -1918,7 +1922,7 @@ export const LeaderChecklist: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteRule(rule.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                   title="Hapus aturan"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1930,6 +1934,90 @@ export const LeaderChecklist: React.FC = () => {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Card Feed */}
+                <div className="block md:hidden space-y-3">
+                  {allowanceRules.map((rule) => {
+                    const isGradeA = rule.minScore >= 90;
+                    const isGradeB = rule.minScore >= 80 && rule.minScore < 90;
+                    const isGradeC = rule.minScore >= 70 && rule.minScore < 80;
+
+                    return (
+                      <div
+                        key={rule.id}
+                        className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`font-black px-2.5 py-1 rounded-lg text-xs ${
+                              isGradeA
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : isGradeB
+                                ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                : isGradeC
+                                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                : "bg-rose-100 text-rose-800 border border-rose-300"
+                            }`}
+                          >
+                            {rule.grade}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRuleStatus(rule.id)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                                rule.isActive !== false
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                  : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200"
+                              }`}
+                            >
+                              {rule.isActive !== false ? "✓ Aktif" : "✕ Nonaktif"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditRule(rule)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="Edit aturan ini"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRule(rule.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus aturan ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase">Rentang Skor</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              {rule.minScore}% – {rule.maxScore}%
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                            <span className="text-[10px] text-emerald-700 font-bold block uppercase">Tunjangan Cair</span>
+                            <span className="font-mono font-black text-emerald-700 text-sm">
+                              {rule.payoutPercentage}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {rule.label && (
+                          <div className="text-[11px] text-slate-600 font-medium bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                            <span className="text-slate-400 font-semibold mr-1">Keterangan:</span>
+                            {rule.label}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -1945,10 +2033,10 @@ export const LeaderChecklist: React.FC = () => {
                   </div>
 
                   {/* Pilihan Divisi */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar flex-nowrap max-w-full gap-1">
                 <button
                   onClick={() => setEditingDivision("BAR")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     editingDivision === "BAR"
                       ? "bg-white text-slate-900 shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
@@ -1958,7 +2046,7 @@ export const LeaderChecklist: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setEditingDivision("KITCHEN")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     editingDivision === "KITCHEN"
                       ? "bg-white text-slate-900 shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
@@ -1968,7 +2056,7 @@ export const LeaderChecklist: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setEditingDivision("BAKER")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     editingDivision === "BAKER"
                       ? "bg-white text-slate-900 shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
