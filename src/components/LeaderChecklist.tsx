@@ -939,15 +939,18 @@ export const LeaderChecklist: React.FC = () => {
     const cat = updated[catIdx];
     const defaultText = "Tugas supervisi / inspeksi stasiun kerja (Leader)";
 
-    cat.items = [
-      ...(cat.items || []), 
-      { 
-        text: defaultText, 
-        shift: "ALL", 
-        targetRole: "LEADER",
-        isActive: true 
-      }
-    ];
+    updated[catIdx] = {
+      ...cat,
+      items: [
+        ...(cat.items || []), 
+        { 
+          text: defaultText, 
+          shift: "ALL", 
+          targetRole: "LEADER",
+          isActive: true 
+        }
+      ]
+    };
     setCurrentEditingCategories(updated);
   };
 
@@ -957,7 +960,7 @@ export const LeaderChecklist: React.FC = () => {
     const items = [...cat.items];
     const norm = normalizeTaskItem(items[itemIdx]);
     items[itemIdx] = { ...norm, text };
-    cat.items = items;
+    updated[catIdx] = { ...cat, items };
     setCurrentEditingCategories(updated);
   };
 
@@ -967,7 +970,7 @@ export const LeaderChecklist: React.FC = () => {
     const items = [...cat.items];
     const norm = normalizeTaskItem(items[itemIdx]);
     items[itemIdx] = { ...norm, shift };
-    cat.items = items;
+    updated[catIdx] = { ...cat, items };
     setCurrentEditingCategories(updated);
   };
 
@@ -977,7 +980,7 @@ export const LeaderChecklist: React.FC = () => {
     const items = [...cat.items];
     const norm = normalizeTaskItem(items[itemIdx]);
     items[itemIdx] = { ...norm, targetRole };
-    cat.items = items;
+    updated[catIdx] = { ...cat, items };
     setCurrentEditingCategories(updated);
   };
 
@@ -987,14 +990,17 @@ export const LeaderChecklist: React.FC = () => {
     const items = [...cat.items];
     const norm = normalizeTaskItem(items[itemIdx]);
     items[itemIdx] = { ...norm, isActive: !norm.isActive };
-    cat.items = items;
+    updated[catIdx] = { ...cat, items };
     setCurrentEditingCategories(updated);
   };
 
   const handleRemoveSubTask = (catIdx: number, itemIdx: number) => {
     const updated = [...currentEditingCategories];
     const cat = updated[catIdx];
-    cat.items = cat.items.filter((_, i) => i !== itemIdx);
+    updated[catIdx] = {
+      ...cat,
+      items: cat.items.filter((_, i) => i !== itemIdx)
+    };
     setCurrentEditingCategories(updated);
   };
 
@@ -1843,7 +1849,7 @@ export const LeaderChecklist: React.FC = () => {
                       className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ Tambah Grade Baru</span>
+                      <span>Tambah Grade Baru</span>
                     </button>
                   </div>
                 </div>
@@ -2106,7 +2112,7 @@ export const LeaderChecklist: React.FC = () => {
                 return (
                   <div 
                     key={cat.id || catIdx}
-                    className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4"
+                    className="p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4"
                   >
                     {/* Category Header with Title input & Delete button */}
                     <div className="flex items-center gap-3">
@@ -2121,8 +2127,9 @@ export const LeaderChecklist: React.FC = () => {
                         placeholder="Nama Kategori (contoh: Kebersihan & Sanitasi Area)..."
                       />
                       <button
+                        type="button"
                         onClick={() => handleRemoveCategory(catIdx)}
-                        className="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shrink-0"
+                        className="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors shrink-0 cursor-pointer"
                         title="Hapus seluruh kategori ini"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -2130,7 +2137,7 @@ export const LeaderChecklist: React.FC = () => {
                     </div>
 
                     {/* Sub-tugas Items inside this category */}
-                    <div className="space-y-2.5 pl-0 sm:pl-9">
+                    <div className="space-y-2.5 pl-0 sm:pl-7">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-semibold text-slate-500">
                           Rincian Sub-Tugas Checklist Supervisi & Jadwal Shift:
@@ -2155,64 +2162,69 @@ export const LeaderChecklist: React.FC = () => {
                                   : "bg-amber-50/50 border-amber-200 shadow-2xs"
                               }`}
                             >
-                              <span className="text-xs text-slate-400 font-bold w-5 text-right hidden sm:block">
-                                {displayIdx + 1}.
-                              </span>
-
-                              <input
-                                type="text"
-                                value={detail.text}
-                                onChange={(e) => handleUpdateSubTaskText(catIdx, originalIdx, e.target.value)}
-                                className="flex-1 px-3 py-1.5 bg-transparent border-0 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-lg"
-                                placeholder="Rincian sub-tugas supervisi yang perlu diawasi Leader..."
-                              />
-
-                              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                                {/* Pilihan Shift Tag */}
-                                <select
-                                  value={detail.shift || "ALL"}
-                                  onChange={(e) => handleUpdateSubTaskShift(catIdx, originalIdx, e.target.value as any)}
-                                  className={`text-[11px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
-                                    detail.shift === "PAGI"
-                                      ? "bg-amber-50 border-amber-300 text-amber-900"
-                                      : detail.shift === "MIDDLE"
-                                      ? "bg-orange-50 border-orange-300 text-orange-900"
-                                      : detail.shift === "SORE"
-                                      ? "bg-purple-50 border-purple-300 text-purple-900"
-                                      : "bg-blue-50 border-blue-300 text-blue-900"
-                                  }`}
-                                  title="Tentukan jadwal shift untuk sub-tugas ini"
-                                >
-                                  <option value="ALL">🌐 Semua Shift</option>
-                                  <option value="PAGI">☀️ Pagi (Opening)</option>
-                                  <option value="MIDDLE">⛅ Middle</option>
-                                  <option value="SORE">🌙 Sore (Closing)</option>
-                                </select>
-
-                                {/* Badge Peran Khusus Leader */}
-                                <span className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border bg-amber-100 border-amber-300 text-amber-950 shrink-0 flex items-center gap-1">
-                                  👑 Leader QC
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-xs text-slate-400 font-bold w-5 shrink-0 text-center sm:text-right">
+                                  {displayIdx + 1}.
                                 </span>
 
-                                {/* Tombol Toggle Aktif / Nonaktif */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleSubTaskActive(catIdx, originalIdx)}
-                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors border ${
-                                    detail.isActive
-                                      ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
-                                      : "bg-slate-200 border-slate-300 text-slate-500 hover:bg-slate-300"
-                                  }`}
-                                  title={detail.isActive ? "Klik untuk Nonaktifkan Tugas" : "Klik untuk Aktifkan Tugas"}
-                                >
-                                  <span className={`w-2 h-2 rounded-full ${detail.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
-                                  {detail.isActive ? "Aktif" : "Nonaktif"}
-                                </button>
+                                <input
+                                  type="text"
+                                  value={detail.text}
+                                  onChange={(e) => handleUpdateSubTaskText(catIdx, originalIdx, e.target.value)}
+                                  className="flex-1 min-w-0 px-2.5 py-1.5 bg-white/70 border border-transparent focus:border-blue-400 focus:bg-white text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-lg transition-colors"
+                                  placeholder="Rincian sub-tugas supervisi yang perlu diawasi Leader..."
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto shrink-0 pt-1.5 sm:pt-0 border-t border-amber-200/40 sm:border-t-0 pl-7 sm:pl-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {/* Pilihan Shift Tag */}
+                                  <select
+                                    value={detail.shift || "ALL"}
+                                    onChange={(e) => handleUpdateSubTaskShift(catIdx, originalIdx, e.target.value as any)}
+                                    className={`text-[11px] font-bold px-2 py-1 sm:py-1.5 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                                      detail.shift === "PAGI"
+                                        ? "bg-amber-50 border-amber-300 text-amber-900"
+                                        : detail.shift === "MIDDLE"
+                                        ? "bg-orange-50 border-orange-300 text-orange-900"
+                                        : detail.shift === "SORE"
+                                        ? "bg-purple-50 border-purple-300 text-purple-900"
+                                        : "bg-blue-50 border-blue-300 text-blue-900"
+                                    }`}
+                                    title="Tentukan jadwal shift untuk sub-tugas ini"
+                                  >
+                                    <option value="ALL">🌐 Semua Shift</option>
+                                    <option value="PAGI">☀️ Pagi (Opening)</option>
+                                    <option value="MIDDLE">⛅ Middle</option>
+                                    <option value="SORE">🌙 Sore (Closing)</option>
+                                  </select>
+
+                                  {/* Badge Peran Khusus Leader */}
+                                  <span className="text-[11px] font-bold px-2 py-1 sm:py-1.5 rounded-lg border bg-amber-100 border-amber-300 text-amber-950 shrink-0 flex items-center gap-1">
+                                    👑 Leader QC
+                                  </span>
+
+                                  {/* Tombol Toggle Aktif / Nonaktif */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSubTaskActive(catIdx, originalIdx)}
+                                    className={`px-2 py-1 sm:py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border cursor-pointer ${
+                                      detail.isActive
+                                        ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                                        : "bg-slate-200 border-slate-300 text-slate-500 hover:bg-slate-300"
+                                    }`}
+                                    title={detail.isActive ? "Klik untuk Nonaktifkan Tugas" : "Klik untuk Aktifkan Tugas"}
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${detail.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
+                                    {detail.isActive ? "Aktif" : "Nonaktif"}
+                                  </button>
+                                </div>
 
                                 {/* Hapus Sub-tugas */}
                                 <button
+                                  type="button"
                                   onClick={() => handleRemoveSubTask(catIdx, originalIdx)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-auto sm:ml-0"
                                   title="Hapus sub-tugas"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -2228,10 +2240,10 @@ export const LeaderChecklist: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleAddSubTask(catIdx, "LEADER")}
-                          className="text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1.5 py-1.5 px-3 rounded-lg transition-colors"
+                          className="text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1.5 py-1.5 px-3 rounded-lg transition-colors cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          + Tambah Sub-Tugas Supervisi / QC (Leader)
+                          Tambah Sub-Tugas Supervisi / QC (Leader)
                         </button>
                       </div>
                     </div>
@@ -2241,33 +2253,36 @@ export const LeaderChecklist: React.FC = () => {
             </div>
 
             {/* Bottom Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-200">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
+                  type="button"
                   onClick={handleAddCategory}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors border border-blue-200"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors border border-blue-200 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  + Tambah Kategori Baru
+                  Tambah Kategori Baru
                 </button>
                 <button
+                  type="button"
                   onClick={handleResetToDefault}
-                  className="flex items-center gap-1.5 px-3 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-medium transition-colors"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-medium transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Reset ke Standar Sistem
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 {settingsSaved && (
-                  <span className="text-emerald-600 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                  <span className="text-emerald-600 text-xs font-bold flex items-center justify-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
                     <Check className="w-4 h-4" /> Pengaturan Tersimpan!
                   </span>
                 )}
                 <button
+                  type="button"
                   onClick={handleSaveSettings}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition-colors cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   Simpan Master Jobdesk Leader
