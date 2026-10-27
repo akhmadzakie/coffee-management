@@ -1642,12 +1642,28 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 )}
               </div>
 
-              <button
-                onClick={() => onNavigate("pos_cashier")}
-                className="w-full mt-5 py-3 rounded-2xl bg-[#241813] hover:bg-[#1b130f] text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm cursor-pointer"
-              >
-                Buka Terminal POS Kasir <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5">
+                <a
+                  href="/pos"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-3 px-4 rounded-2xl bg-[#241813] hover:bg-[#1b130f] text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm cursor-pointer"
+                >
+                  <Store className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Terminal POS Kasir</span>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                </a>
+                <a
+                  href="/kds"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-3 px-4 rounded-2xl bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-coffee-sm cursor-pointer"
+                >
+                  <Coffee className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Layar Dapur (KDS)</span>
+                  <ExternalLink className="w-3 h-3 text-amber-200" />
+                </a>
+              </div>
             </div>
 
             {/* Kehadiran Staf Hari Ini (Live Attendance) */}

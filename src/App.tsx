@@ -204,8 +204,6 @@ function AppContent() {
       "payroll",
       "inventory",
       "audit_log",
-      "pos_cashier",
-      "kitchen_display",
     ],
     MANAGER: [
       "dashboard_manager",
@@ -240,7 +238,6 @@ function AppContent() {
       "purchases",
       "payroll",
       "audit_log",
-      "pos_cashier",
     ],
     KASIR: [
       "pos_cashier",

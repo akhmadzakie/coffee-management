@@ -63,7 +63,25 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const prevTicketCountRef = useRef<number>(0);
+
+  // Fullscreen toggle handler for tablets, phones, and wall monitors
+  const toggleFullscreen = () => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
+      } else {
+        document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
 
   // Auto detect initial station based on user role or department if no URL param was set
   useEffect(() => {
@@ -202,106 +220,151 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-slate-100 text-slate-900 rounded-2xl overflow-hidden shadow-xl border border-slate-200 select-none">
-      {/* ── Top Bar KDS ─────────────────────────────────────────────────── */}
-      <div className="h-16 px-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-xs">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 shadow-xs">
-            <UtensilsCrossed className="w-5 h-5" />
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] md:h-[calc(100vh-1rem)] lg:h-[calc(100vh-2rem)] w-full bg-slate-100 text-slate-900 rounded-none md:rounded-2xl overflow-hidden shadow-xl border-0 md:border md:border-slate-200 select-none">
+      {/* ── Top Bar KDS (Adaptive for Mobile, Tablet, & Monitor) ─────────── */}
+      <div className="min-h-14 py-2.5 px-3 sm:px-5 bg-white border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-2.5 shrink-0 shadow-xs">
+        {/* Row 1: Station Title & Info & Tools */}
+        <div className="flex items-center justify-between w-full md:w-auto gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 shadow-xs shrink-0">
+              <UtensilsCrossed className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-1.5 sm:gap-2 truncate">
+                <span>Layar Dapur & Bar</span>
+                <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 font-bold border border-brand-200 shrink-0">
+                  {tickets.length} Antrean
+                </span>
+              </h1>
+              <p className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5 sm:gap-2 mt-0.5">
+                <span>Stasiun: <strong className="text-brand-800 font-bold">{stationFilter}</strong></span>
+                <span>•</span>
+                <span className="flex items-center gap-1 font-medium">
+                  {isOnline ? (
+                    <span className="text-emerald-700 flex items-center gap-1 font-semibold">
+                      <Wifi className="w-3 h-3 text-emerald-600" /> Live
+                    </span>
+                  ) : (
+                    <span className="text-rose-600 flex items-center gap-1 font-semibold">
+                      <WifiOff className="w-3 h-3 text-rose-500" /> Offline
+                    </span>
+                  )}
+                </span>
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              Kitchen & Bar Display System (KDS)
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 font-bold border border-brand-200">
-                {tickets.length} Antrean Aktif
-              </span>
-            </h1>
-            <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-              <span>Stasiun: <strong className="text-brand-800 font-bold">{stationFilter}</strong></span>
-              <span>•</span>
-              <span className="flex items-center gap-1 font-medium">
-                {isOnline ? (
-                  <span className="text-emerald-700 flex items-center gap-1 font-semibold">
-                    <Wifi className="w-3.5 h-3.5 text-emerald-600" /> Live Terhubung
-                  </span>
-                ) : (
-                  <span className="text-rose-600 flex items-center gap-1 font-semibold">
-                    <WifiOff className="w-3.5 h-3.5 text-rose-500" /> Offline / Terputus
-                  </span>
-                )}
-              </span>
-            </p>
+
+          {/* Quick Actions on Mobile (Sound, Refresh, Fullscreen) */}
+          <div className="flex md:hidden items-center gap-1 shrink-0">
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={`p-2 rounded-xl border transition cursor-pointer ${
+                soundEnabled
+                  ? "bg-brand-50 text-brand-800 border-brand-200 shadow-2xs"
+                  : "bg-white text-slate-400 border-slate-200"
+              }`}
+              title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={fetchTickets}
+              className="p-2 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition cursor-pointer"
+              title="Refresh Tiket"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer"
+              title={isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
           </div>
         </div>
 
-        {/* Station Filters & Controls */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+        {/* Station Filters & Controls (Desktop / Tablet / Horizontal Scroll on Mobile) */}
+        <div className="flex items-center justify-between md:justify-end gap-2 shrink-0 w-full md:w-auto overflow-x-auto no-scrollbar pb-0.5">
           {/* Station Pills */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shrink-0 flex-nowrap">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             {[
-              { id: "ALL", label: "Semua Stasiun", icon: Sparkles },
-              { id: "BAR", label: "Bar Minuman", icon: Coffee },
-              { id: "KITCHEN", label: "Kitchen Dapur", icon: UtensilsCrossed },
-              { id: "BAKERY", label: "Baker / Pastry", icon: Cake },
+              { id: "ALL", label: "Semua", fullLabel: "Semua Stasiun", icon: Sparkles },
+              { id: "BAR", label: "Bar", fullLabel: "Bar Minuman", icon: Coffee },
+              { id: "KITCHEN", label: "Dapur", fullLabel: "Kitchen Dapur", icon: UtensilsCrossed },
+              { id: "BAKERY", label: "Baker", fullLabel: "Baker / Pastry", icon: Cake },
             ].map((st) => {
               const IconComp = st.icon;
               return (
                 <button
                   key={st.id}
                   onClick={() => handleSelectStation(st.id)}
-                  className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer min-h-[36px] ${
                     stationFilter === st.id
                       ? "bg-white text-slate-950 font-black shadow-xs border border-slate-200"
                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                   }`}
                 >
                   <IconComp className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-                  <span>{st.label}</span>
+                  <span className="hidden sm:inline">{st.fullLabel}</span>
+                  <span className="sm:hidden">{st.label}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Sound Toggle */}
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`whitespace-nowrap shrink-0 p-2.5 rounded-xl border transition cursor-pointer ${
-              soundEnabled
-                ? "bg-brand-50 text-brand-800 border-brand-200 shadow-2xs"
-                : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
-            }`}
-            title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
-          </button>
-
-          {/* Refresh button */}
-          <button
-            onClick={fetchTickets}
-            className="whitespace-nowrap shrink-0 p-2.5 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition cursor-pointer"
-            title="Refresh Tiket"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          {onNavigateBack ? (
+          {/* Desktop Controls (Sound, Refresh, Fullscreen, Logout/Back) */}
+          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+            {/* Sound Toggle */}
             <button
-              onClick={onNavigateBack}
-              className="whitespace-nowrap shrink-0 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer"
-              title="Kembali ke Dashboard Manajemen"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={`p-2 rounded-xl border transition cursor-pointer ${
+                soundEnabled
+                  ? "bg-brand-50 text-brand-800 border-brand-200 shadow-2xs"
+                  : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
+              }`}
+              title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
             >
-              Kembali ke Web
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
             </button>
-          ) : (
+
+            {/* Refresh button */}
             <button
-              onClick={logout}
-              title="Keluar dari akun barista/kitchen"
-              className="whitespace-nowrap shrink-0 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              onClick={fetchTickets}
+              className="p-2 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition cursor-pointer"
+              title="Refresh Tiket"
             >
-              <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span>Keluar</span>
+              <RotateCcw className="w-4 h-4" />
             </button>
-          )}
+
+            {/* Fullscreen button */}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer"
+              title={isFullscreen ? "Keluar Layar Penuh" : "Mode Layar Penuh"}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+
+            {onNavigateBack ? (
+              <button
+                onClick={onNavigateBack}
+                className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs transition cursor-pointer"
+                title="Kembali ke Dashboard Manajemen"
+              >
+                Kembali ke Web
+              </button>
+            ) : (
+              <button
+                onClick={logout}
+                title="Keluar dari akun barista/kitchen"
+                className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
+                <span>Keluar</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -323,7 +386,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 items-start pb-6">
             {tickets.map((ticket) => {
               const minutes = getElapsedMinutes(ticket.createdAt);
               // Pewarnaan indikator waktu tunggu
@@ -476,13 +539,13 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                     })}
                   </div>
 
-                  {/* Card Bottom: Fast Action Buttons */}
+                  {/* Card Bottom: Fast Action Buttons (Touch-friendly 44px+ for Barista & Kitchen) */}
                   <div className="p-3 bg-slate-50 border-t border-slate-200 flex gap-2">
                     {ticket.kitchenStatus !== "READY" ? (
                       <>
                         <button
                           onClick={() => handleUpdateOrderStatus(ticket.id, "PREPARING")}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition border ${
+                          className={`flex-1 min-h-[44px] py-2.5 rounded-xl text-xs sm:text-sm font-bold transition border cursor-pointer active:scale-95 ${
                             isOrderPreparing
                               ? "bg-amber-500 text-slate-950 border-amber-600 font-black shadow-2xs"
                               : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
@@ -492,7 +555,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                         </button>
                         <button
                           onClick={() => handleUpdateOrderStatus(ticket.id, "READY")}
-                          className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="flex-1 min-h-[44px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs sm:text-sm font-black shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                           <span>Siap Saji</span>
@@ -501,7 +564,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                     ) : (
                       <button
                         onClick={() => handleUpdateOrderStatus(ticket.id, "SERVED")}
-                        className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        className="w-full min-h-[44px] py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                         <span>Selesai / Sudah Diantar (Tutup)</span>
