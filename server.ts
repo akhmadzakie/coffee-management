@@ -396,7 +396,7 @@ async function ensureTables() {
         notes TEXT
       )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
-        `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC DEFAULT 0`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_rate NUMERIC DEFAULT 0`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS approved_by TEXT`,
@@ -947,7 +947,7 @@ async function startServer() {
     let role = String(u.role || "MANAGER");
     if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
     if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
-    
+
     return {
       id: String(u.id || crypto.randomUUID()),
       username: String(u.username || ""),
@@ -965,7 +965,7 @@ async function startServer() {
     if (finalPin.length !== 64) {
       finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
     }
-    
+
     return {
       id: String(u.id || crypto.randomUUID()),
       username: String(u.username || ""),
@@ -1131,8 +1131,8 @@ async function startServer() {
     teamMembers: Array.isArray(s.teamMembers)
       ? JSON.stringify(s.teamMembers)
       : s.teamMembers
-      ? String(s.teamMembers)
-      : null,
+        ? String(s.teamMembers)
+        : null,
   });
 
   const sanitizePromotion = (p: any) => ({
@@ -1264,7 +1264,7 @@ async function startServer() {
       let employees: any[] = [];
       let employee_contracts: any[] = [];
       let attendance_records: any[] = [];
-            let kpi_records: any[] = [];
+      let kpi_records: any[] = [];
       let employee_shifts: any[] = [];
       let daily_checklists: any[] = [];
       let daily_attendances: any[] = [];
@@ -1490,7 +1490,7 @@ async function startServer() {
           try {
             const p = JSON.parse(val);
             if (Array.isArray(p)) return p;
-          } catch {}
+          } catch { }
         }
         return [];
       };
@@ -1617,7 +1617,7 @@ async function startServer() {
         }
         return false;
       });
-      
+
       if (!user) {
         return res.status(401).json({ error: "Username atau PIN salah" });
       }
@@ -1638,17 +1638,17 @@ async function startServer() {
         createdAt: new Date().toISOString(),
         status: "ACTIVE",
       };
-      
+
       if (isDbConnected) {
         try {
           await db.insert(schema.deviceSessions).values(newSession);
-        } catch {}
+        } catch { }
       }
       if (offlineState) {
         offlineState.device_sessions = offlineState.device_sessions || [];
         offlineState.device_sessions.push(newSession);
       }
-      
+
       const { pin: _, ...userWithoutPin } = user;
       res.json({ success: true, token: sessionId, user: userWithoutPin });
     } catch (e) {
@@ -1661,7 +1661,7 @@ async function startServer() {
     try {
       const authHeader = req.headers["authorization"] as string;
       const token = authHeader?.split(" ")[1];
-      
+
       if (!token) {
         return res.status(401).json({ error: "Unauthorized: No token provided" });
       }
@@ -1678,7 +1678,7 @@ async function startServer() {
           if (session) {
             requestUser = currentUsersDB.find(u => u.id === session.userId);
           }
-        } catch {}
+        } catch { }
       }
 
       if (!session && offlineState) {
@@ -1885,7 +1885,7 @@ async function startServer() {
         if (attendances !== undefined) {
           await tx.delete(schema.attendanceRecords);
         }
-                if (dailyAttendances !== undefined) await tx.delete(schema.dailyAttendances);
+        if (dailyAttendances !== undefined) await tx.delete(schema.dailyAttendances);
         if (dailyChecklists !== undefined) await tx.delete(schema.dailyChecklists);
         if (employeeShifts !== undefined) await tx.delete(schema.employeeShifts);
         if (contracts !== undefined) {
@@ -1950,7 +1950,7 @@ async function startServer() {
             await tx.insert(schema.employees).values(employees.map(sanitizeEmployee));
           }
         }
-                if (dailyAttendances !== undefined) {
+        if (dailyAttendances !== undefined) {
           if (Array.isArray(dailyAttendances) && dailyAttendances.length > 0) {
             await tx.insert(schema.dailyAttendances).values(dailyAttendances.map(sanitizeDailyAttendance));
           }
@@ -2078,7 +2078,16 @@ async function startServer() {
         }
         if (stock_opname_items !== undefined) {
           if (Array.isArray(stock_opname_items) && stock_opname_items.length > 0) {
-            await tx.insert(schema.stockOpnameItems).values(stock_opname_items.map(sanitizeStockOpnameItem));
+            try {
+              await tx.insert(schema.stockOpnameItems).values(stock_opname_items.map(sanitizeStockOpnameItem));
+            } catch (insErr: any) {
+              const withoutDiff = stock_opname_items.map((i: any) => {
+                const s = sanitizeStockOpnameItem(i);
+                const { difference, ...rest } = s;
+                return rest;
+              });
+              await tx.insert(schema.stockOpnameItems).values(withoutDiff as any);
+            }
           }
         }
         if (device_sessions !== undefined) {
@@ -2376,9 +2385,9 @@ async function startServer() {
     try {
       const authHeader = req.headers["authorization"] as string;
       const token = authHeader?.split(" ")[1];
-      
+
       if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
-      
+
       const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
       const session = sessions[0];
       if (!session) return res.status(401).json({ error: "Unauthorized: Invalid session" });
@@ -2466,7 +2475,7 @@ async function startServer() {
     try {
       const authHeader = req.headers["authorization"] as string;
       const token = authHeader?.split(" ")[1];
-      
+
       if (!token) {
         return res.status(401).json({ error: "Unauthorized: No token provided" });
       }
@@ -2543,7 +2552,7 @@ async function startServer() {
           const allRecipes = await tx.select().from(schema.recipes);
           const allIngredients = await tx.select().from(schema.ingredients);
           const stockMovementsToInsert: any[] = [];
-          
+
           for (const s of transactions) {
             const recipe = allRecipes.find(r => r.menuName.toLowerCase() === s.menuName.toLowerCase());
             if (recipe) {
@@ -2582,7 +2591,7 @@ async function startServer() {
               }
             }
           }
-          
+
           if (stockMovementsToInsert.length > 0) {
             await tx.insert(schema.stockMovements).values(stockMovementsToInsert);
           }
@@ -2647,7 +2656,41 @@ async function startServer() {
   );
 
   // ─── AI ASSISTANT API ──────────────────────────────────────────────────────
-  const GEMINI_MODEL = "gemini-2.5-flash";
+  const GEMINI_CANDIDATE_MODELS = [
+    process.env.GEMINI_MODEL,
+    "gemini-3.8-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+  ].filter(Boolean) as string[];
+
+  async function generateContentWithFallback(ai: any, requestConfig: any) {
+    let lastErr: any = null;
+    for (const model of GEMINI_CANDIDATE_MODELS) {
+      try {
+        const { response } = await generateContentWithFallback(ai, {
+          ...requestConfig,
+          model,
+        });
+        return { response, model };
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || "");
+        if (
+          msg.includes("404") ||
+          msg.includes("not found") ||
+          msg.includes("no longer available") ||
+          msg.includes("NOT_FOUND") ||
+          err?.status === 404
+        ) {
+          console.warn(`Gemini model ${model} unavailable, trying fallback model...`);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr;
+  }
+  const GEMINI_MODEL = GEMINI_CANDIDATE_MODELS[0] || "gemini-3.8-flash";
 
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
@@ -2657,7 +2700,7 @@ async function startServer() {
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
         else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch {}
+      } catch { }
 
       // Extract text content if it's a text-based, CSV, or JSON document
       let effectiveText = text || "";
@@ -2764,9 +2807,9 @@ async function startServer() {
 
       const ai = new GoogleGenAI({ apiKey });
       const contents: any[] = [];
-      
+
       let promptText = "You are an AI assistant for a Coffee Shop management system. ";
-      
+
       if (imageBase64) {
         const isPdf = mimeType === "application/pdf" || fileName?.toLowerCase().endsWith(".pdf");
         const isImage = mimeType?.startsWith("image/") || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif|heic)$/);
@@ -2783,17 +2826,17 @@ async function startServer() {
           });
         }
       }
-      
+
       if (effectiveText) {
         promptText += "The user input / document text is: '" + effectiveText + "'. ";
         promptText += "Parse this text and extract any expenses, incomes, or stock updates. ";
       }
-      
+
       promptText += "Return the result strictly as a JSON object matching this schema: { transactions: [{ type: 'CASH_OUT' | 'CASH_IN', amount: number, category: string, description: string }] }";
 
       contents.push({ text: promptText });
 
-      const response = await ai.models.generateContent({
+      const { response } = await generateContentWithFallback(ai, {
         model: GEMINI_MODEL,
         contents,
         config: {
@@ -2823,7 +2866,7 @@ async function startServer() {
       if (!jsonStr) {
         throw new Error("Empty response from Gemini");
       }
-      
+
       const result = JSON.parse(jsonStr);
       res.json(result);
     } catch (e: any) {
@@ -2845,7 +2888,7 @@ async function startServer() {
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
         else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch {}
+      } catch { }
 
       // Fallback NLP parser function (handles offline or when Gemini is unreachable)
       const parseLocalNaturalEntry = () => {
@@ -2854,9 +2897,11 @@ async function startServer() {
         const transactions: any[] = [];
 
         for (const sentence of sentences) {
-          // Detect amount
+          // Bersihkan dimensi ukuran barang (misal 80x100) agar tidak tertukar jadi nominal harga
+          const sanitizedSentence = sentence.replace(/\b\d+\s*[*xX]\s*\d+\b/g, " ");
           let amount = 0;
-          const matchNumber = sentence.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
+          const rpMatch = sanitizedSentence.match(/(?:rp|rp\.?|seharga|total|harga|biaya|nilai)\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
+          const matchNumber = rpMatch || sanitizedSentence.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
           if (matchNumber) {
             let num = parseFloat(matchNumber[1].replace(",", "."));
             const unit = (matchNumber[2] || "").toLowerCase();
@@ -2878,7 +2923,7 @@ async function startServer() {
             category = "Bahan Baku";
           } else if (/es|ice|galon|air|cup|lid|sedotan|straw|paper|seal|plastik/i.test(sentence)) {
             category = "Operasional Bar";
-          } else if (/sabun|sunlight|sampah|tissue|tisu|pel|sapu|lap|kebersihan/i.test(sentence)) {
+          } else if (/sabun|sunlight|sampah|tissue|tisu|pel|sapu|lap|kebersihan|kantong|plastik/i.test(sentence)) {
             category = "Kebersihan & Sanitasi";
           } else if (/listrik|pln|wifi|indihome|pdam|gas|lpg/i.test(sentence)) {
             category = "Utilitas";
@@ -2949,12 +2994,15 @@ Teks Catatan: "${text}"
 
 Aturan Pemrosesan:
 1. Pahami satuan angka: "25rb" = 25000, "150k" = 150000, "1.2jt" = 1200000.
-2. Tentukan type: "CASH_OUT" untuk belanja/beli/bayar/keluar, "CASH_IN" untuk pemasukan/terima/omset.
+2. Abaikan format dimensi ukuran (misal 80x100, 30x40). Jangan jadikan ukuran sebagai nominal harga!
+3. Prioritaskan angka dengan awalan 'Rp', 'harga', atau 'total' sebagai nominal transaksi.
+4. Tentukan type: "CASH_OUT" untuk belanja/beli/bayar/keluar, "CASH_IN" untuk pemasukan/terima/omset.
+5. Untuk CASH_OUT (misal plastik sampah, sabun, kantong), jangan pernah gunakan kategori Pendapatan, gunakan kategori biaya operasional/kebersihan.
 3. Cocokkan accountName jika pengguna menyebut "laci/kasir", "bank/bca", atau "kas utama".
 4. Jika nama bahan disebutkan (susu, beans, es, gula aren, galon, dsb), cocokkan ingredientId & ingredientName dari daftar bahan baku, sertakan quantity dan unitnya.
 5. Buat summary bahasa Indonesia yang ringkas dan ramah.`;
 
-          const response = await ai.models.generateContent({
+          const { response } = await generateContentWithFallback(ai, {
             model: GEMINI_MODEL,
             contents: [{ text: prompt }],
             config: {
@@ -3015,7 +3063,7 @@ Aturan Pemrosesan:
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
         else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch {}
+      } catch { }
 
       const prompt = `Anda adalah "Julia Coffee AI Copilot" — penasihat bisnis eksekutif untuk "Julia's Specialty Room • Coffee • Eatery".
 Berdasarkan data performa toko berikut:
@@ -3032,7 +3080,7 @@ Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas d
       if (apiKey) {
         try {
           const ai = new GoogleGenAI({ apiKey });
-          const response = await ai.models.generateContent({
+          const { response } = await generateContentWithFallback(ai, {
             model: GEMINI_MODEL,
             contents: [{ text: prompt }],
             config: { temperature: 0.6 },
@@ -3105,7 +3153,7 @@ Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas d
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
         else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch {}
+      } catch { }
 
       const systemInstruction = `Anda adalah "Julia Coffee AI Copilot" — konsultan bisnis eksekutif dan pakar operasional specialty coffee shop Indonesia.
 Tugas Anda:
@@ -3118,7 +3166,7 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
       if (apiKey) {
         try {
           const ai = new GoogleGenAI({ apiKey });
-          
+
           const contents = [];
           if (Array.isArray(chatHistory)) {
             for (const item of chatHistory.slice(-6)) {
@@ -3135,7 +3183,7 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
             parts: [{ text: message }]
           });
 
-          const response = await ai.models.generateContent({
+          const { response } = await generateContentWithFallback(ai, {
             model: GEMINI_MODEL,
             contents,
             config: {
@@ -3381,7 +3429,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 isDuplicate: true,
               });
             }
-          } catch {}
+          } catch { }
         } else if (offlineState) {
           const existing = (offlineState.orders || []).find((o: any) => o.idempotencyKey === idempotencyKey);
           if (existing) {
@@ -3511,7 +3559,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               let recIngredients: { ingredientId: string; quantity: number }[] = [];
               try {
                 recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch {}
+              } catch { }
 
               for (const rIng of recIngredients) {
                 const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
@@ -3652,41 +3700,41 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
             if (rec.length > 0) {
               let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch {}
+              try {
+                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+              } catch { }
 
-                for (const rIng of recIngredients) {
-                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (usedQty > 0) {
-                    await tx.insert(schema.stockMovements).values({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "USAGE",
-                      quantity: usedQty,
-                      date: nowIso,
-                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
-                      createdBy: cashierName || "Kasir",
-                      referenceId: orderId,
-                    });
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (usedQty > 0) {
+                  await tx.insert(schema.stockMovements).values({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
+                    createdBy: cashierName || "Kasir",
+                    referenceId: orderId,
+                  });
 
-                    const currentIng = await tx
-                      .select()
-                      .from(schema.ingredients)
-                      .where(eq(schema.ingredients.id, rIng.ingredientId))
-                      .limit(1);
-                    if (currentIng.length > 0) {
-                      const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                      await tx
-                        .update(schema.ingredients)
-                        .set({ currentStock: newStock })
-                        .where(eq(schema.ingredients.id, rIng.ingredientId));
-                    }
+                  const currentIng = await tx
+                    .select()
+                    .from(schema.ingredients)
+                    .where(eq(schema.ingredients.id, rIng.ingredientId))
+                    .limit(1);
+                  if (currentIng.length > 0) {
+                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                    await tx
+                      .update(schema.ingredients)
+                      .set({ currentStock: newStock })
+                      .where(eq(schema.ingredients.id, rIng.ingredientId));
                   }
                 }
               }
             }
           }
+        }
       });
 
       const createdOrder = (
@@ -3799,7 +3847,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             let recIngredients: { ingredientId: string; quantity: number }[] = [];
             try {
               recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-            } catch {}
+            } catch { }
 
             for (const rIng of recIngredients) {
               const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
@@ -3914,40 +3962,40 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
           if (rec.length > 0) {
             let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-              } catch {}
+            try {
+              recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+            } catch { }
 
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (usedQty > 0) {
-                  await tx.insert(schema.stockMovements).values({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
-                    createdBy: cashierName || currentOrder.cashierName || "Kasir",
-                    referenceId: orderId,
-                  });
+            for (const rIng of recIngredients) {
+              const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+              if (usedQty > 0) {
+                await tx.insert(schema.stockMovements).values({
+                  id: crypto.randomUUID(),
+                  ingredientId: rIng.ingredientId,
+                  type: "USAGE",
+                  quantity: usedQty,
+                  date: nowIso,
+                  note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
+                  createdBy: cashierName || currentOrder.cashierName || "Kasir",
+                  referenceId: orderId,
+                });
 
-                  const currentIng = await tx
-                    .select()
-                    .from(schema.ingredients)
-                    .where(eq(schema.ingredients.id, rIng.ingredientId))
-                    .limit(1);
-                  if (currentIng.length > 0) {
-                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                    await tx
-                      .update(schema.ingredients)
-                      .set({ currentStock: newStock })
-                      .where(eq(schema.ingredients.id, rIng.ingredientId));
-                  }
+                const currentIng = await tx
+                  .select()
+                  .from(schema.ingredients)
+                  .where(eq(schema.ingredients.id, rIng.ingredientId))
+                  .limit(1);
+                if (currentIng.length > 0) {
+                  const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                  await tx
+                    .update(schema.ingredients)
+                    .set({ currentStock: newStock })
+                    .where(eq(schema.ingredients.id, rIng.ingredientId));
                 }
               }
             }
           }
+        }
       });
 
       const updatedOrder = (
@@ -4027,7 +4075,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               let recIngredients: { ingredientId: string; quantity: number }[] = [];
               try {
                 recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch {}
+              } catch { }
               for (const rIng of recIngredients) {
                 const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
                 if (returnQty > 0) {
@@ -4150,7 +4198,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 let recIngredients: { ingredientId: string; quantity: number }[] = [];
                 try {
                   recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch {}
+                } catch { }
 
                 for (const rIng of recIngredients) {
                   const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
@@ -4308,7 +4356,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               let recIngredients: { ingredientId: string; quantity: number }[] = [];
               try {
                 recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch {}
+              } catch { }
               for (const rIng of recIngredients) {
                 const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
                 if (returnQty > 0) {
@@ -4342,7 +4390,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               let recIngredients: { ingredientId: string; quantity: number }[] = [];
               try {
                 recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch {}
+              } catch { }
               for (const rIng of recIngredients) {
                 const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
                 if (wasteQty > 0) {
@@ -4469,7 +4517,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 let recIngredients: { ingredientId: string; quantity: number }[] = [];
                 try {
                   recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch {}
+                } catch { }
 
                 for (const rIng of recIngredients) {
                   const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
@@ -4519,7 +4567,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 let recIngredients: { ingredientId: string; quantity: number }[] = [];
                 try {
                   recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch {}
+                } catch { }
 
                 for (const rIng of recIngredients) {
                   const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
@@ -4748,7 +4796,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               const usersList = await db.select().from(schema.users).where(eq(schema.users.id, sessions[0].userId));
               authUser = usersList[0];
             }
-          } catch {}
+          } catch { }
         }
         if (!authUser && offlineState) {
           const s = (offlineState.device_sessions || []).find((ds: any) => ds.id === token);
@@ -4812,7 +4860,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
                 if (rec) {
                   let ings: any[] = [];
-                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch {}
+                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch { }
                   for (const ri of ings) {
                     const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
                     if (returnQty > 0) {
@@ -4838,7 +4886,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
                 if (rec) {
                   let ings: any[] = [];
-                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch {}
+                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch { }
                   for (const ri of ings) {
                     const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
                     if (wasteQty > 0) {
@@ -4938,7 +4986,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                   const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
                   if (rec.length > 0) {
                     let ings: any[] = [];
-                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch {}
+                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch { }
                     for (const ri of ings) {
                       const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
                       if (returnQty > 0) {
@@ -4972,7 +5020,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                   const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
                   if (rec.length > 0) {
                     let ings: any[] = [];
-                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch {}
+                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch { }
                     for (const ri of ings) {
                       const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
                       if (wasteQty > 0) {
@@ -5524,7 +5572,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         const settings = await db.select().from(schema.settings).limit(1);
         if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
         else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch {}
+      } catch { }
 
       const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
       res.json({
@@ -5561,7 +5609,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       }
 
       const ai = new GoogleGenAI({ apiKey: keyToTest.trim() });
-      const response = await ai.models.generateContent({
+      const { response } = await generateContentWithFallback(ai, {
         model: "gemini-2.5-flash",
         contents: [{ text: "Tes koneksi. Jawab singkat: OK!" }],
       });
@@ -5569,7 +5617,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       return res.json({
         success: true,
         reply: response.text?.trim() || "OK!",
-        message: "Koneksi ke Google Gemini 2.5 Flash berhasil!",
+        message: "Koneksi ke Google Gemini AI (3.8 Flash) berhasil!",
       });
     } catch (err: any) {
       console.error("Gemini test connection failed:", err);

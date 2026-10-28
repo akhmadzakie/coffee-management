@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { createPortal } from "react-dom";
+
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
 import {
@@ -1550,7 +1550,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 onClick={() => {
                   if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
                   setSelectedIngredientForMove(accessibleIngredients[0].id);
-                  setMovementType(currentUser?.role === "LEADER" ? "USAGE" : "OUT");
+                  setMovementType("USAGE");
                   setMovementNote("");
                   setIsAddMovementOpen(true);
                 }}
@@ -3348,7 +3348,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
       {/* ── MODAL: TAMBAH & EDIT BAHAN BAKU ───────────────────────────────── */}
       <AnimatePresence>
-        {isIngredientModalOpen && createPortal(
+        {isIngredientModalOpen && (
           <motion.div
             key="ingredient-modal-backdrop"
             initial={{ opacity: 0 }}
@@ -3706,14 +3706,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </div>
             </form>
             </motion.div>
-          </motion.div>,
-          document.body
+          </motion.div>
+
         )}
       </AnimatePresence>
 
       {/* ── MODAL: CATAT PEMAKAIAN & WASTE ───────────────────────────────── */}
       <AnimatePresence>
-        {isAddMovementOpen && createPortal(
+        {isAddMovementOpen && (
           <motion.div
             key="movement-modal-backdrop"
             initial={{ opacity: 0 }}
@@ -4039,8 +4039,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </div>
             </form>
             </motion.div>
-          </motion.div>,
-          document.body
+          </motion.div>
+
         )}
       </AnimatePresence>
 
@@ -4061,7 +4061,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
       {/* ── MODAL RINCIAN OPNAME DETAIL ───────────────────────────────────── */}
       <AnimatePresence>
-        {selectedOpnameForView && createPortal(
+        {selectedOpnameForView && (
           <motion.div
             key="opname-detail-backdrop"
             initial={{ opacity: 0 }}
@@ -4119,42 +4119,58 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {stockOpnameItems
-                      .filter((i) => i.opnameId === selectedOpnameForView.id)
-                      .map((item) => {
-                        const ing = ingredients.find((i) => i.id === item.ingredientId);
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="p-3 font-bold text-slate-900">
-                              {ing ? ing.name : "Bahan Terhapus"}{" "}
-                              {ing && <span className="text-slate-400 font-normal">({ing.unit})</span>}
-                            </td>
-                            <td className="p-3 text-center font-mono text-slate-600">
-                              {item.systemStock.toLocaleString("id-ID")}
-                            </td>
-                            <td className="p-3 text-center font-mono font-bold text-slate-900">
-                              {item.physicalStock.toLocaleString("id-ID")}
-                            </td>
-                            <td className={`p-3 text-center font-mono font-bold ${
-                              item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-slate-500"
-                            }`}>
-                              {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")}
-                            </td>
-                            <td className="p-3 text-slate-500">
-                              {item.notes || "-"}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                    {stockOpnameItems.filter((i) => i.opnameId === selectedOpnameForView.id).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400">
+                          <ClipboardList className="w-7 h-7 mx-auto mb-2 text-slate-300" />
+                          <p className="font-semibold text-xs text-slate-600">Belum ada rincian item tercatat pada sesi ini.</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Sesi ini mungkin disimpan sebagai draf awal tanpa item.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      stockOpnameItems
+                        .filter((i) => i.opnameId === selectedOpnameForView.id)
+                        .map((item) => {
+                          const ing = ingredients.find((i) => i.id === item.ingredientId);
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="p-3 font-bold text-slate-900">
+                                {ing ? ing.name : "Bahan Terhapus"}{" "}
+                                {ing && <span className="text-slate-400 font-normal">({ing.unit})</span>}
+                              </td>
+                              <td className="p-3 text-center font-mono text-slate-600">
+                                {item.systemStock.toLocaleString("id-ID")}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-slate-900">
+                                {item.physicalStock.toLocaleString("id-ID")}
+                              </td>
+                              <td className={`p-3 text-center font-mono font-bold ${
+                                item.difference < 0 ? "text-rose-600" : item.difference > 0 ? "text-emerald-600" : "text-slate-500"
+                              }`}>
+                                {item.difference > 0 ? `+${item.difference.toLocaleString("id-ID")}` : item.difference.toLocaleString("id-ID")}
+                              </td>
+                              <td className="p-3 text-slate-500">
+                                {item.notes || "-"}
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
                   </tbody>
                 </table>
               </div>
 
               {/* MOBILE VIEW: Cards Feed */}
               <div className="block sm:hidden divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
-                {stockOpnameItems
-                  .filter((i) => i.opnameId === selectedOpnameForView.id)
-                  .map((item) => {
+                {stockOpnameItems.filter((i) => i.opnameId === selectedOpnameForView.id).length === 0 ? (
+                  <div className="p-6 text-center text-slate-400">
+                    <ClipboardList className="w-6 h-6 mx-auto mb-1.5 text-slate-300" />
+                    <p className="font-semibold text-xs text-slate-600">Belum ada rincian item tercatat.</p>
+                  </div>
+                ) : (
+                  stockOpnameItems
+                    .filter((i) => i.opnameId === selectedOpnameForView.id)
+                    .map((item) => {
                     const ing = ingredients.find((i) => i.id === item.ingredientId);
                     return (
                       <div key={item.id} className="p-3.5 space-y-1.5 hover:bg-slate-50/60 transition-colors">
@@ -4179,7 +4195,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         )}
                       </div>
                     );
-                  })}
+                  }))}
               </div>
             </div>
 
@@ -4214,14 +4230,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </div>
             </div>
           </motion.div>
-        </motion.div>,
-        document.body
+        </motion.div>
+
       )}
     </AnimatePresence>
 
     {/* ── MODAL: CATAT CEPAT WASTE & SPOILAGE ─────────────────────────── */}
     <AnimatePresence>
-      {isQuickWasteOpen && createPortal(
+      {isQuickWasteOpen && (
         <motion.div
           key="quick-waste-backdrop"
           initial={{ opacity: 0 }}
@@ -4441,8 +4457,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </div>
             </form>
           </motion.div>
-        </motion.div>,
-        document.body
+        </motion.div>
+
       )}
     </AnimatePresence>
     </div>

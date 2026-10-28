@@ -29,6 +29,12 @@ import {
   User,
   Coffee,
   Lock,
+  Utensils,
+  ShoppingBag,
+  AlertTriangle,
+  CheckCircle2,
+  Users,
+  ShieldAlert,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
@@ -91,6 +97,7 @@ export const Sales = () => {
     addSalesTransactions,
     isReadOnly,
     closedPeriods = [],
+    shifts = [],
   } = useStore();
 
   const isPeriodClosed = (dateStr: string) => {
@@ -100,7 +107,7 @@ export const Sales = () => {
   };
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
-  const [activeTab, setActiveTab] = useState<"daily_recap" | "pos_orders" | "sales" | "logs">("daily_recap");
+  const [activeTab, setActiveTab] = useState<"cashier_analytics" | "daily_recap" | "pos_orders" | "sales" | "logs">("cashier_analytics");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
@@ -280,7 +287,7 @@ export const Sales = () => {
   };
 
   useEffect(() => {
-    if (activeTab === "pos_orders") {
+    if (activeTab === "pos_orders" || activeTab === "cashier_analytics") {
       fetchPosOrders();
     }
   }, [activeTab, posStatusFilter, posStartDate, posEndDate]);
@@ -314,6 +321,133 @@ export const Sales = () => {
       paidCount,
       openCount,
       voidCount,
+    };
+  }, [posOrders]);
+
+  // Hitung metrik analitik mendalam kasir & shift
+  const cashierAnalytics = useMemo(() => {
+    let dineInCount = 0;
+    let dineInRevenue = 0;
+    let takeAwayCount = 0;
+    let takeAwayRevenue = 0;
+    let deliveryCount = 0;
+    let deliveryRevenue = 0;
+
+    let cashRevenue = 0;
+    let qrisRevenue = 0;
+    let edcRevenue = 0;
+    let transferRevenue = 0;
+
+    let voidCount = 0;
+    let voidTotal = 0;
+    let refundCount = 0;
+    let refundTotal = 0;
+
+    const hourlyMap: Record<number, { count: number; revenue: number }> = {};
+    for (let h = 7; h <= 23; h++) {
+      hourlyMap[h] = { count: 0, revenue: 0 };
+    }
+
+    const itemSalesMap: Record<string, { name: string; quantity: number; total: number }> = {};
+
+    posOrders.forEach((ord) => {
+      const isPaid = ord.status === "PAID";
+      const isVoid = ord.status === "VOID" || ord.status === "CANCELLED";
+      const isRefund = ord.status === "REFUNDED" || (ord.notes && ord.notes.toLowerCase().includes("refund"));
+
+      if (isVoid) {
+        voidCount++;
+        voidTotal += Number(ord.totalAmount) || Number(ord.subtotal) || 0;
+      }
+
+      if (isRefund) {
+        refundCount++;
+        refundTotal += Number(ord.totalAmount) || 0;
+      }
+
+      if (isPaid) {
+        const orderType = (ord.orderType || "").toUpperCase();
+        const amt = Number(ord.totalAmount) || 0;
+
+        if (orderType === "DINE_IN") {
+          dineInCount++;
+          dineInRevenue += amt;
+        } else if (orderType === "TAKE_AWAY") {
+          takeAwayCount++;
+          takeAwayRevenue += amt;
+        } else if (orderType === "DELIVERY") {
+          deliveryCount++;
+          deliveryRevenue += amt;
+        } else {
+          dineInCount++;
+          dineInRevenue += amt;
+        }
+
+        // Breakdown payments
+        if (Array.isArray(ord.payments) && ord.payments.length > 0) {
+          ord.payments.forEach((p) => {
+            const method = (p.paymentMethod || "").toUpperCase();
+            const pAmt = Number(p.amount) || 0;
+            if (method === "CASH" || method === "TUNAI") cashRevenue += pAmt;
+            else if (method.includes("QRIS")) qrisRevenue += pAmt;
+            else if (method.includes("DEBIT") || method.includes("EDC") || method.includes("CREDIT")) edcRevenue += pAmt;
+            else if (method.includes("TRANSFER")) transferRevenue += pAmt;
+            else cashRevenue += pAmt;
+          });
+        }
+
+        // Hourly distribution
+        const dateObj = new Date(ord.createdAt);
+        const hour = dateObj.getHours();
+        if (hourlyMap[hour]) {
+          hourlyMap[hour].count++;
+          hourlyMap[hour].revenue += amt;
+        }
+
+        // Items sold
+        if (Array.isArray(ord.items)) {
+          ord.items.forEach((item) => {
+            const key = item.productName || "Produk";
+            if (!itemSalesMap[key]) {
+              itemSalesMap[key] = { name: key, quantity: 0, total: 0 };
+            }
+            itemSalesMap[key].quantity += Number(item.quantity) || 1;
+            itemSalesMap[key].total += Number(item.subtotal) || 0;
+          });
+        }
+      }
+    });
+
+    const topItems = Object.values(itemSalesMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    const totalPaidOrders = dineInCount + takeAwayCount + deliveryCount;
+    const totalOrderRevenue = dineInRevenue + takeAwayRevenue + deliveryRevenue;
+    const maxHourlyCount = Math.max(1, ...Object.values(hourlyMap).map((h) => h.count));
+
+    return {
+      dineInCount,
+      dineInRevenue,
+      dineInPercent: totalOrderRevenue > 0 ? Math.round((dineInRevenue / totalOrderRevenue) * 100) : 0,
+      takeAwayCount,
+      takeAwayRevenue,
+      takeAwayPercent: totalOrderRevenue > 0 ? Math.round((takeAwayRevenue / totalOrderRevenue) * 100) : 0,
+      deliveryCount,
+      deliveryRevenue,
+      cashRevenue,
+      qrisRevenue,
+      edcRevenue,
+      transferRevenue,
+      voidCount,
+      voidTotal,
+      refundCount,
+      refundTotal,
+      hourlyMap,
+      maxHourlyCount,
+      topItems,
+      totalPaidOrders,
+      totalOrderRevenue,
     };
   }, [posOrders]);
 
@@ -496,6 +630,22 @@ export const Sales = () => {
         <div className="px-4 sm:px-7 py-3 bg-slate-50/70 border-t border-slate-200/80 flex items-center overflow-x-auto no-scrollbar">
           <div className="inline-flex items-center gap-1.5 p-1 bg-slate-200/60 rounded-2xl border border-slate-200/80 shrink-0">
             <button
+              onClick={() => setActiveTab("cashier_analytics")}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "cashier_analytics" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {activeTab === "cashier_analytics" && (
+                <motion.div
+                  layoutId="salesMainTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <Sparkles className="w-4 h-4 text-brand-600 relative z-10" />
+              <span className="relative z-10">Dasbor & Audit Kasir</span>
+            </button>
+            <button
               onClick={() => setActiveTab("daily_recap")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "daily_recap" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
@@ -620,6 +770,374 @@ export const Sales = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── TAB 0: DASBOR & AUDIT KASIR ─────────────────────────────────────── */}
+      {activeTab === "cashier_analytics" && (
+        <div className="space-y-6">
+          {/* Top Actions & Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-500 font-semibold flex items-center gap-1.5 whitespace-nowrap">
+                <Calendar className="w-3.5 h-3.5 text-brand-600" />
+                Periode Transaksi:
+              </span>
+              <div className="flex items-center gap-1.5">
+                <CustomDatePicker
+                  value={posStartDate}
+                  onChange={setPosStartDate}
+                  placeholder="Mulai"
+                  buttonClassName="py-1 px-3 text-xs bg-slate-50 border-slate-200 rounded-xl"
+                />
+                <span className="text-slate-400 font-semibold">s/d</span>
+                <CustomDatePicker
+                  value={posEndDate}
+                  onChange={setPosEndDate}
+                  placeholder="Sampai"
+                  buttonClassName="py-1 px-3 text-xs bg-slate-50 border-slate-200 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={fetchPosOrders}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-brand-600 ${isLoadingPosOrders ? "animate-spin" : ""}`} />
+                <span>Segarkan Data</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Bento KPI Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Total Omzet Kasir */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 p-5 text-white border border-white/10 shadow-xl">
+              <div className="absolute top-0 right-0 w-36 h-36 bg-brand-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative z-10 flex flex-col justify-between h-full space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-brand-300 border border-white/10 flex items-center gap-1.5">
+                    <Receipt className="w-3 h-3 text-brand-400" />
+                    Omzet Kasir
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-brand-300">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    {formatCurrency(cashierAnalytics.totalOrderRevenue)}
+                  </h3>
+                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                    {cashierAnalytics.totalPaidOrders} Transaksi Sukses Lunas
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Saluran Dine In vs Take Away */}
+            <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-200/70">
+                    Saluran Pesanan
+                  </span>
+                  <div className="w-9 h-9 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs">
+                    <Utensils className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-semibold flex items-center gap-1.5">
+                      <Utensils className="w-3 h-3 text-brand-600" /> Dine In
+                    </span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {cashierAnalytics.dineInPercent}% ({formatCurrency(cashierAnalytics.dineInRevenue)})
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                    <div
+                      className="bg-brand-600 h-full transition-all"
+                      style={{ width: `${cashierAnalytics.dineInPercent}%` }}
+                    />
+                    <div
+                      className="bg-amber-500 h-full transition-all"
+                      style={{ width: `${cashierAnalytics.takeAwayPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-semibold flex items-center gap-1.5">
+                      <ShoppingBag className="w-3 h-3 text-amber-600" /> Take Away
+                    </span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {cashierAnalytics.takeAwayPercent}% ({formatCurrency(cashierAnalytics.takeAwayRevenue)})
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Dine In: {cashierAnalytics.dineInCount} meja • Take Away: {cashierAnalytics.takeAwayCount} bungkus
+              </p>
+            </div>
+
+            {/* Card 3: Audit Kebocoran (Void & Pembatalan) */}
+            <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs hover:border-rose-300 transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/70 flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3 text-rose-600" />
+                    Audit Void & Batal
+                  </span>
+                  <div className="w-9 h-9 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shadow-2xs">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-rose-600 tracking-tight">
+                  {formatCurrency(cashierAnalytics.voidTotal)}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  {cashierAnalytics.voidCount} Pesanan Dibatalkan
+                </p>
+              </div>
+              <div className="pt-2 border-t border-slate-100 mt-2 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Refund: {cashierAnalytics.refundCount} trx</span>
+                <span className="font-mono font-bold text-slate-700">{formatCurrency(cashierAnalytics.refundTotal)}</span>
+              </div>
+            </div>
+
+            {/* Card 4: Pecahan Kas vs Non-Tunai */}
+            <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                    Penerimaan Kas
+                  </span>
+                  <div className="w-9 h-9 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-2xs">
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500">Tunai Laci:</span>
+                    <span className="font-mono font-bold text-emerald-600">
+                      {formatCurrency(cashierAnalytics.cashRevenue)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500">QRIS / EDC / Trf:</span>
+                    <span className="font-mono font-bold text-sky-600">
+                      {formatCurrency(cashierAnalytics.qrisRevenue + cashierAnalytics.edcRevenue + cashierAnalytics.transferRevenue)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Rasio Tunai: {cashierAnalytics.totalOrderRevenue > 0 ? Math.round((cashierAnalytics.cashRevenue / cashierAnalytics.totalOrderRevenue) * 100) : 0}%
+              </p>
+            </div>
+          </div>
+
+          {/* Dual Column: Tren Jam Sibuk & Top Produk */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Visual Tren Jam Sibuk Kasir (2 Cols) */}
+            <div className="lg:col-span-2 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Tren Jam Sibuk Kasir (Hourly Peak Hours)</h3>
+                    <p className="text-[11px] text-slate-500">Distribusi jumlah transaksi kasir berdasarkan jam buka toko</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hourly Histogram Chart */}
+              <div className="pt-4 pb-2">
+                <div className="flex items-end justify-between gap-1.5 h-36 px-2">
+                  {(Object.entries(cashierAnalytics.hourlyMap) as [string, { count: number; revenue: number }][]).map(([hourStr, data]) => {
+                    const h = Number(hourStr);
+                    const heightPercent = cashierAnalytics.maxHourlyCount > 0 ? Math.max(8, (data.count / cashierAnalytics.maxHourlyCount) * 100) : 8;
+                    const isPeak = data.count === cashierAnalytics.maxHourlyCount && data.count > 0;
+
+                    return (
+                      <div key={h} className="flex-1 flex flex-col items-center gap-1.5 group relative">
+                        {/* Tooltip on hover */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-10 bg-slate-900 text-white text-[10px] py-1 px-2 rounded-lg pointer-events-none whitespace-nowrap z-20 shadow-md">
+                          Jam {String(h).padStart(2, "0")}:00 • {data.count} trx ({formatCurrency(data.revenue)})
+                        </div>
+                        <div className="w-full h-28 flex items-end">
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: `${heightPercent}%` }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            className={`w-full rounded-t-lg transition-colors cursor-pointer ${
+                              isPeak
+                                ? "bg-gradient-to-t from-brand-600 to-rose-500"
+                                : data.count > 0
+                                ? "bg-brand-500 hover:bg-brand-600"
+                                : "bg-slate-100"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 group-hover:text-slate-800">
+                          {String(h).padStart(2, "0")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Top 5 Menu Terlaris di Kasir (1 Col) */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                    <Coffee className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Top 5 Menu Kasir</h3>
+                    <p className="text-[11px] text-slate-500">Menu paling banyak terjual</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {cashierAnalytics.topItems.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-6">Belum ada item transaksi tercatat</p>
+                  ) : (
+                    cashierAnalytics.topItems.map((item, idx) => (
+                      <div key={item.name} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                            idx === 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {idx + 1}
+                          </span>
+                          <span className="font-bold text-slate-800 truncate">{item.name}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-bold font-mono text-slate-900">{item.quantity} cup</span>
+                          <span className="text-[10px] text-slate-400 block">{formatCurrency(item.total)}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Methods Breakdown */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">Pecahan Pembayaran:</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[10px]">Tunai</span>
+                    <strong className="font-mono text-slate-800">{formatCurrency(cashierAnalytics.cashRevenue)}</strong>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[10px]">QRIS</span>
+                    <strong className="font-mono text-slate-800">{formatCurrency(cashierAnalytics.qrisRevenue)}</strong>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[10px]">Debit / EDC</span>
+                    <strong className="font-mono text-slate-800">{formatCurrency(cashierAnalytics.edcRevenue)}</strong>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-400 block text-[10px]">Transfer</span>
+                    <strong className="font-mono text-slate-800">{formatCurrency(cashierAnalytics.transferRevenue)}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Audit Log Void & Pembatalan Transaksi */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">Audit Riwayat Void & Pembatalan Kasir</h3>
+                  <p className="text-[11px] text-slate-500">Deteksi alasan pembatalan dan supervisor yang mengotorisasi via PIN</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                {posOrders.filter(o => o.status === "VOID" || o.status === "CANCELLED").length} Transaksi Void
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+                    <th className="p-3.5">Waktu & Tanggal</th>
+                    <th className="p-3.5">No. Struk</th>
+                    <th className="p-3.5">Kasir Pelaksana</th>
+                    <th className="p-3.5">Alasan Pembatalan (Void)</th>
+                    <th className="p-3.5">Otorisasi Supervisor</th>
+                    <th className="p-3.5 text-right">Nilai Void</th>
+                    <th className="p-3.5 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {posOrders.filter(o => o.status === "VOID" || o.status === "CANCELLED").length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <CheckCircle2 className="w-7 h-7 mx-auto mb-1.5 text-emerald-500" />
+                        <p className="font-semibold text-xs text-slate-700">Tidak ada transaksi void / dibatalkan.</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Semua pesanan kasir diproses lunas dengan integritas tinggi.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    posOrders
+                      .filter(o => o.status === "VOID" || o.status === "CANCELLED")
+                      .map((ord) => (
+                        <tr key={ord.id} className="hover:bg-rose-50/30 transition-colors">
+                          <td className="p-3.5 font-medium text-slate-600 whitespace-nowrap">
+                            {new Date(ord.createdAt).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-slate-900">{ord.receiptNo}</td>
+                          <td className="p-3.5 text-slate-800 font-medium">{ord.cashierName || "Kasir"}</td>
+                          <td className="p-3.5 text-rose-700 font-semibold max-w-xs truncate">
+                            {ord.voidReason || ord.notes || "Salah ketik / Batal pesan"}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold font-mono">
+                              <Lock className="w-2.5 h-2.5" />
+                              {ord.voidApprovedBy || "Manager PIN"}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono font-bold text-right text-rose-600">
+                            {formatCurrency(Number(ord.totalAmount) || Number(ord.subtotal) || 0)}
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <button
+                              onClick={() => setSelectedOrderForDetail(ord)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Struk</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── TAB 1: REKAP OMZET HARIAN ─────────────────────────────────────── */}
       {activeTab === "daily_recap" && (

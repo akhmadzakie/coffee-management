@@ -189,7 +189,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               c.name.toLowerCase().includes(matchedCat.toLowerCase()) ||
               matchedCat.toLowerCase().includes(c.name.toLowerCase())
           );
-          if (foundCat) matchedCat = foundCat.name;
+          if (foundCat) {
+            matchedCat = foundCat.name;
+          } else if (tx.type === "CASH_OUT") {
+            const expCat = expenseCategories.find((c: any) => !/pendapatan|income|omset/i.test(c.name));
+            if (expCat) matchedCat = expCat.name;
+          }
 
           return {
             ...tx,
@@ -538,8 +543,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 {aiStatus?.isConnected ? (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono flex items-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="hidden sm:inline">Gemini 2.5 Flash Aktif</span>
-                    <span className="sm:hidden">Gemini 2.5</span>
+                    <span className="hidden sm:inline">Gemini AI Aktif</span>
+                    <span className="sm:hidden">Gemini AI</span>
                   </span>
                 ) : (
                   <span
@@ -789,6 +794,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                               }
                               className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
                             >
+                              {tx.category && !expenseCategories.some((c: any) => c.name === tx.category) && (
+                                <option value={tx.category}>{tx.category}</option>
+                              )}
                               {expenseCategories.map((c: any) => (
                                 <option key={c.id} value={c.name}>
                                   {c.name}

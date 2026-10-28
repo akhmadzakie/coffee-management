@@ -37,6 +37,7 @@ import {
   WifiOff,
   Tag,
   ShieldAlert,
+  ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PosPaymentModal } from "./PosPaymentModal";
@@ -144,11 +145,11 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const toggleFullscreen = () => {
     try {
       if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
+        document.documentElement.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => { });
       } else {
-        document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
+        document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => { });
       }
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -339,7 +340,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       if (cached) {
         try {
           setMenuList(JSON.parse(cached));
-        } catch {}
+        } catch { }
       }
     } finally {
       setIsLoadingMenu(false);
@@ -693,22 +694,20 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         <div className="grid grid-cols-2 gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
           <button
             onClick={() => setOrderType("DINE_IN")}
-            className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              orderType === "DINE_IN"
+            className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${orderType === "DINE_IN"
                 ? "bg-brand-600 text-white shadow"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             <Utensils className="w-3.5 h-3.5" />
             <span>Dine In (Makan Sini)</span>
           </button>
           <button
             onClick={() => setOrderType("TAKE_AWAY")}
-            className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              orderType === "TAKE_AWAY"
+            className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${orderType === "TAKE_AWAY"
                 ? "bg-brand-600 text-white shadow"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             <Coffee className="w-3.5 h-3.5" />
             <span>Take Away (Bungkus)</span>
@@ -1149,9 +1148,8 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                       <div className="absolute inset-0 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl z-0 transition-colors" />
                     )}
                     <span
-                      className={`relative z-10 flex items-center gap-1.5 transition-colors ${
-                        isSelected ? "text-white font-bold" : "text-slate-700"
-                      }`}
+                      className={`relative z-10 flex items-center gap-1.5 transition-colors ${isSelected ? "text-white font-bold" : "text-slate-700"
+                        }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
                       <span>{cat.label}</span>
@@ -1186,13 +1184,12 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                       key={item.id}
                       whileTap={{ scale: 0.97 }}
                       onClick={() => handleAddToCart(item)}
-                      className={`relative p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between select-none shadow-xs ${
-                        !item.isAvailable
+                      className={`relative p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between select-none shadow-xs ${!item.isAvailable
                           ? "bg-slate-100/60 border-slate-200 opacity-60 grayscale"
                           : inCartQty > 0
-                          ? "bg-brand-50/50 border-brand-500 shadow-md ring-1 ring-brand-400"
-                          : "bg-white border-slate-200/80 hover:border-brand-300 hover:shadow-md"
-                      }`}
+                            ? "bg-brand-50/50 border-brand-500 shadow-md ring-1 ring-brand-400"
+                            : "bg-white border-slate-200/80 hover:border-brand-300 hover:shadow-md"
+                        }`}
                     >
                       {inCartQty > 0 && (
                         <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center shadow-md">
@@ -1236,13 +1233,12 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         <div className="text-right">
                           <p className="text-[9px] text-slate-400">Ketersediaan</p>
                           <p
-                            className={`text-[10px] font-bold ${
-                              !item.isAvailable
+                            className={`text-[10px] font-bold ${!item.isAvailable
                                 ? "text-rose-600"
                                 : item.maxPortions < 10
-                                ? "text-amber-600"
-                                : "text-emerald-600"
-                            }`}
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                              }`}
                           >
                             {!item.isAvailable ? "Habis" : `${item.maxPortions} porsi`}
                           </p>
@@ -1453,11 +1449,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 <button
                   type="button"
                   onClick={() => setDiscountModalTab("WHITELIST")}
-                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                    discountModalTab === "WHITELIST"
+                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${discountModalTab === "WHITELIST"
                       ? "bg-white text-brand-700 shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
-                  }`}
+                    }`}
                 >
                   <Tag className="w-3.5 h-3.5" />
                   <span>Promo Whitelist ({activeWhitelistPromos.length})</span>
@@ -1465,11 +1460,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 <button
                   type="button"
                   onClick={() => setDiscountModalTab("MANUAL")}
-                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
-                    discountModalTab === "MANUAL"
+                  className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${discountModalTab === "MANUAL"
                       ? "bg-white text-amber-800 shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
-                  }`}
+                    }`}
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-600" />
                   <span>Diskon Manual (PIN)</span>
@@ -1497,13 +1491,12 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         return (
                           <div
                             key={promo.id}
-                            className={`p-3.5 rounded-2xl border transition-all ${
-                              isSelected
+                            className={`p-3.5 rounded-2xl border transition-all ${isSelected
                                 ? "bg-brand-50/70 border-brand-400 shadow-xs ring-1 ring-brand-300"
                                 : isEligible
-                                ? "bg-white border-slate-200 hover:border-brand-200 hover:bg-slate-50/80"
-                                : "bg-slate-50 border-slate-200/60 opacity-60"
-                            }`}
+                                  ? "bg-white border-slate-200 hover:border-brand-200 hover:bg-slate-50/80"
+                                  : "bg-slate-50 border-slate-200/60 opacity-60"
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="space-y-1">
@@ -1532,11 +1525,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
                               <div className="text-right shrink-0">
                                 <span
-                                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${
-                                    promo.type === "PERCENT"
+                                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-extrabold ${promo.type === "PERCENT"
                                       ? "bg-purple-100 text-purple-800"
                                       : "bg-blue-100 text-blue-800"
-                                  }`}
+                                    }`}
                                 >
                                   {promo.type === "PERCENT" ? `${promo.value}% OFF` : `-Rp ${promo.value.toLocaleString("id-ID")}`}
                                 </span>
@@ -1585,11 +1577,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                                     setAppliedPromoMaxDiscount(promo.maxDiscount);
                                     setIsDiscountModalOpen(false);
                                   }}
-                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                                    isEligible
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${isEligible
                                       ? "bg-brand-600 hover:bg-brand-700 text-white shadow-xs"
                                       : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                                  }`}
+                                    }`}
                                 >
                                   Pilih Promo
                                 </button>
@@ -1617,22 +1608,20 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                         <button
                           type="button"
                           onClick={() => setManualDiscountType("PERCENT")}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                            manualDiscountType === "PERCENT"
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${manualDiscountType === "PERCENT"
                               ? "bg-white text-slate-900 shadow-xs"
                               : "text-slate-600 hover:text-slate-900"
-                          }`}
+                            }`}
                         >
                           Persentase (%)
                         </button>
                         <button
                           type="button"
                           onClick={() => setManualDiscountType("NOMINAL")}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                            manualDiscountType === "NOMINAL"
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${manualDiscountType === "NOMINAL"
                               ? "bg-white text-slate-900 shadow-xs"
                               : "text-slate-600 hover:text-slate-900"
-                          }`}
+                            }`}
                         >
                           Nominal (Rp)
                         </button>
@@ -1879,11 +1868,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                 {[0, 1, 2, 3, 4, 5].map((idx) => (
                   <div
                     key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                      lockPin.length > idx
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${lockPin.length > idx
                         ? "bg-brand-600 scale-110 shadow-xs shadow-brand-500/50"
                         : "bg-slate-200"
-                    }`}
+                      }`}
                   />
                 ))}
               </div>
