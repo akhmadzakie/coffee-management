@@ -10,7 +10,8 @@
     "start": "npm run migrate && NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx tests/system_test_suite.ts"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",
