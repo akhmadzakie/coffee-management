@@ -543,6 +543,11 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   // Simpan Open Bill (Dine-in Tab)
   const handleSaveOpenBill = async () => {
+    if (!activeShift) {
+      alert("⚠️ Shift Kasir belum dibuka! Silakan buka shift kasir dan masukkan Modal Awal terlebih dahulu.");
+      setIsShiftModalOpen(true);
+      return;
+    }
     if (cart.length === 0) {
       alert("Keranjang masih kosong.");
       return;
@@ -912,13 +917,31 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           <button
             disabled={cart.length === 0}
             onClick={() => {
+              if (!activeShift) {
+                alert("⚠️ Shift Kasir belum dibuka! Silakan masukkan Modal Awal Laci Kasir terlebih dahulu.");
+                setIsShiftModalOpen(true);
+                return;
+              }
               setIsPaymentModalOpen(true);
               if (isDrawer) setIsMobileCartOpen(false);
             }}
-            className="py-2.5 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-bold shadow-lg shadow-brand-600/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
+            className={`py-2.5 px-3 rounded-xl ${
+              activeShift
+                ? "bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white shadow-lg shadow-brand-600/20"
+                : "bg-amber-600 hover:bg-amber-700 text-white"
+            } disabled:opacity-50 disabled:pointer-events-none text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer`}
           >
-            <Banknote className="w-4 h-4" />
-            <span>Bayar Sekarang</span>
+            {activeShift ? (
+              <>
+                <Banknote className="w-4 h-4" />
+                <span>Bayar Sekarang</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 text-amber-200" />
+                <span>Buka Shift Dahulu</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -1021,14 +1044,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             )}
           </div>
 
-          {/* Riwayat Transaksi Hari Ini */}
+          {/* Riwayat Transaksi Hari Ini & Refund */}
           <button
             onClick={() => setIsTodayOrdersOpen(true)}
-            className="whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 border border-slate-200 transition flex items-center gap-1.5 cursor-pointer"
-            title="Riwayat Transaksi Hari Ini & Cetak Ulang"
+            className="whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 border border-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+            title="Riwayat Transaksi Hari Ini, Cetak Ulang & Refund"
           >
-            <History className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="hidden sm:inline">Riwayat</span>
+            <RotateCcw className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="hidden sm:inline">Riwayat & Refund</span>
           </button>
 
           {/* Open Bill Meja */}
@@ -1162,6 +1185,29 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
           {/* Menu Items Grid (Responsive 2 to 4 cols) */}
           <div className="flex-1 overflow-y-auto p-3">
+            {!activeShift && (
+              <div className="mb-3 p-3 sm:p-3.5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-amber-950">Shift Kasir Belum Dibuka</p>
+                    <p className="text-[11px] text-amber-800">
+                      Harap masukkan <strong>Modal Awal Kasir</strong> untuk mengaktifkan proses transaksi dan pembayaran.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Buka Shift Kasir Sekarang</span>
+                </button>
+              </div>
+            )}
+
             {isLoadingMenu ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
                 <RotateCcw className="w-6 h-6 animate-spin text-brand-600" />

@@ -127,6 +127,12 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
     setIsSubmitting(true);
     setErrorMessage("");
 
+    if (!activeShift) {
+      alert("⚠️ Shift Kasir belum dibuka! Silakan masukkan Modal Awal terlebih dahulu.");
+      onClose();
+      return;
+    }
+
     try {
       if (editingOrderId) {
         // Pelunasan Open Bill yang sudah ada di database

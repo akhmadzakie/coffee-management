@@ -20,10 +20,9 @@ interface PosCashierLoginProps {
 export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess }) => {
   const { login, settings, users } = useStore();
 
-  // Filter staf yang memiliki akses ke operasional kasir
-  const cashierUsers = (users || []).filter((u) =>
-    ["KASIR", "BAR", "LEADER", "MANAGER", "OWNER", "SUPER_ADMIN"].includes(u.role)
-  );
+  // Khusus staf terminal kasir (Role: KASIR)
+  const onlyKasirUsers = (users || []).filter((u) => u.role === "KASIR");
+  const cashierUsers = onlyKasirUsers.length > 0 ? onlyKasirUsers : (users || []);
 
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [pin, setPin] = useState("");

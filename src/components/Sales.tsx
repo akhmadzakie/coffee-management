@@ -43,6 +43,7 @@ import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportX
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomSelect } from "./common/CustomSelect";
+import { PosManagerPinModal } from "./pos/PosManagerPinModal";
 
 interface PosOrderDetail {
   id: string;
@@ -137,6 +138,7 @@ export const Sales = () => {
   const [posEndDate, setPosEndDate] = useState<string>("");
   const [posSearchQuery, setPosSearchQuery] = useState<string>("");
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<PosOrderDetail | null>(null);
+  const [isRefundPinModalOpen, setIsRefundPinModalOpen] = useState(false);
 
   // Perhitungan Rekap Omzet Harian
   const filteredRecaps = useMemo(() => {
@@ -2386,14 +2388,27 @@ export const Sales = () => {
                 )}
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
-                <button
-                  onClick={handlePrintReceipt}
-                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak Nota</span>
-                </button>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0 gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrintReceipt}
+                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Nota</span>
+                  </button>
+
+                  {selectedOrderForDetail.status === "PAID" && (
+                    <button
+                      onClick={() => setIsRefundPinModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center gap-1.5 transition border border-rose-200 cursor-pointer"
+                      title="Proses Pengembalian Dana (Refund) dengan PIN Manager"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Refund Pesanan</span>
+                    </button>
+                  )}
+                </div>
 
                 <button
                   onClick={() => setSelectedOrderForDetail(null)}
@@ -2406,6 +2421,39 @@ export const Sales = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── MODAL OTORISASI REFUND DENGAN PIN MANAGER ── */}
+      {isRefundPinModalOpen && selectedOrderForDetail && (
+        <PosManagerPinModal
+          title="Otorisasi Refund Pesanan"
+          description={`Masukkan PIN Manager / Super Admin untuk menyetujui pengembalian dana sebesar ${formatCurrency(selectedOrderForDetail.totalAmount)} pada nota #${selectedOrderForDetail.receiptNo}.`}
+          requireReason={true}
+          onClose={() => setIsRefundPinModalOpen(false)}
+          onSuccess={async (manager, reason) => {
+            try {
+              const res = await fetch(`/api/pos/orders/${selectedOrderForDetail.id}/refund`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  managerPin: manager.pin,
+                  refundReason: reason || "Refund dari Rekap Penjualan",
+                  refundMethod: "CASH",
+                  refundRestockOption: "RETURN_TO_STOCK",
+                  refundAmount: selectedOrderForDetail.totalAmount,
+                }),
+              });
+              const result = await res.json();
+              if (!res.ok) throw new Error(result.error || "Gagal memproses refund");
+              alert("Pesanan berhasil di-refund dan audit kas telah diperbarui!");
+              setIsRefundPinModalOpen(false);
+              setSelectedOrderForDetail(null);
+              fetchPosOrders();
+            } catch (err: any) {
+              alert("Gagal refund: " + err.message);
+            }
+          }}
+        />
+      )}
 
       {/* ── MODAL CATAT OMZET HARIAN ────────────────────────────────────── */}
       <AnimatePresence>
