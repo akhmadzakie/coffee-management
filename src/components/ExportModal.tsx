@@ -369,6 +369,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
+  if (!isOpen && !isImportOpen) return null;
+
   return (
     <>
       <ImportFinanceModal

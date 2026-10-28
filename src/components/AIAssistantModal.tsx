@@ -531,6 +531,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (

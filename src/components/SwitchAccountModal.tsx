@@ -195,6 +195,8 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (
