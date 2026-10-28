@@ -428,6 +428,8 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_store_sales_bonus BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_leader_allowance_bonus BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_kpi_score_bonus BOOLEAN DEFAULT FALSE`,
+    `UPDATE cash_transactions SET type = 'CASH_OUT' WHERE type IN ('OUT', 'EXPENSE')`,
+    `UPDATE cash_transactions SET type = 'CASH_IN' WHERE type IN ('IN', 'INCOME')`,
     `CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         receipt_no TEXT NOT NULL,
@@ -797,17 +799,22 @@ async function startServer() {
     timestamp: String(a.timestamp || new Date().toISOString()),
   });
 
-  const sanitizeCashTransaction = (f: any) => ({
-    id: String(f.id || crypto.randomUUID()),
-    accountId: String(f.accountId || ""),
-    type: String(f.type || "CASH_IN"),
-    date: String(f.date || new Date().toISOString()),
-    amount: Number(f.amount) || 0,
-    description: String(f.description || ""),
-    category: String(f.category || ""),
-    categoryId: f.categoryId ? String(f.categoryId) : null,
-    referenceId: f.referenceId ? String(f.referenceId) : null,
-  });
+  const sanitizeCashTransaction = (f: any) => {
+    let type = String(f.type || "CASH_IN");
+    if (type === "OUT" || type === "EXPENSE") type = "CASH_OUT";
+    if (type === "IN" || type === "INCOME") type = "CASH_IN";
+    return {
+      id: String(f.id || crypto.randomUUID()),
+      accountId: String(f.accountId || ""),
+      type,
+      date: String(f.date || new Date().toISOString()),
+      amount: Number(f.amount) || 0,
+      description: String(f.description || ""),
+      category: String(f.category || ""),
+      categoryId: f.categoryId ? String(f.categoryId) : null,
+      referenceId: f.referenceId ? String(f.referenceId) : null,
+    };
+  };
 
   // ─── New sanitizers (Fase 1-4) ───────────────────────────────────────────
   const sanitizeExpenseCategory = (c: any) => ({

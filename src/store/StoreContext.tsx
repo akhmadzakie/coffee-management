@@ -64,6 +64,12 @@ const generateId = () => {
   );
 };
 
+export const normalizeCashTrxType = (type: any): "CASH_IN" | "CASH_OUT" | "TRANSFER" => {
+  if (type === "TRANSFER") return "TRANSFER";
+  if (type === "OUT" || type === "EXPENSE" || type === "CASH_OUT") return "CASH_OUT";
+  return "CASH_IN";
+};
+
 export const DEFAULT_INITIAL_INGREDIENTS: Ingredient[] = [
   { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 250000, storageLocation: "BAR" },
   { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 18500, storageLocation: "CHILLER" },
@@ -963,7 +969,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.cash_accounts))
           setCashAccounts(data.cash_accounts);
         if (Array.isArray(data.cash_transactions))
-          setCashTransactions(data.cash_transactions);
+          setCashTransactions(
+            data.cash_transactions.map((tx: any) => ({
+              ...tx,
+              type: normalizeCashTrxType(tx.type),
+            }))
+          );
         if (data.settings) {
           const s = data.settings;
           const parseArr = (v: any) => {
@@ -1812,14 +1823,23 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addCashTransaction = (trx: Omit<CashTransaction, "id">) => {
     const id = generateId();
-    setCashTransactions((prev) => [...prev, { ...trx, id }]);
+    const normalizedTrx: CashTransaction = {
+      ...trx,
+      type: normalizeCashTrxType(trx.type),
+      id,
+    };
+    setCashTransactions((prev) => [...prev, normalizedTrx]);
     writeAuditLog("CREATE", "cash_transactions", id);
     markChanged();
   };
 
   const updateCashTransaction = (trx: CashTransaction) => {
+    const normalizedTrx: CashTransaction = {
+      ...trx,
+      type: normalizeCashTrxType(trx.type),
+    };
     setCashTransactions((prev) =>
-      prev.map((t) => (t.id === trx.id ? trx : t)),
+      prev.map((t) => (t.id === trx.id ? normalizedTrx : t)),
     );
     writeAuditLog("UPDATE", "cash_transactions", trx.id);
     markChanged();

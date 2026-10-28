@@ -69,6 +69,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     "CASH_IN",
   );
 
+  const getNormalizedType = (type: any): "CASH_IN" | "CASH_OUT" | "TRANSFER" => {
+    if (type === "TRANSFER") return "TRANSFER";
+    if (type === "OUT" || type === "EXPENSE" || type === "CASH_OUT") return "CASH_OUT";
+    return "CASH_IN";
+  };
+
   // Filter transactions
   const filteredTransactions = useMemo(() => {
     let filtered = cashTransactions;
@@ -76,7 +82,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       filtered = filtered.filter((f) => f.accountId === selectedAccountId);
     }
     if (typeFilter !== "ALL") {
-      filtered = filtered.filter((f) => f.type === typeFilter);
+      filtered = filtered.filter((f) => getNormalizedType(f.type) === typeFilter);
     }
     if (searchTerm) {
       filtered = filtered.filter(
@@ -99,9 +105,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       if (balances[trx.accountId] === undefined) {
         balances[trx.accountId] = 0;
       }
-      if (trx.type === "CASH_IN") {
+      const norm = getNormalizedType(trx.type);
+      if (norm === "CASH_IN") {
         balances[trx.accountId] += trx.amount;
-      } else if (trx.type === "CASH_OUT") {
+      } else if (norm === "CASH_OUT") {
         balances[trx.accountId] -= trx.amount;
       }
     });
@@ -121,13 +128,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   const totalCashIn = useMemo(() => {
     return scopeTransactions
-      .filter((t) => t.type === "CASH_IN")
+      .filter((t) => getNormalizedType(t.type) === "CASH_IN")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [scopeTransactions]);
 
   const totalCashOut = useMemo(() => {
     return scopeTransactions
-      .filter((t) => t.type === "CASH_OUT")
+      .filter((t) => getNormalizedType(t.type) === "CASH_OUT")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [scopeTransactions]);
 
@@ -610,7 +617,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     id: trx.id,
                     Tanggal: getLocalDateString(new Date(trx.date)),
                     "Pos Kas": cashAccounts.find((a) => a.id === trx.accountId)?.name || "-",
-                    Jenis: trx.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+                    Jenis: getNormalizedType(trx.type) === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
                     Kategori: trx.category,
                     Deskripsi: trx.description,
                     Jumlah: trx.amount,
@@ -699,12 +706,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   <td className="py-3.5 px-5">
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-2xs ${
-                        trx.type === "CASH_IN"
+                        getNormalizedType(trx.type) === "CASH_IN"
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
                           : "bg-rose-50 text-rose-700 border-rose-200/60"
                       }`}
                     >
-                      {trx.type === "CASH_IN" ? (
+                      {getNormalizedType(trx.type) === "CASH_IN" ? (
                         <>
                           <ArrowUpRight className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
                           Pemasukan
@@ -779,12 +786,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 <div className="flex items-center gap-2">
                   <span
                     className={`w-7 h-7 rounded-xl flex items-center justify-center shadow-2xs ${
-                      trx.type === "CASH_IN"
+                      getNormalizedType(trx.type) === "CASH_IN"
                         ? "bg-emerald-50 text-emerald-600 border border-emerald-200/60"
                         : "bg-rose-50 text-rose-600 border border-rose-200/60"
                     }`}
                   >
-                    {trx.type === "CASH_IN" ? (
+                    {getNormalizedType(trx.type) === "CASH_IN" ? (
                       <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
                     ) : (
                       <ArrowDownRight className="w-4 h-4 stroke-[2.5]" />
@@ -807,10 +814,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 <div className="text-right">
                   <span
                     className={`text-sm font-extrabold tracking-tight block ${
-                      trx.type === "CASH_IN" ? "text-emerald-600" : "text-rose-600"
+                      getNormalizedType(trx.type) === "CASH_IN" ? "text-emerald-600" : "text-rose-600"
                     }`}
                   >
-                    {trx.type === "CASH_IN" ? "+" : "-"}
+                    {getNormalizedType(trx.type) === "CASH_IN" ? "+" : "-"}
                     {formatCurrency(trx.amount)}
                   </span>
                   <span className="text-[10px] font-semibold text-slate-500">

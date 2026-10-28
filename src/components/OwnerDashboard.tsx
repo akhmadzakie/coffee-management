@@ -205,8 +205,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       cash = cash.filter((c) => new Date(c.date).getFullYear() === currentYear);
     }
 
-    const cashIn = cash.filter((c) => c.type === "IN").reduce((acc, c) => acc + c.amount, 0);
-    const cashOut = cash.filter((c) => c.type === "OUT").reduce((acc, c) => acc + c.amount, 0);
+    const cashIn = cash.filter((c) => c.type === "IN" || c.type === "CASH_IN").reduce((acc, c) => acc + c.amount, 0);
+    const cashOut = cash.filter((c) => c.type === "OUT" || c.type === "CASH_OUT").reduce((acc, c) => acc + c.amount, 0);
 
     return {
       filteredSales: sales,
@@ -229,7 +229,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
   // 3. Average Ticket Value (ATV / Basket Size) & Transaction Count
-  const transactionCount = filteredSales.length > 0 ? filteredSales.length : (filteredTransactions.filter(c => c.type === "IN").length || 1);
+  const transactionCount = filteredSales.length > 0 ? filteredSales.length : (filteredTransactions.filter(c => c.type === "IN" || c.type === "CASH_IN").length || 1);
   const averageTicketValue = totalRevenue > 0 ? Math.round(totalRevenue / Math.max(1, transactionCount)) : 0;
 
   // 4. Total Volume Cup / Produk Terjual
@@ -249,8 +249,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // Total Likuiditas Kas Bersih (Semua Bank & Kas Fisik)
   const totalCashLiquidity = useMemo(() => {
     return cashTransactions.reduce((acc, t) => {
-      if (t.type === "IN") return acc + t.amount;
-      if (t.type === "OUT") return acc - t.amount;
+      if (t.type === "IN" || t.type === "CASH_IN") return acc + t.amount;
+      if (t.type === "OUT" || t.type === "CASH_OUT") return acc - t.amount;
       return acc;
     }, 0);
   }, [cashTransactions]);
@@ -264,7 +264,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // 1. HPP / COGS Ratio (Bahan Baku / Omzet) - Target Sehat: 28% - 35%
   const cogsExpenses = useMemo(() => {
     return filteredTransactions
-      .filter((c) => c.type === "OUT" && (c.category?.toLowerCase().includes("bahan") || c.category?.toLowerCase().includes("cogs") || c.category?.toLowerCase().includes("kulakan")))
+      .filter((c) => (c.type === "OUT" || c.type === "CASH_OUT") && (c.category?.toLowerCase().includes("bahan") || c.category?.toLowerCase().includes("cogs") || c.category?.toLowerCase().includes("kulakan")))
       .reduce((sum, c) => sum + c.amount, 0);
   }, [filteredTransactions]);
   const cogsRatio = totalRevenue > 0 ? (cogsExpenses / totalRevenue) * 100 : 0;
@@ -272,7 +272,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // 2. Labor Cost Ratio (Gaji & Upah / Omzet) - Target Sehat: 15% - 22%
   const laborExpenses = useMemo(() => {
     return filteredTransactions
-      .filter((c) => c.type === "OUT" && (c.category?.toLowerCase().includes("gaji") || c.category?.toLowerCase().includes("payroll") || c.category?.toLowerCase().includes("sdm")))
+      .filter((c) => (c.type === "OUT" || c.type === "CASH_OUT") && (c.category?.toLowerCase().includes("gaji") || c.category?.toLowerCase().includes("payroll") || c.category?.toLowerCase().includes("sdm")))
       .reduce((sum, c) => sum + c.amount, 0);
   }, [filteredTransactions]);
   const laborRatio = totalRevenue > 0 ? (laborExpenses / totalRevenue) * 100 : 0;
@@ -335,14 +335,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       const mCashIn = cashTransactions
         .filter((c) => {
           const d = new Date(c.date);
-          return c.type === "IN" && d.getMonth() === mIdx && d.getFullYear() === yIdx;
+          return (c.type === "IN" || c.type === "CASH_IN") && d.getMonth() === mIdx && d.getFullYear() === yIdx;
         })
         .reduce((sum, c) => sum + c.amount, 0);
 
       const mCashOut = cashTransactions
         .filter((c) => {
           const d = new Date(c.date);
-          return c.type === "OUT" && d.getMonth() === mIdx && d.getFullYear() === yIdx;
+          return (c.type === "OUT" || c.type === "CASH_OUT") && d.getMonth() === mIdx && d.getFullYear() === yIdx;
         })
         .reduce((sum, c) => sum + c.amount, 0);
 

@@ -175,6 +175,7 @@ export const Layout: React.FC<LayoutProps> = ({
     currentUser,
     logout,
     cashAccounts,
+    expenseCategories,
     addCashTransaction,
     addStockMovement,
     employees,
@@ -510,12 +511,19 @@ export const Layout: React.FC<LayoutProps> = ({
             const nowIso = new Date().toISOString();
             txs.forEach((tx) => {
               const targetAccountId = tx.accountId || defaultAccountId;
+              const isIncome = tx.type === "CASH_IN" || tx.type === "IN";
+              const targetType: "CASH_IN" | "CASH_OUT" = isIncome ? "CASH_IN" : "CASH_OUT";
+              const matchedCatObj = expenseCategories?.find(
+                (c: any) => c.name.toLowerCase() === (tx.category || "").toLowerCase()
+              );
+              const targetCatId = tx.categoryId || matchedCatObj?.id || null;
+
               addCashTransaction({
                 accountId: targetAccountId,
-                type: tx.type === "CASH_IN" ? "IN" : "OUT",
+                type: targetType,
                 amount: Number(tx.amount || 0),
-                category: tx.category || "Operasional",
-                categoryId: tx.categoryId || null,
+                category: tx.category || (isIncome ? "Penjualan" : "Operasional"),
+                categoryId: targetCatId,
                 description: tx.description || "Draft AI",
                 date: nowIso,
                 createdBy: currentUser?.name || "Julia AI Copilot",

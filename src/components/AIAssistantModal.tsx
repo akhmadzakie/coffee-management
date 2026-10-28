@@ -33,6 +33,11 @@ import {
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import {
+  compressImageFile,
+  formatFileSize,
+  CompressionResult,
+} from "../utils/imageCompressor";
 
 export interface AIAssistantModalProps {
   isOpen: boolean;
@@ -239,20 +244,45 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionResult, setCompressionResult] = useState<CompressionResult | null>(null);
   const [scanResult, setScanResult] = useState<any | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processSelectedFile = async (selectedFile: File) => {
-    setReceiptFile(selectedFile);
     setScanError(null);
 
     const name = selectedFile.name.toLowerCase();
     const type = selectedFile.type.toLowerCase();
+    const isImage =
+      type.startsWith("image/") ||
+      Boolean(name.match(/\.(jpg|jpeg|png|webp|gif|heic|bmp|svg)$/));
 
-    if (type.startsWith("image/") || name.match(/\.(jpg|jpeg|png|webp|gif|heic|bmp|svg)$/)) {
-      setPreviewUrl(URL.createObjectURL(selectedFile));
+    if (!isImage && selectedFile.size > 20 * 1024 * 1024) {
+      setScanError(
+        "Batas ukuran dokumen PDF/Excel maksimal 20 MB. Silakan unggah berkas yang lebih ringkas."
+      );
+      return;
+    }
+
+    if (isImage) {
+      setIsCompressing(true);
+      try {
+        const result = await compressImageFile(selectedFile, 1600, 0.8);
+        setReceiptFile(result.file);
+        setCompressionResult(result);
+        setPreviewUrl(URL.createObjectURL(result.file));
+      } catch (err) {
+        setReceiptFile(selectedFile);
+        setCompressionResult(null);
+        setPreviewUrl(URL.createObjectURL(selectedFile));
+      } finally {
+        setIsCompressing(false);
+      }
     } else {
+      setReceiptFile(selectedFile);
+      setCompressionResult(null);
       setPreviewUrl(null);
     }
 
@@ -436,7 +466,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const liveMetrics = useMemo(() => {
     const totalRev = salesTransactions.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
     const totalExp = cashTransactions
-      .filter((c) => c.type === "OUT")
+      .filter((c) => c.type === "OUT" || c.type === "CASH_OUT")
       .reduce((acc, c) => acc + (c.amount || 0), 0);
     const netProfit = Math.max(0, totalRev - totalExp);
     const marginPercent = totalRev > 0 ? Math.round((netProfit / totalRev) * 100) : 0;
@@ -499,12 +529,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     } finally {
       setIsLoadingBriefing(false);
     }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return createPortal(
@@ -950,6 +974,13 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         📝 Dokumen / Teks
                       </span>
                     </div>
+
+                    <div className="mt-1 py-1 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-800 flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span>
+                        <strong>Auto-Kompres Aktif:</strong> Foto kamera ponsel ukuran berapa pun langsung dioptimasi otomatis (&lt;300 KB) agar hemat kuota & cepat. Berkas PDF/Excel maks. 20 MB.
+                      </span>
+                    </div>
                   </div>
                 ) : previewUrl ? (
                   /* ── Image Preview ── */
@@ -964,12 +995,21 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200 font-mono">
                           FOTO
                         </span>
-                        <span className="text-slate-700 font-medium truncate max-w-[220px]">
+                        <span className="text-slate-700 font-medium truncate max-w-[180px]">
                           {receiptFile.name}
                         </span>
-                        <span className="text-slate-400 text-[11px]">
-                          ({formatFileSize(receiptFile.size)})
-                        </span>
+                        {compressionResult?.wasCompressed ? (
+                          <span className="text-emerald-700 text-[11px] font-semibold flex items-center gap-1">
+                            <span>{formatFileSize(compressionResult.originalSize)} → {formatFileSize(compressionResult.compressedSize)}</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-[10px] font-bold text-emerald-800">
+                              -{compressionResult.savedPercent}%
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">
+                            ({formatFileSize(receiptFile.size)})
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
@@ -984,6 +1024,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           onClick={() => {
                             setReceiptFile(null);
                             setPreviewUrl(null);
+                            setCompressionResult(null);
                           }}
                           className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100"
                           title="Hapus foto"
@@ -1050,6 +1091,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         onClick={() => {
                           setReceiptFile(null);
                           setPreviewUrl(null);
+                          setCompressionResult(null);
                         }}
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-rose-100"
                         title="Hapus berkas"
@@ -1068,10 +1110,17 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 </div>
               )}
 
+              {isCompressing && (
+                <div className="p-3 bg-brand-50 border border-brand-200 rounded-xl text-xs text-brand-700 flex items-center gap-2 animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-600" />
+                  <span>Mengompresi foto otomatis agar ringan dan cepat diproses AI...</span>
+                </div>
+              )}
+
               {/* Action Button */}
               <button
                 onClick={handleProcessReceipt}
-                disabled={isScanning || (!receiptText && !receiptFile)}
+                disabled={isScanning || isCompressing || (!receiptText && !receiptFile)}
                 className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 shadow-xs cursor-pointer"
               >
                 {isScanning ? (
