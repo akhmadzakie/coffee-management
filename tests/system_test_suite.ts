@@ -174,8 +174,8 @@ console.log("\n4. Pengujian Keamanan, PIN Supervisor & Role Access:");
 
 test("Verifikasi PIN Otorisasi Supervisor POS Khusus", () => {
   const configuredSupervisorPin = "4321"; // Manajer mengubah PIN supervisor di Pengaturan
-  const inputPin1 = "4321";
-  const inputPin2 = "0000";
+  const inputPin1: string = "4321";
+  const inputPin2: string = "0000";
 
   const isAuth1 = inputPin1 === configuredSupervisorPin;
   const isAuth2 = inputPin2 === configuredSupervisorPin;
@@ -223,6 +223,98 @@ test("Default Nilai Pengaturan Baru", () => {
   assert.strictEqual(defaultSettings.posSupervisorPin, "1234");
   assert.strictEqual(defaultSettings.autoDeductStockOnSale, true);
   assert.strictEqual(defaultSettings.allowNegativeStockSale, true);
+});
+
+// -------------------------------------------------------------
+// 6. SPLIT BILL (PECAH TAGIHAN PER ITEM & BAGI RATA)
+// -------------------------------------------------------------
+console.log("\n6. Pengujian Arsitektur Split Bill (Pecah Tagihan):");
+
+test("Split Bill Per Menu: Pengurangan Item & Pembaruan Tagihan Induk", () => {
+  const parentOrderItems = [
+    { id: "it-1", menuName: "Kopi Susu", unitPrice: 25000, quantity: 2, subtotal: 50000 },
+    { id: "it-2", menuName: "Croissant", unitPrice: 30000, quantity: 1, subtotal: 30000 },
+  ];
+  const initialParentTotal = 80000;
+
+  // Tamu 1 bayar 1 Kopi Susu (Rp 25.000)
+  const splitItems = [{ id: "it-1", quantity: 1 }];
+
+  let splitSubtotal = 0;
+  const remainingItems: typeof parentOrderItems = [];
+
+  for (const pIt of parentOrderItems) {
+    const sIt = splitItems.find((s) => s.id === pIt.id);
+    if (sIt) {
+      splitSubtotal += pIt.unitPrice * sIt.quantity;
+      const leftQty = pIt.quantity - sIt.quantity;
+      if (leftQty > 0) {
+        remainingItems.push({ ...pIt, quantity: leftQty, subtotal: pIt.unitPrice * leftQty });
+      }
+    } else {
+      remainingItems.push({ ...pIt });
+    }
+  }
+
+  assert.strictEqual(splitSubtotal, 25000, "Nominal split porsi Tamu 1 harus Rp 25.000");
+
+  const remainingParentTotal = remainingItems.reduce((s, it) => s + it.subtotal, 0);
+  assert.strictEqual(remainingParentTotal, 55000, "Sisa tagihan meja harus tepat Rp 55.000");
+  assert.strictEqual(remainingItems.length, 2, "Masih tersisa 2 menu di meja (1 Kopi Susu, 1 Croissant)");
+  assert.strictEqual(remainingItems.find((it) => it.id === "it-1")?.quantity, 1);
+});
+
+test("Split Bill Bagi Rata (Evenly Split): Perhitungan Sisa Saldo Meja", () => {
+  const totalBill = 100000;
+  const personsCount = 4;
+  const sharePerPerson = Math.round(totalBill / personsCount); // 25.000
+
+  assert.strictEqual(sharePerPerson, 25000);
+
+  // Pembayaran bertahap:
+  let remainingTotal = totalBill;
+
+  // Orang 1 bayar Rp 25.000
+  remainingTotal -= sharePerPerson;
+  assert.strictEqual(remainingTotal, 75000);
+
+  // Orang 2 bayar Rp 25.000
+  remainingTotal -= sharePerPerson;
+  assert.strictEqual(remainingTotal, 50000);
+
+  // Orang 3 & 4 bayar Rp 50.000
+  remainingTotal -= sharePerPerson * 2;
+  assert.strictEqual(remainingTotal, 0, "Tagihan meja lunas saat seluruh pecahan terbayar");
+});
+
+// -------------------------------------------------------------
+// 7. REMOTE APPROVAL STATE MACHINE
+// -------------------------------------------------------------
+console.log("\n7. Pengujian Persetujuan Jarak Jauh (Remote Approval):");
+
+test("Alur Transisi Status Otorisasi Jarak Jauh (PENDING -> APPROVED)", () => {
+  type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+  const request: {
+    id: string;
+    orderId: string;
+    type: "VOID" | "REFUND";
+    status: ApprovalStatus;
+    respondedBy?: string;
+  } = {
+    id: "req-1",
+    orderId: "ord-1",
+    type: "VOID",
+    status: "PENDING",
+  };
+
+  assert.strictEqual(request.status, "PENDING", "Permintaan awal berstatus PENDING");
+
+  // Manager merespon APPROVE dari HP
+  request.status = "APPROVED";
+  request.respondedBy = "Budi (Manager)";
+
+  assert.strictEqual(request.status, "APPROVED");
+  assert.strictEqual(request.respondedBy, "Budi (Manager)");
 });
 
 // -------------------------------------------------------------

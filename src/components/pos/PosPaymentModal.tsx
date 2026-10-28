@@ -47,6 +47,10 @@ interface PosPaymentModalProps {
   appliedPromotionId?: string | null;
   appliedPromotionName?: string | null;
   editingOrderId?: string | null;
+  isSplitPayment?: boolean;
+  splitParentOrderId?: string;
+  splitMode?: "ITEMS" | "EVENLY";
+  splitItems?: any[];
   onClose: () => void;
   onSuccess: (orderData: any) => void;
 }
@@ -68,6 +72,10 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
   appliedPromotionId,
   appliedPromotionName,
   editingOrderId,
+  isSplitPayment,
+  splitParentOrderId,
+  splitMode,
+  splitItems,
   onClose,
   onSuccess,
 }) => {
@@ -134,7 +142,43 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
     }
 
     try {
-      if (editingOrderId) {
+      if (isSplitPayment && splitParentOrderId) {
+        // Pelunasan Pecahan Tagihan (Split Bill)
+        const res = await fetch(`/api/pos/orders/${splitParentOrderId}/split`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            splitMode: splitMode || "ITEMS",
+            splitItems: splitItems || [],
+            splitAmount: totalAmount,
+            payment: {
+              paymentMethod,
+              amount: totalAmount,
+              cashReceived: paymentMethod === "CASH" ? cashReceived : totalAmount,
+              changeAmount,
+              referenceNo: referenceNo.trim() ? `${selectedBank} - ${referenceNo.trim()}` : null,
+              cashAccountId: selectedAccountId || defaultCashAccount?.id,
+              shiftId: activeShift?.id || null,
+            },
+            customerName: customerName.trim() || "Tamu (Split)",
+            cashierName: currentUser?.name || "Kasir",
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Gagal memproses pembayaran pecahan split bill");
+        }
+
+        const data = await res.json();
+        onSuccess({
+          ...data.splitOrder,
+          items: data.splitItems || cart,
+          payments: data.payments,
+          isSplit: true,
+          parentRemainingCount: data.remainingItemsCount,
+        });
+      } else if (editingOrderId) {
         // Pelunasan Open Bill yang sudah ada di database
         const res = await fetch(`/api/pos/orders/${editingOrderId}/pay`, {
           method: "POST",

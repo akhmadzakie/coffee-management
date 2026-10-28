@@ -5,6 +5,7 @@ import { useStore } from "../store/StoreContext";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
 import { AIAssistantModal } from "./AIAssistantModal";
+import { ManagerApprovalModal } from "./ManagerApprovalModal";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -47,6 +48,7 @@ import {
   UtensilsCrossed,
   Utensils,
   ExternalLink,
+  ShieldAlert,
 } from "lucide-react";
 
 const DASHBOARD_TABS: { id: ViewState; label: string }[] = [
@@ -81,6 +83,8 @@ export const Layout: React.FC<LayoutProps> = ({
     "sales" | "inventory" | "finance" | "payroll" | "attendance" | "kpi" | "executive"
   >("sales");
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [isManagerApprovalOpen, setIsManagerApprovalOpen] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [aiInitialTab, setAiInitialTab] = useState<
     "quick-input" | "receipt" | "consultant" | "insights"
   >("quick-input");
@@ -181,6 +185,29 @@ export const Layout: React.FC<LayoutProps> = ({
     employees,
   } = useStore();
   const { t } = useTranslation(settings.language || "id");
+
+  // ─── Polling Remote Approvals untuk Manager & Super Admin ───
+  useEffect(() => {
+    if (currentUser?.role !== "MANAGER" && currentUser?.role !== "SUPER_ADMIN") return;
+
+    let isMounted = true;
+    const fetchPendingCount = async () => {
+      try {
+        const res = await fetch("/api/pos/approvals/pending");
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setPendingApprovalsCount(Array.isArray(data) ? data.length : 0);
+        }
+      } catch {}
+    };
+
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentUser?.role]);
 
   // Realtime clock ticker
   useEffect(() => {
@@ -561,6 +588,18 @@ export const Layout: React.FC<LayoutProps> = ({
         defaultModule={exportModalModule}
       />
 
+      {/* ─── Remote Manager Approval Modal ─── */}
+      <ManagerApprovalModal
+        isOpen={isManagerApprovalOpen}
+        onClose={() => setIsManagerApprovalOpen(false)}
+        onProcessed={() => {
+          fetch("/api/pos/approvals/pending")
+            .then((r) => r.json())
+            .then((d) => setPendingApprovalsCount(Array.isArray(d) ? d.length : 0))
+            .catch(() => {});
+        }}
+      />
+
       {/* ─── SIDEBAR (DESKTOP) ─── */}
       <aside
         className={`hidden md:flex flex-col bg-white border-r border-slate-200/90 text-slate-800 transition-all duration-300 select-none z-40 ${
@@ -867,29 +906,50 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* Manager-only Operational Station Launcher (Tab Terpisah /pos & /kds) */}
             {(currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
-              <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs">
-                <a
-                  href="/pos"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Buka Terminal POS Kasir di Tab Baru (Khusus Manager)"
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 hover:text-brand-700 hover:bg-brand-50/60 border border-slate-200/70 transition-all shadow-xs group"
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsManagerApprovalOpen(true)}
+                  className={`relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                    pendingApprovalsCount > 0
+                      ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse"
+                      : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200"
+                  }`}
+                  title="Persetujuan Jarak Jauh Otorisasi Kasir (Remote Approval)"
                 >
-                  <Store className="w-3.5 h-3.5 text-brand-600 transition-transform group-hover:scale-110" />
-                  <span className="hidden sm:inline">Kasir POS</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-brand-600" />
-                </a>
-                <a
-                  href="/kds"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Buka Layar Dapur KDS di Tab Baru (Khusus Manager)"
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 hover:text-amber-700 hover:bg-amber-50/60 border border-slate-200/70 transition-all shadow-xs group"
-                >
-                  <Utensils className="w-3.5 h-3.5 text-amber-600 transition-transform group-hover:scale-110" />
-                  <span className="hidden sm:inline">Layar KDS</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-amber-600" />
-                </a>
+                  <ShieldAlert className={`w-3.5 h-3.5 ${pendingApprovalsCount > 0 ? "text-white" : "text-amber-600"}`} />
+                  <span className="hidden sm:inline">Otorisasi</span>
+                  {pendingApprovalsCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-white text-rose-600 text-[10px] font-black">
+                      {pendingApprovalsCount}
+                    </span>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs">
+                  <a
+                    href="/pos"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Buka Terminal POS Kasir di Tab Baru (Khusus Manager)"
+                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 hover:text-brand-700 hover:bg-brand-50/60 border border-slate-200/70 transition-all shadow-xs group"
+                  >
+                    <Store className="w-3.5 h-3.5 text-brand-600 transition-transform group-hover:scale-110" />
+                    <span className="hidden sm:inline">Kasir POS</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-brand-600" />
+                  </a>
+                  <a
+                    href="/kds"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Buka Layar Dapur KDS di Tab Baru (Khusus Manager)"
+                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 hover:text-amber-700 hover:bg-amber-50/60 border border-slate-200/70 transition-all shadow-xs group"
+                  >
+                    <Utensils className="w-3.5 h-3.5 text-amber-600 transition-transform group-hover:scale-110" />
+                    <span className="hidden sm:inline">Layar KDS</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-amber-600" />
+                  </a>
+                </div>
               </div>
             )}
 

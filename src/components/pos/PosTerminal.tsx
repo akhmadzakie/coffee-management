@@ -117,6 +117,13 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   // Modals
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [splitBillConfig, setSplitBillConfig] = useState<{
+    isSplit: boolean;
+    parentOrderId: string;
+    splitMode: "ITEMS" | "EVENLY";
+    splitItems: any[];
+    splitAmount: number;
+  } | null>(null);
   const [isOpenBillsModalOpen, setIsOpenBillsModalOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinActionType, setPinActionType] = useState<"DISCOUNT" | "VOID">("DISCOUNT");
@@ -642,6 +649,38 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   };
 
   const handleSelectOpenBill = (billOrder: any) => {
+    if (billOrder.isSplitBill) {
+      setSplitBillConfig({
+        isSplit: true,
+        parentOrderId: billOrder.parentOrderId,
+        splitMode: billOrder.splitMode,
+        splitItems: billOrder.splitItems,
+        splitAmount: billOrder.totalAmount,
+      });
+      setCurrentEditingOrderId(null);
+      setTableNumber(billOrder.tableNumber || "");
+      setCustomerName(billOrder.customerName || "");
+      setOrderType(billOrder.orderType);
+
+      const mappedCart: CartItem[] = (billOrder.items || []).map((it: any) => ({
+        cartId: crypto.randomUUID(),
+        recipeId: it.recipeId,
+        menuName: it.menuName,
+        variantName: it.variantName || "Regular",
+        quantity: Number(it.quantity) || 1,
+        unitPrice: Number(it.unitPrice) || 0,
+        subtotal: Number(it.subtotal) || 0,
+        modifiers: it.modifiers || [],
+        notes: it.notes || "",
+        printDestination: it.printDestination || "BAR",
+      }));
+      setCart(mappedCart);
+      setIsOpenBillsModalOpen(false);
+      setIsPaymentModalOpen(true);
+      return;
+    }
+
+    setSplitBillConfig(null);
     setCurrentEditingOrderId(billOrder.id);
     setOrderType(billOrder.orderType);
     setTableNumber(billOrder.tableNumber || "");
@@ -1358,10 +1397,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       <AnimatePresence>
         {isPaymentModalOpen && (
           <PosPaymentModal
-            totalAmount={totalAmount}
-            subtotal={subtotal}
-            discountAmount={discountAmount}
-            taxAmount={taxAmount}
+            totalAmount={splitBillConfig?.isSplit ? splitBillConfig.splitAmount : totalAmount}
+            subtotal={splitBillConfig?.isSplit ? splitBillConfig.splitAmount : subtotal}
+            discountAmount={splitBillConfig?.isSplit ? 0 : discountAmount}
+            taxAmount={splitBillConfig?.isSplit ? 0 : taxAmount}
             taxPercent={taxEnabled ? taxRate : 0}
             taxMode={taxMode}
             tableNumber={tableNumber}
@@ -1374,9 +1413,17 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             appliedPromotionId={appliedPromotionId}
             appliedPromotionName={appliedPromotionName}
             editingOrderId={currentEditingOrderId}
-            onClose={() => setIsPaymentModalOpen(false)}
+            isSplitPayment={splitBillConfig?.isSplit}
+            splitParentOrderId={splitBillConfig?.parentOrderId}
+            splitMode={splitBillConfig?.splitMode}
+            splitItems={splitBillConfig?.splitItems}
+            onClose={() => {
+              setIsPaymentModalOpen(false);
+              setSplitBillConfig(null);
+            }}
             onSuccess={(paidOrder) => {
               setIsPaymentModalOpen(false);
+              setSplitBillConfig(null);
               setCompletedOrder(paidOrder);
               setIsReceiptModalOpen(true);
               setCart([]);

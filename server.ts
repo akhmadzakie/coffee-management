@@ -4046,6 +4046,449 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     }
   });
 
+  // 3b. Split Bill / Pecah Tagihan Meja
+  app.post("/api/pos/orders/:id/split", async (req, res) => {
+    try {
+      const parentOrderId = req.params.id;
+      const {
+        splitMode = "ITEMS",
+        splitItems = [],
+        splitAmount = 0,
+        payment,
+        customerName,
+        cashierName = "Kasir",
+      } = req.body;
+
+      if (!payment) {
+        return res.status(400).json({ error: "Detail pembayaran split bill wajib disertakan." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+
+      // --- Offline State Support ---
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = offlineState.orders || [];
+        offlineState.order_items = offlineState.order_items || [];
+        offlineState.payments = offlineState.payments || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+
+        const parentOrder = offlineState.orders.find((o: any) => o.id === parentOrderId);
+        if (!parentOrder) {
+          return res.status(404).json({ error: "Order utama tidak ditemukan." });
+        }
+        if (parentOrder.status === "VOID" || parentOrder.status === "CANCELLED") {
+          return res.status(400).json({ error: `Order utama berstatus ${parentOrder.status}` });
+        }
+
+        const splitOrderId = crypto.randomUUID();
+        const splitReceiptNo = `${parentOrder.receiptNo}-S${randomSuffix}`;
+        let splitSubtotal = 0;
+        let splitTotal = 0;
+        const insertedSplitItems: any[] = [];
+
+        if (splitMode === "ITEMS") {
+          const parentItems = offlineState.order_items.filter((it: any) => it.orderId === parentOrderId);
+          for (const sIt of splitItems) {
+            const pItem = parentItems.find((it: any) => it.id === sIt.id);
+            if (!pItem) continue;
+            const splitQty = Math.min(Number(sIt.quantity) || 1, Number(pItem.quantity) || 1);
+            if (splitQty <= 0) continue;
+
+            const itemSubtotal = (Number(pItem.unitPrice) || 0) * splitQty;
+            splitSubtotal += itemSubtotal;
+
+            const newSplitItem = {
+              id: crypto.randomUUID(),
+              orderId: splitOrderId,
+              menuName: pItem.menuName,
+              recipeId: pItem.recipeId || null,
+              variantName: pItem.variantName || null,
+              quantity: splitQty,
+              unitPrice: Number(pItem.unitPrice) || 0,
+              subtotal: itemSubtotal,
+              modifiers: pItem.modifiers || [],
+              notes: pItem.notes || null,
+              printDestination: pItem.printDestination || "BAR",
+              isPrinted: true,
+              createdAt: nowIso,
+            };
+            offlineState.order_items.push(newSplitItem);
+            insertedSplitItems.push(newSplitItem);
+
+            // Deduct from parent order item
+            if (pItem.quantity <= splitQty) {
+              const idx = offlineState.order_items.indexOf(pItem);
+              if (idx > -1) offlineState.order_items.splice(idx, 1);
+            } else {
+              pItem.quantity -= splitQty;
+              pItem.subtotal = pItem.unitPrice * pItem.quantity;
+            }
+          }
+
+          const taxRate = Number(parentOrder.taxPercent) || 0;
+          let splitTax = 0;
+          if (taxRate > 0) {
+            splitTax = parentOrder.taxMode === "INCLUSIVE"
+              ? Math.round((splitSubtotal * taxRate) / (100 + taxRate))
+              : Math.round((splitSubtotal * taxRate) / 100);
+          }
+          splitTotal = parentOrder.taxMode === "EXCLUSIVE" ? splitSubtotal + splitTax : splitSubtotal;
+
+          // Update parent order totals
+          const remainingParentItems = offlineState.order_items.filter((it: any) => it.orderId === parentOrderId);
+          if (remainingParentItems.length === 0) {
+            parentOrder.status = "PAID";
+            parentOrder.paidAt = nowIso;
+            parentOrder.subtotal = 0;
+            parentOrder.totalAmount = 0;
+          } else {
+            const newParentSubtotal = remainingParentItems.reduce((sum: number, it: any) => sum + (Number(it.subtotal) || 0), 0);
+            let newParentTax = 0;
+            if (taxRate > 0) {
+              newParentTax = parentOrder.taxMode === "INCLUSIVE"
+                ? Math.round((newParentSubtotal * taxRate) / (100 + taxRate))
+                : Math.round((newParentSubtotal * taxRate) / 100);
+            }
+            parentOrder.subtotal = newParentSubtotal;
+            parentOrder.taxAmount = newParentTax;
+            parentOrder.totalAmount = parentOrder.taxMode === "EXCLUSIVE" ? newParentSubtotal + newParentTax : newParentSubtotal;
+            parentOrder.updatedAt = nowIso;
+          }
+        } else {
+          // EVENLY split
+          splitTotal = Number(splitAmount) || Number(payment.amount) || 0;
+          splitSubtotal = splitTotal;
+          parentOrder.totalAmount = Math.max(0, (Number(parentOrder.totalAmount) || 0) - splitTotal);
+          if (parentOrder.totalAmount <= 0) {
+            parentOrder.status = "PAID";
+            parentOrder.paidAt = nowIso;
+          }
+          parentOrder.updatedAt = nowIso;
+        }
+
+        const newSplitOrder = {
+          id: splitOrderId,
+          receiptNo: splitReceiptNo,
+          shiftId: payment.shiftId || parentOrder.shiftId || null,
+          outletId: "OUTLET-MAIN",
+          orderType: parentOrder.orderType,
+          tableNumber: parentOrder.tableNumber,
+          customerName: customerName || `${parentOrder.customerName || "Tamu"} (Split)`,
+          status: "PAID",
+          subtotal: splitSubtotal,
+          discountPercent: 0,
+          discountAmount: 0,
+          discountReason: null,
+          taxPercent: parentOrder.taxPercent || 0,
+          taxAmount: 0,
+          taxMode: parentOrder.taxMode || "EXCLUSIVE",
+          totalAmount: splitTotal,
+          notes: `Split dari #${parentOrder.receiptNo}`,
+          idempotencyKey: crypto.randomUUID(),
+          cashierId: parentOrder.cashierId || null,
+          cashierName: cashierName || parentOrder.cashierName || "Kasir",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          paidAt: nowIso,
+        };
+        offlineState.orders.push(newSplitOrder);
+
+        const newSplitPayment = {
+          id: crypto.randomUUID(),
+          orderId: splitOrderId,
+          shiftId: payment.shiftId || parentOrder.shiftId || null,
+          paymentMethod: payment.paymentMethod || "CASH",
+          amount: splitTotal,
+          cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : splitTotal,
+          changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : 0,
+          referenceNo: payment.referenceNo || null,
+          cashAccountId: payment.cashAccountId || null,
+          createdAt: nowIso,
+        };
+        offlineState.payments.push(newSplitPayment);
+
+        if (payment.cashAccountId) {
+          offlineState.cash_transactions.push({
+            id: crypto.randomUUID(),
+            accountId: payment.cashAccountId,
+            type: "CASH_IN",
+            date: nowIso,
+            amount: splitTotal,
+            description: `Split POS #${splitReceiptNo} (${payment.paymentMethod})`,
+            category: "PENDAPATAN",
+            referenceId: splitOrderId,
+          });
+        }
+
+        // Deduct inventory for split items
+        const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
+        if (shouldAutoDeduct) {
+          for (const sItem of insertedSplitItems) {
+            let rec = (offlineState.recipes || []).find((r: any) =>
+              (sItem.recipeId && r.id === sItem.recipeId) ||
+              (sItem.menuName && r.menuName.toLowerCase() === sItem.menuName.toLowerCase())
+            );
+            if (rec) {
+              let recIngredients: any[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch {}
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(sItem.quantity) || 1);
+                if (usedQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `Split POS #${splitReceiptNo} - ${sItem.menuName} x${sItem.quantity}`,
+                    createdBy: cashierName || "Kasir",
+                    referenceId: splitOrderId,
+                  });
+                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                  if (ing) ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                }
+              }
+            }
+          }
+        }
+
+        return res.json({
+          success: true,
+          splitOrder: newSplitOrder,
+          splitItems: insertedSplitItems,
+          payments: [newSplitPayment],
+          parentOrder,
+          remainingItemsCount: offlineState.order_items.filter((it: any) => it.orderId === parentOrderId).length,
+        });
+      }
+
+      // --- PostgreSQL DB Mode ---
+      const parentOrderList = await db.select().from(schema.orders).where(eq(schema.orders.id, parentOrderId)).limit(1);
+      if (parentOrderList.length === 0) {
+        return res.status(404).json({ error: "Order utama tidak ditemukan." });
+      }
+      const parentOrder = parentOrderList[0];
+      if (parentOrder.status === "VOID" || parentOrder.status === "CANCELLED") {
+        return res.status(400).json({ error: `Order utama berstatus ${parentOrder.status}` });
+      }
+
+      const splitOrderId = crypto.randomUUID();
+      const splitReceiptNo = `${parentOrder.receiptNo}-S${randomSuffix}`;
+      let splitSubtotal = 0;
+      let splitTotal = 0;
+      const insertedSplitItems: any[] = [];
+
+      await db.transaction(async (tx) => {
+        if (splitMode === "ITEMS") {
+          const parentItems = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, parentOrderId));
+          for (const sIt of splitItems) {
+            const pItem = parentItems.find((it: any) => it.id === sIt.id);
+            if (!pItem) continue;
+            const splitQty = Math.min(Number(sIt.quantity) || 1, Number(pItem.quantity) || 1);
+            if (splitQty <= 0) continue;
+
+            const itemSubtotal = (Number(pItem.unitPrice) || 0) * splitQty;
+            splitSubtotal += itemSubtotal;
+
+            const splitItemRecord = {
+              id: crypto.randomUUID(),
+              orderId: splitOrderId,
+              menuName: pItem.menuName,
+              recipeId: pItem.recipeId || null,
+              variantName: pItem.variantName || null,
+              quantity: splitQty,
+              unitPrice: Number(pItem.unitPrice) || 0,
+              subtotal: itemSubtotal,
+              modifiers: pItem.modifiers || [],
+              notes: pItem.notes || null,
+              printDestination: pItem.printDestination || "BAR",
+              isPrinted: true,
+              createdAt: nowIso,
+            };
+            await tx.insert(schema.orderItems).values(splitItemRecord);
+            insertedSplitItems.push(splitItemRecord);
+
+            if (pItem.quantity <= splitQty) {
+              await tx.delete(schema.orderItems).where(eq(schema.orderItems.id, pItem.id));
+            } else {
+              const newQty = pItem.quantity - splitQty;
+              await tx.update(schema.orderItems).set({
+                quantity: newQty,
+                subtotal: (Number(pItem.unitPrice) || 0) * newQty,
+              }).where(eq(schema.orderItems.id, pItem.id));
+            }
+          }
+
+          const taxRate = Number(parentOrder.taxPercent) || 0;
+          let splitTax = 0;
+          if (taxRate > 0) {
+            splitTax = parentOrder.taxMode === "INCLUSIVE"
+              ? Math.round((splitSubtotal * taxRate) / (100 + taxRate))
+              : Math.round((splitSubtotal * taxRate) / 100);
+          }
+          splitTotal = parentOrder.taxMode === "EXCLUSIVE" ? splitSubtotal + splitTax : splitSubtotal;
+
+          // Update parent totals
+          const remainingParentItems = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, parentOrderId));
+          if (remainingParentItems.length === 0) {
+            await tx.update(schema.orders).set({
+              status: "PAID",
+              paidAt: nowIso,
+              subtotal: 0,
+              totalAmount: 0,
+              updatedAt: nowIso,
+            }).where(eq(schema.orders.id, parentOrderId));
+          } else {
+            const newParentSubtotal = remainingParentItems.reduce((sum: number, it: any) => sum + (Number(it.subtotal) || 0), 0);
+            let newParentTax = 0;
+            if (taxRate > 0) {
+              newParentTax = parentOrder.taxMode === "INCLUSIVE"
+                ? Math.round((newParentSubtotal * taxRate) / (100 + taxRate))
+                : Math.round((newParentSubtotal * taxRate) / 100);
+            }
+            const newParentTotal = parentOrder.taxMode === "EXCLUSIVE" ? newParentSubtotal + newParentTax : newParentSubtotal;
+            await tx.update(schema.orders).set({
+              subtotal: newParentSubtotal,
+              taxAmount: newParentTax,
+              totalAmount: newParentTotal,
+              updatedAt: nowIso,
+            }).where(eq(schema.orders.id, parentOrderId));
+          }
+        } else {
+          // EVENLY split
+          splitTotal = Number(splitAmount) || Number(payment.amount) || 0;
+          splitSubtotal = splitTotal;
+          const newParentTotal = Math.max(0, (Number(parentOrder.totalAmount) || 0) - splitTotal);
+          await tx.update(schema.orders).set({
+            totalAmount: newParentTotal,
+            status: newParentTotal <= 0 ? "PAID" : parentOrder.status,
+            paidAt: newParentTotal <= 0 ? nowIso : parentOrder.paidAt,
+            updatedAt: nowIso,
+          }).where(eq(schema.orders.id, parentOrderId));
+        }
+
+        // Insert new completed split order
+        await tx.insert(schema.orders).values({
+          id: splitOrderId,
+          receiptNo: splitReceiptNo,
+          shiftId: payment.shiftId || parentOrder.shiftId || null,
+          outletId: "OUTLET-MAIN",
+          orderType: parentOrder.orderType,
+          tableNumber: parentOrder.tableNumber,
+          customerName: customerName || `${parentOrder.customerName || "Tamu"} (Split)`,
+          status: "PAID",
+          subtotal: splitSubtotal,
+          discountPercent: 0,
+          discountAmount: 0,
+          discountReason: null,
+          taxPercent: parentOrder.taxPercent || 0,
+          taxAmount: 0,
+          taxMode: parentOrder.taxMode || "EXCLUSIVE",
+          totalAmount: splitTotal,
+          notes: `Split dari #${parentOrder.receiptNo}`,
+          idempotencyKey: crypto.randomUUID(),
+          cashierId: parentOrder.cashierId || null,
+          cashierName: cashierName || parentOrder.cashierName || "Kasir",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          paidAt: nowIso,
+        });
+
+        // Insert payment
+        await tx.insert(schema.payments).values({
+          id: crypto.randomUUID(),
+          orderId: splitOrderId,
+          shiftId: payment.shiftId || parentOrder.shiftId || null,
+          paymentMethod: payment.paymentMethod || "CASH",
+          amount: splitTotal,
+          cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : splitTotal,
+          changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : 0,
+          referenceNo: payment.referenceNo || null,
+          cashAccountId: payment.cashAccountId || null,
+          createdAt: nowIso,
+        });
+
+        // Insert cash transaction
+        if (payment.cashAccountId) {
+          await tx.insert(schema.cashTransactions).values({
+            id: crypto.randomUUID(),
+            accountId: payment.cashAccountId,
+            type: "CASH_IN",
+            date: nowIso,
+            amount: splitTotal,
+            description: `Split POS #${splitReceiptNo} (${payment.paymentMethod})`,
+            category: "PENDAPATAN",
+            referenceId: splitOrderId,
+          });
+        }
+
+        // Deduct inventory
+        const currentSettings = await tx.select().from(schema.settings).limit(1);
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+        if (shouldAutoDeduct) {
+          for (const sItem of insertedSplitItems) {
+            let rec: any[] = [];
+            if (sItem.recipeId) {
+              rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, sItem.recipeId)).limit(1);
+            }
+            if (rec.length === 0 && sItem.menuName) {
+              rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.menuName, sItem.menuName)).limit(1);
+            }
+            if (rec.length > 0) {
+              let recIngredients: any[] = [];
+              try {
+                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+              } catch {}
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(sItem.quantity) || 1);
+                if (usedQty > 0) {
+                  await tx.insert(schema.stockMovements).values({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `Split POS #${splitReceiptNo} - ${sItem.menuName} x${sItem.quantity}`,
+                    createdBy: cashierName || "Kasir",
+                    referenceId: splitOrderId,
+                  });
+                  const currentIng = await tx.select().from(schema.ingredients).where(eq(schema.ingredients.id, rIng.ingredientId)).limit(1);
+                  if (currentIng.length > 0) {
+                    await tx.update(schema.ingredients).set({
+                      currentStock: (currentIng[0].currentStock || 0) - usedQty,
+                    }).where(eq(schema.ingredients.id, rIng.ingredientId));
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const updatedParent = (await db.select().from(schema.orders).where(eq(schema.orders.id, parentOrderId)).limit(1))[0];
+      const remainingItems = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, parentOrderId));
+      const createdSplitOrder = (await db.select().from(schema.orders).where(eq(schema.orders.id, splitOrderId)).limit(1))[0];
+      const createdSplitPayments = await db.select().from(schema.payments).where(eq(schema.payments.orderId, splitOrderId));
+
+      res.json({
+        success: true,
+        splitOrder: createdSplitOrder,
+        splitItems: insertedSplitItems,
+        payments: createdSplitPayments,
+        parentOrder: updatedParent,
+        remainingItemsCount: remainingItems.length,
+      });
+    } catch (e: any) {
+      console.error("Split order error:", e);
+      res.status(500).json({ error: e?.message || "Failed to split order" });
+    }
+  });
+
   // 4. Void / Cancel Order with Manager PIN Approval
   app.post("/api/pos/orders/:id/void", async (req, res) => {
     try {

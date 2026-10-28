@@ -800,6 +800,10 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                       const splitSubtotal = selectedItemsToPay.reduce((s: number, i: any) => s + i.subtotal, 0);
                       const splitOrder = {
                         ...selectedSplitOrder,
+                        isSplitBill: true,
+                        parentOrderId: selectedSplitOrder.id,
+                        splitMode: "ITEMS",
+                        splitItems: selectedItemsToPay,
                         customerName: `${selectedSplitOrder.customerName || "Tamu"} (Split)`,
                         items: selectedItemsToPay,
                         totalAmount: splitSubtotal,
@@ -811,6 +815,10 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                       const amountPerPerson = Math.round(selectedSplitOrder.totalAmount / splitPersonsCount);
                       const splitOrder = {
                         ...selectedSplitOrder,
+                        isSplitBill: true,
+                        parentOrderId: selectedSplitOrder.id,
+                        splitMode: "EVENLY",
+                        splitAmount: amountPerPerson,
                         customerName: `${selectedSplitOrder.customerName || "Tamu"} (1/${splitPersonsCount})`,
                         totalAmount: amountPerPerson,
                         subtotal: amountPerPerson,
