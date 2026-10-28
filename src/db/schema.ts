@@ -158,6 +158,9 @@ export const settings = pgTable("settings", {
   enableStoreSalesBonus: boolean("enable_store_sales_bonus").default(true),
   enableLeaderAllowanceBonus: boolean("enable_leader_allowance_bonus").default(true),
   enableKpiScoreBonus: boolean("enable_kpi_score_bonus").default(false),
+  posSupervisorPin: text("pos_supervisor_pin").default("1234"),
+  autoDeductStockOnSale: boolean("auto_deduct_stock_on_sale").default(true),
+  allowNegativeStockSale: boolean("allow_negative_stock_sale").default(true),
 });
 export const deviceSessions = pgTable("device_sessions", {
   id: varchar("id", { length: 255 }).primaryKey(),

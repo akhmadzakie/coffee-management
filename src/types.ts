@@ -390,6 +390,9 @@ export interface Settings {
   enableStoreSalesBonus?: boolean;
   enableLeaderAllowanceBonus?: boolean;
   enableKpiScoreBonus?: boolean;
+  posSupervisorPin?: string;
+  autoDeductStockOnSale?: boolean;
+  allowNegativeStockSale?: boolean;
 }
 
 export interface CashAccount {

@@ -600,6 +600,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       enableStoreSalesBonus: true,
       enableLeaderAllowanceBonus: true,
       enableKpiScoreBonus: false,
+      posSupervisorPin: "1234",
+      autoDeductStockOnSale: true,
+      allowNegativeStockSale: true,
     };
     try {
       const cached = localStorage.getItem("app_settings_cache");
@@ -1020,6 +1023,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
             enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),
+            posSupervisorPin: String(s.posSupervisorPin || "1234"),
+            autoDeductStockOnSale: s.autoDeductStockOnSale !== false,
+            allowNegativeStockSale: s.allowNegativeStockSale !== false,
           };
           setSettings(newSettings);
           try {

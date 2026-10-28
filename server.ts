@@ -428,6 +428,9 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_store_sales_bonus BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_leader_allowance_bonus BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_kpi_score_bonus BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pos_supervisor_pin TEXT DEFAULT '1234'`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_deduct_stock_on_sale BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS allow_negative_stock_sale BOOLEAN DEFAULT TRUE`,
     `UPDATE cash_transactions SET type = 'CASH_OUT' WHERE type IN ('OUT', 'EXPENSE')`,
     `UPDATE cash_transactions SET type = 'CASH_IN' WHERE type IN ('IN', 'INCOME')`,
     `CREATE TABLE IF NOT EXISTS orders (
@@ -947,6 +950,9 @@ async function startServer() {
       enableStoreSalesBonus: st?.enableStoreSalesBonus !== false,
       enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
       enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
+      posSupervisorPin: String(st?.posSupervisorPin || "1234"),
+      autoDeductStockOnSale: st?.autoDeductStockOnSale !== false,
+      allowNegativeStockSale: st?.allowNegativeStockSale !== false,
     };
   };
 
@@ -3547,6 +3553,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             });
           }
 
+          const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
           for (const item of items) {
             offlineState.sales_transactions.push({
               id: crypto.randomUUID(),
@@ -3557,34 +3564,36 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               importLogId: `POS-${receiptNo}`,
             });
 
-            let rec = (offlineState.recipes || []).find((r: any) =>
-              (item.recipeId && r.id === item.recipeId) ||
-              (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-            );
+            if (shouldAutoDeduct) {
+              let rec = (offlineState.recipes || []).find((r: any) =>
+                (item.recipeId && r.id === item.recipeId) ||
+                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+              );
 
-            if (rec) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch { }
+              if (rec) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+                } catch { }
 
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (usedQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
-                    createdBy: cashierName || "Kasir",
-                    referenceId: orderId,
-                  });
+                for (const rIng of recIngredients) {
+                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (usedQty > 0) {
+                    offlineState.stock_movements.push({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "USAGE",
+                      quantity: usedQty,
+                      date: nowIso,
+                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
+                      createdBy: cashierName || "Kasir",
+                      referenceId: orderId,
+                    });
 
-                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                  if (ing) {
-                    ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                    const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                    if (ing) {
+                      ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                    }
                   }
                 }
               }
@@ -3678,6 +3687,9 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             });
           }
 
+          const currentSettings = await tx.select().from(schema.settings).limit(1);
+          const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+
           // Stock deductions via recipes & record sales transactions
           for (const item of items) {
             await tx.insert(schema.salesTransactions).values({
@@ -3689,53 +3701,55 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               importLogId: `POS-${receiptNo}`,
             });
 
-            let rec: any[] = [];
-            if (item.recipeId) {
-              rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.id, item.recipeId))
-                .limit(1);
-            }
-            if (rec.length === 0 && item.menuName) {
-              rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.menuName, item.menuName))
-                .limit(1);
-            }
+            if (shouldAutoDeduct) {
+              let rec: any[] = [];
+              if (item.recipeId) {
+                rec = await tx
+                  .select()
+                  .from(schema.recipes)
+                  .where(eq(schema.recipes.id, item.recipeId))
+                  .limit(1);
+              }
+              if (rec.length === 0 && item.menuName) {
+                rec = await tx
+                  .select()
+                  .from(schema.recipes)
+                  .where(eq(schema.recipes.menuName, item.menuName))
+                  .limit(1);
+              }
 
-            if (rec.length > 0) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-              } catch { }
+              if (rec.length > 0) {
+                let recIngredients: { ingredientId: string; quantity: number }[] = [];
+                try {
+                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+                } catch { }
 
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (usedQty > 0) {
-                  await tx.insert(schema.stockMovements).values({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
-                    createdBy: cashierName || "Kasir",
-                    referenceId: orderId,
-                  });
+                for (const rIng of recIngredients) {
+                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                  if (usedQty > 0) {
+                    await tx.insert(schema.stockMovements).values({
+                      id: crypto.randomUUID(),
+                      ingredientId: rIng.ingredientId,
+                      type: "USAGE",
+                      quantity: usedQty,
+                      date: nowIso,
+                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
+                      createdBy: cashierName || "Kasir",
+                      referenceId: orderId,
+                    });
 
-                  const currentIng = await tx
-                    .select()
-                    .from(schema.ingredients)
-                    .where(eq(schema.ingredients.id, rIng.ingredientId))
-                    .limit(1);
-                  if (currentIng.length > 0) {
-                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                    await tx
-                      .update(schema.ingredients)
-                      .set({ currentStock: newStock })
-                      .where(eq(schema.ingredients.id, rIng.ingredientId));
+                    const currentIng = await tx
+                      .select()
+                      .from(schema.ingredients)
+                      .where(eq(schema.ingredients.id, rIng.ingredientId))
+                      .limit(1);
+                    if (currentIng.length > 0) {
+                      const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                      await tx
+                        .update(schema.ingredients)
+                        .set({ currentStock: newStock })
+                        .where(eq(schema.ingredients.id, rIng.ingredientId));
+                    }
                   }
                 }
               }
@@ -3835,6 +3849,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         }
 
         const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
+        const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
         for (const item of items) {
           offlineState.sales_transactions.push({
             id: crypto.randomUUID(),
@@ -3845,34 +3860,36 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             importLogId: `POS-${currentOrder.receiptNo}`,
           });
 
-          let rec = (offlineState.recipes || []).find((r: any) =>
-            (item.recipeId && r.id === item.recipeId) ||
-            (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-          );
+          if (shouldAutoDeduct) {
+            let rec = (offlineState.recipes || []).find((r: any) =>
+              (item.recipeId && r.id === item.recipeId) ||
+              (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
+            );
 
-          if (rec) {
-            let recIngredients: { ingredientId: string; quantity: number }[] = [];
-            try {
-              recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-            } catch { }
+            if (rec) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
+              } catch { }
 
-            for (const rIng of recIngredients) {
-              const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-              if (usedQty > 0) {
-                offlineState.stock_movements.push({
-                  id: crypto.randomUUID(),
-                  ingredientId: rIng.ingredientId,
-                  type: "USAGE",
-                  quantity: usedQty,
-                  date: nowIso,
-                  note: `Pelunasan #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
-                  createdBy: cashierName || "Kasir",
-                  referenceId: orderId,
-                });
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (usedQty > 0) {
+                  offlineState.stock_movements.push({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `Pelunasan #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
+                    createdBy: cashierName || "Kasir",
+                    referenceId: orderId,
+                  });
 
-                const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                if (ing) {
-                  ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
+                  if (ing) {
+                    ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
+                  }
                 }
               }
             }
@@ -3936,6 +3953,9 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         }
 
         // 4. Stock deductions and sales transactions
+        const currentSettings = await tx.select().from(schema.settings).limit(1);
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+
         const items = await tx
           .select()
           .from(schema.orderItems)
@@ -3951,53 +3971,55 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             importLogId: `POS-${currentOrder.receiptNo}`,
           });
 
-          let rec: any[] = [];
-          if (item.recipeId) {
-            rec = await tx
-              .select()
-              .from(schema.recipes)
-              .where(eq(schema.recipes.id, item.recipeId))
-              .limit(1);
-          }
-          if (rec.length === 0 && item.menuName) {
-            rec = await tx
-              .select()
-              .from(schema.recipes)
-              .where(eq(schema.recipes.menuName, item.menuName))
-              .limit(1);
-          }
+          if (shouldAutoDeduct) {
+            let rec: any[] = [];
+            if (item.recipeId) {
+              rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.id, item.recipeId))
+                .limit(1);
+            }
+            if (rec.length === 0 && item.menuName) {
+              rec = await tx
+                .select()
+                .from(schema.recipes)
+                .where(eq(schema.recipes.menuName, item.menuName))
+                .limit(1);
+            }
 
-          if (rec.length > 0) {
-            let recIngredients: { ingredientId: string; quantity: number }[] = [];
-            try {
-              recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-            } catch { }
+            if (rec.length > 0) {
+              let recIngredients: { ingredientId: string; quantity: number }[] = [];
+              try {
+                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
+              } catch { }
 
-            for (const rIng of recIngredients) {
-              const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-              if (usedQty > 0) {
-                await tx.insert(schema.stockMovements).values({
-                  id: crypto.randomUUID(),
-                  ingredientId: rIng.ingredientId,
-                  type: "USAGE",
-                  quantity: usedQty,
-                  date: nowIso,
-                  note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
-                  createdBy: cashierName || currentOrder.cashierName || "Kasir",
-                  referenceId: orderId,
-                });
+              for (const rIng of recIngredients) {
+                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
+                if (usedQty > 0) {
+                  await tx.insert(schema.stockMovements).values({
+                    id: crypto.randomUUID(),
+                    ingredientId: rIng.ingredientId,
+                    type: "USAGE",
+                    quantity: usedQty,
+                    date: nowIso,
+                    note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
+                    createdBy: cashierName || currentOrder.cashierName || "Kasir",
+                    referenceId: orderId,
+                  });
 
-                const currentIng = await tx
-                  .select()
-                  .from(schema.ingredients)
-                  .where(eq(schema.ingredients.id, rIng.ingredientId))
-                  .limit(1);
-                if (currentIng.length > 0) {
-                  const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                  await tx
-                    .update(schema.ingredients)
-                    .set({ currentStock: newStock })
-                    .where(eq(schema.ingredients.id, rIng.ingredientId));
+                  const currentIng = await tx
+                    .select()
+                    .from(schema.ingredients)
+                    .where(eq(schema.ingredients.id, rIng.ingredientId))
+                    .limit(1);
+                  if (currentIng.length > 0) {
+                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
+                    await tx
+                      .update(schema.ingredients)
+                      .set({ currentStock: newStock })
+                      .where(eq(schema.ingredients.id, rIng.ingredientId));
+                  }
                 }
               }
             }
@@ -4040,24 +4062,32 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.payments = offlineState.payments || [];
 
-        const ownerUser = (offlineState.users || []).find(
-          (u: any) =>
-            (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
-            u.role === "OWNER"
-        );
-        if (ownerUser) {
-          return res.status(403).json({
-            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
-          });
+        const configuredSupervisorPin = (offlineState.settings && offlineState.settings.posSupervisorPin) || "1234";
+        let approver: any = null;
+
+        if (String(managerPin) === String(configuredSupervisorPin)) {
+          approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
+        } else {
+          const ownerUser = (offlineState.users || []).find(
+            (u: any) =>
+              (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
+              u.role === "OWNER"
+          );
+          if (ownerUser) {
+            return res.status(403).json({
+              error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
+            });
+          }
+
+          approver = (offlineState.users || []).find(
+            (u: any) =>
+              (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
+              (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
+          );
         }
 
-        const approver = (offlineState.users || []).find(
-          (u: any) =>
-            (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-            (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
-        );
         if (!approver) {
-          return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
+          return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
         }
 
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
@@ -4139,41 +4169,51 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      // Check if PIN belongs to OWNER (Owner is strictly read-only)
-      const ownerCheck = await db
-        .select()
-        .from(schema.users)
-        .where(
-          and(
-            eq(schema.users.pin, String(managerPin)),
-            eq(schema.users.role, "OWNER")
-          )
-        )
-        .limit(1);
+      let approver: any = null;
+      const currentSettings = await db.select().from(schema.settings).limit(1);
+      const configuredSupervisorPin = currentSettings[0]?.posSupervisorPin || "1234";
 
-      if (ownerCheck.length > 0) {
-        return res.status(403).json({
-          error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
-        });
+      if (String(managerPin) === String(configuredSupervisorPin)) {
+        approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
+      } else {
+        // Check if PIN belongs to OWNER (Owner is strictly read-only)
+        const ownerCheck = await db
+          .select()
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.pin, String(managerPin)),
+              eq(schema.users.role, "OWNER")
+            )
+          )
+          .limit(1);
+
+        if (ownerCheck.length > 0) {
+          return res.status(403).json({
+            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
+          });
+        }
+
+        // Verify PIN against MANAGER or SUPER_ADMIN
+        const authUsers = await db
+          .select()
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.pin, String(managerPin)),
+              or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
+            )
+          )
+          .limit(1);
+
+        if (authUsers.length > 0) {
+          approver = authUsers[0];
+        }
       }
 
-      // Verify PIN against MANAGER or SUPER_ADMIN
-      const authUsers = await db
-        .select()
-        .from(schema.users)
-        .where(
-          and(
-            eq(schema.users.pin, String(managerPin)),
-            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
-          )
-        )
-        .limit(1);
-
-      if (authUsers.length === 0) {
-        return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
+      if (!approver) {
+        return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
       }
-
-      const approver = authUsers[0];
       const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
       if (orderList.length === 0) {
         return res.status(404).json({ error: "Order tidak ditemukan" });
@@ -4320,24 +4360,32 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.audit_logs = offlineState.audit_logs || [];
 
-        const ownerUser = (offlineState.users || []).find(
-          (u: any) =>
-            (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
-            u.role === "OWNER"
-        );
-        if (ownerUser) {
-          return res.status(403).json({
-            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
-          });
+        const configuredSupervisorPin = (offlineState.settings && offlineState.settings.posSupervisorPin) || "1234";
+        let approver: any = null;
+
+        if (String(managerPin) === String(configuredSupervisorPin)) {
+          approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
+        } else {
+          const ownerUser = (offlineState.users || []).find(
+            (u: any) =>
+              (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
+              u.role === "OWNER"
+          );
+          if (ownerUser) {
+            return res.status(403).json({
+              error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
+            });
+          }
+
+          approver = (offlineState.users || []).find(
+            (u: any) =>
+              (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
+              (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
+          );
         }
 
-        const approver = (offlineState.users || []).find(
-          (u: any) =>
-            (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-            (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
-        );
         if (!approver) {
-          return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
+          return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
         }
 
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
@@ -4458,41 +4506,51 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      // Check if PIN belongs to OWNER (Owner is strictly read-only)
-      const ownerCheck = await db
-        .select()
-        .from(schema.users)
-        .where(
-          and(
-            eq(schema.users.pin, String(managerPin)),
-            eq(schema.users.role, "OWNER")
-          )
-        )
-        .limit(1);
+      let approver: any = null;
+      const currentSettings = await db.select().from(schema.settings).limit(1);
+      const configuredSupervisorPin = currentSettings[0]?.posSupervisorPin || "1234";
 
-      if (ownerCheck.length > 0) {
-        return res.status(403).json({
-          error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
-        });
+      if (String(managerPin) === String(configuredSupervisorPin)) {
+        approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
+      } else {
+        // Check if PIN belongs to OWNER (Owner is strictly read-only)
+        const ownerCheck = await db
+          .select()
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.pin, String(managerPin)),
+              eq(schema.users.role, "OWNER")
+            )
+          )
+          .limit(1);
+
+        if (ownerCheck.length > 0) {
+          return res.status(403).json({
+            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
+          });
+        }
+
+        // Verify PIN against MANAGER or SUPER_ADMIN
+        const authUsers = await db
+          .select()
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.pin, String(managerPin)),
+              or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
+            )
+          )
+          .limit(1);
+
+        if (authUsers.length > 0) {
+          approver = authUsers[0];
+        }
       }
 
-      // Verify PIN against MANAGER or SUPER_ADMIN
-      const authUsers = await db
-        .select()
-        .from(schema.users)
-        .where(
-          and(
-            eq(schema.users.pin, String(managerPin)),
-            or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
-          )
-        )
-        .limit(1);
-
-      if (authUsers.length === 0) {
-        return res.status(403).json({ error: "PIN Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
+      if (!approver) {
+        return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
       }
-
-      const approver = authUsers[0];
       const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
       if (orderList.length === 0) {
         return res.status(404).json({ error: "Order tidak ditemukan" });

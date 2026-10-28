@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Percent,
   Store,
+  KeyRound,
+  Boxes,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 
@@ -36,6 +38,10 @@ export const SettingsComponent = () => {
   const [taxRate, setTaxRate] = useState(settings.taxRate ?? 10);
   const [taxMode, setTaxMode] = useState<"INCLUSIVE" | "EXCLUSIVE">(settings.taxMode ?? "EXCLUSIVE");
   const [maxCashierDiscount, setMaxCashierDiscount] = useState(settings.maxCashierDiscount ?? 10);
+  const [posSupervisorPin, setPosSupervisorPin] = useState(settings.posSupervisorPin || "1234");
+  const [showSupervisorPin, setShowSupervisorPin] = useState(false);
+  const [autoDeductStockOnSale, setAutoDeductStockOnSale] = useState(settings.autoDeductStockOnSale !== false);
+  const [allowNegativeStockSale, setAllowNegativeStockSale] = useState(settings.allowNegativeStockSale !== false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +70,9 @@ export const SettingsComponent = () => {
       taxRate: Number(taxRate) || 0,
       taxMode,
       maxCashierDiscount: Number(maxCashierDiscount) || 0,
+      posSupervisorPin: posSupervisorPin.trim() || "1234",
+      autoDeductStockOnSale,
+      allowNegativeStockSale,
     });
     setSaveStatus("Settings saved successfully!");
     setTimeout(() => setSaveStatus(null), 3000);
@@ -431,7 +440,7 @@ export const SettingsComponent = () => {
                 <span className="text-[11px] text-brand-600 font-bold">{maxCashierDiscount}%</span>
               </label>
               <p className="text-[11px] text-slate-500 mb-2">
-                Kasir di tablet hanya bisa memberikan diskon maksimal sampai persentase ini. Diskon di atas nilai ini wajib memasukkan PIN otorisasi Manager/Owner.
+                Kasir di tablet hanya bisa memberikan diskon maksimal sampai persentase ini. Diskon di atas nilai ini wajib memasukkan PIN otorisasi Supervisor/Manager.
               </p>
               <input
                 type="number"
@@ -442,6 +451,107 @@ export const SettingsComponent = () => {
                 className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-mono focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none"
                 placeholder="10"
               />
+            </div>
+
+            {/* PIN Otorisasi Supervisor POS */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">
+                      PIN Otorisasi Supervisor POS
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      PIN khusus untuk otorisasi Void, Refund, Buka Laci Kasir, dan Diskon di tablet kasir.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="relative w-full max-w-xs">
+                  <input
+                    type={showSupervisorPin ? "text" : "password"}
+                    maxLength={6}
+                    value={posSupervisorPin}
+                    onChange={(e) => setPosSupervisorPin(e.target.value.replace(/\D/g, ""))}
+                    className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-xl text-base sm:text-sm font-mono tracking-widest text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none"
+                    placeholder="1234"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSupervisorPin(!showSupervisorPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showSupervisorPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  <strong className="text-slate-700">Keamanan:</strong> Kasir tidak perlu meminjam akun manajer. Cukup gunakan PIN Supervisor ini di kasir. Default: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">1234</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Otomatisasi & Kontrol Stok POS */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                  <Boxes className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">
+                    Otomatisasi Stok Bahan dari Penjualan Kasir
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Atur bagaimana penjualan di kasir memengaruhi stok bahan baku.
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle 1: Potong Stok Otomatis */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">
+                    Potong Stok Bahan Otomatis dari Penjualan POS
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Saat pesanan lunas, bahan baku resep otomatis dipotong secara real-time. Jika dimatikan, stok hanya berubah dari mutasi manual atau stok opname.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={autoDeductStockOnSale}
+                    onChange={(e) => setAutoDeductStockOnSale(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {/* Toggle 2: Mode Anti-Macet (Allow Negative Stock) */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-800">
+                    Mode Operasional Anti-Macet (Izinkan Jual saat Stok Sistem Habis)
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Kasir tetap bisa melayani tamu walaupun stok di sistem tercatat 0 (misal akibat staf terlambat input stok opname atau nota belanja). Stok akan tercatat minus untuk direkonsiliasi kemudian.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={allowNegativeStockSale}
+                    onChange={(e) => setAllowNegativeStockSale(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
             </div>
           </div>
 

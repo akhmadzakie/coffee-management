@@ -17,7 +17,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { users } = useStore();
+  const { users, settings } = useStore();
   const [pin, setPin] = useState("");
   const [reason, setReason] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -61,6 +61,9 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       return;
     }
 
+    const supervisorPin = settings?.posSupervisorPin || "1234";
+    const isSupervisorMatch = currentPin === supervisorPin;
+
     // Cari user dengan PIN cocok dan role MANAGER, OWNER, atau SUPER_ADMIN
     const authorizedUser = users.find((u) => {
       const isManagerOrOwner =
@@ -76,8 +79,19 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       return currentPin === "123456" || currentPin === "1234";
     });
 
+    if (isSupervisorMatch) {
+      const supervisorObj = authorizedUser || {
+        id: "supervisor_pos",
+        name: "Supervisor POS",
+        role: "MANAGER",
+        pin: currentPin,
+      };
+      onSuccess(supervisorObj, reasonRef.current.trim());
+      return;
+    }
+
     if (!authorizedUser) {
-      setErrorMessage("PIN salah atau Anda tidak memiliki wewenang Manager/Owner.");
+      setErrorMessage("PIN salah atau Anda tidak memiliki wewenang Supervisor / Manager.");
       pinRef.current = "";
       setPin("");
       return;
