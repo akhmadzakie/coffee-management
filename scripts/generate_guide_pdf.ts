@@ -1346,5 +1346,592 @@ export const generateFullMasterManual = () => {
   console.log(`[Master 17-Page Manual] Successfully generated master manual: ${outputPdfPath} (${buffer.length} bytes)`);
 };
 
-// Execute
+// ══════════════════════════════════════════════════════════════════════════════
+// PANDUAN OPERASIONAL KHUSUS: KASIR, BARISTA & KDS (5 HALAMAN)
+// ══════════════════════════════════════════════════════════════════════════════
+const generateKasirKdsRoleGuide = () => {
+  const doc = new JsPDFConstructor({ orientation: "p", unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const colW = (contentWidth - 6) / 2;
+  const totalPages = 5;
+
+  // HALAMAN 1: LOGIN & BUKA SHIFT KASIR
+  addHeaderFooter(doc, 1, totalPages, "Panduan Operasional Kasir & Barista — Login & Buka Shift");
+  let curY = 18;
+  curY = addSectionTitle(doc, "1. Otentikasi Kasir & Prosedur Modal Awal Laci", curY, "SOP pembukaan kasir dan penyiapan uang kembalian pukul 07:30 WITA");
+  
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Pilih Kasir", sub: "Layar Login" },
+    { label: "2. Input PIN", sub: "Keypad POS" },
+    { label: "3. Buka Shift", sub: "Menu POS" },
+    { label: "4. Modal Awal", sub: "Rp 300.000" },
+    { label: "5. Laci Kasir", sub: "Status Aktif" }
+  ]);
+
+  const s1Y = curY;
+  drawImageBox(doc, SCREEN_LOGIN, margin, s1Y, colW, 46, "Gambar K.1: Layar Login Operator & Keypad PIN");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s1Y, colW - 4, 46, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Langkah Buka Shift Kasir Pagi:", margin + colW + 8, s1Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s1Steps = [
+    "1. Sentuh tombol akun 'Terminal Kasir POS' atau nama kasir pada layar login.",
+    "2. Masukkan 6 digit PIN kasir pada keypad virtual layar sentuh.",
+    "3. Buka menu POS Kasir -> Klik tombol 'Buka Shift Kasir'.",
+    "4. Hitung modal uang pecahan kembalian dari brankas (default Rp 300.000).",
+    "5. Masukkan nominal ke kolom modal awal -> Klik konfirmasi buka shift.",
+    "6. Laci kasir otomatis terbuka dan status terminal menjadi AKTIF."
+  ];
+  s1Steps.forEach((st, idx) => {
+    const l = doc.splitTextToSize(st, colW - 14);
+    doc.text(l, margin + colW + 8, s1Y + 13 + idx * 5.2);
+  });
+
+  curY = s1Y + 52;
+  curY = addSectionTitle(doc, "2. Checklist Kesiapan Bar & Kalibrasi Mesin Espresso", curY, "Standar dial-in espresso 18g dose / 36g yield sebelum melayani tamu");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Komponen Kesiapan", "Target Standar Julia's Coffee", "Tindakan Jika Tidak Sesuai"]],
+    body: [
+      ["Ekstraksi Espresso", "18g bubuk kopi -> 36g yield cair (25-30 detik)", "Sesuaikan kehalusan gilingan grinder (finer/coarser)."],
+      ["Suhu Chiller Susu", "2°C s/d 4°C (Susu UHT & Fresh Milk dingin)", "Periksa saklar chiller dan laporkan ke Leader Bar."],
+      ["Kertas Printer Thermal", "Rol kertas 58mm/80mm terpasang penuh", "Ganti rol baru dengan sisi mengkilap menghadap keluar."],
+      ["Konektivitas Jaringan", "Indikator sistem hijau (ONLINE)", "Gunakan mode offline jika koneksi internet terputus."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 42, fontStyle: "bold" }, 1: { cellWidth: 68 }, 2: { cellWidth: 72 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 2: TERMINAL POS & KATALOG MENU
+  doc.addPage();
+  addHeaderFooter(doc, 2, totalPages, "Panduan Operasional Kasir — Katalog Menu & Keranjang POS");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Navigasi Katalog Menu & Pengisian Keranjang Pesanan", curY, "Langkah transaksi kasir cepat (rata-rata 30-45 detik per transaksi)");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Kategori", sub: "Filter Menu" },
+    { label: "2. Klik Menu", sub: "Pilih Item" },
+    { label: "3. Suhu Minuman", sub: "Iced / Hot" },
+    { label: "4. Keranjang", sub: "Rincian PB1" },
+    { label: "5. Pilih Meja", sub: "Dine In / Take" }
+  ]);
+
+  const s2Y = curY;
+  drawImageBox(doc, SCREEN_POS, margin, s2Y, colW, 48, "Gambar K.2: Terminal Kasir POS, Katalog & Keranjang");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s2Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Tata Letak & Fitur Terminal POS:", margin + colW + 8, s2Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s2Points = [
+    "• Bar Kategori Atas: Filter menu Kopi, Non-Coffee, Pastry, & Makanan.",
+    "• Kartu Produk: Menampilkan nama, foto, harga, dan indikator stok gudang.",
+    "• Panel Keranjang (Kanan): Rincian item yang dipesan, subtotal, dan pajak PB1.",
+    "• Pengaturan Tipe Pesanan: Tombol Dine In (Pilih No Meja) atau Take Away.",
+    "• Diskon & Promo: Klik 'Diskon' untuk memilih voucher atau potongan manual.",
+    "• Tombol Bayar Cepat: Mengarahkan langsung ke sheet kalkulasi pembayaran."
+  ];
+  s2Points.forEach((pt, idx) => {
+    const l = doc.splitTextToSize(pt, colW - 14);
+    doc.text(l, margin + colW + 8, s2Y + 13 + idx * 5.4);
+  });
+
+  curY = s2Y + 54;
+  curY = addSectionTitle(doc, "2. Prosedur Modifikasi Pesanan & Opsi Tambahan (Add-Ons)", curY, "Pencatatan varian suhu dan preferensi khusus tamu");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Pilihan Modifikasi", "Opsi di Terminal POS", "Dampak pada Stok Bahan & HPP"]],
+    body: [
+      ["Suhu Minuman", "Iced (Dingin) / Hot (Panas)", "Opsi Iced memotong stok es batu tube 120g per cup."],
+      ["Level Manis (Sugar)", "Normal (100%), Less Sugar (50%), No Sugar", "Mempengaruhi takaran sirup aren cair (default 25ml)."],
+      ["Substitusi Susu", "Fresh Milk UHT, Oat Milk (+Rp 6.000)", "Memotong saldo stok susu oat dan menambah tagihan."],
+      ["Extra Espresso Shot", "Tambah 1 Shot (+Rp 5.000)", "Memotong 18g biji kopi tambahan dan mencetak tanda +Shot."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 42, fontStyle: "bold" }, 1: { cellWidth: 68 }, 2: { cellWidth: 72 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 3: PEMBAYARAN & SPLIT BILL
+  doc.addPage();
+  addHeaderFooter(doc, 3, totalPages, "Panduan Operasional Kasir — Pembayaran & Split Bill");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Alur Transaksi Pembayaran Kasir", curY, "Penyelesaian transaksi via Tunai, QRIS Dinamis, Transfer Bank & Mesin EDC");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Klik Bayar", sub: "Sheet Kasir" },
+    { label: "2. Pilih Metode", sub: "Tunai / QRIS" },
+    { label: "3. Input Uang", sub: "Kembalian" },
+    { label: "4. Verifikasi", sub: "Status PAID" },
+    { label: "5. Cetak Struk", sub: "Thermal / WA" }
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Metode Bayar", "Prosedur Pelaksanaan di Meja Kasir", "Hasil Struk & Catatan Sistem"]],
+    body: [
+      ["Uang Tunai (Cash)", "Terima uang fisik, input nominal uang diterima. Sistem otomatis menampilkan nominal kembalian. Laci kasir terbuka otomatis.", "Struk fisik dicetak dengan rincian: Uang Tunai, Total Tagihan, dan Kembalian."],
+      ["QRIS Dinamis", "Layar menghadapkan QRIS statis / dinamis ke tamu. Minta tamu scan dengan BCA/Mandiri/GoPay/OVO. Verifikasi notifikasi berhasil.", "Struk mencantumkan kode referensi pembayaran QRIS."],
+      ["Kartu Debit / EDC", "Gesek/insert kartu ke mesin EDC fisik. Masukkan nominal tagihan POS. Minta nasabah input PIN. Simpan slip EDC merchant.", "Struk POS mencantumkan metode DEBIT CARD."],
+      ["Transfer Bank BCA", "Tamu transfer ke rekening resmi kedai. Periksa bukti transfer di m-banking kedai / terminal tablet sebelum menyelesaikan order.", "Struk POS mencantumkan metode TRANSFER BANK."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.8 },
+    columnStyles: { 0: { cellWidth: 38, fontStyle: "bold" }, 1: { cellWidth: 88 }, 2: { cellWidth: 56 } },
+    margin: { left: margin, right: margin }
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = addSectionTitle(doc, "2. Prosedur Split Bill (Pecah Tagihan Meja)", curY, "Dua metode pemisahan pembayaran pesanan satu rombongan meja");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Jenis Split Bill", "Kasus Penggunaan Lapangan", "Langkah Eksekusi di Terminal POS"]],
+    body: [
+      ["Split Per Item (Pecah Menu)", "Tamu dalam 1 meja ingin membayar sendiri makanan/minuman yang mereka santap.", "Buka pesanan meja -> Klik 'Split Bill' -> Pilih 'Per Item' -> Centang item tamu 1 -> Selesaikan bayar -> Sisa item tetap ada di meja induk."],
+      ["Split Bagi Rata (Even Split)", "Total tagihan meja dibagi rata sejumlah orang (misal Rp 150.000 dibagi 3 = Rp 50.000/orang).", "Buka pesanan meja -> Klik 'Split Bill' -> Pilih 'Bagi Rata' -> Masukkan jumlah orang -> Bayar cicilan per orang hingga tagihan meja Rp 0."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.8 },
+    columnStyles: { 0: { cellWidth: 44, fontStyle: "bold" }, 1: { cellWidth: 64 }, 2: { cellWidth: 74 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 4: KITCHEN DISPLAY SYSTEM (KDS)
+  doc.addPage();
+  addHeaderFooter(doc, 4, totalPages, "Panduan Operasional Barista & Dapur — Kitchen Display System");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Operasional Layar Dapur & Bar (KDS)", curY, "Alur antrean pesanan masuk, transisi status pembuatan, dan indikator SLA");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Order Masuk", sub: "Bunyi Alert" },
+    { label: "2. Status Antre", sub: "Kuning QUEUED" },
+    { label: "3. Mulai Buat", sub: "Timer Berjalan" },
+    { label: "4. Seduh Kopi", sub: "Bar / Dapur" },
+    { label: "5. Siap Saji", sub: "Server Antar" }
+  ]);
+
+  const s4Y = curY;
+  drawImageBox(doc, SCREEN_KDS, margin, s4Y, colW, 48, "Gambar K.4: Kitchen Display System (Antrean Barista)");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s4Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Tata Cara Kerja Barista di Layar KDS:", margin + colW + 8, s4Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s4Points = [
+    "• Filter Stasiun: Barista memilih 'Bar Minuman', koki memilih 'Kitchen Dapur'.",
+    "• Tiket Pesanan Baru: Masuk otomatis dengan bunyi audio alert tanpa refresh.",
+    "• Tombol 'Mulai Buat': Sentuh saat mulai menyeduh kopi. Timer berubah biru.",
+    "• Peringatan Waktu (SLA): Jika pesanan melebihi target waktu, kartu berkedip merah (TERLAMBAT).",
+    "• Tombol 'Siap Saji': Sentuh saat minuman selesai dibuat dan siap disajikan.",
+    "• Server / Waiter langsung mengantarkan pesanan ke nomor meja tamu."
+  ];
+  s4Points.forEach((pt, idx) => {
+    const l = doc.splitTextToSize(pt, colW - 14);
+    doc.text(l, margin + colW + 8, s4Y + 13 + idx * 5.4);
+  });
+
+  curY = s4Y + 54;
+  curY = addSectionTitle(doc, "2. Standar Waktu Penyajian Pesanan (SLA Service Time)", curY, "Target durasi penyelesaian menu Julia's Coffee & Eatery");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Kategori Menu", "Stasiun Pelaksana", "Target Standar", "Tindakan Jika Terlambat"]],
+    body: [
+      ["Espresso & Americano", "Bar Minuman", "2 s/d 3 Menit", "Prioritaskan ekstraksi shot espresso."],
+      ["Milk-Based Coffee (Latte)", "Bar Minuman", "3 s/d 4 Menit", "Steam susu paralel untuk 2 cup berdekatan."],
+      ["Makanan Hangat (Kitchen)", "Kitchen Dapur", "8 s/d 12 Menit", "Laporkan ke server untuk menyajikan minuman dulu."],
+      ["Pastry & Bakery Panas", "Pastry / Baker", "3 s/d 5 Menit", "Hangatkan di oven salamander/microwave segera."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 44, fontStyle: "bold" }, 1: { cellWidth: 38 }, 2: { cellWidth: 36, fontStyle: "bold", textColor: [15, 118, 110] }, 3: { cellWidth: 64 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 5: TUTUP SHIFT KASIR & HANDOVER
+  doc.addPage();
+  addHeaderFooter(doc, 5, totalPages, "Panduan Operasional Kasir — Tutup Shift & Serah Terima Kas");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. SOP Penutupan Shift Kasir & Rekonsiliasi Kas Laci", curY, "Prosedur tutup laci kas, penghitungan fisik uang, dan eliminasi selisih kas");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Hitung Kas", sub: "Fisik Laci" },
+    { label: "2. Tutup Shift", sub: "Formulir POS" },
+    { label: "3. Input Saldo", sub: "Verifikasi Rp 0" },
+    { label: "4. X-Report", sub: "Cetak Struk" },
+    { label: "5. Serah Terima", sub: "SOP Handover" }
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Komponen Perhitungan Kas", "Formula Sistem POS", "Tindakan Jika Terjadi Selisih"]],
+    body: [
+      ["Modal Awal Laci", "Saldo awal laci saat shift dibuka (default Rp 300.000)", "Wajib utuh saat diserahkan ke kasir shift berikutnya."],
+      ["Penjualan Tunai Bersih", "(+ Total Penerimaan Tunai) - (Refund Tunai)", "Dicocokkan dengan fisik uang penjualan di laci."],
+      ["Penerimaan / Pengeluaran Kas", "(+ Cash In / Petty Cash) - (- Cash Out Biaya Operasional)", "Wajib menyertakan bon fisik pengeluaran operasional."],
+      ["Total Kas Fisik Diharapkan", "Modal Awal + Penjualan Tunai + Cash In - Cash Out - Refund", "Jika Fisik > Sistem: Selisih Lebih (Masuk Kas Lain-lain).\nJika Fisik < Sistem: Kasir bertanggung jawab mengganti."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 46, fontStyle: "bold" }, 1: { cellWidth: 70 }, 2: { cellWidth: 66 } },
+    margin: { left: margin, right: margin }
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = addSectionTitle(doc, "2. SOP Serah Terima Kasir Antar-Shift (Shift Handover)", curY, "Penyerahan modal laci dan pencatatan berita acara pergantian kru");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Urutan Tindakan", "Kasir Shift Pagi (Keluar)", "Kasir Shift Siang (Masuk)", "Pengawasan Leader"]],
+    body: [
+      ["1. Hitung Fisik", "Menghitung uang kas laci di depan kasir masuk.", "Menyaksikan penghitungan lembar per lembar.", "Memastikan tidak ada orang lain di meja kasir."],
+      ["2. Input Sistem", "Menginput total fisik kas ke formulir Tutup Shift.", "Memastikan angka yang diinput sesuai hitungan fisik.", "Melihat verifikasi status selisih Rp 0."],
+      ["3. Cetak Struk", "Mencetak struk ringkasan shift (X-Report).", "Menerima lembar struk shift untuk arsip kasir.", "Menandatangani struk shift bersama kasir."],
+      ["4. Modal Laci", "Menyisakan Rp 300.000 di laci kasir.", "Menerima uang modal awal shift Rp 300.000.", "Menyimpan sisa uang omzet ke kantong brankas."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.8 },
+    columnStyles: { 0: { cellWidth: 38, fontStyle: "bold" }, 1: { cellWidth: 54 }, 2: { cellWidth: 54 }, 3: { cellWidth: 36 } },
+    margin: { left: margin, right: margin }
+  });
+
+  const outPath = path.join(process.cwd(), "public", "Panduan_Operasional_Kasir_dan_KDS.pdf");
+  fs.writeFileSync(outPath, Buffer.from(doc.output("arraybuffer")));
+  console.log(`[Kasir Guide] Successfully generated 5-page manual: ${outPath}`);
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PANDUAN MANAJERIAL KHUSUS: OWNER, MANAGER & FINANCE (5 HALAMAN)
+// ══════════════════════════════════════════════════════════════════════════════
+const generateManagerOwnerRoleGuide = () => {
+  const doc = new JsPDFConstructor({ orientation: "p", unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const colW = (contentWidth - 6) / 2;
+  const totalPages = 5;
+
+  // HALAMAN 1: DASHBOARD EKSEKUTIF OWNER
+  addHeaderFooter(doc, 1, totalPages, "Panduan Manajerial — Dashboard Eksekutif & Omzet Bisnis");
+  let curY = 18;
+  curY = addSectionTitle(doc, "1. Analitik Bisnis & Dashboard Eksekutif Owner", curY, "Pemantauan omzet kotor, laba bersih, dan tren penjualan real-time");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Login Owner", sub: "Akun Eksekutif" },
+    { label: "2. Dasbor Bisnis", sub: "Grafik & Omzet" },
+    { label: "3. Pantau Metrik", sub: "Gross vs Net" },
+    { label: "4. Top Seller", sub: "Evaluasi Menu" },
+    { label: "5. Keputusan", sub: "Strategi Promo" }
+  ]);
+
+  const s1Y = curY;
+  drawImageBox(doc, SCREEN_DASHBOARD, margin, s1Y, colW, 48, "Gambar M.1: Dashboard Eksekutif Owner");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s1Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Metrik Utama Dashboard Bisnis:", margin + colW + 8, s1Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s1Metrics = [
+    "• Total Omzet (Gross Sales): Akumulasi seluruh pesanan berbayar (PAID).",
+    "• Laba Bersih (Net Profit): Omzet dikurangi HPP bahan dan beban operasional.",
+    "• Total Pesanan (Order Count): Jumlah struk transaksi yang berhasil dilayani.",
+    "• Average Order Value (AOV): Rata-rata nominal belanja tamu per transaksi.",
+    "• Filter Rentang Waktu: Pilihan analitik Hari Ini, 7 Hari, 30 Hari, & Bulan Ini.",
+    "• Analisis Kategori Terlaris: Komposisi penjualan Kopi, Non-Coffee, & Eatery."
+  ];
+  s1Metrics.forEach((m, idx) => {
+    const l = doc.splitTextToSize(m, colW - 14);
+    doc.text(l, margin + colW + 8, s1Y + 13 + idx * 5.4);
+  });
+
+  curY = s1Y + 54;
+  curY = addSectionTitle(doc, "2. Formula Finansial & Standar KPI Kedai", curY, "Rumus perhitungan profitabilitas kedai Julia's Coffee");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Indikator Keuangan", "Formula Perhitungan Sistem", "Target Standar Bisnis F&B"]],
+    body: [
+      ["Gross Revenue (Omzet Kotor)", "Total Seluruh Transaksi Berstatus PAID", "Pertumbuhan minimal +5% per bulan."],
+      ["HPP Bahan Baku (COGS)", "Total Modal Bahan Terpakai = Resep POS * Volume Terjual", "Maksimal 30% s/d 35% dari Omzet Kotor."],
+      ["Gross Profit (Laba Kotor)", "Gross Revenue - HPP Bahan Baku", "Minimal 65% s/d 70% dari Omzet Kotor."],
+      ["Net Operating Profit", "Gross Profit - Beban Operasional (Gaji + Sewa + Utilitas)", "Minimal 20% s/d 25% dari Omzet Bersih."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 46, fontStyle: "bold" }, 1: { cellWidth: 80 }, 2: { cellWidth: 56 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 2: SUPERVISI LEADER BAR
+  doc.addPage();
+  addHeaderFooter(doc, 2, totalPages, "Panduan Manajerial — Supervisi Leader Bar & Quality Control");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Peran Khusus Leader Bar (Head Barista)", curY, "Monitoring checklist jobdesk, dial-in kalibrasi espresso, & persetujuan waste");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Login Leader", sub: "Akun Head Bar" },
+    { label: "2. Checklist Bar", sub: "Opening/Closing" },
+    { label: "3. Kalibrasi Kopi", sub: "Dial-in Grinder" },
+    { label: "4. Suhu Chiller", sub: "2°C s/d 4°C" },
+    { label: "5. QC Minuman", sub: "SLA Maks 4m" }
+  ]);
+
+  const s2Y = curY;
+  drawImageBox(doc, SCREEN_LEADER, margin, s2Y, colW, 48, "Gambar M.2: Checklist Supervisi Leader Bar");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s2Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Tugas Utama Leader Bar Lapangan:", margin + colW + 8, s2Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s2Tasks = [
+    "• Dial-In Kalibrasi Grinder Pagi: Memastikan rasa espresso seimbang (sweet, acid, body).",
+    "• Pengawasan SLA Barista: Menjaga waktu seduh kopi tidak melampaui 4 menit.",
+    "• Persetujuan Quick Waste: Otorisasi bahan terbuang/tumpah dengan alasan jelas.",
+    "• Stok Opname Harian Bar: Memeriksa sisa biji kopi, sirup, dan susu di bar.",
+    "• Closing Checklist: Memverifikasi *backflush* mesin espresso & pembersihan bar.",
+    "• Coaching Kru: Memberikan arahan teknis *steaming latte art* kepada barista junior."
+  ];
+  s2Tasks.forEach((t, idx) => {
+    const l = doc.splitTextToSize(t, colW - 14);
+    doc.text(l, margin + colW + 8, s2Y + 13 + idx * 5.4);
+  });
+
+  curY = s2Y + 54;
+  curY = addSectionTitle(doc, "2. SOP Kalibrasi Grinder Espresso & Batas Toleransi Waste", curY, "Pengendalian kualitas seduhan dan pencegahan pemborosan bahan");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Parameter Kalibrasi", "Spesifikasi Standar Julia's Coffee", "Tindakan Koreksi"]],
+    body: [
+      ["Dosis Bubuk Kopi (Dose)", "18.0 gram (+/- 0.2 gram)", "Gunakan timbangan digital presisi."],
+      ["Hasil Ekstraksi (Yield)", "36.0 gram cairan espresso cair", "Hentikan ekstraksi saat rasio 1:2 tercapai."],
+      ["Waktu Ekstraksi (Time)", "25 s/d 30 detik", "Jika < 25s: Putar grinder finer. Jika > 30s: Putar coarser."],
+      ["Maksimum Waste Kalibrasi", "Maksimal 3x ekstraksi uji coba (54g)", "Jika belum ketemu, minta bantuan Manager Operasional."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 46, fontStyle: "bold" }, 1: { cellWidth: 68 }, 2: { cellWidth: 68 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 3: MANAJEMEN STOK & AUDIT OPNAME
+  doc.addPage();
+  addHeaderFooter(doc, 3, totalPages, "Panduan Manajerial — Stok Bahan Baku, Resep & Opname");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Manajemen Inventori Stok Bahan Baku & Resep HPP", curY, "Pemotongan otomatis bahan per pesanan POS dan pemantauan batas minimum");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Menu Stok", sub: "Cek Inventori" },
+    { label: "2. Saldo Gudang", sub: "Deduksi POS" },
+    { label: "3. Formula HPP", sub: "Gramatur BOM" },
+    { label: "4. Stok Opname", sub: "Hitung Fisik" },
+    { label: "5. Varians Stok", sub: "Koreksi Selisih" }
+  ]);
+
+  const s3Y = curY;
+  drawImageBox(doc, SCREEN_INVENTORY, margin, s3Y, colW, 48, "Gambar M.3: Stok Bahan Baku & Opname");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s3Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Fitur Modul Stok & Resep Menu:", margin + colW + 8, s3Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s3Features = [
+    "• Bill of Materials (BOM): Resep terhubung ke tiap menu (mis. 18g biji kopi per cup).",
+    "• Pemotongan Otomatis: Saldo gudang berkurang instan saat pesanan POS dibayar.",
+    "• Peringatan Stok Menipis: Indikator kuning/merah jika stok di bawah batas aman.",
+    "• Purchase Order (PO): Input pembelian bahan baku dari pemasok resmi kedai.",
+    "• Formulir Stok Opname: Pencatatan hitung fisik mingguan dan koreksi selisih.",
+    "• Log Mutasi Bahan: Rincian keluar/masuk bahan lengkap dengan nama operator."
+  ];
+  s3Features.forEach((f, idx) => {
+    const l = doc.splitTextToSize(f, colW - 14);
+    doc.text(l, margin + colW + 8, s3Y + 13 + idx * 5.4);
+  });
+
+  curY = s3Y + 54;
+  curY = addSectionTitle(doc, "2. Studi Kasus Audit Stok Opname Mingguan", curY, "Penetapan batas wajar selisih stok dan penelusuran kebocoran bahan");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Bahan Baku", "Stok Sistem POS", "Hitung Fisik", "Selisih Varians", "Toleransi & Investigasi"]],
+    body: [
+      ["Biji Kopi House Blend", "5.200 gram", "5.050 gram", "-150 gram (-2.8%)", "Wajar (Dalam batas waste kalibrasi grinder mingguan)."],
+      ["Fresh Milk UHT", "24 Liter", "24 Liter", "0 Liter (0.0%)", "Akurat (Kesesuaian 100% tanpa selisih)."],
+      ["Sirup Aren Cair", "3.000 ml", "2.650 ml", "-350 ml (-11.6%)", "Tinggi! Lakukan investigasi porsi pompa dispenser sirup."],
+      ["Cup Kopi Take Away 12oz", "350 pcs", "348 pcs", "-2 pcs (-0.5%)", "Wajar (Cup rusak/penyok saat proses lid-sealing)."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 42, fontStyle: "bold" }, 1: { cellWidth: 30 }, 2: { cellWidth: 26 }, 3: { cellWidth: 32, fontStyle: "bold" }, 4: { cellWidth: 52 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 4: ARUS KAS & REKONSILIASI BANK (ROLE FINANCE)
+  doc.addPage();
+  addHeaderFooter(doc, 4, totalPages, "Panduan Manajerial — Buku Kas, Arus Kas & Rekonsiliasi Bank");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Peran Khusus Finance: Arus Kas & Rekonsiliasi Bank", curY, "Pengawasan mutasi dana kas laci, petty cash operasional, & setoran rekening bank");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Validasi Shift", sub: "X-Report Kasir" },
+    { label: "2. Mutasi Kas", sub: "Cash In/Out" },
+    { label: "3. Petty Cash", sub: "Operasional" },
+    { label: "4. Cash Drop", sub: "Setor Brankas" },
+    { label: "5. Rekonsiliasi", sub: "Rekening Bank" }
+  ]);
+
+  const s4Y = curY;
+  drawImageBox(doc, SCREEN_CASHFLOW, margin, s4Y, colW, 48, "Gambar M.4: Buku Kas & Arus Kas Keuangan");
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin + colW + 4, s4Y, colW - 4, 48, 2, 2, "FD");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 58, 138);
+  doc.text("Tanggung Jawab Tim Keuangan (Finance):", margin + colW + 8, s4Y + 7);
+
+  doc.setFontSize(6.3);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(51, 65, 85);
+  const s4Tasks = [
+    "• Verifikasi Tutup Shift: Mencocokkan struk fisik X-Report kasir dengan uang tunai.",
+    "• Pengelolaan Kas Kecil (Petty Cash): Pencatatan biaya operasional darurat.",
+    "• Cash Drop: Memindahkan uang tunai laci ke brankas saat saldo melebihi batas.",
+    "• Rekonsiliasi Bank: Mencocokkan mutasi QRIS/Transfer dengan rekening koran.",
+    "• Laporan Laba Rugi (P&L): Menghasilkan rekap profitabilitas bulanan untuk Owner.",
+    "• Pembayaran Tagihan Supplier: Menjadwalkan pelunasan invoice bahan baku."
+  ];
+  s4Tasks.forEach((t, idx) => {
+    const l = doc.splitTextToSize(t, colW - 14);
+    doc.text(l, margin + colW + 8, s4Y + 13 + idx * 5.4);
+  });
+
+  curY = s4Y + 54;
+  curY = addSectionTitle(doc, "2. Klasifikasi Akun Rekening Kas & Bank", curY, "Pemisahan pos kas fisik dan rekening digital kedai");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Akun / Pos Dana", "Tipe Rekening", "Tujuan Penggunaan & Saldo Standar"]],
+    body: [
+      ["Kas Laci Kasir (Cash Drawer)", "Kas Fisik Meja Kasir", "Modal kembalian (Rp 300.000) & penampung penjualan tunai shift berjalan."],
+      ["Kas Kecil Toko (Petty Cash)", "Kas Fisik Brankas", "Dana operasional darurat (es batu darurat, gas elpiji, air galon). Saldo: Rp 500.000."],
+      ["Rekening Operasional (BCA)", "Bank Digital", "Penerimaan pembayaran QRIS, transfer bank, dan pembayaran supplier."],
+      ["Rekening Payroll (Mandiri)", "Bank Digital", "Penampungan dana khusus pembayaran gaji bulanan seluruh karyawan."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 46, fontStyle: "bold" }, 1: { cellWidth: 36 }, 2: { cellWidth: 100 } },
+    margin: { left: margin, right: margin }
+  });
+
+  // HALAMAN 5: SDM, PAYROLL & MANAJEMEN PIN TERSENTRALISASI
+  doc.addPage();
+  addHeaderFooter(doc, 5, totalPages, "Panduan Manajerial — SDM, Slip Gaji & Manajemen PIN Admin");
+  curY = 18;
+  curY = addSectionTitle(doc, "1. Penggajian Karyawan & Cetak Slip Gaji PDF", curY, "Perhitungan gaji pokok, tunjangan jabatan, lembur, dan pencetakan slip resmi");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Data SDM", sub: "Kontrak Kerja" },
+    { label: "2. Jam Absensi", sub: "Rekap Kehadiran" },
+    { label: "3. Hitung Gaji", sub: "Pokok + Lembur" },
+    { label: "4. Cetak Slip", sub: "Vektor PDF" },
+    { label: "5. Hak Akses", sub: "Reset PIN Admin" }
+  ]);
+
+  const s5Y = curY;
+  drawImageBox(doc, SCREEN_PAYROLL, margin, s5Y, colW, 46, "Gambar M.5A: Data Karyawan & Kontrak SDM");
+  drawImageBox(doc, SCREEN_USERS_PIN, margin + colW + 4, s5Y, colW - 4, 46, "Gambar M.5B: Manajemen Pengguna & Reset PIN");
+
+  curY = s5Y + 52;
+  curY = addSectionTitle(doc, "2. Mekanisme Penggantian PIN Otorisasi Tersentralisasi", curY, "Kebijakan keamanan mutlak: Penggantian PIN hanya oleh Super Admin / Manager");
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Aturan Keamanan PIN", "Prosedur Eksekusi di Sistem POS", "Alasan Kebijakan Audit Trail"]],
+    body: [
+      ["Larangan Ganti Mandiri", "Staf kasir, barista, kitchen, dan server tidak memiliki opsi ganti PIN di layar terminal POS.", "Mencegah manipulasi akun kasir dan menjaga akuntabilitas mutasi laci."],
+      ["Penggantian oleh Admin", "Super Admin atau Manager membuka menu 'Users & Akses' -> Klik tombol 'Edit Akun' -> Masukkan PIN Baru.", "Setiap perubahan kredensial tercatat di Audit Log dengan cap waktu."],
+      ["PIN Lupa / Terkunci", "Karyawan melapor ke Manager. Manager membuka profil karyawan -> Input 6-digit PIN pengganti -> Simpan.", "Memastikan proses reset PIN selalu disaksikan dan disetujui pimpinan."],
+      ["Keamanan PIN Void/Refund", "PIN otorisasi void hanya diketahui oleh Manager dan Supervisor bertugas.", "Mencegah pembatalan transaksi fiktif tanpa persetujuan pihak berwenang."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: [51, 65, 85], cellPadding: 1.6 },
+    columnStyles: { 0: { cellWidth: 42, fontStyle: "bold" }, 1: { cellWidth: 70 }, 2: { cellWidth: 70 } },
+    margin: { left: margin, right: margin }
+  });
+
+  const outPath = path.join(process.cwd(), "public", "Panduan_Manajerial_Owner_dan_Manager.pdf");
+  fs.writeFileSync(outPath, Buffer.from(doc.output("arraybuffer")));
+  console.log(`[Manager Guide] Successfully generated 5-page manual: ${outPath}`);
+};
+
+// Execute all 3 official guidebooks
 generateFullMasterManual();
+generateKasirKdsRoleGuide();
+generateManagerOwnerRoleGuide();
