@@ -15,12 +15,27 @@ window.addEventListener("vite:preloadError", () => {
   }
 });
 
-// Register PWA Service Worker for offline capability & mobile installation
-if ("serviceWorker" in navigator && !window.location.host.startsWith("localhost:")) {
+// Register PWA Service Worker for offline capability & tablet installation
+if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch((err) => {
-      console.log("PWA Service Worker registration skipped:", err);
-    });
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => {
+        // Auto update service worker on new deployment
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                console.log("Versi baru aplikasi terinstal di perangkat.");
+              }
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        console.log("PWA Service Worker registration skipped:", err);
+      });
   });
 }
 

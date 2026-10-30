@@ -2138,6 +2138,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         Selisih: {opnameItems.filter((i) => i.difference !== 0).length} Bahan
                       </span>
                     )}
+
+                    {/* Estimasi Nominal Kerugian HPP Selisih */}
+                    {(() => {
+                      const totalDiffLoss = opnameItems.reduce((acc, item) => {
+                        if (item.difference < 0) {
+                          const ing = ingredients.find((i) => i.id === item.ingredientId);
+                          const unitCost = ing?.costPerUnit || 0;
+                          return acc + Math.abs(item.difference) * unitCost;
+                        }
+                        return acc;
+                      }, 0);
+
+                      if (totalDiffLoss > 0) {
+                        return (
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-extrabold border border-amber-300 font-mono">
+                            Estimasi Defisit HPP: -{formatCurrency(totalDiffLoss)}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">

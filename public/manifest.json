@@ -24,6 +24,20 @@
   ],
   "shortcuts": [
     {
+      "name": "POS Kasir",
+      "short_name": "Kasir",
+      "description": "Terminal Kasir POS & Transaksi Meja",
+      "url": "/pos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Kitchen Display (KDS)",
+      "short_name": "KDS Bar",
+      "description": "Layar Antrean Pesanan Barista & Dapur",
+      "url": "/kds",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
       "name": "Presensi & Clock In",
       "short_name": "Presensi",
       "description": "Clock In / Clock Out Kehadiran Karyawan",
@@ -31,23 +45,9 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Checklist Supervisi",
-      "short_name": "Checklist",
-      "description": "Checklist Pembukaan & Penutupan Outlet",
-      "url": "/",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
       "name": "Stok Opname Fisik",
       "short_name": "Opname",
       "description": "Audit & Timbang Stok Bahan Riil",
-      "url": "/",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Buku Kas & Keuangan",
-      "short_name": "Keuangan",
-      "description": "Arus Kas, Omzet & Laporan",
       "url": "/",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
