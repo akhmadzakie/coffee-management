@@ -150,7 +150,7 @@ export const Layout: React.FC<LayoutProps> = ({
       case "SUPER_ADMIN":
         return "dashboard_manager";
       case "KASIR":
-        return "pos_cashier";
+        return "dashboard_employee";
       default:
         return "dashboard_employee";
     }
@@ -416,11 +416,12 @@ export const Layout: React.FC<LayoutProps> = ({
       "payroll",
     ],
 
-    // Kasir: POS Terminal & Presensi
+    // Kasir: Dashboard Karyawan, Presensi Selfie, POS Terminal & Layar KDS
     KASIR: [
+      "dashboard_employee",
+      "attendance_clock",
       "pos_cashier",
       "kitchen_display",
-      "attendance_clock",
     ],
 
     // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, presensi, rekap omzet

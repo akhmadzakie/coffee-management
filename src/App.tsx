@@ -169,11 +169,11 @@ function AppContent() {
     OWNER:       "dashboard_owner",
     MANAGER:     "dashboard_manager",
     FINANCE:     "dashboard_finance",
-    KASIR:       "pos_cashier",
+    KASIR:       "dashboard_employee",
     LEADER:      "leader_checklist",
-    BAR:         "attendance_clock",
-    KITCHEN:     "attendance_clock",
-    BAKER:       "attendance_clock",
+    BAR:         "dashboard_employee",
+    KITCHEN:     "dashboard_employee",
+    BAKER:       "dashboard_employee",
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
@@ -240,9 +240,10 @@ function AppContent() {
       "audit_log",
     ],
     KASIR: [
+      "dashboard_employee",
+      "attendance_clock",
       "pos_cashier",
       "kitchen_display",
-      "attendance_clock",
     ],
     LEADER: [
       "dashboard_employee",
@@ -378,7 +379,7 @@ function AppContent() {
   const getSafeReturnView = (): ViewState => {
     if (!currentUser) return "dashboard_finance";
     if (currentUser.role === "KASIR") {
-      return "attendance_clock";
+      return "dashboard_employee";
     }
     return roleDefaultView[currentUser.role] || "dashboard_owner";
   };
