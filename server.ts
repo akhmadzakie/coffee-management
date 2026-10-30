@@ -59,12 +59,68 @@ const initialUsers = [
     department: "Management",
   },
   {
+    id: "owner-1",
+    username: "owner",
+    pin: "123456",
+    name: "Owner Julia's",
+    role: "OWNER",
+    department: "Executive",
+  },
+  {
+    id: "manager-1",
+    username: "manager",
+    pin: "123456",
+    name: "Manager Operasional",
+    role: "MANAGER",
+    department: "Operasional",
+  },
+  {
     id: "pos-terminal-1",
     username: "kasir",
     pin: "123456",
     name: "Terminal Kasir POS",
     role: "KASIR",
     department: "Bar & Kasir",
+  },
+  {
+    id: "leader-1",
+    username: "leader",
+    pin: "123456",
+    name: "Rama (Leader Bar)",
+    role: "LEADER",
+    department: "BAR",
+  },
+  {
+    id: "barista-1",
+    username: "barista",
+    pin: "123456",
+    name: "Budi (Barista)",
+    role: "BAR",
+    department: "BAR",
+  },
+  {
+    id: "kitchen-1",
+    username: "kitchen",
+    pin: "123456",
+    name: "Chef Dapur",
+    role: "KITCHEN",
+    department: "KITCHEN",
+  },
+  {
+    id: "baker-1",
+    username: "baker",
+    pin: "123456",
+    name: "Pastry Baker",
+    role: "BAKER",
+    department: "BAKERY",
+  },
+  {
+    id: "finance-1",
+    username: "finance",
+    pin: "123456",
+    name: "Finance & Accounting",
+    role: "FINANCE",
+    department: "Finance",
   },
 ];
 
@@ -6539,6 +6595,75 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
     } catch (e) {
       console.error("Dashboard summary error:", e);
       res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  // ─── ADMIN DATA PURGE / RESET ENDPOINT (Pembersihan Data Uji Coba) ──────────────
+  app.post("/api/admin/reset-transactions", async (req, res) => {
+    try {
+      const { confirmKey, target } = req.body;
+      if (confirmKey !== "RESET_JULIA_COFFEE_2026") {
+        return res.status(403).json({ error: "Kunci konfirmasi tidak valid." });
+      }
+
+      if (!isDbConnected && offlineState) {
+        offlineState.orders = [];
+        offlineState.order_items = [];
+        offlineState.payments = [];
+        offlineState.sales_transactions = [];
+        offlineState.sales_import_logs = [];
+        offlineState.shifts = [];
+        offlineState.cash_transactions = [];
+        offlineState.stock_movements = [];
+        offlineState.stock_opnames = [];
+        offlineState.stock_opname_items = [];
+        offlineState.daily_attendances = [];
+        offlineState.daily_checklists = [];
+        offlineState.attendance_records = [];
+        offlineState.audit_logs = [];
+        offlineState.payroll_records = [];
+        offlineState.kpi_records = [];
+        offlineState.batch_preparations = [];
+        bumpDataVersion();
+        return res.json({ success: true, message: "Data transaksional berhasil dibersihkan (Offline Mode)." });
+      }
+
+      await db.transaction(async (tx) => {
+        // Hapus pesanan dan pembayaran POS
+        await tx.delete(schema.payments);
+        await tx.delete(schema.orderItems);
+        await tx.delete(schema.orders);
+
+        // Hapus penjualan & mutasi kas
+        await tx.delete(schema.salesTransactions);
+        await tx.delete(schema.salesImportLogs);
+        await tx.delete(schema.cashTransactions);
+        await tx.delete(schema.shifts);
+
+        // Hapus kartu stok & opname
+        await tx.delete(schema.stockMovements);
+        await tx.delete(schema.stockOpnameItems);
+        await tx.delete(schema.stockOpnames);
+
+        // Hapus catatan presensi & payroll uji coba
+        await tx.delete(schema.dailyAttendances);
+        await tx.delete(schema.dailyChecklists);
+        await tx.delete(schema.attendanceRecords);
+        await tx.delete(schema.payrollRecords);
+        await tx.delete(schema.kpiRecords);
+        await tx.delete(schema.batchPreparations);
+        await tx.delete(schema.managerApprovalRequests);
+        await tx.delete(schema.auditLogs);
+      });
+
+      bumpDataVersion();
+      res.json({
+        success: true,
+        message: "Data transaksi, shift, presensi, dan log uji coba berhasil dibersihkan ke kondisi awal.",
+      });
+    } catch (err: any) {
+      console.error("Gagal membersihkan data transaksi:", err);
+      res.status(500).json({ error: err?.message || "Gagal membersihkan data transaksi" });
     }
   });
 
