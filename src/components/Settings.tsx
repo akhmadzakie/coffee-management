@@ -16,6 +16,9 @@ import {
   Store,
   KeyRound,
   Boxes,
+  BookOpen,
+  FileText,
+  Download,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 
@@ -566,6 +569,104 @@ export const SettingsComponent = () => {
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
               placeholder="e.g., You are our strongest connection..."
             />
+          </div>
+
+          {/* Buku Panduan Resmi & SOP Julia's Coffee */}
+          <div className="pt-5 border-t border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen className="w-5 h-5 text-amber-600" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Buku Panduan Resmi & Standar Operasional Prosedur (SOP)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Unduh dokumen panduan format PDF resmi untuk operasional kedai dan pelatihan tim.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Card 1: Master Guide */}
+              <a
+                href="/Buku_Panduan_Lengkap_Julia_Coffee.pdf"
+                target="_blank"
+                rel="noreferrer"
+                download="Buku_Panduan_Lengkap_Julia_Coffee.pdf"
+                className="group flex flex-col justify-between p-3.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all shadow-xs border border-slate-700"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500 text-slate-950">
+                      Master Guide
+                    </span>
+                    <Download className="w-4 h-4 text-amber-400 group-hover:translate-y-0.5 transition-transform" />
+                  </div>
+                  <h4 className="text-xs font-bold text-white mb-1">
+                    Buku Panduan Komprehensif
+                  </h4>
+                  <p className="text-[11px] text-slate-300">
+                    Dokumen induk mencakup arsitektur 9 role, alur sistem, formula HPP, inventori, dan pemeliharaan.
+                  </p>
+                </div>
+                <div className="mt-3 text-[10px] text-amber-300 font-semibold flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" /> Unduh PDF Lengkap (4 Hal)
+                </div>
+              </a>
+
+              {/* Card 2: Kasir & KDS */}
+              <a
+                href="/Panduan_Operasional_Kasir_dan_KDS.pdf"
+                target="_blank"
+                rel="noreferrer"
+                download="Panduan_Operasional_Kasir_dan_KDS.pdf"
+                className="group flex flex-col justify-between p-3.5 bg-gradient-to-br from-blue-900 to-indigo-950 text-white rounded-xl hover:from-blue-800 hover:to-indigo-900 transition-all shadow-xs border border-blue-800"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500 text-white">
+                      Front & Back Office
+                    </span>
+                    <Download className="w-4 h-4 text-blue-300 group-hover:translate-y-0.5 transition-transform" />
+                  </div>
+                  <h4 className="text-xs font-bold text-white mb-1">
+                    Panduan Kasir & KDS Dapur
+                  </h4>
+                  <p className="text-[11px] text-blue-100">
+                    SOP Buka Shift, Transaksi Meja, Split Bill, Tiket Layar Barista/Dapur, Kalibrasi, hingga Z-Report.
+                  </p>
+                </div>
+                <div className="mt-3 text-[10px] text-blue-300 font-semibold flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" /> Unduh PDF Kasir & KDS (3 Hal)
+                </div>
+              </a>
+
+              {/* Card 3: Owner & Manager */}
+              <a
+                href="/Panduan_Manajerial_Owner_dan_Manager.pdf"
+                target="_blank"
+                rel="noreferrer"
+                download="Panduan_Manajerial_Owner_dan_Manager.pdf"
+                className="group flex flex-col justify-between p-3.5 bg-gradient-to-br from-emerald-950 to-slate-900 text-white rounded-xl hover:from-emerald-900 hover:to-slate-800 transition-all shadow-xs border border-emerald-800"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500 text-slate-950">
+                      Executive & Finance
+                    </span>
+                    <Download className="w-4 h-4 text-emerald-300 group-hover:translate-y-0.5 transition-transform" />
+                  </div>
+                  <h4 className="text-xs font-bold text-white mb-1">
+                    Panduan Owner & Manager
+                  </h4>
+                  <p className="text-[11px] text-emerald-100">
+                    Dashboard P&L Laba-Rugi, Otorisasi PIN Void, Pembelian PO, Stok Opname, Payroll & Reset Bersih.
+                  </p>
+                </div>
+                <div className="mt-3 text-[10px] text-emerald-300 font-semibold flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" /> Unduh PDF Manajerial (3 Hal)
+                </div>
+              </a>
+            </div>
           </div>
         </div>
       </div>

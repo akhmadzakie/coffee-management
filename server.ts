@@ -1105,6 +1105,27 @@ async function startServer() {
     };
   };
 
+  const ensureDefaultUsers = async (targetDb: any, existingUsers: any[]) => {
+    if (!existingUsers) return initialUsers;
+    const existingUsernames = new Set(
+      existingUsers.map((u: any) => String(u.username || "").toLowerCase())
+    );
+    const missing = initialUsers.filter(
+      (u: any) => !existingUsernames.has(String(u.username || "").toLowerCase())
+    );
+    if (missing.length > 0 && targetDb) {
+      try {
+        const sanitized = missing.map((u: any) => sanitizeUserForInsert(u, u.pin));
+        await targetDb.insert(schema.users).values(sanitized);
+        console.log(`[AutoSeed] Injected ${missing.length} missing default users into database.`);
+        return [...existingUsers, ...sanitized];
+      } catch (err) {
+        console.warn("[AutoSeed] Failed to insert missing default users:", err);
+      }
+    }
+    return existingUsers;
+  };
+
   const sanitizeDeviceSession = (s: any) => ({
     id: String(s.id || crypto.randomUUID()),
     userId: String(s.userId || ""),
@@ -1536,15 +1557,17 @@ async function startServer() {
               publicUsers = initialUsers;
               rawSt = initialSettings;
             } else {
-              publicUsers = uRows;
+              publicUsers = await ensureDefaultUsers(db, uRows);
               rawSt = sRows[0] || initialSettings;
             }
           } catch {
-            publicUsers = offlineState?.users || initialUsers;
+            const rawOffline = offlineState?.users || initialUsers;
+            publicUsers = initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin));
             rawSt = (Array.isArray(offlineState?.settings) ? offlineState.settings[0] : offlineState?.settings) || initialSettings;
           }
         } else if (offlineState) {
-          publicUsers = offlineState.users || initialUsers;
+          const rawOffline = offlineState.users || initialUsers;
+          publicUsers = initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin));
           rawSt = (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) || initialSettings;
         }
 
@@ -1770,6 +1793,8 @@ async function startServer() {
           } catch (seedErr) {
             console.warn("Auto seed skipped or failed:", seedErr);
           }
+        } else {
+          users = (await ensureDefaultUsers(db, users)) as any;
         }
 
         // Auto seed default cash drawer & bank/QRIS accounts if empty
@@ -6599,12 +6624,38 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   });
 
   // ─── ADMIN DATA PURGE / RESET ENDPOINT (Pembersihan Data Uji Coba) ──────────────
-  app.post("/api/admin/reset-transactions", async (req, res) => {
+  // Syarat: sesi login aktif ber-role SUPER_ADMIN + ketik ulang PIN sendiri + kalimat konfirmasi.
+  // Master data (menu, resep, bahan, user, pengaturan, rekening) TIDAK dihapus.
+  const RESET_CONFIRM_TEXT = "HAPUS DATA UJI COBA";
+  app.post("/api/admin/reset-transactions", pinVerifyLimiter, async (req, res) => {
     try {
-      const { confirmKey, target } = req.body;
-      if (confirmKey !== "RESET_JULIA_COFFEE_2026") {
-        return res.status(403).json({ error: "Kunci konfirmasi tidak valid." });
+      const requestUser: any = await resolveAuthUser(req);
+      if (!requestUser) {
+        return res.status(401).json({ error: "Sesi tidak valid. Silakan login ulang." });
       }
+      if (requestUser.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ error: "Hanya Super Admin yang boleh mereset data." });
+      }
+
+      const { pin, confirmText } = req.body || {};
+      if (confirmText !== RESET_CONFIRM_TEXT) {
+        return res.status(400).json({ error: `Ketik persis: ${RESET_CONFIRM_TEXT}` });
+      }
+
+      const rawPin = String(pin || "");
+      const hashedPin = rawPin.length === 64 ? rawPin : crypto.createHash("sha256").update(rawPin).digest("hex");
+      if (!rawPin || (requestUser.pin !== hashedPin && requestUser.pin !== rawPin)) {
+        return res.status(403).json({ error: "PIN Super Admin salah." });
+      }
+
+      const resetAudit = {
+        id: crypto.randomUUID(),
+        userId: requestUser.id,
+        action: "DELETE",
+        tableName: "RESET_DATA_UJI_COBA",
+        recordId: "ALL_TRANSACTIONS",
+        timestamp: new Date().toISOString(),
+      };
 
       if (!isDbConnected && offlineState) {
         offlineState.orders = [];
@@ -6620,7 +6671,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.daily_attendances = [];
         offlineState.daily_checklists = [];
         offlineState.attendance_records = [];
-        offlineState.audit_logs = [];
+        offlineState.audit_logs = [resetAudit];
         offlineState.payroll_records = [];
         offlineState.kpi_records = [];
         offlineState.batch_preparations = [];
@@ -6654,6 +6705,9 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         await tx.delete(schema.batchPreparations);
         await tx.delete(schema.managerApprovalRequests);
         await tx.delete(schema.auditLogs);
+
+        // Jejak audit: siapa yang melakukan reset
+        await tx.insert(schema.auditLogs).values(resetAudit);
       });
 
       bumpDataVersion();

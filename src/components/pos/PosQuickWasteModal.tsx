@@ -194,11 +194,10 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
                     key={r.id}
                     type="button"
                     onClick={() => setReason(r.id)}
-                    className={`flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-bold transition text-left cursor-pointer ${
-                      isSelected
+                    className={`flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-bold transition text-left cursor-pointer ${isSelected
                         ? "bg-amber-50 border-amber-500 text-amber-900 shadow-xs"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
+                      }`}
                   >
                     <Icon className={`w-4 h-4 ${isSelected ? "text-amber-600" : "text-slate-400"}`} />
                     <span>{r.label}</span>
