@@ -266,14 +266,15 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       return;
     }
 
-    if (!isManagerOrAdmin && onNavigateBack) {
-      // Shift sudah tutup, tapi kasir ingin kembali ke web manajemen
-      setIsExitPinModalOpen(true);
+    if (isManagerOrAdmin && onNavigateBack) {
+      // Akun Manager/Owner yang sedang mencoba POS, langsung kembali ke dashboard manajemen
+      onNavigateBack();
       return;
     }
 
-    if (onNavigateBack) onNavigateBack();
-    else logout();
+    // Jika akun yang login adalah Kasir (atau tanpa onNavigateBack),
+    // logout agar pengguna dapat login sebagai Owner/Manager di Web Management
+    logout();
   };
 
   // Tax config from settings
@@ -1220,14 +1221,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             <span className="hidden sm:inline">Kunci</span>
           </button>
 
-          {/* Keluar / Kembali */}
+          {/* Keluar / Kembali / Ganti Akun */}
           <button
             onClick={handleExitAttempt}
             className="whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 text-xs font-semibold text-slate-700 border border-slate-200 transition flex items-center gap-1.5 cursor-pointer"
-            title={onNavigateBack ? "Kembali ke Dashboard Manajemen" : "Keluar dari POS"}
+            title={isManagerOrAdmin && onNavigateBack ? "Kembali ke Dashboard Manajemen" : "Keluar dari Akun Kasir / Ganti Akun"}
           >
             <LogOut className="w-3.5 h-3.5 shrink-0 text-slate-500" />
-            <span>{onNavigateBack ? "Kembali" : "Keluar"}</span>
+            <span>{isManagerOrAdmin && onNavigateBack ? "Kembali ke Web" : "Keluar / Ganti Akun"}</span>
           </button>
         </div>
       </div>
