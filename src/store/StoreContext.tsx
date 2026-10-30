@@ -575,6 +575,41 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+/**
+ * Helper untuk mengisolasi sesi auth antara Terminal POS Kasir (/pos),
+ * Layar Dapur KDS (/kds), dan Web Management (/) agar tidak saling menimpa
+ * di localStorage / IndexedDB saat dijalankan di domain / browser yang sama.
+ */
+export const getAuthStorageKeys = () => {
+  if (typeof window === "undefined") {
+    return { userKey: "node_current_user", sessionKey: "node_session_id" };
+  }
+  const pathname = window.location.pathname.toLowerCase();
+  const searchParams = new URLSearchParams(window.location.search);
+
+  const isPos =
+    pathname === "/pos" ||
+    pathname.startsWith("/pos/") ||
+    searchParams.get("view") === "pos_cashier" ||
+    searchParams.get("mode") === "pos";
+
+  if (isPos) {
+    return { userKey: "pos_cashier_user", sessionKey: "pos_session_id" };
+  }
+
+  const isKds =
+    pathname === "/kds" ||
+    pathname.startsWith("/kds/") ||
+    searchParams.get("view") === "kitchen_display" ||
+    searchParams.get("mode") === "kds";
+
+  if (isKds) {
+    return { userKey: "kds_screen_user", sessionKey: "kds_session_id" };
+  }
+
+  return { userKey: "node_current_user", sessionKey: "node_session_id" };
+};
+
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthLoaded, setIsAuthLoaded] = useState(false);
@@ -766,17 +801,38 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
   const [closedPeriods, setClosedPeriods] = useState<ClosedPeriod[]>([]);
 
+  const hasLocalChanges = useRef(false);
+  const dirtyTablesRef = useRef<Set<string>>(new Set());
+  const isSyncingRef = useRef(false);
+  const isApplyingServerUpdate = useRef(false);
+  const deviceRef = useRef<DetectedDeviceInfo>({} as DetectedDeviceInfo);
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const markChanged = (...tables: string[]) => {
+    if (isApplyingServerUpdate.current || currentUser?.role === "OWNER") return;
+    hasLocalChanges.current = true;
+    if (tables.length === 0) {
+      dirtyTablesRef.current.add("*");
+    } else {
+      tables.forEach((t) => dirtyTablesRef.current.add(t));
+    }
+  };
+
   // Generic dispatch for new modules
   const dispatch = (action: any) => {
-    hasLocalChanges.current = true;
+    if (currentUser?.role === "OWNER") return;
     switch (action.type) {
       case "ADD_EXPENSE_CATEGORY":
+        markChanged("expense_categories");
         setExpenseCategories((prev) => [...prev, action.payload]);
         break;
       case "UPDATE_EXPENSE_CATEGORY":
+        markChanged("expense_categories");
         setExpenseCategories((prev) => prev.map((c) => c.id === action.payload.id ? action.payload : c));
         break;
       case "DELETE_EXPENSE_CATEGORY": {
+        markChanged("expense_categories");
         const toDelete = expenseCategories.find((c) => c.id === action.payload);
         if (toDelete) {
           const childIds = expenseCategories.filter((c) => c.parentId === toDelete.id).map((c) => c.id);
@@ -785,48 +841,63 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       }
       case "ADD_PAYROLL_RECORD":
+        markChanged("payroll_records");
         setPayrollRecords((prev) => [...prev, action.payload]);
         break;
       case "UPDATE_PAYROLL_RECORD":
+        markChanged("payroll_records");
         setPayrollRecords((prev) => prev.map((p) => p.id === action.payload.id ? action.payload : p));
         break;
       case "DELETE_PAYROLL_RECORD":
+        markChanged("payroll_records");
         setPayrollRecords((prev) => prev.filter((p) => p.id !== action.payload));
         break;
       case "BULK_ADD_PAYROLL_RECORDS":
+        markChanged("payroll_records");
         setPayrollRecords((prev) => [...prev, ...action.payload]);
         break;
       case "ADD_BUDGET":
+        markChanged("budgets");
         setBudgets((prev) => [...prev, action.payload]);
         break;
       case "UPDATE_BUDGET":
+        markChanged("budgets");
         setBudgets((prev) => prev.map((b) => b.id === action.payload.id ? action.payload : b));
         break;
       case "DELETE_BUDGET":
+        markChanged("budgets");
         setBudgets((prev) => prev.filter((b) => b.id !== action.payload));
         break;
       case "ADD_BANK_RECONCILIATION":
+        markChanged("bank_reconciliations");
         setBankReconciliations((prev) => [...prev, action.payload]);
         break;
       case "UPDATE_BANK_RECONCILIATION":
+        markChanged("bank_reconciliations");
         setBankReconciliations((prev) => prev.map((r) => r.id === action.payload.id ? action.payload : r));
         break;
       case "ADD_BANK_STATEMENT_LINE":
+        markChanged("bank_statement_lines");
         setBankStatementLines((prev) => [...prev, action.payload]);
         break;
       case "UPDATE_BANK_STATEMENT_LINE":
+        markChanged("bank_statement_lines");
         setBankStatementLines((prev) => prev.map((l) => l.id === action.payload.id ? action.payload : l));
         break;
       case "BULK_ADD_BANK_STATEMENT_LINES":
+        markChanged("bank_statement_lines");
         setBankStatementLines((prev) => [...prev, ...action.payload]);
         break;
       case "SET_BANK_RECONCILIATIONS":
+        markChanged("bank_reconciliations");
         setBankReconciliations(action.payload);
         break;
       case "SET_BANK_STATEMENT_LINES":
+        markChanged("bank_statement_lines");
         setBankStatementLines(action.payload);
         break;
       case "ADD_STOCK_OPNAME":
+        markChanged("stock_opnames");
         setStockOpnames((prev) => {
           const exists = prev.some((o) => o.id === action.payload.id);
           if (exists) {
@@ -836,13 +907,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         });
         break;
       case "UPDATE_STOCK_OPNAME":
+        markChanged("stock_opnames");
         setStockOpnames((prev) => prev.map((o) => (o.id === action.payload.id ? action.payload : o)));
         break;
       case "DELETE_STOCK_OPNAME":
+        markChanged("stock_opnames", "stock_opname_items");
         setStockOpnames((prev) => prev.filter((o) => o.id !== action.payload));
         setStockOpnameItems((prev) => prev.filter((i) => i.opnameId !== action.payload));
         break;
       case "ADD_STOCK_OPNAME_ITEM":
+        markChanged("stock_opname_items");
         setStockOpnameItems((prev) => {
           const exists = prev.some((i) => i.id === action.payload.id || (i.opnameId === action.payload.opnameId && i.ingredientId === action.payload.ingredientId));
           if (exists) {
@@ -852,9 +926,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         });
         break;
       case "UPDATE_STOCK_OPNAME_ITEM":
+        markChanged("stock_opname_items");
         setStockOpnameItems((prev) => prev.map((i) => (i.id === action.payload.id ? action.payload : i)));
         break;
       case "BULK_ADD_STOCK_OPNAME_ITEMS":
+        markChanged("stock_opname_items");
         setStockOpnameItems((prev) => {
           const incomingIds = new Set(action.payload.map((i: any) => i.id));
           const incomingPairs = new Set(action.payload.map((i: any) => `${i.opnameId}_${i.ingredientId}`));
@@ -864,6 +940,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       case "ADD_CLOSED_PERIOD":
       case "CLOSE_PERIOD":
+        markChanged("closed_periods");
         setClosedPeriods((prev) => [
           ...prev.filter((p) => p.period !== action.payload.period),
           {
@@ -877,12 +954,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       case "REMOVE_CLOSED_PERIOD":
       case "REOPEN_PERIOD":
+        markChanged("closed_periods");
         setClosedPeriods((prev) => prev.filter((p) => p.period !== (action.payload?.period || action.payload)));
         break;
       case "SET_STOCK_OPNAMES":
+        markChanged("stock_opnames");
         setStockOpnames(action.payload);
         break;
       case "SET_STOCK_OPNAME_ITEMS":
+        markChanged("stock_opname_items");
         setStockOpnameItems(action.payload);
         break;
     }
@@ -893,26 +973,27 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [wasForceLoggedOut, setWasForceLoggedOut] = useState<boolean>(false);
 
-  const hasLocalChanges = useRef(false);
-  const isSyncingRef = useRef(false);
-  const isApplyingServerUpdate = useRef(false);
-  const deviceRef = useRef<DetectedDeviceInfo>({} as DetectedDeviceInfo);
-  const lastActivityRef = useRef<number>(Date.now());
-  const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Initialize auth
   useEffect(() => {
     async function loadAuth() {
       try {
+        const { userKey, sessionKey } = getAuthStorageKeys();
         const deviceInfo = await detectDeviceAsync();
+        const savedToken =
+          localStorage.getItem(sessionKey) ||
+          ((await get(sessionKey).catch(() => "")) as string);
+        if (savedToken) {
+          deviceInfo.sessionId = savedToken;
+          localStorage.setItem(sessionKey, savedToken);
+        }
         deviceRef.current = deviceInfo;
 
-        let savedUser = await get("node_current_user");
+        let savedUser = await get(userKey);
         if (!savedUser) {
-          const lsUser = localStorage.getItem("node_current_user");
+          const lsUser = localStorage.getItem(userKey);
           if (lsUser) {
             savedUser = JSON.parse(lsUser);
-            await set("node_current_user", savedUser).catch(() => {});
+            await set(userKey, savedUser).catch(() => {});
           }
         }
         setCurrentUser(savedUser || null);
@@ -928,12 +1009,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   // Save auth
   useEffect(() => {
     if (isAuthLoaded) {
+      const { userKey } = getAuthStorageKeys();
       if (currentUser) {
-        set("node_current_user", currentUser).catch(console.error);
-        localStorage.setItem("node_current_user", JSON.stringify(currentUser));
+        set(userKey, currentUser).catch(console.error);
+        localStorage.setItem(userKey, JSON.stringify(currentUser));
       } else {
-        del("node_current_user").catch(console.error);
-        localStorage.removeItem("node_current_user");
+        del(userKey).catch(console.error);
+        localStorage.removeItem(userKey);
       }
     }
   }, [currentUser, isAuthLoaded]);
@@ -941,7 +1023,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   // Sync Logic & Version tracking for Railway Network Egress Optimization
   const serverVersionRef = useRef<number | null>(null);
 
-  const fetchFromServer = async (isManual = false) => {
+  const fetchFromServer = async (isManual = false, overrideToken?: string) => {
     // Hemat kuota data & biaya Railway: jangan sync di background jika tab sedang diminimize/tidak aktif
     if (typeof document !== "undefined" && document.hidden && !isManual) return;
     if (isSyncingRef.current && !isManual) return;
@@ -949,13 +1031,45 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       if (isManual) setIsSyncing(true);
+      const { sessionKey } = getAuthStorageKeys();
+      const token =
+        overrideToken ||
+        localStorage.getItem(sessionKey) ||
+        deviceRef.current?.sessionId ||
+        "";
+
       const url = isManual || !serverVersionRef.current
         ? "/api/sync"
         : `/api/sync?v=${serverVersionRef.current}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
+
+        // Jika belum login, server mengembalikan mode publicOnly (hanya daftar nama akun & branding halaman Login)
+        if (data.publicOnly) {
+          isApplyingServerUpdate.current = true;
+          if (Array.isArray(data.users) && data.users.length > 0) {
+            setUsers(data.users);
+          }
+          if (data.settings) {
+            setSettings((prev) => ({
+              ...prev,
+              brandName: data.settings.brandName || prev.brandName,
+              companyAddress: data.settings.companyAddress || prev.companyAddress,
+              footerMessage: data.settings.footerMessage || prev.footerMessage,
+              logoDataUrl: data.settings.logoDataUrl || prev.logoDataUrl,
+              language: data.settings.language || prev.language,
+            }));
+          }
+          serverVersionRef.current = null;
+          setTimeout(() => {
+            isApplyingServerUpdate.current = false;
+          }, 100);
+          return;
+        }
 
         // Jika server melaporkan data tidak berubah sejak sync terakhir, selesai seketika (35 byte)!
         if (data.notModified) {
@@ -1023,7 +1137,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
             enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),
-            posSupervisorPin: String(s.posSupervisorPin || "1234"),
+            posSupervisorPin: String(s.posSupervisorPin ?? ""),
             autoDeductStockOnSale: s.autoDeductStockOnSale !== false,
             allowNegativeStockSale: s.allowNegativeStockSale !== false,
           };
@@ -1093,6 +1207,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
         setLastSyncTime(new Date());
         hasLocalChanges.current = false;
+        dirtyTablesRef.current.clear();
 
         setTimeout(() => {
           isApplyingServerUpdate.current = false;
@@ -1180,7 +1295,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       const idleDuration = Date.now() - lastActivityRef.current;
       if (idleDuration >= IDLE_TIMEOUT_MS) {
         // Auto logout
-        const curSessionId = deviceRef.current?.sessionId;
+        const { userKey, sessionKey } = getAuthStorageKeys();
+        const curSessionId = localStorage.getItem(sessionKey) || deviceRef.current?.sessionId;
         if (curSessionId) {
           fetch("/api/sessions/logout", {
             method: "POST",
@@ -1189,10 +1305,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           }).catch(() => {});
         }
         setCurrentUser(null);
-        localStorage.removeItem("node_current_user");
-        del("node_current_user").catch(() => {});
-        localStorage.removeItem("node_session_id");
-        del("node_session_id").catch(() => {});
+        localStorage.removeItem(userKey);
+        del(userKey).catch(() => {});
+        localStorage.removeItem(sessionKey);
+        del(sessionKey).catch(() => {});
         setWasForceLoggedOut(true); // Gunakan flag yg sama agar UI tampil info
       }
     }, 60_000); // cek tiap 1 menit
@@ -1206,12 +1322,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const sendHeartbeat = async (user = currentUser) => {
     if (!user) return;
     try {
+      const { userKey, sessionKey } = getAuthStorageKeys();
       const info = deviceRef.current;
+      const activeSessionId = localStorage.getItem(sessionKey) || info.sessionId;
+      if (!activeSessionId) return;
       const res = await fetch("/api/sessions/heartbeat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionId: info.sessionId,
+          sessionId: activeSessionId,
           userId: user.id,
           username: user.username,
           userName: user.name,
@@ -1225,10 +1344,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         const data = await res.json();
         if (data.revoked) {
           setCurrentUser(null);
-          localStorage.removeItem("node_current_user");
-          del("node_current_user").catch(() => {});
-          localStorage.removeItem("node_session_id");
-          del("node_session_id").catch(() => {});
+          localStorage.removeItem(userKey);
+          del(userKey).catch(() => {});
+          localStorage.removeItem(sessionKey);
+          del(sessionKey).catch(() => {});
           detectDeviceAsync().then((info) => {
             deviceRef.current = info;
             setWasForceLoggedOut(true);
@@ -1244,7 +1363,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.sessions)) {
-          const currentId = deviceRef.current.sessionId;
+          const { sessionKey } = getAuthStorageKeys();
+          const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
           setSessions(
             data.sessions.map((s: any) => ({
               ...s,
@@ -1263,9 +1383,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       });
       if (res.ok) {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-        if (sessionId === deviceRef.current.sessionId) {
+        const { userKey, sessionKey } = getAuthStorageKeys();
+        const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+        if (sessionId === currentId) {
           setCurrentUser(null);
-          localStorage.removeItem("node_current_user");
+          localStorage.removeItem(userKey);
+          localStorage.removeItem(sessionKey);
         }
         return true;
       }
@@ -1277,11 +1400,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const revokeOtherSessions = async (): Promise<boolean> => {
     try {
+      const { sessionKey } = getAuthStorageKeys();
+      const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
       const res = await fetch("/api/sessions/revoke-others", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          currentSessionId: deviceRef.current.sessionId,
+          currentSessionId: currentId,
           userId: currentUser?.id,
         }),
       });
@@ -1311,9 +1436,71 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    if (!isLoaded || isApplyingServerUpdate.current || !hasLocalChanges.current || currentUser?.role === "OWNER")
+    if (
+      !isLoaded ||
+      isApplyingServerUpdate.current ||
+      !hasLocalChanges.current ||
+      !currentUser ||
+      currentUser.role === "OWNER"
+    )
       return;
+
+    const token = localStorage.getItem("node_session_id") || deviceRef.current?.sessionId;
+    if (!token) return;
+
     const timer = setTimeout(async () => {
+      const sentKeys: string[] = Array.from(dirtyTablesRef.current);
+      if (sentKeys.length === 0) {
+        hasLocalChanges.current = false;
+        return;
+      }
+
+      const fullTableMap: Record<string, any> = {
+        cash_accounts: cashAccounts,
+        cash_transactions: cashTransactions,
+        settings: settings,
+        users: users,
+        device_sessions: sessions,
+        ingredients: ingredients,
+        recipes: recipes,
+        stock_movements: stockMovements,
+        sales_transactions: salesTransactions,
+        sales_import_logs: salesImportLogs,
+        audit_logs: auditLogs,
+        suppliers,
+        purchase_orders: purchaseOrders,
+        shifts,
+        employees,
+        contracts,
+        attendances,
+        dailyAttendances,
+        dailyChecklists,
+        employeeShifts,
+        kpiRecords,
+        expense_categories: expenseCategories,
+        budgets,
+        bank_reconciliations: bankReconciliations,
+        bank_statement_lines: bankStatementLines,
+        stock_opnames: stockOpnames,
+        stock_opname_items: stockOpnameItems,
+        payroll_records: payrollRecords,
+        closed_periods: closedPeriods,
+        products,
+        batch_preparations: batchPreparations,
+        promotions,
+      };
+
+      const payload: Record<string, any> = {};
+      if (sentKeys.includes("*")) {
+        Object.assign(payload, fullTableMap);
+      } else {
+        for (const k of sentKeys) {
+          if (k in fullTableMap) {
+            payload[k] = fullTableMap[k];
+          }
+        }
+      }
+
       try {
         setIsSyncing(true);
         isSyncingRef.current = true;
@@ -1321,51 +1508,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("node_session_id")}`,
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            cash_accounts: cashAccounts,
-            cash_transactions: cashTransactions,
-            settings: settings,
-            users: users,
-            device_sessions: sessions,
-            ingredients: ingredients,
-            recipes: recipes,
-            stock_movements: stockMovements,
-            sales_transactions: salesTransactions,
-            sales_import_logs: salesImportLogs,
-            audit_logs: auditLogs,
-            suppliers,
-            purchase_orders: purchaseOrders,
-            shifts,
-            employees,
-            contracts,
-            attendances,
-            dailyAttendances,
-        dailyChecklists,
-            employeeShifts,
-            kpiRecords,
-            // Fase 1-4
-            expense_categories: expenseCategories,
-            budgets,
-            bank_reconciliations: bankReconciliations,
-            bank_statement_lines: bankStatementLines,
-            stock_opnames: stockOpnames,
-            stock_opname_items: stockOpnameItems,
-            payroll_records: payrollRecords,
-            closed_periods: closedPeriods,
-            products,
-            batch_preparations: batchPreparations,
-            promotions,
-          }),
+          body: JSON.stringify(payload),
         });
         if (res.ok) {
-          hasLocalChanges.current = false;
+          sentKeys.forEach((k) => dirtyTablesRef.current.delete(k));
+          hasLocalChanges.current = dirtyTablesRef.current.size > 0;
           setLastSyncTime(new Date());
         } else {
           const errData = await res.json().catch(() => ({}));
           console.error("Sync API failed:", errData);
-          alert("Gagal sinkronisasi data ke server: " + (errData.error || "Unknown error"));
+          if (res.status !== 401) {
+            alert("Gagal sinkronisasi data ke server: " + (errData.error || "Unknown error"));
+          }
         }
       } catch (err) {
         console.error("Error saving data:", err);
@@ -1376,6 +1532,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }, 1000);
     return () => clearTimeout(timer);
   }, [
+    currentUser,
     cashAccounts,
     cashTransactions,
     settings,
@@ -1410,12 +1567,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     promotions,
   ]);
 
-  const markChanged = () => {
-    if (!isApplyingServerUpdate.current && currentUser?.role !== "OWNER") {
-      hasLocalChanges.current = true;
-    }
-  };
-
   const updateSettings = (newSettings: Settings) => {
     if (currentUser?.role === "OWNER") {
       alert("Akun Owner berstatus Read-Only (Pengawasan). Anda tidak diizinkan mengubah konfigurasi toko.");
@@ -1425,10 +1576,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     try {
       localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
     } catch {}
-    markChanged();
+    markChanged("settings");
 
     // Kirim sinkronisasi langsung ke server agar tidak ter-rollback oleh background polling
-    const token = localStorage.getItem("node_session_id");
+    const token = localStorage.getItem("node_session_id") || deviceRef.current?.sessionId;
     if (token) {
       fetch("/api/sync", {
         method: "POST",
@@ -1441,7 +1592,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }),
       }).then((res) => {
         if (res.ok) {
-          hasLocalChanges.current = false;
+          dirtyTablesRef.current.delete("settings");
+          hasLocalChanges.current = dirtyTablesRef.current.size > 0;
         }
       }).catch((err) => console.warn("Direct settings sync failed:", err));
     }
@@ -1458,11 +1610,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         return false;
       }
       const data = await res.json();
+      const { userKey, sessionKey } = getAuthStorageKeys();
       setCurrentUser(data.user);
-      localStorage.setItem("node_current_user", JSON.stringify(data.user));
-      localStorage.setItem("node_session_id", data.token);
-      localStorage.setItem("node_session_id", data.token);
-      fetchFromServer(true);
+      localStorage.setItem(userKey, JSON.stringify(data.user));
+      set(userKey, data.user).catch(() => {});
+      if (data.token) {
+        localStorage.setItem(sessionKey, data.token);
+        set(sessionKey, data.token).catch(() => {});
+        if (deviceRef.current) {
+          deviceRef.current.sessionId = data.token;
+        }
+      }
+      serverVersionRef.current = null;
+      await fetchFromServer(true, data.token);
       sendHeartbeat(data.user);
       return true;
     } catch (e) {
@@ -1472,7 +1632,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    const curSessionId = deviceRef.current?.sessionId;
+    const { userKey, sessionKey } = getAuthStorageKeys();
+    const curSessionId = localStorage.getItem(sessionKey) || deviceRef.current?.sessionId;
     if (curSessionId) {
       fetch("/api/sessions/logout", {
         method: "POST",
@@ -1481,10 +1642,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }).catch(() => {});
     }
     setCurrentUser(null);
-    localStorage.removeItem("node_current_user");
-    del("node_current_user").catch(() => {});
-    localStorage.removeItem("node_session_id");
-    del("node_session_id").catch(() => {});
+    serverVersionRef.current = null;
+    dirtyTablesRef.current.clear();
+    hasLocalChanges.current = false;
+    localStorage.removeItem(userKey);
+    del(userKey).catch(() => {});
+    localStorage.removeItem(sessionKey);
+    del(sessionKey).catch(() => {});
     detectDeviceAsync().then((info) => {
       deviceRef.current = info;
     });
@@ -1508,27 +1672,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       timestamp: new Date().toISOString(),
     };
     setAuditLogs((prev) => [log, ...prev]);
+    dirtyTablesRef.current.add("audit_logs");
   };
 
   
   const handleSetDailyChecklists = (c: DailyChecklist[]) => {
     setDailyChecklists(c);
-    markChanged();
+    markChanged("dailyChecklists");
   };
   const handleSetEmployeeShifts = (shifts: EmployeeShift[]) => {
     setEmployeeShifts(shifts);
-    markChanged();
+    markChanged("employeeShifts");
   };
   const handleSetDailyAttendances = (a: DailyAttendance[]) => {
     setDailyAttendances(a);
-    markChanged();
+    markChanged("dailyAttendances");
   };
 
   const addUser = (user: Omit<User, "id">) => {
     const id = generateId();
     setUsers((prev) => [...prev, { ...user, id }]);
     writeAuditLog("CREATE", "users", id);
-    markChanged();
+    markChanged("users");
   };
 
   // ─── HR ACTIONS ─────────────────────────────────────────────────────────
@@ -1539,7 +1704,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       { ...emp, id, createdAt: new Date().toISOString() },
     ]);
     writeAuditLog("CREATE", "employees", id);
-    markChanged();
+    markChanged("employees");
     return id;
   };
 
@@ -1591,7 +1756,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     );
 
     writeAuditLog("UPDATE", "employees", emp.id);
-    markChanged();
+    markChanged("employees", "users");
   };
 
   const deleteEmployee = (id: string) => {
@@ -1602,14 +1767,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setContracts((prev) => prev.filter((c) => c.employeeId !== id));
     setEmployeeShifts((prev) => prev.filter((s) => s.employeeId !== id));
     writeAuditLog("DELETE", "employees", id);
-    markChanged();
+    markChanged("employees", "users", "contracts", "employeeShifts");
   };
 
   const addContract = (contract: Omit<EmployeeContract, "id">) => {
     const id = generateId();
     setContracts((prev) => [...prev, { ...contract, id }]);
     writeAuditLog("CREATE", "contracts", id);
-    markChanged();
+    markChanged("contracts");
   };
 
   const updateContract = (contract: EmployeeContract) => {
@@ -1617,13 +1782,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((c) => (c.id === contract.id ? contract : c)),
     );
     writeAuditLog("UPDATE", "contracts", contract.id);
-    markChanged();
+    markChanged("contracts");
   };
 
   const deleteContract = (id: string) => {
     setContracts((prev) => prev.filter((c) => c.id !== id));
     writeAuditLog("DELETE", "contracts", id);
-    markChanged();
+    markChanged("contracts");
   };
 
   const addAttendance = (
@@ -1640,13 +1805,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       },
     ]);
     writeAuditLog("CREATE", "attendances", id);
-    markChanged();
+    markChanged("attendances");
   };
 
   const updateAttendance = (att: AttendanceRecord) => {
     setAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
     writeAuditLog("UPDATE", "attendances", att.id);
-    markChanged();
+    markChanged("attendances");
   };
 
   const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
@@ -1665,7 +1830,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             : a
         );
         writeAuditLog("UPDATE", "daily_attendances", existing.id);
-        markChanged();
+        markChanged("dailyAttendances");
         return updated;
       }
       const id = generateId();
@@ -1675,7 +1840,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         id,
       };
       writeAuditLog("CREATE", "daily_attendances", id);
-      markChanged();
+      markChanged("dailyAttendances");
       return [...prev, newAtt];
     });
   };
@@ -1683,7 +1848,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const updateDailyAttendance = (att: DailyAttendance) => {
     setDailyAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
     writeAuditLog("UPDATE", "daily_attendances", att.id);
-    markChanged();
+    markChanged("dailyAttendances");
   };
 
   const addKPI = (kpi: Omit<KPIRecord, "id" | "createdAt" | "evaluatedBy">) => {
@@ -1698,13 +1863,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       },
     ]);
     writeAuditLog("CREATE", "kpi_records", id);
-    markChanged();
+    markChanged("kpiRecords");
   };
 
   const updateKPI = (kpi: KPIRecord) => {
     setKpiRecords((prev) => prev.map((k) => (k.id === kpi.id ? kpi : k)));
     writeAuditLog("UPDATE", "kpi_records", kpi.id);
-    markChanged();
+    markChanged("kpiRecords");
   };
 
   const updateKpiTask = (id: string, task: any) => {
@@ -1716,7 +1881,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
       return updated;
     });
-    markChanged();
   };
 
   const deleteKpiTask = (id: string) => {
@@ -1725,7 +1889,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
       return updated;
     });
-    markChanged();
   };
 
   const updateKpiBonusRule = (id: string, rule: any) => {
@@ -1737,7 +1900,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
       return updated;
     });
-    markChanged();
   };
 
   const deleteKpiBonusRule = (id: string) => {
@@ -1746,7 +1908,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
       return updated;
     });
-    markChanged();
   };
 
   const updateUser = (updatedUser: User) => {
@@ -1798,33 +1959,33 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     );
 
     writeAuditLog("UPDATE", "users", updatedUser.id);
-    markChanged();
+    markChanged("users", "employees");
   };
 
   const deleteUser = (id: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== id));
     setSessions((prev) => prev.filter((s) => s.userId !== id));
     writeAuditLog("DELETE", "users", id);
-    markChanged();
+    markChanged("users", "device_sessions");
   };
 
   const addCashAccount = (acc: Omit<CashAccount, "id">) => {
     const id = generateId();
     setCashAccounts((prev) => [...prev, { ...acc, id }]);
     writeAuditLog("CREATE", "cash_accounts", id);
-    markChanged();
+    markChanged("cash_accounts");
   };
 
   const updateCashAccount = (acc: CashAccount) => {
     setCashAccounts((prev) => prev.map((a) => (a.id === acc.id ? acc : a)));
     writeAuditLog("UPDATE", "cash_accounts", acc.id);
-    markChanged();
+    markChanged("cash_accounts");
   };
 
   const deleteCashAccount = (id: string) => {
     setCashAccounts((prev) => prev.filter((a) => a.id !== id));
     writeAuditLog("DELETE", "cash_accounts", id);
-    markChanged();
+    markChanged("cash_accounts");
   };
 
   const addCashTransaction = (trx: Omit<CashTransaction, "id">) => {
@@ -1836,7 +1997,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     };
     setCashTransactions((prev) => [...prev, normalizedTrx]);
     writeAuditLog("CREATE", "cash_transactions", id);
-    markChanged();
+    markChanged("cash_transactions");
   };
 
   const updateCashTransaction = (trx: CashTransaction) => {
@@ -1848,51 +2009,51 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((t) => (t.id === trx.id ? normalizedTrx : t)),
     );
     writeAuditLog("UPDATE", "cash_transactions", trx.id);
-    markChanged();
+    markChanged("cash_transactions");
   };
 
   const deleteCashTransaction = (id: string) => {
     setCashTransactions((prev) => prev.filter((t) => t.id !== id));
     writeAuditLog("DELETE", "cash_transactions", id);
-    markChanged();
+    markChanged("cash_transactions");
   };
 
   const addIngredient = (ing: Omit<Ingredient, "id">) => {
     const id = generateId();
     setIngredients((prev) => [...prev, { ...ing, id }]);
     writeAuditLog("CREATE", "ingredients", id);
-    markChanged();
+    markChanged("ingredients");
   };
 
   const updateIngredient = (ing: Ingredient) => {
     setIngredients((prev) => prev.map((i) => (i.id === ing.id ? ing : i)));
     writeAuditLog("UPDATE", "ingredients", ing.id);
-    markChanged();
+    markChanged("ingredients");
   };
 
   const deleteIngredient = (id: string) => {
     setIngredients((prev) => prev.filter((i) => i.id !== id));
     writeAuditLog("DELETE", "ingredients", id);
-    markChanged();
+    markChanged("ingredients");
   };
 
   const addRecipe = (recipe: Omit<Recipe, "id">) => {
     const id = generateId();
     setRecipes((prev) => [...prev, { ...recipe, id }]);
     writeAuditLog("CREATE", "recipes", id);
-    markChanged();
+    markChanged("recipes");
   };
 
   const updateRecipe = (recipe: Recipe) => {
     setRecipes((prev) => prev.map((r) => (r.id === recipe.id ? recipe : r)));
     writeAuditLog("UPDATE", "recipes", recipe.id);
-    markChanged();
+    markChanged("recipes");
   };
 
   const deleteRecipe = (id: string) => {
     setRecipes((prev) => prev.filter((r) => r.id !== id));
     writeAuditLog("DELETE", "recipes", id);
-    markChanged();
+    markChanged("recipes");
   };
 
   const addProduct = (prod: Omit<Product, "id" | "createdAt">): string => {
@@ -1904,7 +2065,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     };
     setProducts((prev) => [...prev, newProduct]);
     writeAuditLog("CREATE", "products", id);
-    markChanged();
+    markChanged("products");
     return id;
   };
 
@@ -1913,13 +2074,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((p) => (p.id === prod.id ? { ...prod, updatedAt: new Date().toISOString() } : p))
     );
     writeAuditLog("UPDATE", "products", prod.id);
-    markChanged();
+    markChanged("products");
   };
 
   const deleteProduct = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
     writeAuditLog("DELETE", "products", id);
-    markChanged();
+    markChanged("products");
   };
 
   const addBatchPreparation = (bp: Omit<BatchPreparation, "id">): string => {
@@ -1927,20 +2088,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const newBp: BatchPreparation = { ...bp, id };
     setBatchPreparations((prev) => [...prev, newBp]);
     writeAuditLog("CREATE", "batch_preparations", id);
-    markChanged();
+    markChanged("batch_preparations");
     return id;
   };
 
   const updateBatchPreparation = (bp: BatchPreparation) => {
     setBatchPreparations((prev) => prev.map((b) => (b.id === bp.id ? bp : b)));
     writeAuditLog("UPDATE", "batch_preparations", bp.id);
-    markChanged();
+    markChanged("batch_preparations");
   };
 
   const deleteBatchPreparation = (id: string) => {
     setBatchPreparations((prev) => prev.filter((b) => b.id !== id));
     writeAuditLog("DELETE", "batch_preparations", id);
-    markChanged();
+    markChanged("batch_preparations");
   };
 
   const executeBatchCook = (
@@ -2060,7 +2221,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     );
 
     writeAuditLog("CREATE", "batch_cook", batchPrepId);
-    markChanged();
+    markChanged("batch_preparations", "ingredients", "stock_movements");
 
     return {
       success: true,
@@ -2072,7 +2233,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const id = generateId();
     setSuppliers((prev) => [...prev, { ...supplier, id }]);
     writeAuditLog("CREATE", "suppliers", id);
-    markChanged();
+    markChanged("suppliers");
   };
 
   const updateSupplier = (supplier: Supplier) => {
@@ -2080,13 +2241,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((s) => (s.id === supplier.id ? supplier : s)),
     );
     writeAuditLog("UPDATE", "suppliers", supplier.id);
-    markChanged();
+    markChanged("suppliers");
   };
 
   const deleteSupplier = (id: string) => {
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
     writeAuditLog("DELETE", "suppliers", id);
-    markChanged();
+    markChanged("suppliers");
   };
 
   const addPurchaseOrder = (po: Omit<PurchaseOrder, "id">) => {
@@ -2150,7 +2311,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
     }
 
-    markChanged();
+    markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
   };
 
   const addDirectMarketPurchase = (data: {
@@ -2238,7 +2399,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
     }
 
-    markChanged();
+    markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
     return newPO;
   };
 
@@ -2247,7 +2408,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       prev.map((po) => (po.id === id ? { ...po, status } : po)),
     );
     writeAuditLog("UPDATE", "purchase_orders", id);
-    markChanged();
+    markChanged("purchase_orders");
   };
 
   const payPurchaseOrder = (
@@ -2292,7 +2453,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     });
 
     writeAuditLog("UPDATE", "purchase_orders", id);
-    markChanged();
+    markChanged("purchase_orders", "cash_transactions");
   };
 
   const markPOAsReceived = (id: string) => {
@@ -2331,20 +2492,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       writeAuditLog("CREATE", "stock_movements", mvId);
     });
 
-    markChanged();
+    markChanged("purchase_orders", "ingredients", "stock_movements");
   };
 
   const deletePurchaseOrder = (id: string) => {
     setPurchaseOrders((prev) => prev.filter((po) => po.id !== id));
     writeAuditLog("DELETE", "purchase_orders", id);
-    markChanged();
+    markChanged("purchase_orders");
   };
 
   const openShift = (shift: Omit<ShiftSession, "id">) => {
     const id = generateId();
     setShifts((prev) => [...prev, { ...shift, id }]);
     writeAuditLog("CREATE", "shifts", id);
-    markChanged();
+    markChanged("shifts");
   };
 
   const closeShift = (
@@ -2368,7 +2529,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }),
     );
     writeAuditLog("UPDATE", "shifts", id);
-    markChanged();
+    markChanged("shifts");
   };
 
   const addPromotion = (promo: Omit<Promotion, "id" | "createdAt">) => {
@@ -2386,7 +2547,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     writeAuditLog("CREATE", "promotions", id);
-    markChanged();
+    markChanged("promotions");
   };
 
   const updatePromotion = (id: string, promoData: Partial<Promotion>) => {
@@ -2398,7 +2559,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     writeAuditLog("UPDATE", "promotions", id);
-    markChanged();
+    markChanged("promotions");
   };
 
   const deletePromotion = (id: string) => {
@@ -2410,7 +2571,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     writeAuditLog("DELETE", "promotions", id);
-    markChanged();
+    markChanged("promotions");
   };
 
   const togglePromotionStatus = (id: string) => {
@@ -2422,7 +2583,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     writeAuditLog("UPDATE", "promotions", id);
-    markChanged();
+    markChanged("promotions");
   };
 
   const addStockMovement = (mov: Omit<StockMovement, "id">) => {
@@ -2435,19 +2596,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           let newStock = ing.currentStock;
           if (mov.type === "IN" || mov.type === "RETURN") {
             newStock += mov.quantity;
-          } else if (mov.type === "OUT" || mov.type === "WASTE" || mov.type === "USAGE" as any) {
+          } else if (mov.type === "OUT" || mov.type === "WASTE" || (mov.type as any) === "USAGE") {
             newStock -= mov.quantity;
           } else if (mov.type === "ADJUSTMENT") {
-            // For ADJUSTMENT, quantity is the target stock (physical stock)
             newStock = mov.quantity;
           }
-          // Note: TRANSFER does not affect the global physical stock count, it's just movement tracking.
           return { ...ing, currentStock: Math.max(0, newStock) };
         }
         return ing;
       }),
     );
-    markChanged();
+    markChanged("stock_movements", "ingredients");
   };
 
   const addSalesTransactions = (
@@ -2473,7 +2632,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setSalesTransactions((prev) => [...newTxs, ...prev]);
     setSalesImportLogs((prev) => [newLog, ...prev]);
     writeAuditLog("CREATE", "sales_transactions", logId);
-    markChanged();
+    markChanged("sales_transactions", "sales_import_logs");
   };
 
   const addDailySalesRecap = (recap: Omit<DailySalesRecap, "id" | "createdAt">) => {
@@ -2530,7 +2689,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     writeAuditLog("CREATE", "daily_sales_recap", newId);
-    markChanged();
+    markChanged("cash_transactions");
   };
 
   const deleteDailySalesRecap = (id: string) => {

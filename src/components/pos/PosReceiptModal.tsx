@@ -1,7 +1,26 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
-import { Printer, CheckCircle2, X, Download, Share2 } from "lucide-react";
+import {
+  buildEscPosReceipt,
+  printViaWebBluetooth,
+  printViaWebUsb,
+  triggerRawBtPrint,
+  buildCashDrawerKickCommand,
+} from "../../utils/escpos";
+import { buildWhatsAppReceiptUrl } from "../../utils/whatsappReceipt";
+import {
+  Printer,
+  CheckCircle2,
+  X,
+  Share2,
+  Send,
+  MessageSquare,
+  Sparkles,
+  Zap,
+  Smartphone,
+  ChevronDown,
+} from "lucide-react";
 
 interface PosReceiptModalProps {
   orderData: any;
@@ -11,18 +30,101 @@ interface PosReceiptModalProps {
 export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onClose }) => {
   const { settings } = useStore();
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [isPrintingThermal, setIsPrintingThermal] = useState(false);
+  const [printStatus, setPrintStatus] = useState<string>("");
 
-  const handlePrint = () => {
+  const payment = orderData.payments?.[0] || orderData.payment || {};
+  const isCash = (payment.paymentMethod || orderData.paymentMethod || "CASH") === "CASH";
+
+  // Estimasi Poin Loyalitas (1 poin per Rp 10.000)
+  const loyaltyPointsEarned = Math.floor((Number(orderData.totalAmount) || 0) / 10000);
+
+  // Fallback dialog browser standar
+  const handleBrowserPrint = () => {
     window.print();
   };
 
-  const receiptNo = orderData.receiptNo || "ORD-0000";
+  // Cetak Thermal ESC/POS Instan (Bluetooth / USB / RawBT)
+  const handleThermalPrint = async () => {
+    setIsPrintingThermal(true);
+    setPrintStatus("Menyiapkan data ESC/POS...");
+    try {
+      const bytes = buildEscPosReceipt(orderData, settings, {
+        paperWidth: "80mm",
+        kickDrawer: isCash,
+      });
+
+      // 1. Coba Web Bluetooth jika didukung
+      if (typeof navigator !== "undefined" && (navigator as any).bluetooth) {
+        setPrintStatus("Menghubungkan printer Bluetooth...");
+        try {
+          await printViaWebBluetooth(bytes);
+          setPrintStatus("Struk thermal berhasil dicetak via Bluetooth!");
+          setTimeout(() => setPrintStatus(""), 3000);
+          return;
+        } catch (btErr: any) {
+          console.warn("Bluetooth dibatalkan / gagal, mencoba metode alternatif:", btErr.message);
+        }
+      }
+
+      // 2. Coba WebUSB jika didukung
+      if (typeof navigator !== "undefined" && (navigator as any).usb) {
+        setPrintStatus("Mencoba koneksi printer USB...");
+        try {
+          await printViaWebUsb(bytes);
+          setPrintStatus("Struk berhasil dicetak via USB!");
+          setTimeout(() => setPrintStatus(""), 3000);
+          return;
+        } catch (usbErr: any) {
+          console.warn("USB gagal:", usbErr.message);
+        }
+      }
+
+      // 3. Fallback RawBT / download binary ESC/POS untuk tablet kasir
+      triggerRawBtPrint(bytes, `receipt-${orderData.receiptNo || "pos"}.bin`);
+      setPrintStatus("Meneruskan ke driver printer / RawBT...");
+      setTimeout(() => setPrintStatus(""), 3000);
+    } catch (err: any) {
+      alert(`Pencetakan ESC/POS: ${err.message}. Membuka dialog cetak browser sebagai cadangan.`);
+      handleBrowserPrint();
+    } finally {
+      setIsPrintingThermal(false);
+    }
+  };
+
+  // Tendang Laci Kasir Manual (Cash Drawer Kick)
+  const handleKickDrawer = async () => {
+    try {
+      const kickBytes = buildCashDrawerKickCommand();
+      if (typeof navigator !== "undefined" && (navigator as any).bluetooth) {
+        await printViaWebBluetooth(kickBytes);
+      } else {
+        triggerRawBtPrint(kickBytes, "drawer-kick.bin");
+      }
+      alert("Perintah buka laci uang terkirim ke printer!");
+    } catch (e: any) {
+      alert(`Buka laci: ${e.message}`);
+    }
+  };
+
+  // Kirim Struk Digital via WhatsApp
+  const handleSendWhatsApp = () => {
+    let phone = orderData.customerPhone || "";
+    if (!phone) {
+      const input = prompt("Masukkan nomor WhatsApp pelanggan (misal 08123456789):", "");
+      if (!input) return;
+      phone = input;
+    }
+    const url = buildWhatsAppReceiptUrl(phone, orderData, settings, loyaltyPointsEarned);
+    window.open(url, "_blank");
+  };
+
+  const receiptNo = orderData.receiptNo || orderData.orderNumber || "ORD-0000";
   const dateFormatted = new Date(orderData.createdAt || Date.now()).toLocaleString("id-ID", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 
-  const payment = orderData.payments?.[0] || orderData.payment || {};
   const items = orderData.items || [];
 
   return (
@@ -215,22 +317,73 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 no-print">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition"
-          >
-            Transaksi Baru
-          </button>
+        {/* Print Status Feedback */}
+        {printStatus && (
+          <div className="px-6 py-2 bg-emerald-50 border-t border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between no-print animate-fade-in">
+            <span>{printStatus}</span>
+          </div>
+        )}
 
-          <button
-            onClick={handlePrint}
-            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20 transition flex items-center justify-center gap-2"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Cetak Struk</span>
-          </button>
+        {/* Action Buttons */}
+        <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 space-y-2.5 no-print">
+          <div className="flex items-center gap-2">
+            {/* 1. Tombol Utama: Cetak Thermal ESC/POS Instan */}
+            <button
+              type="button"
+              onClick={handleThermalPrint}
+              disabled={isPrintingThermal}
+              className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-brand-600/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Cetak langsung ke printer thermal Bluetooth / USB tanpa dialog print browser"
+            >
+              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <span>{isPrintingThermal ? "Mencetak..." : "Cetak Thermal ESC/POS"}</span>
+            </button>
+
+            {/* 2. Tombol Kirim WhatsApp */}
+            <button
+              type="button"
+              onClick={handleSendWhatsApp}
+              className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+              title="Kirim struk digital nota pesanan ke nomor WhatsApp pelanggan"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Kirim WA</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* 3. Buka Laci Kasir (Khusus Cash / Drawer) */}
+            {isCash && (
+              <button
+                type="button"
+                onClick={handleKickDrawer}
+                className="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Buka laci kasir manual via perintah ESC p"
+              >
+                <span>Buka Laci</span>
+              </button>
+            )}
+
+            {/* 4. Cetak Cadangan Browser */}
+            <button
+              type="button"
+              onClick={handleBrowserPrint}
+              className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+              title="Gunakan dialog cetak browser biasa"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>Browser Print</span>
+            </button>
+
+            {/* 5. Transaksi Baru / Tutup */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition cursor-pointer text-center"
+            >
+              Transaksi Baru →
+            </button>
+          </div>
         </div>
       </div>
 

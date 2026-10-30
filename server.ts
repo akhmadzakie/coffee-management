@@ -8,8 +8,19 @@ import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq, ne, not, desc, like, and, or } from "drizzle-orm";
+import { eq, ne, not, desc, like, and, or, gte, lte } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  getLocalDateString,
+  getLocalPeriodString,
+  getLocalDayUtcBounds,
+  isTimestampOnLocalDate,
+} from "./src/utils/dateUtils.ts";
+import {
+  resolveOrderItemIngredients,
+  calculateTodayOrderSummary,
+  resolvePaymentAccountId,
+} from "./src/utils/posDomainLogic.ts";
 
 const initialSettings = {
   id: "1",
@@ -570,7 +581,40 @@ async function ensureTables() {
         notes TEXT,
         last_prepared_date TEXT
       )`,
-    `ALTER TABLE batch_preparations ADD COLUMN IF NOT EXISTS division TEXT DEFAULT 'BAR'`
+    `ALTER TABLE batch_preparations ADD COLUMN IF NOT EXISTS division TEXT DEFAULT 'BAR'`,
+    `ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'CASH'`,
+    `ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS order_id TEXT`,
+    `ALTER TABLE stock_opnames ADD COLUMN IF NOT EXISTS date TEXT`,
+    `ALTER TABLE cash_transactions ALTER COLUMN amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE sales_transactions ALTER COLUMN quantity_sold TYPE DOUBLE PRECISION`,
+    `ALTER TABLE sales_transactions ALTER COLUMN total_price TYPE DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ALTER COLUMN current_stock TYPE DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ALTER COLUMN min_stock TYPE DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ALTER COLUMN cost_per_unit TYPE DOUBLE PRECISION`,
+    `ALTER TABLE stock_movements ALTER COLUMN quantity TYPE DOUBLE PRECISION`,
+    `ALTER TABLE stock_movements ALTER COLUMN unit_cost TYPE DOUBLE PRECISION`,
+    `ALTER TABLE stock_movements ALTER COLUMN total_cost TYPE DOUBLE PRECISION`,
+    `ALTER TABLE shifts ALTER COLUMN starting_cash TYPE DOUBLE PRECISION`,
+    `ALTER TABLE shifts ALTER COLUMN expected_ending_cash TYPE DOUBLE PRECISION`,
+    `ALTER TABLE shifts ALTER COLUMN actual_ending_cash TYPE DOUBLE PRECISION`,
+    `ALTER TABLE shifts ALTER COLUMN difference TYPE DOUBLE PRECISION`,
+    `ALTER TABLE orders ALTER COLUMN subtotal TYPE DOUBLE PRECISION`,
+    `ALTER TABLE orders ALTER COLUMN discount_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE orders ALTER COLUMN tax_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE orders ALTER COLUMN total_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE orders ALTER COLUMN refund_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE order_items ALTER COLUMN quantity TYPE DOUBLE PRECISION`,
+    `ALTER TABLE order_items ALTER COLUMN unit_price TYPE DOUBLE PRECISION`,
+    `ALTER TABLE order_items ALTER COLUMN subtotal TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payments ALTER COLUMN amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payments ALTER COLUMN cash_received TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payments ALTER COLUMN change_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE purchase_orders ALTER COLUMN total_amount TYPE DOUBLE PRECISION`,
+    `ALTER TABLE purchase_orders ALTER COLUMN amount_paid TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payroll_records ALTER COLUMN basic_salary TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payroll_records ALTER COLUMN gross_pay TYPE DOUBLE PRECISION`,
+    `ALTER TABLE payroll_records ALTER COLUMN net_pay TYPE DOUBLE PRECISION`,
+    `ALTER TABLE manager_approval_requests ALTER COLUMN amount TYPE DOUBLE PRECISION`
   ];
 
   for (const q of queries) {
@@ -780,8 +824,10 @@ async function startServer() {
     date: String(s.date || new Date().toISOString()),
     menuName: String(s.menuName || ""),
     quantitySold: Number(s.quantitySold) || 0,
-    totalPrice: Number(s.totalPrice) || 0,
+    totalPrice: Math.round(Number(s.totalPrice) || 0),
     importLogId: String(s.importLogId || ""),
+    paymentMethod: s.paymentMethod ? String(s.paymentMethod) : "CASH",
+    orderId: s.orderId ? String(s.orderId) : null,
   });
 
   const sanitizeSalesImportLog = (l: any) => ({
@@ -916,13 +962,27 @@ async function startServer() {
     isDefault: Boolean(a.isDefault),
   });
 
-  const sanitizeSettings = (st: any) => {
+  const sanitizeSettings = (st: any, existingRow?: any, isPrivilegedRole = true) => {
     const divTarget = typeof st?.divisionKpiBonusTarget === "object" ? { ...st.divisionKpiBonusTarget } : {};
     if (st?.leaderJobdeskAllowanceRules && Array.isArray(st.leaderJobdeskAllowanceRules)) {
       divTarget.__leaderAllowanceRules = st.leaderJobdeskAllowanceRules;
     }
     if (st?.shiftDefinitions && Array.isArray(st.shiftDefinitions)) {
       divTarget.__shiftDefinitions = st.shiftDefinitions;
+    }
+
+    const incomingKey = st?.gemini_api_key ?? st?.geminiApiKey;
+    const isMaskedKey = typeof incomingKey === "string" && incomingKey.startsWith("••");
+    let resolvedGeminiKey = existingRow?.gemini_api_key ?? process.env.GEMINI_API_KEY ?? null;
+    if (isPrivilegedRole && incomingKey !== undefined && !isMaskedKey) {
+      resolvedGeminiKey = incomingKey || process.env.GEMINI_API_KEY || null;
+    }
+
+    const incomingSupPin = st?.posSupervisorPin;
+    const isMaskedPin = typeof incomingSupPin === "string" && incomingSupPin.startsWith("••");
+    let resolvedSupervisorPin = String(existingRow?.posSupervisorPin || "1234");
+    if (isPrivilegedRole && incomingSupPin !== undefined && incomingSupPin !== "" && !isMaskedPin) {
+      resolvedSupervisorPin = String(incomingSupPin);
     }
 
     return {
@@ -938,7 +998,7 @@ async function startServer() {
       leaderKitchenTasks: Array.isArray(st?.leaderKitchenTasks) ? JSON.stringify(st.leaderKitchenTasks) : (st?.leaderKitchenTasks || "[]"),
       leaderBakerTasks: Array.isArray(st?.leaderBakerTasks) ? JSON.stringify(st.leaderBakerTasks) : (st?.leaderBakerTasks || "[]"),
       managerTasks: Array.isArray(st?.managerTasks) ? JSON.stringify(st.managerTasks) : (st?.managerTasks || "[]"),
-      gemini_api_key: st?.gemini_api_key || st?.geminiApiKey || process.env.GEMINI_API_KEY || null,
+      gemini_api_key: resolvedGeminiKey,
       taxEnabled: Boolean(st?.taxEnabled ?? false),
       taxRate: Number(st?.taxRate ?? 10),
       taxMode: String(st?.taxMode || "EXCLUSIVE"),
@@ -950,7 +1010,7 @@ async function startServer() {
       enableStoreSalesBonus: st?.enableStoreSalesBonus !== false,
       enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
       enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
-      posSupervisorPin: String(st?.posSupervisorPin || "1234"),
+      posSupervisorPin: resolvedSupervisorPin,
       autoDeductStockOnSale: st?.autoDeductStockOnSale !== false,
       allowNegativeStockSale: st?.allowNegativeStockSale !== false,
     };
@@ -1201,7 +1261,10 @@ async function startServer() {
     recipes: formatRecipesForClient(initialRecipes),
     products: JSON.parse(JSON.stringify(initialProducts)),
     promotions: initialPromotions,
-    cash_accounts: [{ id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true }],
+    cash_accounts: [
+      { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true },
+      { id: "bank-bca-main", name: "Rekening Bank / QRIS Utama", type: "BANK", isDefault: false },
+    ],
     stock_movements: [],
     sales_transactions: [],
     orders: [],
@@ -1234,8 +1297,211 @@ async function startServer() {
     serverDataVersion = Date.now();
   };
 
+  // Helper autentikasi sesi berbasis Bearer token yang aman (tanpa fallback ke Super Admin!)
+  const resolveAuthUser = async (req: express.Request) => {
+    const authHeader = req.headers["authorization"] as string | undefined;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : authHeader?.split(" ")[1];
+    if (!token) return null;
+
+    if (isDbConnected) {
+      try {
+        const sessions = await db
+          .select()
+          .from(schema.deviceSessions)
+          .where(eq(schema.deviceSessions.id, token))
+          .limit(1);
+        const session = sessions[0];
+        if (session && session.status === "ACTIVE") {
+          const userRows = await db
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, session.userId))
+            .limit(1);
+          if (userRows[0]) return userRows[0];
+        }
+      } catch { }
+    }
+
+    if (offlineState) {
+      const session = (offlineState.device_sessions || []).find(
+        (s: any) => s.id === token && s.status !== "REVOKED" && s.status !== "EXPIRED"
+      );
+      if (session) {
+        const u = (offlineState.users || []).find((usr: any) => usr.id === session.userId);
+        if (u) return u;
+      }
+    }
+    return null;
+  };
+
+  // Helper verifikasi PIN Supervisor / Manager / Unlock Layar POS dengan dukungan penuh SHA-256
+  const verifyPosPin = async (
+    rawPin: string,
+    purpose: "SUPERVISOR" | "UNLOCK" = "SUPERVISOR",
+    currentUserId?: string
+  ): Promise<{ ok: boolean; status: number; approver?: any; error?: string }> => {
+    const cleanPin = String(rawPin || "").trim();
+    if (!cleanPin) {
+      return { ok: false, status: 400, error: "PIN wajib diisi." };
+    }
+    const pinHash =
+      cleanPin.length === 64
+        ? cleanPin
+        : crypto.createHash("sha256").update(cleanPin).digest("hex");
+
+    let configuredSupervisorPin = "1234";
+    let allUsers: any[] = [];
+
+    if (isDbConnected) {
+      try {
+        const stRows = await db.select().from(schema.settings).limit(1);
+        configuredSupervisorPin = String(stRows[0]?.posSupervisorPin || "1234").trim();
+        allUsers = await db.select().from(schema.users);
+      } catch { }
+    }
+    if (allUsers.length === 0 && offlineState) {
+      const rawSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+      configuredSupervisorPin = String(rawSt?.posSupervisorPin || "1234").trim();
+      allUsers = offlineState.users || initialUsers;
+    }
+
+    const supPinHash =
+      configuredSupervisorPin.length === 64
+        ? configuredSupervisorPin
+        : crypto.createHash("sha256").update(configuredSupervisorPin).digest("hex");
+
+    // 1. Jika tujuan UNLOCK layar kasir: cek juga PIN akun kasir yang sedang aktif
+    if (purpose === "UNLOCK" && currentUserId) {
+      const activeOperator = allUsers.find((u: any) => u.id === currentUserId);
+      if (activeOperator && (activeOperator.pin === pinHash || activeOperator.pin === cleanPin)) {
+        return {
+          ok: true,
+          status: 200,
+          approver: { id: activeOperator.id, name: activeOperator.name, role: activeOperator.role },
+        };
+      }
+    }
+
+    // 2. Cek PIN Supervisor POS khusus yang disetel Manager di Pengaturan
+    if (cleanPin === configuredSupervisorPin || pinHash === supPinHash) {
+      return {
+        ok: true,
+        status: 200,
+        approver: { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" },
+      };
+    }
+
+    // 3. Cek apakah PIN milik akun OWNER (Aturan #5b: Owner Read-Only tidak boleh mengotorisasi aksi operasional)
+    const matchedOwner = allUsers.find(
+      (u: any) => u.role === "OWNER" && (u.pin === pinHash || u.pin === cleanPin)
+    );
+    if (matchedOwner && purpose === "SUPERVISOR") {
+      return {
+        ok: false,
+        status: 403,
+        error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi harus dilakukan oleh Manager atau Super Admin.",
+      };
+    }
+
+    // 4. Cek apakah PIN cocok dengan akun MANAGER atau SUPER_ADMIN (mendukung SHA-256 maupun plaintext di offline seed)
+    const matchedMgr = allUsers.find(
+      (u: any) =>
+        (u.role === "MANAGER" || u.role === "SUPER_ADMIN") &&
+        (u.pin === pinHash || u.pin === cleanPin)
+    );
+    if (matchedMgr) {
+      return {
+        ok: true,
+        status: 200,
+        approver: { id: matchedMgr.id, name: matchedMgr.name, role: matchedMgr.role },
+      };
+    }
+
+    return {
+      ok: false,
+      status: 403,
+      error: "PIN Supervisor / Manager tidak valid atau tidak memiliki wewenang otorisasi.",
+    };
+  };
+
+  const pinVerifyLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 15,
+    message: { error: "Terlalu banyak percobaan PIN. Coba lagi dalam 1 menit." },
+  });
+
+  app.post("/api/pos/verify-pin", pinVerifyLimiter, async (req, res) => {
+    try {
+      const { pin, purpose = "SUPERVISOR", currentUserId } = req.body || {};
+      const result = await verifyPosPin(pin, purpose === "UNLOCK" ? "UNLOCK" : "SUPERVISOR", currentUserId);
+      if (!result.ok) {
+        return res.status(result.status).json({ valid: false, error: result.error });
+      }
+      return res.json({ valid: true, approver: result.approver });
+    } catch (err: any) {
+      return res.status(500).json({ valid: false, error: err?.message || "Gagal memverifikasi PIN" });
+    }
+  });
+
   app.get("/api/sync", async (req, res) => {
     try {
+      const authUser = await resolveAuthUser(req);
+      const isPrivilegedRole =
+        authUser?.role === "MANAGER" || authUser?.role === "SUPER_ADMIN";
+
+      // Jika belum login (mis. halaman pilih akun Login): hanya kirim daftar nama akun publik & branding dasar,
+      // TANPA membocorkan kas, gaji, inventori, audit log, API key, maupun PIN!
+      if (!authUser) {
+        let publicUsers: any[] = initialUsers;
+        let rawSt: any = initialSettings;
+        if (isDbConnected) {
+          try {
+            const [uRows, sRows] = await Promise.all([
+              db.select().from(schema.users),
+              db.select().from(schema.settings).limit(1),
+            ]);
+            if (uRows.length === 0) {
+              await db.transaction(async (tx) => {
+                await tx
+                  .insert(schema.users)
+                  .values(initialUsers.map((u: any) => sanitizeUserForInsert(u, u.pin)));
+                await tx
+                  .insert(schema.settings)
+                  .values([sanitizeSettings(initialSettings)]);
+              });
+              publicUsers = initialUsers;
+              rawSt = initialSettings;
+            } else {
+              publicUsers = uRows;
+              rawSt = sRows[0] || initialSettings;
+            }
+          } catch {
+            publicUsers = offlineState?.users || initialUsers;
+            rawSt = (Array.isArray(offlineState?.settings) ? offlineState.settings[0] : offlineState?.settings) || initialSettings;
+          }
+        } else if (offlineState) {
+          publicUsers = offlineState.users || initialUsers;
+          rawSt = (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) || initialSettings;
+        }
+
+        return res.json({
+          publicOnly: true,
+          v: 0,
+          users: publicUsers.map(sanitizeUser),
+          settings: {
+            id: "1",
+            brandName: String(rawSt?.brandName || "Julia's"),
+            logoDataUrl: rawSt?.logoDataUrl || "/logo-wordmark-white.png",
+            companyAddress: String(rawSt?.companyAddress || ""),
+            bankDetails: "",
+            salesPerson: "",
+            footerMessage: String(rawSt?.footerMessage || ""),
+            language: rawSt?.language === "en" ? "en" : "id",
+          },
+          serverTime: new Date().toISOString(),
+        });
+      }
+
       const clientVersion = req.query.v ? Number(req.query.v) : null;
       if (clientVersion && clientVersion === serverDataVersion) {
         return res.json({
@@ -1254,11 +1520,15 @@ async function startServer() {
           "";
         return res.json({
           ...offlineState,
+          users: (offlineState.users || initialUsers).map(sanitizeUser),
           v: serverDataVersion,
           settings: {
             ...rawSettings,
-            geminiApiKey: effectiveApiKey,
-            gemini_api_key: effectiveApiKey,
+            hasGeminiApiKey: Boolean(effectiveApiKey),
+            hasPosSupervisorPin: Boolean(rawSettings?.posSupervisorPin),
+            geminiApiKey: isPrivilegedRole ? effectiveApiKey : "",
+            gemini_api_key: isPrivilegedRole ? effectiveApiKey : "",
+            posSupervisorPin: isPrivilegedRole ? (rawSettings?.posSupervisorPin || "1234") : "",
           },
           serverTime: new Date().toISOString(),
         });
@@ -1438,12 +1708,15 @@ async function startServer() {
           }
         }
 
-        // Auto seed default cash drawer account if empty
+        // Auto seed default cash drawer & bank/QRIS accounts if empty
         if (cash_accounts.length === 0) {
           try {
-            const defaultCash = { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true };
-            await db.insert(schema.cashAccounts).values(sanitizeCashAccount(defaultCash));
-            cash_accounts = [defaultCash] as any;
+            const defaultAccounts = [
+              { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true },
+              { id: "bank-bca-main", name: "Rekening Bank / QRIS Utama", type: "BANK", isDefault: false },
+            ];
+            await db.insert(schema.cashAccounts).values(defaultAccounts.map(sanitizeCashAccount));
+            cash_accounts = defaultAccounts as any;
           } catch (seedErr) {
             console.warn("Cash accounts seed skipped:", seedErr);
           }
@@ -1537,8 +1810,11 @@ async function startServer() {
 
       const formattedSettings = {
         ...rawSettings,
-        geminiApiKey: effectiveApiKey,
-        gemini_api_key: effectiveApiKey,
+        hasGeminiApiKey: Boolean(effectiveApiKey),
+        hasPosSupervisorPin: Boolean(rawSettings.posSupervisorPin),
+        geminiApiKey: isPrivilegedRole ? effectiveApiKey : "",
+        gemini_api_key: isPrivilegedRole ? effectiveApiKey : "",
+        posSupervisorPin: isPrivilegedRole ? String(rawSettings.posSupervisorPin || "1234") : "",
         leaderBarTasks: parseTasksJson(rawSettings.leaderBarTasks),
         leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
         leaderBakerTasks: parseTasksJson(rawSettings.leaderBakerTasks),
@@ -1679,34 +1955,15 @@ async function startServer() {
         return res.status(401).json({ error: "Unauthorized: No token provided" });
       }
 
-      let session: any = null;
-      let requestUser: any = null;
+      const requestUser = await resolveAuthUser(req);
       let currentUsersDB: any[] = [];
 
-      if (isDbConnected) {
-        try {
-          const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
-          session = sessions[0];
-          currentUsersDB = await db.select().from(schema.users);
-          if (session) {
-            requestUser = currentUsersDB.find(u => u.id === session.userId);
-          }
-        } catch { }
-      }
-
-      if (!session && offlineState) {
-        session = (offlineState.device_sessions || []).find((s: any) => s.id === token);
-        if (session) {
-          requestUser = (offlineState.users || []).find((u: any) => u.id === session.userId);
-        } else {
-          requestUser = offlineState.users?.[0] || initialUsers[0];
-          session = { id: token, userId: requestUser.id };
-        }
-      }
-
       if (!requestUser) {
-        return res.status(401).json({ error: "Unauthorized: User not found" });
+        return res.status(401).json({ error: "Unauthorized: Sesi tidak valid atau telah berakhir" });
       }
+
+      const isPrivilegedSyncUser =
+        requestUser.role === "MANAGER" || requestUser.role === "SUPER_ADMIN";
 
       // ── ATURAN #5b: OWNER READ-ONLY ENFORCEMENT ──────────────────────────
       // Owner berstatus Read-Only (Pengawasan). Seluruh mutasi data via API ditolak di sisi server.
@@ -1752,14 +2009,6 @@ async function startServer() {
         batch_preparations,
         promotions,
       } = req.body;
-
-      // ── ATURAN PEMBATASAN TABEL BERDASARKAN ROLE ─────────────────────────
-      if (requestUser.role === "OWNER") {
-        // Aturan #5b: Owner hanya read-only, server menolak seluruh request tulis dari OWNER
-        return res.status(403).json({
-          error: "Akses Ditolak: Akun OWNER berstatus strictly read-only dan tidak diizinkan mengubah data sistem.",
-        });
-      }
 
       if (requestUser.role === "KASIR") {
         // Kasir hanya diizinkan memperbarui data shift, absensi, dan sesi terminal
@@ -1812,27 +2061,128 @@ async function startServer() {
         purchase_orders = undefined;
       }
 
+      const mergeByIdPreservingExisting = (incomingList: any[], protectedRows: any[]) => {
+        const map = new Map<string, any>();
+        for (const row of protectedRows) {
+          if (row?.id) map.set(String(row.id), row);
+        }
+        for (const item of incomingList) {
+          if (item?.id) map.set(String(item.id), item);
+        }
+        return Array.from(map.values());
+      };
+
       if (!isDbConnected && offlineState) {
+        const offlineOrderIds = new Set<string>((offlineState.orders || []).map((o: any) => String(o.id)));
         if (ingredients !== undefined) offlineState.ingredients = ingredients;
         if (recipes !== undefined) offlineState.recipes = recipes;
         if (products !== undefined) offlineState.products = products;
         if (cash_accounts !== undefined) offlineState.cash_accounts = cash_accounts;
-        if (cash_transactions !== undefined) offlineState.cash_transactions = cash_transactions;
-        if (stock_movements !== undefined) offlineState.stock_movements = stock_movements;
-        if (sales_transactions !== undefined) offlineState.sales_transactions = sales_transactions;
+        if (cash_transactions !== undefined && Array.isArray(cash_transactions)) {
+          const protectedPosCash = (offlineState.cash_transactions || []).filter(
+            (ct: any) => ct.referenceId && offlineOrderIds.has(String(ct.referenceId))
+          );
+          offlineState.cash_transactions = mergeByIdPreservingExisting(cash_transactions, protectedPosCash);
+        }
+        if (stock_movements !== undefined && Array.isArray(stock_movements)) {
+          const protectedPosMovements = (offlineState.stock_movements || []).filter(
+            (sm: any) => sm.referenceId && offlineOrderIds.has(String(sm.referenceId))
+          );
+          offlineState.stock_movements = mergeByIdPreservingExisting(stock_movements, protectedPosMovements);
+        }
+        if (sales_transactions !== undefined && Array.isArray(sales_transactions)) {
+          const protectedPosSales = (offlineState.sales_transactions || []).filter((st: any) =>
+            String(st.importLogId || "").startsWith("POS-")
+          );
+          offlineState.sales_transactions = mergeByIdPreservingExisting(sales_transactions, protectedPosSales);
+        }
         if (shifts !== undefined) offlineState.shifts = shifts;
-        if (users !== undefined) offlineState.users = users;
-        if (settings !== undefined) offlineState.settings = Array.isArray(settings) ? settings : [settings];
+        if (users !== undefined && Array.isArray(users)) {
+          const existingOfflineUsers = offlineState.users || initialUsers;
+          offlineState.users = users.map((u: any) =>
+            sanitizeUserForInsert(u, existingOfflineUsers.find((cu: any) => String(cu.id) === String(u.id))?.pin)
+          );
+        }
+        if (settings !== undefined && settings !== null) {
+          const rawExisting = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+          const incomingSt = Array.isArray(settings) ? settings[0] : settings;
+          offlineState.settings = [sanitizeSettings(incomingSt, rawExisting, isPrivilegedSyncUser)];
+        }
         if (expense_categories !== undefined) offlineState.expense_categories = expense_categories;
         if (budgets !== undefined) offlineState.budgets = budgets;
         if (payroll_records !== undefined) offlineState.payroll_records = payroll_records;
         if (promotions !== undefined) offlineState.promotions = promotions;
-        return res.json({ success: true, serverTime: new Date().toISOString() });
+        if (suppliers !== undefined) offlineState.suppliers = suppliers;
+        if (purchase_orders !== undefined) offlineState.purchase_orders = purchase_orders;
+        if (employees !== undefined) offlineState.employees = employees;
+        if (contracts !== undefined) offlineState.contracts = contracts;
+        if (employeeShifts !== undefined) offlineState.employeeShifts = employeeShifts;
+        if (attendances !== undefined) offlineState.attendances = attendances;
+        if (dailyAttendances !== undefined) offlineState.dailyAttendances = dailyAttendances;
+        if (dailyChecklists !== undefined) offlineState.dailyChecklists = dailyChecklists;
+        if (kpiRecords !== undefined) offlineState.kpiRecords = kpiRecords;
+        if (audit_logs !== undefined && Array.isArray(audit_logs)) {
+          offlineState.audit_logs = mergeByIdPreservingExisting(audit_logs, offlineState.audit_logs || []);
+        }
+        bumpDataVersion();
+        return res.json({ success: true, v: serverDataVersion, serverTime: new Date().toISOString() });
       }
 
       await db.transaction(async (tx) => {
-        // --- PHASE 1: DELETES (Child -> Parent) ---
+        // --- SNAPSHOT DATA TRANSAKSIONAL POS & SESI AKTIF AGAR TIDAK TERHAPUS MULTI-DEVICE ---
         let existingPaidIds = new Set<string>();
+        let existingSettingsRow: any = null;
+        let protectedPosSales: any[] = [];
+        let protectedPosCash: any[] = [];
+        let protectedPosMovements: any[] = [];
+        let protectedAuditLogs: any[] = [];
+        let protectedActiveSessions: any[] = [];
+
+        const needPosOrdersCheck =
+          cash_transactions !== undefined ||
+          stock_movements !== undefined ||
+          sales_transactions !== undefined;
+
+        let posOrderIds = new Set<string>();
+        if (needPosOrdersCheck) {
+          const ordRows = await tx.select({ id: schema.orders.id, status: schema.orders.status, receiptNo: schema.orders.receiptNo }).from(schema.orders);
+          const voidReceipts = new Set<string>();
+          for (const o of ordRows) {
+            posOrderIds.add(String(o.id));
+            if (o.status === "VOID" || o.status === "CANCELLED") {
+              voidReceipts.add(`POS-${o.receiptNo}`);
+            }
+          }
+          if (sales_transactions !== undefined) {
+            const dbPosSales = await tx
+              .select()
+              .from(schema.salesTransactions)
+              .where(like(schema.salesTransactions.importLogId, "POS-%"));
+            protectedPosSales = dbPosSales.filter((s) => !voidReceipts.has(String(s.importLogId)));
+          }
+          if (cash_transactions !== undefined) {
+            const dbCash = await tx.select().from(schema.cashTransactions);
+            protectedPosCash = dbCash.filter((ct) => ct.referenceId && posOrderIds.has(String(ct.referenceId)));
+          }
+          if (stock_movements !== undefined) {
+            const dbMoves = await tx.select().from(schema.stockMovements);
+            protectedPosMovements = dbMoves.filter((sm) => sm.referenceId && posOrderIds.has(String(sm.referenceId)));
+          }
+        }
+
+        if (settings !== undefined && settings !== null) {
+          const stRows = await tx.select().from(schema.settings).limit(1);
+          existingSettingsRow = stRows[0] || null;
+        }
+        if (audit_logs !== undefined) {
+          protectedAuditLogs = await tx.select().from(schema.auditLogs);
+        }
+        if (device_sessions !== undefined) {
+          const sessRows = await tx.select().from(schema.deviceSessions);
+          protectedActiveSessions = sessRows.filter((s) => s.status === "ACTIVE");
+        }
+
+        // --- PHASE 1: DELETES (Child -> Parent) ---
         if (promotions !== undefined) {
           await tx.delete(schema.promotions);
         }
@@ -1936,7 +2286,8 @@ async function startServer() {
         }
 
         if (settings !== undefined && settings !== null) {
-          await tx.insert(schema.settings).values([sanitizeSettings(settings)]);
+          const incomingSt = Array.isArray(settings) ? settings[0] : settings;
+          await tx.insert(schema.settings).values([sanitizeSettings(incomingSt, existingSettingsRow, isPrivilegedSyncUser)]);
         }
         if (cash_accounts !== undefined) {
           if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
@@ -2028,18 +2379,30 @@ async function startServer() {
           }
         }
         if (cash_transactions !== undefined) {
-          if (Array.isArray(cash_transactions) && cash_transactions.length > 0) {
-            await tx.insert(schema.cashTransactions).values(cash_transactions.map(sanitizeCashTransaction));
+          const mergedCashTx = mergeByIdPreservingExisting(
+            Array.isArray(cash_transactions) ? cash_transactions : [],
+            protectedPosCash
+          );
+          if (mergedCashTx.length > 0) {
+            await tx.insert(schema.cashTransactions).values(mergedCashTx.map(sanitizeCashTransaction));
           }
         }
         if (stock_movements !== undefined) {
-          if (Array.isArray(stock_movements) && stock_movements.length > 0) {
-            await tx.insert(schema.stockMovements).values(stock_movements.map(sanitizeStockMovement));
+          const mergedMovements = mergeByIdPreservingExisting(
+            Array.isArray(stock_movements) ? stock_movements : [],
+            protectedPosMovements
+          );
+          if (mergedMovements.length > 0) {
+            await tx.insert(schema.stockMovements).values(mergedMovements.map(sanitizeStockMovement));
           }
         }
         if (sales_transactions !== undefined) {
-          if (Array.isArray(sales_transactions) && sales_transactions.length > 0) {
-            await tx.insert(schema.salesTransactions).values(sales_transactions.map(sanitizeSalesTransaction));
+          const mergedSales = mergeByIdPreservingExisting(
+            Array.isArray(sales_transactions) ? sales_transactions : [],
+            protectedPosSales
+          );
+          if (mergedSales.length > 0) {
+            await tx.insert(schema.salesTransactions).values(mergedSales.map(sanitizeSalesTransaction));
           }
         }
         if (recipes !== undefined) {
@@ -2053,14 +2416,16 @@ async function startServer() {
           }
         }
         if (audit_logs !== undefined) {
-          if (Array.isArray(audit_logs) && audit_logs.length > 0) {
-            let filteredItems = audit_logs;
-            if (validUserIds !== null) {
-              filteredItems = audit_logs.filter((item: any) => validUserIds!.has(String(item.userId)));
-            }
-            if (filteredItems.length > 0) {
-              await tx.insert(schema.auditLogs).values(filteredItems.map(sanitizeAuditLog));
-            }
+          const mergedAudit = mergeByIdPreservingExisting(
+            Array.isArray(audit_logs) ? audit_logs : [],
+            protectedAuditLogs
+          );
+          let filteredItems = mergedAudit;
+          if (validUserIds !== null) {
+            filteredItems = mergedAudit.filter((item: any) => validUserIds!.has(String(item.userId)));
+          }
+          if (filteredItems.length > 0) {
+            await tx.insert(schema.auditLogs).values(filteredItems.map(sanitizeAuditLog));
           }
         }
         if (shifts !== undefined) {
@@ -2104,14 +2469,16 @@ async function startServer() {
           }
         }
         if (device_sessions !== undefined) {
-          if (Array.isArray(device_sessions) && device_sessions.length > 0) {
-            let filteredItems = device_sessions;
-            if (validUserIds !== null) {
-              filteredItems = device_sessions.filter((item: any) => validUserIds!.has(String(item.userId)));
-            }
-            if (filteredItems.length > 0) {
-              await tx.insert(schema.deviceSessions).values(filteredItems.map(sanitizeDeviceSession));
-            }
+          const mergedSessions = mergeByIdPreservingExisting(
+            Array.isArray(device_sessions) ? device_sessions : [],
+            protectedActiveSessions
+          );
+          let filteredItems = mergedSessions;
+          if (validUserIds !== null) {
+            filteredItems = mergedSessions.filter((item: any) => validUserIds!.has(String(item.userId)));
+          }
+          if (filteredItems.length > 0) {
+            await tx.insert(schema.deviceSessions).values(filteredItems.map(sanitizeDeviceSession));
           }
         }
         if (products !== undefined) {
@@ -2671,19 +3038,19 @@ async function startServer() {
   // ─── AI ASSISTANT API ──────────────────────────────────────────────────────
   const GEMINI_CANDIDATE_MODELS = [
     process.env.GEMINI_MODEL,
-    "gemini-3.8-flash",
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
   ].filter(Boolean) as string[];
 
   async function generateContentWithFallback(ai: any, requestConfig: any) {
     let lastErr: any = null;
     for (const model of GEMINI_CANDIDATE_MODELS) {
       try {
-        const { response } = await generateContentWithFallback(ai, {
+        const rawRes = await ai.models.generateContent({
           ...requestConfig,
           model,
         });
+        const response = (rawRes as any)?.response ?? rawRes;
         return { response, model };
       } catch (err: any) {
         lastErr = err;
@@ -2703,7 +3070,7 @@ async function startServer() {
     }
     throw lastErr;
   }
-  const GEMINI_MODEL = GEMINI_CANDIDATE_MODELS[0] || "gemini-3.8-flash";
+  const GEMINI_MODEL = GEMINI_CANDIDATE_MODELS[0] || "gemini-2.5-flash";
 
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
@@ -3276,6 +3643,235 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
   // ─── POS & Kasir Tablet API ────────────────────────────────────────────────
 
+  // Helper routing akun kas berdasarkan metode pembayaran (CASH -> Laci Kasir, QRIS/DEBIT/CREDIT -> Rekening Bank/E-Wallet)
+  const resolveOfflinePaymentAccount = (
+    paymentMethod: string,
+    requestedAccountId?: string | null,
+    shiftId?: string | null
+  ): string => {
+    offlineState.cash_accounts = offlineState.cash_accounts || [];
+    const shift = shiftId ? (offlineState.shifts || []).find((s: any) => s.id === shiftId) : null;
+    const resolved = resolvePaymentAccountId(
+      paymentMethod,
+      requestedAccountId,
+      offlineState.cash_accounts,
+      shift?.cashAccountId
+    );
+    if (resolved) return resolved;
+
+    const method = String(paymentMethod || "CASH").toUpperCase();
+    if (method === "CASH") {
+      if (!offlineState.cash_accounts.some((a: any) => a.type === "CASH")) {
+        offlineState.cash_accounts.push({
+          id: "cash-drawer-main",
+          name: "Laci Kasir Utama",
+          type: "CASH",
+          isDefault: true,
+        });
+      }
+      return offlineState.cash_accounts.find((a: any) => a.type === "CASH")?.id || "cash-drawer-main";
+    } else {
+      if (!offlineState.cash_accounts.some((a: any) => a.type === "BANK" || a.type === "E_WALLET")) {
+        offlineState.cash_accounts.push({
+          id: "bank-bca-main",
+          name: "Rekening Bank / QRIS Utama",
+          type: "BANK",
+          isDefault: false,
+        });
+      }
+      return (
+        offlineState.cash_accounts.find((a: any) => a.type === "BANK" || a.type === "E_WALLET")?.id ||
+        "bank-bca-main"
+      );
+    }
+  };
+
+  const resolveDbPaymentAccount = async (
+    tx: any,
+    paymentMethod: string,
+    requestedAccountId?: string | null,
+    shiftId?: string | null
+  ): Promise<string> => {
+    const accounts = await tx.select().from(schema.cashAccounts);
+    let shiftCashAccId: string | null = null;
+    if (shiftId) {
+      const shRows = await tx.select().from(schema.shifts).where(eq(schema.shifts.id, shiftId)).limit(1);
+      shiftCashAccId = shRows[0]?.cashAccountId || null;
+    }
+    const resolved = resolvePaymentAccountId(paymentMethod, requestedAccountId, accounts, shiftCashAccId);
+    if (resolved) return resolved;
+
+    const method = String(paymentMethod || "CASH").toUpperCase();
+    if (method === "CASH") {
+      const fallbackId = "cash-drawer-main";
+      if (!accounts.some((a: any) => a.id === fallbackId)) {
+        await tx.insert(schema.cashAccounts).values({
+          id: fallbackId,
+          name: "Laci Kasir Utama",
+          type: "CASH",
+          isDefault: true,
+        });
+      }
+      return fallbackId;
+    } else {
+      const fallbackBankId = "bank-bca-main";
+      if (!accounts.some((a: any) => a.id === fallbackBankId)) {
+        await tx.insert(schema.cashAccounts).values({
+          id: fallbackBankId,
+          name: "Rekening Bank / QRIS Utama",
+          type: "BANK",
+          isDefault: false,
+        });
+      }
+      return fallbackBankId;
+    }
+  };
+
+  // Helper pemotongan/pengembalian stok yang mendukung resep spesifik Varian (Hot/Iced/1L), Modifier (Extra Shot), & Substitusi Susu Oat/Soy
+  const applyOfflineOrderStock = (
+    items: any[],
+    mode: "USAGE" | "RETURN" | "WASTE",
+    notePrefix: string,
+    actorName: string,
+    orderId: string,
+    nowIso: string
+  ) => {
+    offlineState.stock_movements = offlineState.stock_movements || [];
+    offlineState.ingredients = offlineState.ingredients || [];
+    const allRecipes = offlineState.recipes || [];
+    const allProducts = offlineState.products || [];
+    const allIngredients = offlineState.ingredients || [];
+
+    for (const item of items) {
+      const resolvedIngs = resolveOrderItemIngredients(item, allRecipes, allProducts, allIngredients);
+      const variantLabel = item.variantName ? ` (${item.variantName})` : "";
+      for (const rIng of resolvedIngs) {
+        if (rIng.totalQuantity <= 0) continue;
+        if (mode === "USAGE") {
+          offlineState.stock_movements.push({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "USAGE",
+            quantity: rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+          const ing = allIngredients.find((i: any) => i.id === rIng.ingredientId);
+          if (ing) {
+            ing.currentStock = Number(((Number(ing.currentStock) || 0) - rIng.totalQuantity).toFixed(4));
+          }
+        } else if (mode === "RETURN") {
+          offlineState.stock_movements.push({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "RETURN",
+            quantity: rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+          const ing = allIngredients.find((i: any) => i.id === rIng.ingredientId);
+          if (ing) {
+            ing.currentStock = Number(((Number(ing.currentStock) || 0) + rIng.totalQuantity).toFixed(4));
+          }
+        } else if (mode === "WASTE") {
+          offlineState.stock_movements.push({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "WASTE",
+            quantity: -rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+        }
+      }
+    }
+  };
+
+  const applyDbOrderStock = async (
+    tx: any,
+    items: any[],
+    mode: "USAGE" | "RETURN" | "WASTE",
+    notePrefix: string,
+    actorName: string,
+    orderId: string,
+    nowIso: string
+  ) => {
+    if (!items || items.length === 0) return;
+    const [allRecipes, allProducts, allIngredients] = await Promise.all([
+      tx.select().from(schema.recipes),
+      tx.select().from(schema.products),
+      tx.select().from(schema.ingredients),
+    ]);
+    const ingStockMap = new Map<string, number>();
+    for (const ing of allIngredients) {
+      ingStockMap.set(String(ing.id), Number(ing.currentStock) || 0);
+    }
+
+    for (const item of items) {
+      const resolvedIngs = resolveOrderItemIngredients(item, allRecipes, allProducts, allIngredients);
+      const variantLabel = item.variantName ? ` (${item.variantName})` : "";
+      for (const rIng of resolvedIngs) {
+        if (rIng.totalQuantity <= 0) continue;
+        if (mode === "USAGE") {
+          await tx.insert(schema.stockMovements).values({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "USAGE",
+            quantity: rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+          if (ingStockMap.has(rIng.ingredientId)) {
+            const nextStock = Number(((ingStockMap.get(rIng.ingredientId) || 0) - rIng.totalQuantity).toFixed(4));
+            ingStockMap.set(rIng.ingredientId, nextStock);
+            await tx
+              .update(schema.ingredients)
+              .set({ currentStock: nextStock })
+              .where(eq(schema.ingredients.id, rIng.ingredientId));
+          }
+        } else if (mode === "RETURN") {
+          await tx.insert(schema.stockMovements).values({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "RETURN",
+            quantity: rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+          if (ingStockMap.has(rIng.ingredientId)) {
+            const nextStock = Number(((ingStockMap.get(rIng.ingredientId) || 0) + rIng.totalQuantity).toFixed(4));
+            ingStockMap.set(rIng.ingredientId, nextStock);
+            await tx
+              .update(schema.ingredients)
+              .set({ currentStock: nextStock })
+              .where(eq(schema.ingredients.id, rIng.ingredientId));
+          }
+        } else if (mode === "WASTE") {
+          await tx.insert(schema.stockMovements).values({
+            id: crypto.randomUUID(),
+            ingredientId: rIng.ingredientId,
+            type: "WASTE",
+            quantity: -rIng.totalQuantity,
+            date: nowIso,
+            note: `${notePrefix} - ${item.menuName}${variantLabel} x${item.quantity || 1}`,
+            createdBy: actorName,
+            referenceId: orderId,
+          });
+        }
+      }
+    }
+  };
+
   // 1. Get POS Menu & Live Stock Availability
   app.get("/api/pos/menu", async (req, res) => {
     try {
@@ -3303,18 +3899,30 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       }
 
       const ingredientMap = new Map(allIngredients.map((ing) => [ing.id, ing]));
-      const productPriceMap = new Map<string, number>();
+      const productMap = new Map<string, { price?: number; variants: any[]; modifierGroups: any[]; category?: string; division?: string }>();
 
       for (const p of allProducts) {
+        if (p.isActive === false) continue;
         let vars: any[] = [];
+        let modGroups: any[] = [];
         try {
-          vars = typeof p.variants === "string" ? JSON.parse(p.variants) : p.variants;
+          vars = typeof p.variants === "string" ? JSON.parse(p.variants) : (Array.isArray(p.variants) ? p.variants : []);
         } catch {
           vars = [];
         }
-        if (Array.isArray(vars) && vars.length > 0 && vars[0].price) {
-          productPriceMap.set(p.name.toLowerCase().trim(), Number(vars[0].price));
+        try {
+          modGroups = typeof p.modifierGroups === "string" ? JSON.parse(p.modifierGroups) : (Array.isArray(p.modifierGroups) ? p.modifierGroups : []);
+        } catch {
+          modGroups = [];
         }
+        const defaultPrice = vars.length > 0 && vars[0].price ? Number(vars[0].price) : undefined;
+        productMap.set(String(p.name || "").toLowerCase().trim(), {
+          price: defaultPrice,
+          variants: vars.filter((v: any) => v.isAvailable !== false),
+          modifierGroups: modGroups,
+          category: p.category,
+          division: p.division,
+        });
       }
 
       const menuList = allRecipes.map((r) => {
@@ -3360,18 +3968,20 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           defaultStation = "BAR";
         }
 
-        const officialPrice = productPriceMap.get(lowerName.trim());
+        const matchedProduct = productMap.get(lowerName.trim());
 
         return {
           id: r.id,
           name: r.menuName,
-          category: guessedCategory,
-          defaultStation,
+          category: matchedProduct?.category || guessedCategory,
+          defaultStation: matchedProduct?.division === "BAKER" ? "BAKERY" : (matchedProduct?.division || defaultStation),
           recipe: recipeItems,
           estimatedHpp: Math.round(hppCost),
           maxPortions,
           isAvailable: maxPortions > 0,
-          price: officialPrice || undefined,
+          price: matchedProduct?.price || undefined,
+          variants: matchedProduct?.variants || [],
+          modifierGroups: matchedProduct?.modifierGroups || [],
         };
       });
 
@@ -3458,8 +4068,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         }
       }
 
-      // Generate receipt number: ORD-YYYYMMDD-XXXX
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      // Generate receipt number: ORD-YYYYMMDD-XXXX (menggunakan tanggal lokal WITA toko, bukan UTC)
+      const dateStr = getLocalDateString().replace(/-/g, "");
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       const receiptNo = `ORD-${dateStr}-${randomSuffix}`;
       const orderId = crypto.randomUUID();
@@ -3482,14 +4092,15 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           tableNumber: tableNumber || null,
           customerName: customerName || null,
           status,
-          subtotal: Number(subtotal),
-          discountPercent: Number(discountPercent),
-          discountAmount: Number(discountAmount),
+          kitchenStatus: "QUEUED",
+          subtotal: Math.round(Number(subtotal) || 0),
+          discountPercent: Number(discountPercent) || 0,
+          discountAmount: Math.round(Number(discountAmount) || 0),
           discountReason: discountReason || null,
-          taxPercent: Number(taxPercent),
-          taxAmount: Number(taxAmount),
+          taxPercent: Number(taxPercent) || 0,
+          taxAmount: Math.round(Number(taxAmount) || 0),
           taxMode: taxMode || "EXCLUSIVE",
-          totalAmount: Number(totalAmount),
+          totalAmount: Math.round(Number(totalAmount) || 0),
           notes: notes || null,
           idempotencyKey: idempotencyKey || null,
           cashierId: cashierId || null,
@@ -3511,12 +4122,13 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             recipeId: item.recipeId || null,
             variantName: item.variantName || null,
             quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unitPrice) || 0,
-            subtotal: Number(item.subtotal) || 0,
+            unitPrice: Math.round(Number(item.unitPrice) || 0),
+            subtotal: Math.round(Number(item.subtotal) || 0),
             modifiers: item.modifiers || [],
             notes: item.notes || null,
             printDestination: item.printDestination || "BAR",
             isPrinted: false,
+            itemStatus: "QUEUED",
             createdAt: nowIso,
           };
           offlineState.order_items.push(newItem);
@@ -3525,82 +4137,57 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
         const insertedPayments = [];
         if (status === "PAID" && payment) {
+          const payMethod = payment.paymentMethod || "CASH";
+          const targetAccId = resolveOfflinePaymentAccount(payMethod, payment.cashAccountId, shiftId);
           const newPayment = {
             id: crypto.randomUUID(),
             orderId,
             shiftId: shiftId || null,
-            paymentMethod: payment.paymentMethod || "CASH",
-            amount: Number(payment.amount) || Number(totalAmount),
-            cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : null,
-            changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : null,
+            paymentMethod: payMethod,
+            amount: Math.round(Number(payment.amount) || Number(totalAmount) || 0),
+            cashReceived: payment.cashReceived != null ? Math.round(Number(payment.cashReceived)) : null,
+            changeAmount: payment.changeAmount != null ? Math.round(Number(payment.changeAmount)) : null,
             referenceNo: payment.referenceNo || null,
-            cashAccountId: payment.cashAccountId || null,
+            cashAccountId: targetAccId,
             createdAt: nowIso,
           };
           offlineState.payments.push(newPayment);
           insertedPayments.push(newPayment);
 
-          if (payment.cashAccountId) {
+          if (targetAccId) {
             offlineState.cash_transactions.push({
               id: crypto.randomUUID(),
-              accountId: payment.cashAccountId,
+              accountId: targetAccId,
               type: "CASH_IN",
               date: nowIso,
-              amount: Number(totalAmount),
-              description: `Penjualan POS #${receiptNo} (${payment.paymentMethod})`,
+              amount: Math.round(Number(totalAmount) || 0),
+              description: `Penjualan POS #${receiptNo} (${payMethod})`,
               category: "PENDAPATAN",
               referenceId: orderId,
             });
           }
 
-          const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
+          const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+          const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
           for (const item of items) {
             offlineState.sales_transactions.push({
               id: crypto.randomUUID(),
               date: nowIso,
               menuName: item.menuName,
               quantitySold: Number(item.quantity) || 1,
-              totalPrice: Number(item.subtotal) || 0,
+              totalPrice: Math.round(Number(item.subtotal) || 0),
               importLogId: `POS-${receiptNo}`,
+              paymentMethod: payMethod,
+              orderId,
             });
+          }
 
-            if (shouldAutoDeduct) {
-              let rec = (offlineState.recipes || []).find((r: any) =>
-                (item.recipeId && r.id === item.recipeId) ||
-                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-              );
-
-              if (rec) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-                } catch { }
-
-                for (const rIng of recIngredients) {
-                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (usedQty > 0) {
-                    offlineState.stock_movements.push({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "USAGE",
-                      quantity: usedQty,
-                      date: nowIso,
-                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
-                      createdBy: cashierName || "Kasir",
-                      referenceId: orderId,
-                    });
-
-                    const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                    if (ing) {
-                      ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
-                    }
-                  }
-                }
-              }
-            }
+          if (shouldAutoDeduct) {
+            applyOfflineOrderStock(items, "USAGE", `POS Order #${receiptNo}`, cashierName || "Kasir", orderId, nowIso);
           }
         }
 
+        bumpDataVersion();
         return res.status(201).json({
           order: newOrder,
           items: insertedItems,
@@ -3619,14 +4206,14 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           tableNumber: tableNumber || null,
           customerName: customerName || null,
           status,
-          subtotal: Number(subtotal),
-          discountPercent: Number(discountPercent),
-          discountAmount: Number(discountAmount),
+          subtotal: Math.round(Number(subtotal) || 0),
+          discountPercent: Number(discountPercent) || 0,
+          discountAmount: Math.round(Number(discountAmount) || 0),
           discountReason: discountReason || null,
-          taxPercent: Number(taxPercent),
-          taxAmount: Number(taxAmount),
+          taxPercent: Number(taxPercent) || 0,
+          taxAmount: Math.round(Number(taxAmount) || 0),
           taxMode: taxMode || "EXCLUSIVE",
-          totalAmount: Number(totalAmount),
+          totalAmount: Math.round(Number(totalAmount) || 0),
           notes: notes || null,
           idempotencyKey: idempotencyKey || null,
           cashierId: cashierId || null,
@@ -3647,8 +4234,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             recipeId: item.recipeId || null,
             variantName: item.variantName || null,
             quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unitPrice) || 0,
-            subtotal: Number(item.subtotal) || 0,
+            unitPrice: Math.round(Number(item.unitPrice) || 0),
+            subtotal: Math.round(Number(item.subtotal) || 0),
             modifiers: item.modifiers || [],
             notes: item.notes || null,
             printDestination: item.printDestination || "BAR",
@@ -3659,29 +4246,30 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
         // If PAID immediately (Pay-first): process payment, stock, cash in, sales transaction
         if (status === "PAID" && payment) {
+          const payMethod = payment.paymentMethod || "CASH";
+          const targetAccId = await resolveDbPaymentAccount(tx, payMethod, payment.cashAccountId, shiftId);
           const paymentId = crypto.randomUUID();
           await tx.insert(schema.payments).values({
             id: paymentId,
             orderId,
             shiftId: shiftId || null,
-            paymentMethod: payment.paymentMethod || "CASH",
-            amount: Number(payment.amount) || Number(totalAmount),
-            cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : null,
-            changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : null,
+            paymentMethod: payMethod,
+            amount: Math.round(Number(payment.amount) || Number(totalAmount) || 0),
+            cashReceived: payment.cashReceived != null ? Math.round(Number(payment.cashReceived)) : null,
+            changeAmount: payment.changeAmount != null ? Math.round(Number(payment.changeAmount)) : null,
             referenceNo: payment.referenceNo || null,
-            cashAccountId: payment.cashAccountId || null,
+            cashAccountId: targetAccId,
             createdAt: nowIso,
           });
 
-          // Record cash transaction (if cash drawer / account is set)
-          if (payment.cashAccountId) {
+          if (targetAccId) {
             await tx.insert(schema.cashTransactions).values({
               id: crypto.randomUUID(),
-              accountId: payment.cashAccountId,
+              accountId: targetAccId,
               type: "CASH_IN",
               date: nowIso,
-              amount: Number(totalAmount),
-              description: `Penjualan POS #${receiptNo} (${payment.paymentMethod})`,
+              amount: Math.round(Number(totalAmount) || 0),
+              description: `Penjualan POS #${receiptNo} (${payMethod})`,
               category: "PENDAPATAN",
               referenceId: orderId,
             });
@@ -3690,73 +4278,26 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           const currentSettings = await tx.select().from(schema.settings).limit(1);
           const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
 
-          // Stock deductions via recipes & record sales transactions
           for (const item of items) {
             await tx.insert(schema.salesTransactions).values({
               id: crypto.randomUUID(),
               date: nowIso,
               menuName: item.menuName,
               quantitySold: Number(item.quantity) || 1,
-              totalPrice: Number(item.subtotal) || 0,
+              totalPrice: Math.round(Number(item.subtotal) || 0),
               importLogId: `POS-${receiptNo}`,
+              paymentMethod: payMethod,
+              orderId,
             });
+          }
 
-            if (shouldAutoDeduct) {
-              let rec: any[] = [];
-              if (item.recipeId) {
-                rec = await tx
-                  .select()
-                  .from(schema.recipes)
-                  .where(eq(schema.recipes.id, item.recipeId))
-                  .limit(1);
-              }
-              if (rec.length === 0 && item.menuName) {
-                rec = await tx
-                  .select()
-                  .from(schema.recipes)
-                  .where(eq(schema.recipes.menuName, item.menuName))
-                  .limit(1);
-              }
-
-              if (rec.length > 0) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch { }
-
-                for (const rIng of recIngredients) {
-                  const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (usedQty > 0) {
-                    await tx.insert(schema.stockMovements).values({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "USAGE",
-                      quantity: usedQty,
-                      date: nowIso,
-                      note: `POS Order #${receiptNo} - ${item.menuName} x${item.quantity}`,
-                      createdBy: cashierName || "Kasir",
-                      referenceId: orderId,
-                    });
-
-                    const currentIng = await tx
-                      .select()
-                      .from(schema.ingredients)
-                      .where(eq(schema.ingredients.id, rIng.ingredientId))
-                      .limit(1);
-                    if (currentIng.length > 0) {
-                      const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                      await tx
-                        .update(schema.ingredients)
-                        .set({ currentStock: newStock })
-                        .where(eq(schema.ingredients.id, rIng.ingredientId));
-                    }
-                  }
-                }
-              }
-            }
+          if (shouldAutoDeduct) {
+            await applyDbOrderStock(tx, items, "USAGE", `POS Order #${receiptNo}`, cashierName || "Kasir", orderId, nowIso);
           }
         }
       });
+
+      bumpDataVersion();
 
       const createdOrder = (
         await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1)
@@ -3816,29 +4357,32 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           return res.status(400).json({ error: `Order dalam status ${currentOrder.status}` });
         }
 
-        const finalAmount = Number(amount) || currentOrder.totalAmount;
+        const finalAmount = Math.round(Number(amount) || currentOrder.totalAmount || 0);
         currentOrder.status = "PAID";
         currentOrder.paidAt = nowIso;
         currentOrder.updatedAt = nowIso;
 
+        const effectiveShiftId = shiftId || currentOrder.shiftId || null;
+        const targetAccId = resolveOfflinePaymentAccount(paymentMethod, cashAccountId, effectiveShiftId);
+
         const newPayment = {
           id: crypto.randomUUID(),
           orderId,
-          shiftId: shiftId || currentOrder.shiftId || null,
+          shiftId: effectiveShiftId,
           paymentMethod,
           amount: finalAmount,
-          cashReceived: cashReceived != null ? Number(cashReceived) : null,
-          changeAmount: changeAmount != null ? Number(changeAmount) : null,
+          cashReceived: cashReceived != null ? Math.round(Number(cashReceived)) : null,
+          changeAmount: changeAmount != null ? Math.round(Number(changeAmount)) : null,
           referenceNo: referenceNo || null,
-          cashAccountId: cashAccountId || null,
+          cashAccountId: targetAccId,
           createdAt: nowIso,
         };
         offlineState.payments.push(newPayment);
 
-        if (cashAccountId) {
+        if (targetAccId) {
           offlineState.cash_transactions.push({
             id: crypto.randomUUID(),
-            accountId: cashAccountId,
+            accountId: targetAccId,
             type: "CASH_IN",
             date: nowIso,
             amount: finalAmount,
@@ -3849,53 +4393,26 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         }
 
         const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
-        const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
+        const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
         for (const item of items) {
           offlineState.sales_transactions.push({
             id: crypto.randomUUID(),
             date: nowIso,
             menuName: item.menuName,
             quantitySold: Number(item.quantity) || 1,
-            totalPrice: Number(item.subtotal) || 0,
+            totalPrice: Math.round(Number(item.subtotal) || 0),
             importLogId: `POS-${currentOrder.receiptNo}`,
+            paymentMethod,
+            orderId,
           });
-
-          if (shouldAutoDeduct) {
-            let rec = (offlineState.recipes || []).find((r: any) =>
-              (item.recipeId && r.id === item.recipeId) ||
-              (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-            );
-
-            if (rec) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch { }
-
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (usedQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `Pelunasan #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
-                    createdBy: cashierName || "Kasir",
-                    referenceId: orderId,
-                  });
-
-                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                  if (ing) {
-                    ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
-                  }
-                }
-              }
-            }
-          }
         }
 
+        if (shouldAutoDeduct) {
+          applyOfflineOrderStock(items, "USAGE", `Pelunasan #${currentOrder.receiptNo}`, cashierName || "Kasir", orderId, nowIso);
+        }
+
+        bumpDataVersion();
         return res.json({ success: true, order: currentOrder, payment: newPayment });
       }
 
@@ -3911,9 +4428,12 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: `Order dalam status ${currentOrder.status}` });
       }
 
-      const finalAmount = Number(amount) || currentOrder.totalAmount;
+      const finalAmount = Math.round(Number(amount) || currentOrder.totalAmount || 0);
 
       await db.transaction(async (tx) => {
+        const effectiveShiftId = shiftId || currentOrder.shiftId || null;
+        const targetAccId = await resolveDbPaymentAccount(tx, paymentMethod, cashAccountId, effectiveShiftId);
+
         // 1. Update order status
         await tx
           .update(schema.orders)
@@ -3928,21 +4448,21 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         await tx.insert(schema.payments).values({
           id: crypto.randomUUID(),
           orderId,
-          shiftId: shiftId || currentOrder.shiftId || null,
+          shiftId: effectiveShiftId,
           paymentMethod,
           amount: finalAmount,
-          cashReceived: cashReceived != null ? Number(cashReceived) : null,
-          changeAmount: changeAmount != null ? Number(changeAmount) : null,
+          cashReceived: cashReceived != null ? Math.round(Number(cashReceived)) : null,
+          changeAmount: changeAmount != null ? Math.round(Number(changeAmount)) : null,
           referenceNo: referenceNo || null,
-          cashAccountId: cashAccountId || null,
+          cashAccountId: targetAccId,
           createdAt: nowIso,
         });
 
         // 3. Cash in transaction
-        if (cashAccountId) {
+        if (targetAccId) {
           await tx.insert(schema.cashTransactions).values({
             id: crypto.randomUUID(),
-            accountId: cashAccountId,
+            accountId: targetAccId,
             type: "CASH_IN",
             date: nowIso,
             amount: finalAmount,
@@ -3967,65 +4487,19 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             date: nowIso,
             menuName: item.menuName,
             quantitySold: Number(item.quantity) || 1,
-            totalPrice: Number(item.subtotal) || 0,
+            totalPrice: Math.round(Number(item.subtotal) || 0),
             importLogId: `POS-${currentOrder.receiptNo}`,
+            paymentMethod,
+            orderId,
           });
+        }
 
-          if (shouldAutoDeduct) {
-            let rec: any[] = [];
-            if (item.recipeId) {
-              rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.id, item.recipeId))
-                .limit(1);
-            }
-            if (rec.length === 0 && item.menuName) {
-              rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.menuName, item.menuName))
-                .limit(1);
-            }
-
-            if (rec.length > 0) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-              } catch { }
-
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (usedQty > 0) {
-                  await tx.insert(schema.stockMovements).values({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `POS Order #${currentOrder.receiptNo} - ${item.menuName} x${item.quantity}`,
-                    createdBy: cashierName || currentOrder.cashierName || "Kasir",
-                    referenceId: orderId,
-                  });
-
-                  const currentIng = await tx
-                    .select()
-                    .from(schema.ingredients)
-                    .where(eq(schema.ingredients.id, rIng.ingredientId))
-                    .limit(1);
-                  if (currentIng.length > 0) {
-                    const newStock = (currentIng[0].currentStock || 0) - usedQty;
-                    await tx
-                      .update(schema.ingredients)
-                      .set({ currentStock: newStock })
-                      .where(eq(schema.ingredients.id, rIng.ingredientId));
-                  }
-                }
-              }
-            }
-          }
+        if (shouldAutoDeduct) {
+          await applyDbOrderStock(tx, items, "USAGE", `POS Order #${currentOrder.receiptNo}`, cashierName || currentOrder.cashierName || "Kasir", orderId, nowIso);
         }
       });
+
+      bumpDataVersion();
 
       const updatedOrder = (
         await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1)
@@ -4196,67 +4670,58 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         };
         offlineState.orders.push(newSplitOrder);
 
+        const splitPayMethod = payment.paymentMethod || "CASH";
+        const splitShiftId = payment.shiftId || parentOrder.shiftId || null;
+        const targetAccId = resolveOfflinePaymentAccount(splitPayMethod, payment.cashAccountId, splitShiftId);
+
         const newSplitPayment = {
           id: crypto.randomUUID(),
           orderId: splitOrderId,
-          shiftId: payment.shiftId || parentOrder.shiftId || null,
-          paymentMethod: payment.paymentMethod || "CASH",
-          amount: splitTotal,
-          cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : splitTotal,
-          changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : 0,
+          shiftId: splitShiftId,
+          paymentMethod: splitPayMethod,
+          amount: Math.round(splitTotal),
+          cashReceived: payment.cashReceived != null ? Math.round(Number(payment.cashReceived)) : Math.round(splitTotal),
+          changeAmount: payment.changeAmount != null ? Math.round(Number(payment.changeAmount)) : 0,
           referenceNo: payment.referenceNo || null,
-          cashAccountId: payment.cashAccountId || null,
+          cashAccountId: targetAccId,
           createdAt: nowIso,
         };
         offlineState.payments.push(newSplitPayment);
 
-        if (payment.cashAccountId) {
+        if (targetAccId) {
           offlineState.cash_transactions.push({
             id: crypto.randomUUID(),
-            accountId: payment.cashAccountId,
+            accountId: targetAccId,
             type: "CASH_IN",
             date: nowIso,
-            amount: splitTotal,
-            description: `Split POS #${splitReceiptNo} (${payment.paymentMethod})`,
+            amount: Math.round(splitTotal),
+            description: `Split POS #${splitReceiptNo} (${splitPayMethod})`,
             category: "PENDAPATAN",
             referenceId: splitOrderId,
           });
         }
 
-        // Deduct inventory for split items
-        const shouldAutoDeduct = offlineState.settings?.autoDeductStockOnSale !== false;
-        if (shouldAutoDeduct) {
-          for (const sItem of insertedSplitItems) {
-            let rec = (offlineState.recipes || []).find((r: any) =>
-              (sItem.recipeId && r.id === sItem.recipeId) ||
-              (sItem.menuName && r.menuName.toLowerCase() === sItem.menuName.toLowerCase())
-            );
-            if (rec) {
-              let recIngredients: any[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch {}
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(sItem.quantity) || 1);
-                if (usedQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `Split POS #${splitReceiptNo} - ${sItem.menuName} x${sItem.quantity}`,
-                    createdBy: cashierName || "Kasir",
-                    referenceId: splitOrderId,
-                  });
-                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                  if (ing) ing.currentStock = (Number(ing.currentStock) || 0) - usedQty;
-                }
-              }
-            }
-          }
+        for (const sItem of insertedSplitItems) {
+          offlineState.sales_transactions.push({
+            id: crypto.randomUUID(),
+            date: nowIso,
+            menuName: sItem.menuName,
+            quantitySold: Number(sItem.quantity) || 1,
+            totalPrice: Math.round(Number(sItem.subtotal) || 0),
+            importLogId: `POS-${splitReceiptNo}`,
+            paymentMethod: splitPayMethod,
+            orderId: splitOrderId,
+          });
         }
 
+        // Deduct inventory for split items
+        const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+        if (shouldAutoDeduct) {
+          applyOfflineOrderStock(insertedSplitItems, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
+        }
+
+        bumpDataVersion();
         return res.json({
           success: true,
           splitOrder: newSplitOrder,
@@ -4292,7 +4757,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             const splitQty = Math.min(Number(sIt.quantity) || 1, Number(pItem.quantity) || 1);
             if (splitQty <= 0) continue;
 
-            const itemSubtotal = (Number(pItem.unitPrice) || 0) * splitQty;
+            const itemSubtotal = Math.round((Number(pItem.unitPrice) || 0) * splitQty);
             splitSubtotal += itemSubtotal;
 
             const splitItemRecord = {
@@ -4302,7 +4767,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               recipeId: pItem.recipeId || null,
               variantName: pItem.variantName || null,
               quantity: splitQty,
-              unitPrice: Number(pItem.unitPrice) || 0,
+              unitPrice: Math.round(Number(pItem.unitPrice) || 0),
               subtotal: itemSubtotal,
               modifiers: pItem.modifiers || [],
               notes: pItem.notes || null,
@@ -4319,7 +4784,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
               const newQty = pItem.quantity - splitQty;
               await tx.update(schema.orderItems).set({
                 quantity: newQty,
-                subtotal: (Number(pItem.unitPrice) || 0) * newQty,
+                subtotal: Math.round((Number(pItem.unitPrice) || 0) * newQty),
               }).where(eq(schema.orderItems.id, pItem.id));
             }
           }
@@ -4361,9 +4826,9 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           }
         } else {
           // EVENLY split
-          splitTotal = Number(splitAmount) || Number(payment.amount) || 0;
+          splitTotal = Math.round(Number(splitAmount) || Number(payment.amount) || 0);
           splitSubtotal = splitTotal;
-          const newParentTotal = Math.max(0, (Number(parentOrder.totalAmount) || 0) - splitTotal);
+          const newParentTotal = Math.max(0, Math.round(Number(parentOrder.totalAmount) || 0) - splitTotal);
           await tx.update(schema.orders).set({
             totalAmount: newParentTotal,
             status: newParentTotal <= 0 ? "PAID" : parentOrder.status,
@@ -4372,11 +4837,15 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           }).where(eq(schema.orders.id, parentOrderId));
         }
 
+        const splitPayMethod = payment.paymentMethod || "CASH";
+        const splitShiftId = payment.shiftId || parentOrder.shiftId || null;
+        const targetAccId = await resolveDbPaymentAccount(tx, splitPayMethod, payment.cashAccountId, splitShiftId);
+
         // Insert new completed split order
         await tx.insert(schema.orders).values({
           id: splitOrderId,
           receiptNo: splitReceiptNo,
-          shiftId: payment.shiftId || parentOrder.shiftId || null,
+          shiftId: splitShiftId,
           outletId: "OUTLET-MAIN",
           orderType: parentOrder.orderType,
           tableNumber: parentOrder.tableNumber,
@@ -4403,27 +4872,40 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         await tx.insert(schema.payments).values({
           id: crypto.randomUUID(),
           orderId: splitOrderId,
-          shiftId: payment.shiftId || parentOrder.shiftId || null,
-          paymentMethod: payment.paymentMethod || "CASH",
+          shiftId: splitShiftId,
+          paymentMethod: splitPayMethod,
           amount: splitTotal,
-          cashReceived: payment.cashReceived != null ? Number(payment.cashReceived) : splitTotal,
-          changeAmount: payment.changeAmount != null ? Number(payment.changeAmount) : 0,
+          cashReceived: payment.cashReceived != null ? Math.round(Number(payment.cashReceived)) : splitTotal,
+          changeAmount: payment.changeAmount != null ? Math.round(Number(payment.changeAmount)) : 0,
           referenceNo: payment.referenceNo || null,
-          cashAccountId: payment.cashAccountId || null,
+          cashAccountId: targetAccId,
           createdAt: nowIso,
         });
 
         // Insert cash transaction
-        if (payment.cashAccountId) {
+        if (targetAccId) {
           await tx.insert(schema.cashTransactions).values({
             id: crypto.randomUUID(),
-            accountId: payment.cashAccountId,
+            accountId: targetAccId,
             type: "CASH_IN",
             date: nowIso,
             amount: splitTotal,
-            description: `Split POS #${splitReceiptNo} (${payment.paymentMethod})`,
+            description: `Split POS #${splitReceiptNo} (${splitPayMethod})`,
             category: "PENDAPATAN",
             referenceId: splitOrderId,
+          });
+        }
+
+        for (const sItem of insertedSplitItems) {
+          await tx.insert(schema.salesTransactions).values({
+            id: crypto.randomUUID(),
+            date: nowIso,
+            menuName: sItem.menuName,
+            quantitySold: Number(sItem.quantity) || 1,
+            totalPrice: Math.round(Number(sItem.subtotal) || 0),
+            importLogId: `POS-${splitReceiptNo}`,
+            paymentMethod: splitPayMethod,
+            orderId: splitOrderId,
           });
         }
 
@@ -4431,44 +4913,11 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         const currentSettings = await tx.select().from(schema.settings).limit(1);
         const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
         if (shouldAutoDeduct) {
-          for (const sItem of insertedSplitItems) {
-            let rec: any[] = [];
-            if (sItem.recipeId) {
-              rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, sItem.recipeId)).limit(1);
-            }
-            if (rec.length === 0 && sItem.menuName) {
-              rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.menuName, sItem.menuName)).limit(1);
-            }
-            if (rec.length > 0) {
-              let recIngredients: any[] = [];
-              try {
-                recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-              } catch {}
-              for (const rIng of recIngredients) {
-                const usedQty = (Number(rIng.quantity) || 0) * (Number(sItem.quantity) || 1);
-                if (usedQty > 0) {
-                  await tx.insert(schema.stockMovements).values({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "USAGE",
-                    quantity: usedQty,
-                    date: nowIso,
-                    note: `Split POS #${splitReceiptNo} - ${sItem.menuName} x${sItem.quantity}`,
-                    createdBy: cashierName || "Kasir",
-                    referenceId: splitOrderId,
-                  });
-                  const currentIng = await tx.select().from(schema.ingredients).where(eq(schema.ingredients.id, rIng.ingredientId)).limit(1);
-                  if (currentIng.length > 0) {
-                    await tx.update(schema.ingredients).set({
-                      currentStock: (currentIng[0].currentStock || 0) - usedQty,
-                    }).where(eq(schema.ingredients.id, rIng.ingredientId));
-                  }
-                }
-              }
-            }
-          }
+          await applyDbOrderStock(tx, insertedSplitItems, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
         }
       });
+
+      bumpDataVersion();
 
       const updatedParent = (await db.select().from(schema.orders).where(eq(schema.orders.id, parentOrderId)).limit(1))[0];
       const remainingItems = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, parentOrderId));
@@ -4496,42 +4945,22 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const { managerPin, voidReason } = req.body;
 
       if (!managerPin) {
-        return res.status(400).json({ error: "PIN Manager / Owner wajib diisi." });
+        return res.status(400).json({ error: "PIN Supervisor / Manager wajib diisi." });
       }
+
+      const pinCheck = await verifyPosPin(managerPin, "SUPERVISOR");
+      if (!pinCheck.ok) {
+        return res.status(pinCheck.status).json({ error: pinCheck.error });
+      }
+      const approver = pinCheck.approver;
 
       if (!isDbConnected && offlineState) {
         offlineState.orders = offlineState.orders || [];
         offlineState.stock_movements = offlineState.stock_movements || [];
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.payments = offlineState.payments || [];
-
-        const configuredSupervisorPin = (offlineState.settings && offlineState.settings.posSupervisorPin) || "1234";
-        let approver: any = null;
-
-        if (String(managerPin) === String(configuredSupervisorPin)) {
-          approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
-        } else {
-          const ownerUser = (offlineState.users || []).find(
-            (u: any) =>
-              (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
-              u.role === "OWNER"
-          );
-          if (ownerUser) {
-            return res.status(403).json({
-              error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
-            });
-          }
-
-          approver = (offlineState.users || []).find(
-            (u: any) =>
-              (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-              (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
-          );
-        }
-
-        if (!approver) {
-          return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
-        }
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.audit_logs = offlineState.audit_logs || [];
 
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
         if (!targetOrder) {
@@ -4545,54 +4974,36 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
         if (targetOrder.status === "PAID") {
           const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
-          for (const item of items) {
-            let rec = (offlineState.recipes || []).find(
-              (r: any) =>
-                (item.recipeId && r.id === item.recipeId) ||
-                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-            );
-            if (rec) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch { }
-              for (const rIng of recIngredients) {
-                const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (returnQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "RETURN",
-                    quantity: returnQty,
-                    date: nowIso,
-                    note: `VOID Order #${targetOrder.receiptNo}: ${voidReason || "Pembatalan"}`,
-                    createdBy: approver.name,
-                    referenceId: orderId,
-                  });
-                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                  if (ing) {
-                    ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
-                  }
-                }
-              }
-            }
-          }
+          applyOfflineOrderStock(
+            items,
+            "RETURN",
+            `VOID Order #${targetOrder.receiptNo} (${voidReason || "Pembatalan"})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
 
           const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === orderId);
           for (const pay of existingPayments) {
-            if (pay.cashAccountId) {
-              offlineState.cash_transactions.push({
-                id: crypto.randomUUID(),
-                accountId: pay.cashAccountId,
-                type: "CASH_OUT",
-                date: nowIso,
-                amount: pay.amount,
-                description: `VOID/Refund POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
-                category: "PENGELUARAN",
-                referenceId: orderId,
-              });
-            }
+            const accId =
+              pay.cashAccountId ||
+              resolveOfflinePaymentAccount(pay.method || "CASH", undefined, targetOrder.shiftId);
+            offlineState.cash_transactions.push({
+              id: crypto.randomUUID(),
+              accountId: accId,
+              type: "CASH_OUT",
+              date: nowIso,
+              amount: Math.round(Number(pay.amount) || 0),
+              description: `VOID/Refund ${pay.method || "CASH"} POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
+              category: "PENGELUARAN",
+              referenceId: orderId,
+            });
           }
+
+          // Batalkan entri rekap penjualan (sales_transactions) agar laporan penjualan tidak menghitung order yang di-VOID
+          offlineState.sales_transactions = offlineState.sales_transactions.filter(
+            (st: any) => st.orderId !== orderId && st.importLogId !== `POS-${targetOrder.receiptNo}`
+          );
 
           targetOrder.status = "VOID";
           targetOrder.voidReason = voidReason || "Void oleh manager";
@@ -4605,6 +5016,18 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           targetOrder.updatedAt = nowIso;
         }
 
+        offlineState.audit_logs.push({
+          id: crypto.randomUUID(),
+          userId: approver.id,
+          userName: approver.name,
+          action: "VOID",
+          tableName: "orders",
+          recordId: orderId,
+          timestamp: nowIso,
+        });
+
+        bumpDataVersion();
+
         return res.json({
           success: true,
           message: `Order #${targetOrder.receiptNo} berhasil ${targetOrder.status === "VOID" ? "di-VOID dan stok dikembalikan" : "dibatalkan"}`,
@@ -4612,51 +5035,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      let approver: any = null;
-      const currentSettings = await db.select().from(schema.settings).limit(1);
-      const configuredSupervisorPin = currentSettings[0]?.posSupervisorPin || "1234";
-
-      if (String(managerPin) === String(configuredSupervisorPin)) {
-        approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
-      } else {
-        // Check if PIN belongs to OWNER (Owner is strictly read-only)
-        const ownerCheck = await db
-          .select()
-          .from(schema.users)
-          .where(
-            and(
-              eq(schema.users.pin, String(managerPin)),
-              eq(schema.users.role, "OWNER")
-            )
-          )
-          .limit(1);
-
-        if (ownerCheck.length > 0) {
-          return res.status(403).json({
-            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Void harus dilakukan oleh Manager atau Super Admin.",
-          });
-        }
-
-        // Verify PIN against MANAGER or SUPER_ADMIN
-        const authUsers = await db
-          .select()
-          .from(schema.users)
-          .where(
-            and(
-              eq(schema.users.pin, String(managerPin)),
-              or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
-            )
-          )
-          .limit(1);
-
-        if (authUsers.length > 0) {
-          approver = authUsers[0];
-        }
-      }
-
-      if (!approver) {
-        return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
-      }
       const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
       if (orderList.length === 0) {
         return res.status(404).json({ error: "Order tidak ditemukan" });
@@ -4670,57 +5048,21 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const nowIso = new Date().toISOString();
 
       await db.transaction(async (tx) => {
-        // If order was already PAID: restore stock & record cash refund
         if (targetOrder.status === "PAID") {
           const items = await tx
             .select()
             .from(schema.orderItems)
             .where(eq(schema.orderItems.orderId, orderId));
 
-          for (const item of items) {
-            if (item.recipeId) {
-              const rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.id, item.recipeId))
-                .limit(1);
-              if (rec.length > 0) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch { }
-
-                for (const rIng of recIngredients) {
-                  const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (returnQty > 0) {
-                    await tx.insert(schema.stockMovements).values({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "RETURN",
-                      quantity: returnQty,
-                      date: nowIso,
-                      note: `VOID Order #${targetOrder.receiptNo}: ${voidReason || "Pembatalan"}`,
-                      createdBy: approver.name,
-                      referenceId: orderId,
-                    });
-
-                    const currentIng = await tx
-                      .select()
-                      .from(schema.ingredients)
-                      .where(eq(schema.ingredients.id, rIng.ingredientId))
-                      .limit(1);
-                    if (currentIng.length > 0) {
-                      const newStock = (currentIng[0].currentStock || 0) + returnQty;
-                      await tx
-                        .update(schema.ingredients)
-                        .set({ currentStock: newStock })
-                        .where(eq(schema.ingredients.id, rIng.ingredientId));
-                    }
-                  }
-                }
-              }
-            }
-          }
+          await applyDbOrderStock(
+            tx,
+            items,
+            "RETURN",
+            `VOID Order #${targetOrder.receiptNo} (${voidReason || "Pembatalan"})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
 
           const existingPayments = await tx
             .select()
@@ -4728,19 +5070,30 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             .where(eq(schema.payments.orderId, orderId));
 
           for (const pay of existingPayments) {
-            if (pay.cashAccountId) {
-              await tx.insert(schema.cashTransactions).values({
-                id: crypto.randomUUID(),
-                accountId: pay.cashAccountId,
-                type: "CASH_OUT",
-                date: nowIso,
-                amount: pay.amount,
-                description: `VOID/Refund POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
-                category: "PENGELUARAN",
-                referenceId: orderId,
-              });
-            }
+            const payMethod = pay.paymentMethod || (pay as any).method || "CASH";
+            const accId =
+              pay.cashAccountId ||
+              (await resolveDbPaymentAccount(tx, payMethod, undefined, targetOrder.shiftId));
+            await tx.insert(schema.cashTransactions).values({
+              id: crypto.randomUUID(),
+              accountId: accId,
+              type: "CASH_OUT",
+              date: nowIso,
+              amount: Math.round(Number(pay.amount) || 0),
+              description: `VOID/Refund ${payMethod} POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
+              category: "PENGELUARAN",
+              referenceId: orderId,
+            });
           }
+
+          await tx
+            .delete(schema.salesTransactions)
+            .where(
+              or(
+                eq(schema.salesTransactions.orderId, orderId),
+                eq(schema.salesTransactions.importLogId, `POS-${targetOrder.receiptNo}`)
+              )
+            );
 
           await tx
             .update(schema.orders)
@@ -4762,7 +5115,18 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
             })
             .where(eq(schema.orders.id, orderId));
         }
+
+        await tx.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          userId: approver.id,
+          action: "VOID",
+          tableName: "orders",
+          recordId: orderId,
+          timestamp: nowIso,
+        });
       });
+
+      bumpDataVersion();
 
       res.json({
         success: true,
@@ -4788,12 +5152,18 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       } = req.body;
 
       if (!managerPin) {
-        return res.status(400).json({ error: "PIN Manager / Owner wajib diisi untuk otorisasi refund." });
+        return res.status(400).json({ error: "PIN Supervisor / Manager wajib diisi untuk otorisasi refund." });
       }
 
       if (!refundReason || !refundReason.trim()) {
         return res.status(400).json({ error: "Alasan refund wajib diisi untuk catatan pembukuan & audit." });
       }
+
+      const pinCheck = await verifyPosPin(managerPin, "SUPERVISOR");
+      if (!pinCheck.ok) {
+        return res.status(pinCheck.status).json({ error: pinCheck.error });
+      }
+      const approver = pinCheck.approver;
 
       const nowIso = new Date().toISOString();
 
@@ -4803,34 +5173,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         offlineState.cash_transactions = offlineState.cash_transactions || [];
         offlineState.audit_logs = offlineState.audit_logs || [];
 
-        const configuredSupervisorPin = (offlineState.settings && offlineState.settings.posSupervisorPin) || "1234";
-        let approver: any = null;
-
-        if (String(managerPin) === String(configuredSupervisorPin)) {
-          approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
-        } else {
-          const ownerUser = (offlineState.users || []).find(
-            (u: any) =>
-              (u.pin === String(managerPin) || (String(managerPin) === "123456" && u.role === "OWNER")) &&
-              u.role === "OWNER"
-          );
-          if (ownerUser) {
-            return res.status(403).json({
-              error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
-            });
-          }
-
-          approver = (offlineState.users || []).find(
-            (u: any) =>
-              (u.pin === String(managerPin) || String(managerPin) === "123456" || String(managerPin) === "1234") &&
-              (u.role === "MANAGER" || u.role === "SUPER_ADMIN")
-          );
-        }
-
-        if (!approver) {
-          return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
-        }
-
         const targetOrder = offlineState.orders.find((o: any) => o.id === orderId);
         if (!targetOrder) {
           return res.status(404).json({ error: "Order tidak ditemukan" });
@@ -4839,97 +5181,57 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
         }
 
-        const finalRefundAmount = Number(customRefundAmount) > 0 ? Number(customRefundAmount) : (Number(targetOrder.totalAmount) || 0);
+        const finalRefundAmount = Math.round(
+          Number(customRefundAmount) > 0 ? Number(customRefundAmount) : Number(targetOrder.totalAmount) || 0
+        );
 
-        // Inventory adjustment
+        const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
         if (refundRestockOption === "RETURN_TO_STOCK") {
-          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
-          for (const item of items) {
-            let rec = (offlineState.recipes || []).find(
-              (r: any) =>
-                (item.recipeId && r.id === item.recipeId) ||
-                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-            );
-            if (rec) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch { }
-              for (const rIng of recIngredients) {
-                const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (returnQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "RETURN",
-                    quantity: returnQty,
-                    date: nowIso,
-                    note: `Refund Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
-                    createdBy: approver.name,
-                    referenceId: orderId,
-                  });
-                  const ing = (offlineState.ingredients || []).find((i: any) => i.id === rIng.ingredientId);
-                  if (ing) {
-                    ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
-                  }
-                }
-              }
-            }
-          }
+          applyOfflineOrderStock(
+            items,
+            "RETURN",
+            `Refund Order #${targetOrder.receiptNo} (${refundReason.trim()})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
         } else if (refundRestockOption === "WASTE") {
-          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
-          for (const item of items) {
-            let rec = (offlineState.recipes || []).find(
-              (r: any) =>
-                (item.recipeId && r.id === item.recipeId) ||
-                (item.menuName && r.menuName.toLowerCase() === item.menuName.toLowerCase())
-            );
-            if (rec) {
-              let recIngredients: { ingredientId: string; quantity: number }[] = [];
-              try {
-                recIngredients = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients;
-              } catch { }
-              for (const rIng of recIngredients) {
-                const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                if (wasteQty > 0) {
-                  offlineState.stock_movements.push({
-                    id: crypto.randomUUID(),
-                    ingredientId: rIng.ingredientId,
-                    type: "WASTE",
-                    quantity: -wasteQty,
-                    date: nowIso,
-                    note: `Kerusakan / Basi Refund #${targetOrder.receiptNo}: ${refundReason.trim()}`,
-                    createdBy: approver.name,
-                    referenceId: orderId,
-                  });
-                }
-              }
-            }
-          }
+          applyOfflineOrderStock(
+            items,
+            "WASTE",
+            `Kerusakan / Basi Refund #${targetOrder.receiptNo} (${refundReason.trim()})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
         }
 
-        // Cash / Payment adjustment
         const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === orderId);
-        const cashAccId = existingPayments[0]?.cashAccountId || "default";
+        const cashAccId = resolveOfflinePaymentAccount(
+          refundMethod,
+          existingPayments[0]?.cashAccountId,
+          targetOrder.shiftId
+        );
         offlineState.cash_transactions.push({
           id: crypto.randomUUID(),
           accountId: cashAccId,
           type: "CASH_OUT",
           date: nowIso,
           amount: finalRefundAmount,
-          description: `Refund ${refundMethod} Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
+          description: `Refund ${refundMethod} POS #${targetOrder.receiptNo}: ${refundReason.trim()}`,
           category: "PENGELUARAN",
           referenceId: orderId,
         });
 
-        // Audit Log
         offlineState.audit_logs.push({
           id: crypto.randomUUID(),
-          action: "ORDER_REFUND",
+          userId: approver.id,
           userName: approver.name,
-          target: targetOrder.receiptNo,
+          action: "REFUND",
+          tableName: "orders",
+          recordId: orderId,
           details: `Refund #${targetOrder.receiptNo} Rp ${finalRefundAmount.toLocaleString("id-ID")} via ${refundMethod}. Alasan: ${refundReason.trim()}. Restock: ${refundRestockOption}`,
-          createdAt: nowIso,
+          timestamp: nowIso,
         });
 
         targetOrder.status = "REFUNDED";
@@ -4941,6 +5243,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         targetOrder.refundRestockOption = refundRestockOption;
         targetOrder.updatedAt = nowIso;
 
+        bumpDataVersion();
+
         return res.json({
           success: true,
           message: `Order #${targetOrder.receiptNo} berhasil di-refund sebesar Rp ${finalRefundAmount.toLocaleString("id-ID")}`,
@@ -4949,51 +5253,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
-      let approver: any = null;
-      const currentSettings = await db.select().from(schema.settings).limit(1);
-      const configuredSupervisorPin = currentSettings[0]?.posSupervisorPin || "1234";
-
-      if (String(managerPin) === String(configuredSupervisorPin)) {
-        approver = { id: "pos_supervisor", name: "Supervisor POS", role: "MANAGER" };
-      } else {
-        // Check if PIN belongs to OWNER (Owner is strictly read-only)
-        const ownerCheck = await db
-          .select()
-          .from(schema.users)
-          .where(
-            and(
-              eq(schema.users.pin, String(managerPin)),
-              eq(schema.users.role, "OWNER")
-            )
-          )
-          .limit(1);
-
-        if (ownerCheck.length > 0) {
-          return res.status(403).json({
-            error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi Refund harus dilakukan oleh Manager atau Super Admin.",
-          });
-        }
-
-        // Verify PIN against MANAGER or SUPER_ADMIN
-        const authUsers = await db
-          .select()
-          .from(schema.users)
-          .where(
-            and(
-              eq(schema.users.pin, String(managerPin)),
-              or(eq(schema.users.role, "MANAGER"), eq(schema.users.role, "SUPER_ADMIN"))
-            )
-          )
-          .limit(1);
-
-        if (authUsers.length > 0) {
-          approver = authUsers[0];
-        }
-      }
-
-      if (!approver) {
-        return res.status(403).json({ error: "PIN Supervisor / Manager tidak valid atau Anda tidak memiliki hak otorisasi." });
-      }
       const orderList = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1);
       if (orderList.length === 0) {
         return res.status(404).json({ error: "Order tidak ditemukan" });
@@ -5004,106 +5263,49 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
       }
 
-      const finalRefundAmount = Number(customRefundAmount) > 0 ? Number(customRefundAmount) : (Number(targetOrder.totalAmount) || 0);
+      const finalRefundAmount = Math.round(
+        Number(customRefundAmount) > 0 ? Number(customRefundAmount) : Number(targetOrder.totalAmount) || 0
+      );
 
       await db.transaction(async (tx) => {
-        // 1. Inventory Stock Adjustment
+        const items = await tx
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, orderId));
+
         if (refundRestockOption === "RETURN_TO_STOCK") {
-          const items = await tx
-            .select()
-            .from(schema.orderItems)
-            .where(eq(schema.orderItems.orderId, orderId));
-
-          for (const item of items) {
-            if (item.recipeId) {
-              const rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.id, item.recipeId))
-                .limit(1);
-              if (rec.length > 0) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch { }
-
-                for (const rIng of recIngredients) {
-                  const returnQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (returnQty > 0) {
-                    await tx.insert(schema.stockMovements).values({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "RETURN",
-                      quantity: returnQty,
-                      date: nowIso,
-                      note: `Refund Order #${targetOrder.receiptNo}: ${refundReason.trim()}`,
-                      createdBy: approver.name,
-                      referenceId: orderId,
-                    });
-
-                    const currentIng = await tx
-                      .select()
-                      .from(schema.ingredients)
-                      .where(eq(schema.ingredients.id, rIng.ingredientId))
-                      .limit(1);
-                    if (currentIng.length > 0) {
-                      const newStock = (currentIng[0].currentStock || 0) + returnQty;
-                      await tx
-                        .update(schema.ingredients)
-                        .set({ currentStock: newStock })
-                        .where(eq(schema.ingredients.id, rIng.ingredientId));
-                    }
-                  }
-                }
-              }
-            }
-          }
+          await applyDbOrderStock(
+            tx,
+            items,
+            "RETURN",
+            `Refund Order #${targetOrder.receiptNo} (${refundReason.trim()})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
         } else if (refundRestockOption === "WASTE") {
-          const items = await tx
-            .select()
-            .from(schema.orderItems)
-            .where(eq(schema.orderItems.orderId, orderId));
-
-          for (const item of items) {
-            if (item.recipeId) {
-              const rec = await tx
-                .select()
-                .from(schema.recipes)
-                .where(eq(schema.recipes.id, item.recipeId))
-                .limit(1);
-              if (rec.length > 0) {
-                let recIngredients: { ingredientId: string; quantity: number }[] = [];
-                try {
-                  recIngredients = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients;
-                } catch { }
-
-                for (const rIng of recIngredients) {
-                  const wasteQty = (Number(rIng.quantity) || 0) * (Number(item.quantity) || 1);
-                  if (wasteQty > 0) {
-                    await tx.insert(schema.stockMovements).values({
-                      id: crypto.randomUUID(),
-                      ingredientId: rIng.ingredientId,
-                      type: "WASTE",
-                      quantity: -wasteQty,
-                      date: nowIso,
-                      note: `Kerusakan / Basi Refund #${targetOrder.receiptNo}: ${refundReason.trim()}`,
-                      createdBy: approver.name,
-                      referenceId: orderId,
-                    });
-                  }
-                }
-              }
-            }
-          }
+          await applyDbOrderStock(
+            tx,
+            items,
+            "WASTE",
+            `Kerusakan / Basi Refund #${targetOrder.receiptNo} (${refundReason.trim()})`,
+            approver.name,
+            orderId,
+            nowIso
+          );
         }
 
-        // 2. Cash Transaction (CASH_OUT)
         const existingPayments = await tx
           .select()
           .from(schema.payments)
           .where(eq(schema.payments.orderId, orderId));
 
-        const cashAccId = existingPayments[0]?.cashAccountId || "default";
+        const cashAccId = await resolveDbPaymentAccount(
+          tx,
+          refundMethod,
+          existingPayments[0]?.cashAccountId,
+          targetOrder.shiftId
+        );
 
         await tx.insert(schema.cashTransactions).values({
           id: crypto.randomUUID(),
@@ -5116,7 +5318,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           referenceId: orderId,
         });
 
-        // 3. Update Order Status
         await tx
           .update(schema.orders)
           .set({
@@ -5131,7 +5332,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           })
           .where(eq(schema.orders.id, orderId));
 
-        // 4. Audit Log
         await tx.insert(schema.auditLogs).values({
           id: crypto.randomUUID(),
           userId: approver.id,
@@ -5141,6 +5341,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           timestamp: nowIso,
         });
       });
+
+      bumpDataVersion();
 
       res.json({
         success: true,
@@ -5198,10 +5400,12 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       if (!isDbConnected && offlineState) {
         offlineState.manager_approval_requests = offlineState.manager_approval_requests || [];
         offlineState.manager_approval_requests.unshift(newRequest);
+        bumpDataVersion();
         return res.json({ success: true, request: newRequest });
       }
 
       await db.insert(schema.managerApprovalRequests).values(newRequest);
+      bumpDataVersion();
       res.json({ success: true, request: newRequest });
     } catch (e: any) {
       console.error("Create approval request error:", e);
@@ -5289,46 +5493,29 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   app.post("/api/pos/approvals/:id/respond", async (req, res) => {
     try {
       const { id } = req.params;
-      let { action, managerName = "Manager", responseNote = "" } = req.body;
+      let { action, responseNote = "" } = req.body;
 
-      // Autentikasi sesi & otorisasi role
-      const authHeader = req.headers["authorization"] as string;
-      const token = authHeader?.split(" ")[1];
-      let authUser: any = null;
-
-      if (token) {
-        if (isDbConnected) {
-          try {
-            const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
-            if (sessions[0]) {
-              const usersList = await db.select().from(schema.users).where(eq(schema.users.id, sessions[0].userId));
-              authUser = usersList[0];
-            }
-          } catch { }
-        }
-        if (!authUser && offlineState) {
-          const s = (offlineState.device_sessions || []).find((ds: any) => ds.id === token);
-          if (s) {
-            authUser = (offlineState.users || []).find((u: any) => u.id === s.userId);
-          }
-        }
+      // Wajib memiliki sesi autentikasi aktif (tanpa token -> 401 Unauthorized)
+      const authUser = await resolveAuthUser(req);
+      if (!authUser) {
+        return res.status(401).json({
+          error: "Unauthorized: Sesi login diperlukan untuk merespons permintaan otorisasi.",
+        });
       }
 
-      if (authUser?.role === "OWNER") {
+      if (authUser.role === "OWNER") {
         return res.status(403).json({
           error: "Forbidden: Akun Owner berstatus Read-Only (Pengawasan). Persetujuan otorisasi operasional adalah wewenang Manager.",
         });
       }
 
-      if (authUser && authUser.role !== "MANAGER" && authUser.role !== "SUPER_ADMIN") {
+      if (authUser.role !== "MANAGER" && authUser.role !== "SUPER_ADMIN") {
         return res.status(403).json({
           error: "Forbidden: Hanya Manager atau Super Admin yang berwenang memberikan otorisasi kasir.",
         });
       }
 
-      if (authUser?.name) {
-        managerName = authUser.name;
-      }
+      const managerName = authUser.name || "Manager";
 
       if (action !== "APPROVE" && action !== "REJECT") {
         return res.status(400).json({ error: "Action harus APPROVE atau REJECT" });
@@ -5337,6 +5524,11 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const nowIso = new Date().toISOString();
 
       if (!isDbConnected && offlineState) {
+        offlineState.stock_movements = offlineState.stock_movements || [];
+        offlineState.cash_transactions = offlineState.cash_transactions || [];
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.audit_logs = offlineState.audit_logs || [];
+
         const reqItem = (offlineState.manager_approval_requests || []).find((r: any) => r.id === id);
         if (!reqItem) return res.status(404).json({ error: "Permintaan otorisasi tidak ditemukan" });
         if (reqItem.status !== "PENDING") {
@@ -5348,6 +5540,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           reqItem.respondedAt = nowIso;
           reqItem.respondedBy = managerName;
           reqItem.responseNote = responseNote;
+          bumpDataVersion();
           return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
         }
 
@@ -5359,93 +5552,107 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
 
         const targetOrder = (offlineState.orders || []).find((o: any) => o.id === reqItem.orderId);
         if (targetOrder) {
+          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
+
           if (reqItem.type === "REFUND") {
-            const finalRefundAmount = Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0;
-            // Stock adjustment
+            const finalRefundAmount = Math.round(
+              Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0
+            );
             if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
-              const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
-              for (const item of items) {
-                const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
-                if (rec) {
-                  let ings: any[] = [];
-                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch { }
-                  for (const ri of ings) {
-                    const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
-                    if (returnQty > 0) {
-                      offlineState.stock_movements.push({
-                        id: crypto.randomUUID(),
-                        ingredientId: ri.ingredientId,
-                        type: "RETURN",
-                        quantity: returnQty,
-                        date: nowIso,
-                        note: `Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                        createdBy: managerName,
-                        referenceId: targetOrder.id,
-                      });
-                      const ing = (offlineState.ingredients || []).find((i: any) => i.id === ri.ingredientId);
-                      if (ing) ing.currentStock = (Number(ing.currentStock) || 0) + returnQty;
-                    }
-                  }
-                }
-              }
+              applyOfflineOrderStock(
+                items,
+                "RETURN",
+                `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
             } else if (reqItem.refundRestockOption === "WASTE") {
-              const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
-              for (const item of items) {
-                const rec = (offlineState.recipes || []).find((r: any) => r.id === item.recipeId);
-                if (rec) {
-                  let ings: any[] = [];
-                  try { ings = typeof rec.ingredients === "string" ? JSON.parse(rec.ingredients) : rec.ingredients; } catch { }
-                  for (const ri of ings) {
-                    const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
-                    if (wasteQty > 0) {
-                      offlineState.stock_movements.push({
-                        id: crypto.randomUUID(),
-                        ingredientId: ri.ingredientId,
-                        type: "WASTE",
-                        quantity: -wasteQty,
-                        date: nowIso,
-                        note: `Kerusakan Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                        createdBy: managerName,
-                        referenceId: targetOrder.id,
-                      });
-                    }
-                  }
-                }
-              }
+              applyOfflineOrderStock(
+                items,
+                "WASTE",
+                `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
             }
 
-            // Cash out if CASH
-            if (reqItem.refundMethod === "CASH") {
-              const pay = (offlineState.payments || []).find((p: any) => p.orderId === targetOrder.id);
-              const cashAccId = pay?.cashAccountId || "default";
-              offlineState.cash_transactions.push({
-                id: crypto.randomUUID(),
-                accountId: cashAccId,
-                type: "CASH_OUT",
-                date: nowIso,
-                amount: finalRefundAmount,
-                description: `Remote Refund CASH POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                category: "PENGELUARAN",
-                referenceId: targetOrder.id,
-              });
-            }
+            const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
+            const cashAccId = resolveOfflinePaymentAccount(
+              reqItem.refundMethod || "CASH",
+              existingPayments[0]?.cashAccountId,
+              targetOrder.shiftId
+            );
+            offlineState.cash_transactions.push({
+              id: crypto.randomUUID(),
+              accountId: cashAccId,
+              type: "CASH_OUT",
+              date: nowIso,
+              amount: finalRefundAmount,
+              description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+              category: "PENGELUARAN",
+              referenceId: targetOrder.id,
+            });
 
             targetOrder.status = "REFUNDED";
             targetOrder.refundReason = reqItem.reason;
             targetOrder.refundApprovedBy = managerName;
             targetOrder.refundAmount = finalRefundAmount;
-            targetOrder.refundMethod = reqItem.refundMethod;
+            targetOrder.refundMethod = reqItem.refundMethod || "CASH";
             targetOrder.refundRestockOption = reqItem.refundRestockOption;
             targetOrder.refundAt = nowIso;
             targetOrder.updatedAt = nowIso;
           } else if (reqItem.type === "VOID") {
-            targetOrder.status = "VOID";
+            if (targetOrder.status === "PAID") {
+              applyOfflineOrderStock(
+                items,
+                "RETURN",
+                `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
+              const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
+              for (const pay of existingPayments) {
+                const accId =
+                  pay.cashAccountId ||
+                  resolveOfflinePaymentAccount(pay.method || "CASH", undefined, targetOrder.shiftId);
+                offlineState.cash_transactions.push({
+                  id: crypto.randomUUID(),
+                  accountId: accId,
+                  type: "CASH_OUT",
+                  date: nowIso,
+                  amount: Math.round(Number(pay.amount) || 0),
+                  description: `Remote VOID/Refund ${pay.method || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                  category: "PENGELUARAN",
+                  referenceId: targetOrder.id,
+                });
+              }
+              offlineState.sales_transactions = offlineState.sales_transactions.filter(
+                (st: any) => st.orderId !== targetOrder.id && st.importLogId !== `POS-${targetOrder.receiptNo}`
+              );
+              targetOrder.status = "VOID";
+            } else {
+              targetOrder.status = "CANCELLED";
+            }
             targetOrder.voidReason = reqItem.reason;
             targetOrder.voidApprovedBy = managerName;
             targetOrder.updatedAt = nowIso;
           }
+
+          offlineState.audit_logs.push({
+            id: crypto.randomUUID(),
+            userId: authUser.id,
+            userName: managerName,
+            action: reqItem.type,
+            tableName: "orders",
+            recordId: targetOrder.id,
+            timestamp: nowIso,
+          });
         }
 
+        bumpDataVersion();
         return res.json({ success: true, status: "APPROVED", message: `Permintaan ${reqItem.type} berhasil disetujui` });
       }
 
@@ -5476,6 +5683,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           })
           .where(eq(schema.managerApprovalRequests.id, id));
 
+        bumpDataVersion();
         return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
       }
 
@@ -5484,89 +5692,54 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         const orderList = await tx.select().from(schema.orders).where(eq(schema.orders.id, reqItem.orderId)).limit(1);
         if (orderList.length > 0) {
           const targetOrder = orderList[0];
-          const finalRefundAmount = Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0;
+          const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
 
           if (reqItem.type === "REFUND") {
+            const finalRefundAmount = Math.round(
+              Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0
+            );
+
             if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
-              const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
-              for (const item of items) {
-                if (item.recipeId) {
-                  const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
-                  if (rec.length > 0) {
-                    let ings: any[] = [];
-                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch { }
-                    for (const ri of ings) {
-                      const returnQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
-                      if (returnQty > 0) {
-                        await tx.insert(schema.stockMovements).values({
-                          id: crypto.randomUUID(),
-                          ingredientId: ri.ingredientId,
-                          type: "RETURN",
-                          quantity: returnQty,
-                          date: nowIso,
-                          note: `Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                          createdBy: managerName,
-                          referenceId: targetOrder.id,
-                        });
-
-                        const currentIng = await tx.select().from(schema.ingredients).where(eq(schema.ingredients.id, ri.ingredientId)).limit(1);
-                        if (currentIng.length > 0) {
-                          await tx
-                            .update(schema.ingredients)
-                            .set({ currentStock: (currentIng[0].currentStock || 0) + returnQty })
-                            .where(eq(schema.ingredients.id, ri.ingredientId));
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+              await applyDbOrderStock(
+                tx,
+                items,
+                "RETURN",
+                `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
             } else if (reqItem.refundRestockOption === "WASTE") {
-              const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
-              for (const item of items) {
-                if (item.recipeId) {
-                  const rec = await tx.select().from(schema.recipes).where(eq(schema.recipes.id, item.recipeId)).limit(1);
-                  if (rec.length > 0) {
-                    let ings: any[] = [];
-                    try { ings = typeof rec[0].ingredients === "string" ? JSON.parse(rec[0].ingredients) : rec[0].ingredients; } catch { }
-                    for (const ri of ings) {
-                      const wasteQty = (Number(ri.quantity) || 0) * (Number(item.quantity) || 1);
-                      if (wasteQty > 0) {
-                        await tx.insert(schema.stockMovements).values({
-                          id: crypto.randomUUID(),
-                          ingredientId: ri.ingredientId,
-                          type: "WASTE",
-                          quantity: -wasteQty,
-                          date: nowIso,
-                          note: `Kerusakan Remote Refund #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                          createdBy: managerName,
-                          referenceId: targetOrder.id,
-                        });
-                      }
-                    }
-                  }
-                }
-              }
+              await applyDbOrderStock(
+                tx,
+                items,
+                "WASTE",
+                `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
             }
 
-            // Cash Transaction (CASH_OUT)
-            if (reqItem.refundMethod === "CASH") {
-              const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
-              const cashAccId = existingPayments[0]?.cashAccountId || "default";
+            const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
+            const cashAccId = await resolveDbPaymentAccount(
+              tx,
+              reqItem.refundMethod || "CASH",
+              existingPayments[0]?.cashAccountId,
+              targetOrder.shiftId
+            );
 
-              await tx.insert(schema.cashTransactions).values({
-                id: crypto.randomUUID(),
-                accountId: cashAccId,
-                type: "CASH_OUT",
-                date: nowIso,
-                amount: finalRefundAmount,
-                description: `Remote Refund CASH POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                category: "PENGELUARAN",
-                referenceId: targetOrder.id,
-              });
-            }
+            await tx.insert(schema.cashTransactions).values({
+              id: crypto.randomUUID(),
+              accountId: cashAccId,
+              type: "CASH_OUT",
+              date: nowIso,
+              amount: finalRefundAmount,
+              description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+              category: "PENGELUARAN",
+              referenceId: targetOrder.id,
+            });
 
-            // Update Order Status
             await tx
               .update(schema.orders)
               .set({
@@ -5574,36 +5747,84 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
                 refundReason: reqItem.reason,
                 refundApprovedBy: managerName,
                 refundAmount: finalRefundAmount,
-                refundMethod: reqItem.refundMethod,
+                refundMethod: reqItem.refundMethod || "CASH",
                 refundAt: nowIso,
                 refundRestockOption: reqItem.refundRestockOption,
                 updatedAt: nowIso,
               })
               .where(eq(schema.orders.id, targetOrder.id));
 
-            // Audit Log
             await tx.insert(schema.auditLogs).values({
               id: crypto.randomUUID(),
-              userId: managerName,
+              userId: authUser.id,
               action: "REFUND",
               tableName: "orders",
               recordId: targetOrder.id,
               timestamp: nowIso,
             });
           } else if (reqItem.type === "VOID") {
-            await tx
-              .update(schema.orders)
-              .set({
-                status: "VOID",
-                voidReason: reqItem.reason,
-                voidApprovedBy: managerName,
-                updatedAt: nowIso,
-              })
-              .where(eq(schema.orders.id, targetOrder.id));
+            if (targetOrder.status === "PAID") {
+              await applyDbOrderStock(
+                tx,
+                items,
+                "RETURN",
+                `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
+                managerName,
+                targetOrder.id,
+                nowIso
+              );
+
+              const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
+              for (const pay of existingPayments) {
+                const payMethod = pay.paymentMethod || (pay as any).method || "CASH";
+                const accId =
+                  pay.cashAccountId ||
+                  (await resolveDbPaymentAccount(tx, payMethod, undefined, targetOrder.shiftId));
+                await tx.insert(schema.cashTransactions).values({
+                  id: crypto.randomUUID(),
+                  accountId: accId,
+                  type: "CASH_OUT",
+                  date: nowIso,
+                  amount: Math.round(Number(pay.amount) || 0),
+                  description: `Remote VOID/Refund ${payMethod} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                  category: "PENGELUARAN",
+                  referenceId: targetOrder.id,
+                });
+              }
+
+              await tx
+                .delete(schema.salesTransactions)
+                .where(
+                  or(
+                    eq(schema.salesTransactions.orderId, targetOrder.id),
+                    eq(schema.salesTransactions.importLogId, `POS-${targetOrder.receiptNo}`)
+                  )
+                );
+
+              await tx
+                .update(schema.orders)
+                .set({
+                  status: "VOID",
+                  voidReason: reqItem.reason,
+                  voidApprovedBy: managerName,
+                  updatedAt: nowIso,
+                })
+                .where(eq(schema.orders.id, targetOrder.id));
+            } else {
+              await tx
+                .update(schema.orders)
+                .set({
+                  status: "CANCELLED",
+                  voidReason: reqItem.reason,
+                  voidApprovedBy: managerName,
+                  updatedAt: nowIso,
+                })
+                .where(eq(schema.orders.id, targetOrder.id));
+            }
 
             await tx.insert(schema.auditLogs).values({
               id: crypto.randomUUID(),
-              userId: managerName,
+              userId: authUser.id,
               action: "VOID",
               tableName: "orders",
               recordId: targetOrder.id,
@@ -5612,7 +5833,6 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           }
         }
 
-        // Update Approval Request record
         await tx
           .update(schema.managerApprovalRequests)
           .set({
@@ -5623,6 +5843,8 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           })
           .where(eq(schema.managerApprovalRequests.id, id));
       });
+
+      bumpDataVersion();
 
       res.json({
         success: true,
@@ -5677,87 +5899,39 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   // 6. Get POS Orders Today / History Summary (MUST be before /:id)
   app.get("/api/pos/orders/today", async (req, res) => {
     try {
+      const todayLocal = getLocalDateString();
+      const { startUtcIso, endUtcIso } = getLocalDayUtcBounds(todayLocal);
+
       if (!isDbConnected && offlineState) {
-        const todayPrefix = new Date().toISOString().slice(0, 10);
         const todayOrders = (offlineState.orders || [])
-          .filter((o: any) => (o.createdAt || "").startsWith(todayPrefix))
+          .filter((o: any) => isTimestampOnLocalDate(o.createdAt, todayLocal))
           .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-        let totalRevenue = 0;
-        let paidCount = 0;
-        let openCount = 0;
-        let voidCount = 0;
-        let refundCount = 0;
-        let refundTotal = 0;
-
-        for (const ord of todayOrders) {
-          if (ord.status === "PAID") {
-            totalRevenue += Number(ord.totalAmount) || 0;
-            paidCount++;
-          } else if (ord.status === "OPEN") {
-            openCount++;
-          } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
-            voidCount++;
-          } else if (ord.status === "REFUNDED") {
-            refundCount++;
-            refundTotal += Number(ord.refundAmount) || Number(ord.totalAmount) || 0;
-          }
-        }
-
-        const netRevenue = Math.max(0, totalRevenue - refundTotal);
+        const summary = calculateTodayOrderSummary(todayOrders);
 
         return res.json({
-          date: todayPrefix,
-          totalRevenue,
-          refundTotal,
-          netRevenue,
-          paidCount,
-          openCount,
-          voidCount,
-          refundCount,
+          date: todayLocal,
+          ...summary,
           orders: todayOrders,
         });
       }
 
-      const todayPrefix = new Date().toISOString().slice(0, 10);
       const todayOrders = await db
         .select()
         .from(schema.orders)
-        .where(like(schema.orders.createdAt, `${todayPrefix}%`))
+        .where(
+          and(
+            gte(schema.orders.createdAt, startUtcIso),
+            lte(schema.orders.createdAt, endUtcIso)
+          )
+        )
         .orderBy(desc(schema.orders.createdAt));
 
-      let totalRevenue = 0;
-      let paidCount = 0;
-      let openCount = 0;
-      let voidCount = 0;
-      let refundCount = 0;
-      let refundTotal = 0;
-
-      for (const ord of todayOrders) {
-        if (ord.status === "PAID") {
-          totalRevenue += ord.totalAmount;
-          paidCount++;
-        } else if (ord.status === "OPEN") {
-          openCount++;
-        } else if (ord.status === "VOID" || ord.status === "CANCELLED") {
-          voidCount++;
-        } else if (ord.status === "REFUNDED") {
-          refundCount++;
-          refundTotal += Number(ord.refundAmount) || Number(ord.totalAmount) || 0;
-        }
-      }
-
-      const netRevenue = Math.max(0, totalRevenue - refundTotal);
+      const summary = calculateTodayOrderSummary(todayOrders);
 
       res.json({
-        date: todayPrefix,
-        totalRevenue,
-        refundTotal,
-        netRevenue,
-        paidCount,
-        openCount,
-        voidCount,
-        refundCount,
+        date: todayLocal,
+        ...summary,
         orders: todayOrders,
       });
     } catch (e: any) {
@@ -5775,10 +5949,19 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         status?: string;
       };
 
+      const getOrderLocalDate = (createdAt?: string | null) => {
+        if (!createdAt) return "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(createdAt)) return createdAt;
+        const parsed = new Date(createdAt);
+        return Number.isNaN(parsed.getTime()) ? createdAt.slice(0, 10) : getLocalDateString(parsed);
+      };
+
       if (!isDbConnected && offlineState) {
-        const allOrders = (offlineState.orders || []).slice().sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const allOrders = (offlineState.orders || [])
+          .slice()
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         const filteredOrders = allOrders.filter((ord: any) => {
-          const ordDate = ord.createdAt?.slice(0, 10);
+          const ordDate = getOrderLocalDate(ord.createdAt);
           if (startDate && ordDate && ordDate < startDate) return false;
           if (endDate && ordDate && ordDate > endDate) return false;
           if (status && status !== "ALL" && ord.status !== status) return false;
@@ -5791,35 +5974,33 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           return { ...ord, items, payments };
         });
 
-        let totalRevenue = 0;
+        const summary = calculateTodayOrderSummary(filteredOrders);
         let totalTax = 0;
         let totalDiscount = 0;
-        let paidCount = 0;
 
         for (const ord of filteredOrders) {
           if (ord.status === "PAID") {
-            totalRevenue += Number(ord.totalAmount) || 0;
             totalTax += Number(ord.taxAmount) || 0;
             totalDiscount += Number(ord.discountAmount) || 0;
-            paidCount++;
           }
         }
 
         return res.json({
           orders: ordersWithDetails,
           totalCount: filteredOrders.length,
-          paidCount,
-          totalRevenue,
+          paidCount: summary.paidCount,
+          totalRevenue: summary.totalRevenue,
+          refundTotal: summary.refundTotal,
+          netRevenue: summary.netRevenue,
           totalTax,
           totalDiscount,
         });
       }
 
-      let query = db.select().from(schema.orders);
-      const allOrders = await query.orderBy(desc(schema.orders.createdAt));
+      const allOrders = await db.select().from(schema.orders).orderBy(desc(schema.orders.createdAt));
 
       const filteredOrders = allOrders.filter((ord) => {
-        const ordDate = ord.createdAt?.slice(0, 10);
+        const ordDate = getOrderLocalDate(ord.createdAt);
         if (startDate && ordDate && ordDate < startDate) return false;
         if (endDate && ordDate && ordDate > endDate) return false;
         if (status && status !== "ALL" && ord.status !== status) return false;
@@ -5840,25 +6021,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         })
       );
 
-      let totalRevenue = 0;
+      const summary = calculateTodayOrderSummary(filteredOrders);
       let totalTax = 0;
       let totalDiscount = 0;
-      let paidCount = 0;
 
       for (const ord of filteredOrders) {
         if (ord.status === "PAID") {
-          totalRevenue += Number(ord.totalAmount) || 0;
           totalTax += Number(ord.taxAmount) || 0;
           totalDiscount += Number(ord.discountAmount) || 0;
-          paidCount++;
         }
       }
 
       res.json({
         orders: ordersWithDetails,
         totalCount: filteredOrders.length,
-        paidCount,
-        totalRevenue,
+        paidCount: summary.paidCount,
+        totalRevenue: summary.totalRevenue,
+        refundTotal: summary.refundTotal,
+        netRevenue: summary.netRevenue,
         totalTax,
         totalDiscount,
       });
@@ -5896,6 +6076,9 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   // 8. POS Printers Configuration API
   app.get("/api/pos/printers", async (req, res) => {
     try {
+      if (!isDbConnected && offlineState) {
+        return res.json(offlineState.pos_printers || []);
+      }
       const printers = await db.select().from(schema.posPrinters);
       res.json(printers);
     } catch (e: any) {
@@ -5916,6 +6099,31 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         paperWidth = "80mm",
         isActive = true,
       } = req.body;
+
+      if (!isDbConnected && offlineState) {
+        offlineState.pos_printers = offlineState.pos_printers || [];
+        const existingIdx = offlineState.pos_printers.findIndex((p: any) => p.id === id);
+        const printerRecord = {
+          id,
+          name,
+          connectionType,
+          targetStation,
+          ipAddress: ipAddress || null,
+          port: Number(port) || 9100,
+          macAddress: macAddress || null,
+          paperWidth,
+          isActive: Boolean(isActive),
+          createdAt:
+            existingIdx >= 0 ? offlineState.pos_printers[existingIdx].createdAt : new Date().toISOString(),
+        };
+        if (existingIdx >= 0) {
+          offlineState.pos_printers[existingIdx] = printerRecord;
+        } else {
+          offlineState.pos_printers.push(printerRecord);
+        }
+        bumpDataVersion();
+        return res.json({ success: true, message: "Printer configuration saved", printer: printerRecord });
+      }
 
       const existing = await db.select().from(schema.posPrinters).where(eq(schema.posPrinters.id, id)).limit(1);
 
@@ -5948,6 +6156,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         });
       }
 
+      bumpDataVersion();
       res.json({ success: true, message: "Printer configuration saved" });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to save printer" });
@@ -5960,6 +6169,41 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   app.get("/api/kds/tickets", async (req, res) => {
     try {
       const station = (req.query.station as string) || "ALL";
+
+      if (!isDbConnected && offlineState) {
+        const activeOrders = (offlineState.orders || [])
+          .filter(
+            (ord: any) =>
+              (ord.status === "PAID" || ord.status === "OPEN") &&
+              ord.kitchenStatus !== "SERVED" &&
+              ord.status !== "VOID" &&
+              ord.status !== "CANCELLED"
+          )
+          .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const tickets = activeOrders
+          .map((ord: any) => {
+            let items = (offlineState.order_items || []).filter((it: any) => it.orderId === ord.id);
+            if (station !== "ALL") {
+              items = items.filter((it: any) => it.printDestination === station);
+            }
+            return {
+              id: ord.id,
+              receiptNo: ord.receiptNo,
+              orderType: ord.orderType,
+              tableNumber: ord.tableNumber,
+              customerName: ord.customerName,
+              status: ord.status,
+              kitchenStatus: ord.kitchenStatus || "QUEUED",
+              createdAt: ord.createdAt,
+              notes: ord.notes,
+              items,
+            };
+          })
+          .filter((t: any) => t.items.length > 0);
+
+        return res.json(tickets);
+      }
 
       const activeOrders = await db
         .select()
@@ -6018,6 +6262,29 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: "Status wajib diisi" });
       }
 
+      if (!isDbConnected && offlineState) {
+        const item = (offlineState.order_items || []).find((it: any) => it.id === itemId);
+        if (!item) {
+          return res.status(404).json({ error: "Item pesanan tidak ditemukan" });
+        }
+        item.itemStatus = status;
+
+        const siblingItems = (offlineState.order_items || []).filter((si: any) => si.orderId === item.orderId);
+        const allReady = siblingItems.every((si: any) => si.itemStatus === "READY" || si.itemStatus === "SERVED");
+        const allServed = siblingItems.every((si: any) => si.itemStatus === "SERVED");
+
+        const targetOrder = (offlineState.orders || []).find((o: any) => o.id === item.orderId);
+        if (targetOrder) {
+          if (allServed) targetOrder.kitchenStatus = "SERVED";
+          else if (allReady) targetOrder.kitchenStatus = "READY";
+          else if (status === "PREPARING") targetOrder.kitchenStatus = "PREPARING";
+          targetOrder.updatedAt = new Date().toISOString();
+        }
+
+        bumpDataVersion();
+        return res.json({ success: true, message: "Status item berhasil diperbarui" });
+      }
+
       await db
         .update(schema.orderItems)
         .set({ itemStatus: status })
@@ -6038,6 +6305,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         }
       }
 
+      bumpDataVersion();
       res.json({ success: true, message: "Status item berhasil diperbarui" });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to update item status" });
@@ -6054,6 +6322,24 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
         return res.status(400).json({ error: "Status wajib diisi" });
       }
 
+      if (!isDbConnected && offlineState) {
+        const targetOrder = (offlineState.orders || []).find((o: any) => o.id === orderId);
+        if (!targetOrder) {
+          return res.status(404).json({ error: "Order tidak ditemukan" });
+        }
+        targetOrder.kitchenStatus = status;
+        targetOrder.updatedAt = new Date().toISOString();
+
+        for (const it of offlineState.order_items || []) {
+          if (it.orderId === orderId) {
+            it.itemStatus = status;
+          }
+        }
+
+        bumpDataVersion();
+        return res.json({ success: true, message: `Status tiket diubah menjadi ${status}` });
+      }
+
       await db.transaction(async (tx) => {
         await tx
           .update(schema.orders)
@@ -6066,6 +6352,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
           .where(eq(schema.orderItems.orderId, orderId));
       });
 
+      bumpDataVersion();
       res.json({ success: true, message: `Status tiket diubah menjadi ${status}` });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to update order status" });
@@ -6076,11 +6363,18 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   app.get("/api/ai/status", async (req, res) => {
     try {
       let apiKey = process.env.GEMINI_API_KEY || null;
-      try {
-        const settings = await db.select().from(schema.settings).limit(1);
-        if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
-        else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
-      } catch { }
+      if (isDbConnected) {
+        try {
+          const settings = await db.select().from(schema.settings).limit(1);
+          if (settings[0]?.gemini_api_key) apiKey = settings[0].gemini_api_key;
+          else if ((settings[0] as any)?.geminiApiKey) apiKey = (settings[0] as any).geminiApiKey;
+        } catch { }
+      } else if (offlineState) {
+        const rawSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+        if (rawSt?.geminiApiKey || rawSt?.gemini_api_key) {
+          apiKey = rawSt.geminiApiKey || rawSt.gemini_api_key;
+        }
+      }
 
       const isConnected = Boolean(apiKey && apiKey.trim().length > 5);
       res.json({
@@ -6101,10 +6395,17 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       const { apiKey: customKey } = req.body;
       let keyToTest = customKey;
       if (!keyToTest) {
-        try {
-          const settings = await db.select().from(schema.settings).limit(1);
-          keyToTest = settings[0]?.gemini_api_key || (settings[0] as any)?.geminiApiKey || process.env.GEMINI_API_KEY;
-        } catch {
+        if (isDbConnected) {
+          try {
+            const settings = await db.select().from(schema.settings).limit(1);
+            keyToTest = settings[0]?.gemini_api_key || (settings[0] as any)?.geminiApiKey || process.env.GEMINI_API_KEY;
+          } catch {
+            keyToTest = process.env.GEMINI_API_KEY;
+          }
+        } else if (offlineState) {
+          const rawSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+          keyToTest = rawSt?.geminiApiKey || rawSt?.gemini_api_key || process.env.GEMINI_API_KEY;
+        } else {
           keyToTest = process.env.GEMINI_API_KEY;
         }
       }
@@ -6125,7 +6426,7 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
       return res.json({
         success: true,
         reply: response.text?.trim() || "OK!",
-        message: "Koneksi ke Google Gemini AI (3.8 Flash) berhasil!",
+        message: "Koneksi ke Google Gemini AI berhasil!",
       });
     } catch (err: any) {
       console.error("Gemini test connection failed:", err);
@@ -6140,55 +6441,74 @@ Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien da
   app.get("/api/dashboard/summary", async (req, res) => {
     try {
       const now = new Date();
-      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const prevPeriod = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}`;
+      const currentPeriod = getLocalPeriodString(now);
+      const [curYear, curMonth] = currentPeriod.split("-").map(Number);
+      const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+      const prevMonthNum = curMonth === 1 ? 12 : curMonth - 1;
+      const prevPeriod = `${prevYear}-${String(prevMonthNum).padStart(2, "0")}`;
+      const todayLocal = getLocalDateString(now);
+      const thirtyDaysLater = getLocalDateString(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000));
 
-      const [transactions, employees, ingredients, payrolls] = await Promise.all([
-        db.select().from(schema.cashTransactions),
-        db.select().from(schema.employees),
-        db.select().from(schema.ingredients),
-        db.select().from(schema.payrollRecords),
-      ]);
+      let transactions: any[] = [];
+      let employees: any[] = [];
+      let ingredients: any[] = [];
+      let payrolls: any[] = [];
+      let expenseCategories: any[] = [];
 
-      // Filter by period (date starts with YYYY-MM)
-      const currentTx = transactions.filter((t) => t.date.startsWith(currentPeriod));
-      const prevTx = transactions.filter((t) => t.date.startsWith(prevPeriod));
+      if (!isDbConnected && offlineState) {
+        transactions = offlineState.cash_transactions || [];
+        employees = offlineState.employees || [];
+        ingredients = offlineState.ingredients || [];
+        payrolls = offlineState.payroll_records || [];
+        expenseCategories = offlineState.expense_categories || [];
+      } else {
+        [transactions, employees, ingredients, payrolls, expenseCategories] = await Promise.all([
+          db.select().from(schema.cashTransactions),
+          db.select().from(schema.employees),
+          db.select().from(schema.ingredients),
+          db.select().from(schema.payrollRecords),
+          db.select().from(schema.expenseCategories),
+        ]);
+      }
 
-      const sumIn = (txs: any[]) => txs.filter((t) => t.type === "CASH_IN").reduce((s, t) => s + t.amount, 0);
-      const sumOut = (txs: any[]) => txs.filter((t) => t.type === "CASH_OUT").reduce((s, t) => s + t.amount, 0);
+      const getTxPeriod = (rawDate?: string) => {
+        if (!rawDate) return "";
+        if (/^\d{4}-\d{2}(-\d{2})?$/.test(rawDate)) return rawDate.slice(0, 7);
+        const d = new Date(rawDate);
+        return Number.isNaN(d.getTime()) ? rawDate.slice(0, 7) : getLocalPeriodString(d);
+      };
+
+      const currentTx = transactions.filter((t) => getTxPeriod(t.date) === currentPeriod);
+      const prevTx = transactions.filter((t) => getTxPeriod(t.date) === prevPeriod);
+
+      const sumIn = (txs: any[]) => txs.filter((t) => t.type === "CASH_IN").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      const sumOut = (txs: any[]) => txs.filter((t) => t.type === "CASH_OUT").reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
       const currentRevenue = sumIn(currentTx);
       const currentExpense = sumOut(currentTx);
       const prevRevenue = sumIn(prevTx);
       const prevExpense = sumOut(prevTx);
 
-      // Expense breakdown by categoryId
-      const expenseCategories = await db.select().from(schema.expenseCategories);
       const expenseBreakdown = expenseCategories
-        .filter((c) => !c.parentId) // root only
+        .filter((c) => !c.parentId)
         .map((cat) => {
           const childIds = expenseCategories.filter((c) => c.parentId === cat.id).map((c) => c.id);
           const allIds = [cat.id, ...childIds];
           const total = currentTx
             .filter((t) => t.type === "CASH_OUT" && t.categoryId && allIds.includes(t.categoryId))
-            .reduce((s, t) => s + t.amount, 0);
+            .reduce((s, t) => s + (Number(t.amount) || 0), 0);
           return { categoryId: cat.id, name: cat.name, color: cat.color, total };
         })
         .filter((b) => b.total > 0)
         .sort((a, b) => b.total - a.total);
 
-      // Low stock count
-      const lowStockCount = ingredients.filter((i) => i.currentStock <= i.minStock).length;
+      const lowStockCount = ingredients.filter((i) => Number(i.currentStock) <= Number(i.minStock)).length;
 
-      // Active employees & expiring contracts
       const activeEmployeeCount = employees.filter((e) => e.status === "AKTIF").length;
-      const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const expiringContracts = employees.filter(
-        (e) => e.endDate && e.endDate <= thirtyDaysLater && e.endDate >= now.toISOString().slice(0, 10)
+        (e) => e.endDate && e.endDate <= thirtyDaysLater && e.endDate >= todayLocal
       ).length;
 
-      // Payroll status for current period
       const currentPayrolls = payrolls.filter((p) => p.period === currentPeriod);
       const payrollStatus = {
         draft: currentPayrolls.filter((p) => p.status === "DRAFT").length,

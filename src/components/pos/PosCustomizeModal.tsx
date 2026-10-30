@@ -21,6 +21,27 @@ interface MenuItem {
   category: string;
   defaultStation: PrintDestination;
   price?: number;
+  variants?: {
+    id: string;
+    name: string;
+    price: number;
+    sku?: string;
+    isAvailable?: boolean;
+    recipe?: any[];
+  }[];
+  modifierGroups?: {
+    id: string;
+    name: string;
+    minSelect?: number;
+    maxSelect?: number;
+    options: {
+      id: string;
+      name: string;
+      price: number;
+      cost?: number;
+      recipe?: any[];
+    }[];
+  }[];
 }
 
 interface PosCustomizeModalProps {
@@ -81,7 +102,17 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
   item,
   onAddToCartWithCustomization,
 }) => {
-  const basePrice = item.price || 20000;
+  const hasProductVariants = Array.isArray(item.variants) && item.variants.length > 0;
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(
+    hasProductVariants ? item.variants![0].id : ""
+  );
+
+  const activeVariant = useMemo(() => {
+    if (!hasProductVariants) return null;
+    return item.variants?.find((v) => v.id === selectedVariantId) || item.variants?.[0] || null;
+  }, [hasProductVariants, item.variants, selectedVariantId]);
+
+  const basePrice = activeVariant ? activeVariant.price : (item.price || 20000);
   const isDrink =
     item.category.toUpperCase() === "COFFEE" ||
     item.category.toUpperCase() === "NON-COFFEE";
@@ -111,7 +142,7 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
   ];
 
   const addonOptions = [
-    { name: "Extra Espresso Shot", price: 5000 },
+    { name: "Extra Espresso Shot", price: 6000 },
     { name: "Vanilla Syrup", price: 4000 },
     { name: "Caramel Drizzle", price: 4000 },
     { name: "Hazelnut Syrup", price: 4000 },
@@ -132,15 +163,15 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
   // Kalkulasi harga per unit
   const unitPrice = useMemo(() => {
     let price = basePrice;
-    if (isDrink && temperature === "ICED") {
-      price += 2000; // Iced +2000
+    if (!hasProductVariants && isDrink && temperature === "ICED") {
+      price += 2000; // Iced +2000 jika bukan varian terpisah
     }
     price += selectedMilk.price;
     selectedAddons.forEach((a) => {
       price += a.price;
     });
     return price;
-  }, [basePrice, isDrink, temperature, selectedMilk, selectedAddons]);
+  }, [basePrice, hasProductVariants, isDrink, temperature, selectedMilk, selectedAddons]);
 
   const subtotal = useMemo(() => {
     return unitPrice * quantity;
@@ -150,10 +181,12 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
     const modifiers: OrderModifier[] = [];
 
     if (isDrink) {
-      if (temperature === "ICED") {
-        modifiers.push({ name: "Suhu: Dingin (Iced)", price: 2000, extraPrice: 2000 });
-      } else {
-        modifiers.push({ name: "Suhu: Panas (Hot)", price: 0, extraPrice: 0 });
+      if (!hasProductVariants) {
+        if (temperature === "ICED") {
+          modifiers.push({ name: "Suhu: Dingin (Iced)", price: 2000, extraPrice: 2000 });
+        } else {
+          modifiers.push({ name: "Suhu: Panas (Hot)", price: 0, extraPrice: 0 });
+        }
       }
 
       modifiers.push({ name: sweetness, price: 0, extraPrice: 0 });
@@ -175,11 +208,13 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
       modifiers.push({ name: `+ ${a.name}`, price: a.price, extraPrice: a.price });
     });
 
-    const variantName = isDrink
-      ? `${temperature === "ICED" ? "Iced" : "Hot"}${
-          selectedMilk.price > 0 ? ` (${selectedMilk.name})` : ""
-        }`
-      : "Regular";
+    const variantName = activeVariant
+      ? activeVariant.name
+      : isDrink
+        ? `${temperature === "ICED" ? "Iced" : "Hot"}${
+            selectedMilk.price > 0 ? ` (${selectedMilk.name})` : ""
+          }`
+        : "Regular";
 
     onAddToCartWithCustomization({
       recipeId: item.id,
@@ -242,8 +277,39 @@ const PosCustomizeModalContent: React.FC<PosCustomizeModalContentProps> = ({
 
         {/* Body Opsi Kustomisasi */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
-          {/* Suhu: Hot vs Iced (khusus minuman) */}
-          {isDrink && (
+          {/* Varian Produk (Botol 1 Liter / Iced 16oz / Hot 8oz) */}
+          {hasProductVariants && (
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2">
+                Pilihan Varian Produk
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {item.variants?.map((v) => {
+                  const isSelected = selectedVariantId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setSelectedVariantId(v.id)}
+                      className={`p-3 rounded-2xl border text-xs text-left transition flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-brand-50 border-brand-500 text-brand-900 font-bold shadow-xs"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className="font-bold">{v.name}</span>
+                      <span className="text-[11px] font-extrabold text-brand-700 mt-1">
+                        {formatCurrency(v.price)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Suhu: Hot vs Iced (khusus minuman tanpa varian bawaan) */}
+          {!hasProductVariants && isDrink && (
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">
                 Pilihan Suhu Minuman

@@ -375,13 +375,21 @@ function AppContent() {
     }
   };
 
+  const getSafeReturnView = (): ViewState => {
+    if (!currentUser) return "dashboard_finance";
+    if (currentUser.role === "KASIR") {
+      return "attendance_clock";
+    }
+    return roleDefaultView[currentUser.role] || "dashboard_owner";
+  };
+
   const renderAppContent = () => {
     if (currentView === "pos_cashier") {
       return (
         <Suspense fallback={<PageLoader />}>
           <ErrorBoundary>
             <PosTerminal
-              onNavigateBack={() => setCurrentView(roleDefaultView[currentUser!.role] || "dashboard_owner")}
+              onNavigateBack={() => setCurrentView(getSafeReturnView())}
             />
           </ErrorBoundary>
         </Suspense>
@@ -393,7 +401,7 @@ function AppContent() {
         <Suspense fallback={<PageLoader />}>
           <ErrorBoundary>
             <KitchenDisplaySystem
-              onNavigateBack={() => setCurrentView(roleDefaultView[currentUser!.role] || "dashboard_owner")}
+              onNavigateBack={() => setCurrentView(getSafeReturnView())}
             />
           </ErrorBoundary>
         </Suspense>

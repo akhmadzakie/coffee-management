@@ -158,7 +158,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
     };
   }, [remoteRequestId, remoteStatus]);
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const currentPin = pinRef.current;
     if (!currentPin) {
       setErrorMessage("Silakan masukkan PIN.");
@@ -170,42 +170,41 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       return;
     }
 
-    const supervisorPin = settings?.posSupervisorPin || "1234";
-    const isSupervisorMatch = currentPin === supervisorPin;
-
-    // Cari user dengan PIN cocok dan role MANAGER, OWNER, atau SUPER_ADMIN
-    const authorizedUser = users.find((u) => {
-      const isManagerOrOwner =
-        u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN";
-      if (!isManagerOrOwner) return false;
-      if (u.pin) {
-        return (
-          u.pin === currentPin ||
-          (currentPin === "123456" && (u.pin === "1234" || u.pin === "123456"))
-        );
+    try {
+      const res = await fetch("/api/pos/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: currentPin, purpose: "SUPERVISOR" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setErrorMessage(data.error || "PIN Supervisor / Manager tidak valid.");
+        pinRef.current = "";
+        setPin("");
+        return;
       }
-      return currentPin === "123456" || currentPin === "1234";
-    });
-
-    if (isSupervisorMatch) {
-      const supervisorObj = authorizedUser || {
-        id: "supervisor_pos",
-        name: "Supervisor POS",
-        role: "MANAGER",
-        pin: currentPin,
-      };
-      onSuccess(supervisorObj, reasonRef.current.trim());
-      return;
-    }
-
-    if (!authorizedUser) {
+      onSuccess(data.approver, reasonRef.current.trim());
+    } catch {
+      // Offline fallback
+      const supervisorPin = settings?.posSupervisorPin || "1234";
+      if (currentPin === supervisorPin) {
+        onSuccess(
+          { id: "supervisor_pos", name: "Supervisor POS", role: "MANAGER", pin: currentPin },
+          reasonRef.current.trim()
+        );
+        return;
+      }
+      const matchedUser = users.find(
+        (u) => (u.role === "MANAGER" || u.role === "SUPER_ADMIN") && u.pin === currentPin
+      );
+      if (matchedUser) {
+        onSuccess({ ...matchedUser, pin: currentPin }, reasonRef.current.trim());
+        return;
+      }
       setErrorMessage("PIN salah atau Anda tidak memiliki wewenang Supervisor / Manager.");
       pinRef.current = "";
       setPin("");
-      return;
     }
-
-    onSuccess({ ...authorizedUser, pin: currentPin }, reasonRef.current.trim());
   };
 
   // Listener input keyboard fisik (angka 0-9, backspace, escape, enter)

@@ -367,6 +367,7 @@ export interface Settings {
   leaderBakerTasks?: any;
   managerTasks?: any;
   geminiApiKey?: string;
+  hasGeminiApiKey?: boolean;
   monthlyRevenueTarget?: number;
   targetBonusAmount?: number; // Bonus per karyawan jika omzet tembus target
   divisionKpiBonusTarget?: Record<string, number>; // Plafon Target Bonus KPI per divisi yang diatur Manager
@@ -391,6 +392,7 @@ export interface Settings {
   enableLeaderAllowanceBonus?: boolean;
   enableKpiScoreBonus?: boolean;
   posSupervisorPin?: string;
+  hasPosSupervisorPin?: boolean;
   autoDeductStockOnSale?: boolean;
   allowNegativeStockSale?: boolean;
 }
@@ -467,6 +469,8 @@ export interface SalesTransaction {
   quantitySold: number;
   totalPrice: number;
   importLogId: string;
+  paymentMethod?: PaymentMethod | string;
+  orderId?: string | null;
 }
 
 export interface RecipeIngredient {

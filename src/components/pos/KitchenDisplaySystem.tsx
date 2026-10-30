@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useStore } from "../../store/StoreContext";
 import { KitchenStatus, PrintDestination } from "../../types";
+import { PosQuickWasteModal } from "./PosQuickWasteModal";
 import {
   UtensilsCrossed,
   Coffee,
@@ -64,6 +65,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isQuickWasteOpen, setIsQuickWasteOpen] = useState(false);
   const prevTicketCountRef = useRef<number>(0);
 
   // Fullscreen toggle handler for tablets, phones, and wall monitors
@@ -268,6 +270,13 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
               {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
             </button>
             <button
+              onClick={() => setIsQuickWasteOpen(true)}
+              className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs transition cursor-pointer"
+              title="Catat Kalibrasi Espresso / Bahan Waste"
+            >
+              <Coffee className="w-4 h-4 text-amber-700" />
+            </button>
+            <button
               onClick={fetchTickets}
               className="p-2 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-slate-200 shadow-2xs transition cursor-pointer"
               title="Refresh Tiket"
@@ -326,6 +335,16 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
               title={soundEnabled ? "Suara Chime Aktif" : "Suara Chime Bisu"}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-700" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+
+            {/* Quick Waste & Calibration */}
+            <button
+              onClick={() => setIsQuickWasteOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Catat Kalibrasi Espresso, Susu Tumpah, atau Salah Racik"
+            >
+              <Coffee className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>Kalibrasi / Waste</span>
             </button>
 
             {/* Refresh button */}
@@ -577,6 +596,15 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           </div>
         )}
       </div>
+
+      {/* Modal Quick Waste & Calibration untuk Barista / Kitchen */}
+      {isQuickWasteOpen && (
+        <PosQuickWasteModal
+          isOpen={isQuickWasteOpen}
+          onClose={() => setIsQuickWasteOpen(false)}
+          defaultReason="KALIBRASI_PAGI"
+        />
+      )}
     </div>
   );
 };

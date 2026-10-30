@@ -74,6 +74,8 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (

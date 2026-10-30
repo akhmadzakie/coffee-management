@@ -28,7 +28,7 @@ export const budgets = pgTable("budgets", {
   id: varchar("id", { length: 255 }).primaryKey(),
   categoryId: varchar("category_id", { length: 255 }),
   period: text("period").notNull(),
-  amount: real("amount").notNull().default(0),
+  amount: doublePrecision("amount").notNull().default(0),
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
 });
@@ -39,8 +39,8 @@ export const bankReconciliations = pgTable("bank_reconciliations", {
   period: text("period").notNull(),
   bankName: text("bank_name").notNull(),
   accountNumber: text("account_number"),
-  openingBalance: real("opening_balance").notNull().default(0),
-  closingBalance: real("closing_balance").notNull().default(0),
+  openingBalance: doublePrecision("opening_balance").notNull().default(0),
+  closingBalance: doublePrecision("closing_balance").notNull().default(0),
   status: varchar("status", { length: 50 }).notNull().default("DRAFT"),
   notes: text("notes"),
   createdBy: varchar("created_by", { length: 255 }),
@@ -52,7 +52,7 @@ export const bankStatementLines = pgTable("bank_statement_lines", {
   reconciliationId: varchar("reconciliation_id", { length: 255 }).notNull(),
   date: text("date").notNull(),
   description: text("description").notNull(),
-  amount: real("amount").notNull().default(0),
+  amount: doublePrecision("amount").notNull().default(0),
   transactionType: varchar("transaction_type", { length: 50 }).notNull().default("CREDIT"),
   matchedTransactionId: varchar("matched_transaction_id", { length: 255 }),
   isMatched: boolean("is_matched").notNull().default(false),
@@ -73,9 +73,9 @@ export const stockOpnameItems = pgTable("stock_opname_items", {
   id: varchar("id", { length: 255 }).primaryKey(),
   opnameId: varchar("opname_id", { length: 255 }).notNull(),
   ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
-  systemStock: real("system_stock").notNull(),
-  physicalStock: real("physical_stock").notNull(),
-  difference: real("difference").notNull(), // physicalStock - systemStock
+  systemStock: doublePrecision("system_stock").notNull(),
+  physicalStock: doublePrecision("physical_stock").notNull(),
+  difference: doublePrecision("difference").notNull(), // physicalStock - systemStock
   notes: text("notes"),
 });
 
@@ -84,20 +84,20 @@ export const payrollRecords = pgTable("payroll_records", {
   id: varchar("id", { length: 255 }).primaryKey(),
   employeeId: varchar("employee_id", { length: 255 }).notNull(),
   period: varchar("period", { length: 7 }).notNull(), // YYYY-MM
-  basicSalary: real("basic_salary").notNull(),
-  mealAllowance: real("meal_allowance").notNull(),
-  positionAllowance: real("position_allowance").notNull(),
-  kpiBonus: real("kpi_bonus").default(0).notNull(),
-  alphaDeduction: real("alpha_deduction").default(0).notNull(),
-  overtimePay: real("overtime_pay").default(0).notNull(),
-  otherDeductions: real("other_deductions").default(0).notNull(),
-  grossPay: real("gross_pay").notNull(),
-  netPay: real("net_pay").notNull(),
+  basicSalary: doublePrecision("basic_salary").notNull(),
+  mealAllowance: doublePrecision("meal_allowance").notNull(),
+  positionAllowance: doublePrecision("position_allowance").notNull(),
+  kpiBonus: doublePrecision("kpi_bonus").default(0).notNull(),
+  alphaDeduction: doublePrecision("alpha_deduction").default(0).notNull(),
+  overtimePay: doublePrecision("overtime_pay").default(0).notNull(),
+  otherDeductions: doublePrecision("other_deductions").default(0).notNull(),
+  grossPay: doublePrecision("gross_pay").notNull(),
+  netPay: doublePrecision("net_pay").notNull(),
   status: varchar("status", { length: 50 }).default("DRAFT").notNull(), // DRAFT | APPROVED | PAID
   approvedBy: varchar("approved_by", { length: 255 }),
   approvedAt: text("approved_at"),
-  overtimeHours: real("overtime_hours").default(0),
-  overtimeRate: real("overtime_rate").default(0),
+  overtimeHours: doublePrecision("overtime_hours").default(0),
+  overtimeRate: doublePrecision("overtime_rate").default(0),
   paidDate: text("paid_date"),
   paidVia: varchar("paid_via", { length: 255 }), // accountId
   notes: text("notes"),
@@ -117,7 +117,7 @@ export const cashTransactions = pgTable("cash_transactions", {
   accountId: varchar("account_id", { length: 255 }).notNull(),
   type: varchar("type", { length: 50 }).notNull(), // 'CASH_IN', 'CASH_OUT', 'TRANSFER'
   date: text("date").notNull(),
-  amount: real("amount").notNull(),
+  amount: doublePrecision("amount").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(), // kept for backward compat
   categoryId: varchar("category_id", { length: 255 }), // FK to expenseCategories
@@ -148,9 +148,9 @@ export const settings = pgTable("settings", {
   managerTasks: text("manager_tasks").default("[]"),
   gemini_api_key: text("gemini_api_key"),
   taxEnabled: boolean("tax_enabled").default(false).notNull(),
-  taxRate: real("tax_rate").default(10).notNull(),
+  taxRate: doublePrecision("tax_rate").default(10).notNull(),
   taxMode: varchar("tax_mode", { length: 20 }).default("EXCLUSIVE").notNull(),
-  maxCashierDiscount: real("max_cashier_discount").default(10).notNull(),
+  maxCashierDiscount: doublePrecision("max_cashier_discount").default(10).notNull(),
   monthlyRevenueTarget: doublePrecision("monthly_revenue_target").default(150000000),
   targetBonusAmount: doublePrecision("target_bonus_amount").default(0),
   divisionKpiBonusTarget: text("division_kpi_bonus_target").default("{}"),
@@ -182,10 +182,10 @@ export const ingredients = pgTable("ingredients", {
   id: varchar("id", { length: 255 }).primaryKey(),
   name: text("name").notNull(),
   unit: text("unit").notNull(),
-  currentStock: real("current_stock").notNull(),
-  minStock: real("min_stock").notNull(),
+  currentStock: doublePrecision("current_stock").notNull(),
+  minStock: doublePrecision("min_stock").notNull(),
   category: text("category").notNull(),
-  costPerUnit: real("cost_per_unit").default(0).notNull(), // Fase 3: valuation
+  costPerUnit: doublePrecision("cost_per_unit").default(0).notNull(), // Fase 3: valuation
 });
 
 export const recipes = pgTable("recipes", {
@@ -199,11 +199,11 @@ export const stockMovements = pgTable("stock_movements", {
   ingredientId: varchar("ingredient_id", { length: 255 }).notNull(),
   // Fase 3: expanded types
   type: varchar("type", { length: 50 }).notNull(), // 'IN' | 'OUT' | 'ADJUSTMENT' | 'WASTE' | 'RETURN' | 'TRANSFER' | 'USAGE'
-  quantity: real("quantity").notNull(),
+  quantity: doublePrecision("quantity").notNull(),
   date: text("date").notNull(), // ISO String
   note: text("note"),
-  unitCost: real("unit_cost"), // harga per unit saat transaksi (untuk IN)
-  totalCost: real("total_cost"), // unitCost × quantity
+  unitCost: doublePrecision("unit_cost"), // harga per unit saat transaksi (untuk IN)
+  totalCost: doublePrecision("total_cost"), // unitCost × quantity
   referenceId: varchar("reference_id", { length: 255 }), // link ke PO
   createdBy: varchar("created_by", { length: 255 }).notNull(),
   location: varchar("location", { length: 50 }),
@@ -213,9 +213,11 @@ export const salesTransactions = pgTable("sales_transactions", {
   id: varchar("id", { length: 255 }).primaryKey(),
   date: text("date").notNull(), // ISO String
   menuName: text("menu_name").notNull(),
-  quantitySold: real("quantity_sold").notNull(),
-  totalPrice: real("total_price").notNull(),
+  quantitySold: doublePrecision("quantity_sold").notNull(),
+  totalPrice: doublePrecision("total_price").notNull(),
   importLogId: varchar("import_log_id", { length: 255 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("CASH"),
+  orderId: varchar("order_id", { length: 255 }),
 });
 
 export const salesImportLogs = pgTable("sales_import_logs", {
@@ -255,9 +257,9 @@ export const employeeContracts = pgTable("employee_contracts", {
   id: varchar("id", { length: 255 }).primaryKey(),
   employeeId: varchar("employee_id", { length: 255 }).notNull(),
   effectiveDate: text("effective_date").notNull(),
-  basicSalary: real("basic_salary").notNull(),
-  mealAllowance: real("meal_allowance").notNull(),
-  positionAllowance: real("position_allowance").notNull(),
+  basicSalary: doublePrecision("basic_salary").notNull(),
+  mealAllowance: doublePrecision("meal_allowance").notNull(),
+  positionAllowance: doublePrecision("position_allowance").notNull(),
   workingDaysPerMonth: integer("working_days_per_month").notNull(),
   notes: text("notes").notNull(),
 });
@@ -297,7 +299,7 @@ export const dailyAttendances = pgTable("daily_attendances", {
   clockOutPhotoUrl: text("clock_out_photo_url"),
   status: varchar("status", { length: 50 }).notNull(),
   approvalStatus: varchar("approval_status", { length: 50 }).default("PENDING"),
-  overtimeHours: real("overtime_hours").default(0),
+  overtimeHours: doublePrecision("overtime_hours").default(0),
   overtimeApproved: boolean("overtime_approved").default(false),
   notes: text("notes"),
 });
@@ -319,8 +321,8 @@ export const kpiRecords = pgTable("kpi_records", {
   quarter: integer("quarter").notNull(),
   year: integer("year").notNull(),
   targets: jsonb("targets").notNull(),
-  totalScore: real("total_score").notNull(),
-  kpiBonus: real("kpi_bonus").notNull(),
+  totalScore: doublePrecision("total_score").notNull(),
+  kpiBonus: doublePrecision("kpi_bonus").notNull(),
   notes: text("notes").notNull(),
   evaluatedBy: varchar("evaluated_by", { length: 255 }).notNull(),
   createdAt: text("created_at").notNull(),
@@ -341,12 +343,12 @@ export const purchaseOrders = pgTable("purchase_orders", {
   supplierId: varchar("supplier_id", { length: 255 }).notNull(),
   date: text("date").notNull(),
   items: jsonb("items").notNull(),
-  totalAmount: real("total_amount").notNull(),
+  totalAmount: doublePrecision("total_amount").notNull(),
   status: varchar("status", { length: 50 }).notNull(),
   deliveryStatus: varchar("delivery_status", { length: 50 }).notNull(),
   paymentMethod: varchar("payment_method", { length: 50 }).default("CASH"),
   dueDate: text("due_date"),
-  amountPaid: real("amount_paid").default(0),
+  amountPaid: doublePrecision("amount_paid").default(0),
 });
 
 export const shifts = pgTable("shifts", {
@@ -355,10 +357,10 @@ export const shifts = pgTable("shifts", {
   cashAccountId: varchar("cash_account_id", { length: 255 }).notNull(),
   startTime: text("start_time").notNull(),
   endTime: text("end_time"),
-  startingCash: real("starting_cash").notNull(),
-  expectedEndingCash: real("expected_ending_cash"),
-  actualEndingCash: real("actual_ending_cash"),
-  difference: real("difference"),
+  startingCash: doublePrecision("starting_cash").notNull(),
+  expectedEndingCash: doublePrecision("expected_ending_cash"),
+  actualEndingCash: doublePrecision("actual_ending_cash"),
+  difference: doublePrecision("difference"),
   status: varchar("status", { length: 50 }).notNull(),
   picEmployeeId: varchar("pic_employee_id", { length: 255 }),
   picEmployeeName: text("pic_employee_name"),
@@ -372,19 +374,19 @@ export const kpiTasks = pgTable("kpi_tasks", {
   employeeId: varchar("employee_id", { length: 255 }).notNull(),
   period: text("period").notNull(), // YYYY-MM
   taskName: text("task_name").notNull(),
-  weight: real("weight").notNull(), // e.g. 20 for 20%
-  target: real("target").notNull(), 
-  realization: real("realization").default(0).notNull(),
-  score: real("score").default(0).notNull(), // (realization / target) * weight
+  weight: doublePrecision("weight").notNull(), // e.g. 20 for 20%
+  target: doublePrecision("target").notNull(), 
+  realization: doublePrecision("realization").default(0).notNull(),
+  score: doublePrecision("score").default(0).notNull(), // (realization / target) * weight
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
 });
 
 export const kpiBonusRules = pgTable("kpi_bonus_rules", {
   id: varchar("id", { length: 255 }).primaryKey(),
-  minScore: real("min_score").notNull(),
-  maxScore: real("max_score").notNull(),
-  bonusAmount: real("bonus_amount").notNull(),
+  minScore: doublePrecision("min_score").notNull(),
+  maxScore: doublePrecision("max_score").notNull(),
+  bonusAmount: doublePrecision("bonus_amount").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
 });
 
@@ -407,14 +409,14 @@ export const orders = pgTable("orders", {
   tableNumber: varchar("table_number", { length: 50 }), // Nomor meja untuk open bill
   customerName: varchar("customer_name", { length: 100 }),
   status: varchar("status", { length: 50 }).notNull(), // 'OPEN' | 'PAID' | 'CANCELLED' | 'VOID' | 'REFUNDED'
-  subtotal: real("subtotal").notNull().default(0),
-  discountPercent: real("discount_percent").default(0).notNull(),
-  discountAmount: real("discount_amount").default(0).notNull(),
+  subtotal: doublePrecision("subtotal").notNull().default(0),
+  discountPercent: doublePrecision("discount_percent").default(0).notNull(),
+  discountAmount: doublePrecision("discount_amount").default(0).notNull(),
   discountReason: text("discount_reason"),
-  taxPercent: real("tax_percent").default(0).notNull(),
-  taxAmount: real("tax_amount").default(0).notNull(),
+  taxPercent: doublePrecision("tax_percent").default(0).notNull(),
+  taxAmount: doublePrecision("tax_amount").default(0).notNull(),
   taxMode: varchar("tax_mode", { length: 20 }).default("EXCLUSIVE").notNull(),
-  totalAmount: real("total_amount").notNull().default(0),
+  totalAmount: doublePrecision("total_amount").notNull().default(0),
   notes: text("notes"),
   idempotencyKey: varchar("idempotency_key", { length: 255 }),
   cashierId: varchar("cashier_id", { length: 255 }),
@@ -426,7 +428,7 @@ export const orders = pgTable("orders", {
   voidApprovedBy: varchar("void_approved_by", { length: 255 }),
   refundReason: text("refund_reason"),
   refundApprovedBy: varchar("refund_approved_by", { length: 255 }),
-  refundAmount: real("refund_amount"),
+  refundAmount: doublePrecision("refund_amount"),
   refundMethod: varchar("refund_method", { length: 50 }),
   refundAt: text("refund_at"),
   refundRestockOption: varchar("refund_restock_option", { length: 50 }),
@@ -441,9 +443,9 @@ export const orderItems = pgTable("order_items", {
   menuName: text("menu_name").notNull(),
   recipeId: varchar("recipe_id", { length: 255 }),
   variantName: text("variant_name"), // e.g. "Iced", "Large", "Hot"
-  quantity: real("quantity").notNull(),
-  unitPrice: real("unit_price").notNull(),
-  subtotal: real("subtotal").notNull(),
+  quantity: doublePrecision("quantity").notNull(),
+  unitPrice: doublePrecision("unit_price").notNull(),
+  subtotal: doublePrecision("subtotal").notNull(),
   modifiers: jsonb("modifiers").default([]), // [{ name, price, quantity }]
   notes: text("notes"), // catatan per item (less sugar, dll)
   printDestination: varchar("print_destination", { length: 50 }).default("BAR").notNull(), // 'BAR' | 'KITCHEN' | 'BAKERY' | 'NONE'
@@ -457,9 +459,9 @@ export const payments = pgTable("payments", {
   orderId: varchar("order_id", { length: 255 }).notNull(),
   shiftId: varchar("shift_id", { length: 255 }),
   paymentMethod: varchar("payment_method", { length: 50 }).notNull(), // 'CASH' | 'QRIS' | 'DEBIT' | 'CREDIT'
-  amount: real("amount").notNull(),
-  cashReceived: real("cash_received"),
-  changeAmount: real("change_amount"),
+  amount: doublePrecision("amount").notNull(),
+  cashReceived: doublePrecision("cash_received"),
+  changeAmount: doublePrecision("change_amount"),
   referenceNo: text("reference_no"), // Kode approval EDC / nomor referensi QRIS
   cashAccountId: varchar("cash_account_id", { length: 255 }),
   createdAt: text("created_at").notNull(),
@@ -499,7 +501,7 @@ export const batchPreparations = pgTable("batch_preparations", {
   division: varchar("division", { length: 50 }).default("BAR").notNull(),
   targetIngredientId: varchar("target_ingredient_id", { length: 255 }).notNull(),
   targetIngredientName: text("target_ingredient_name"),
-  yieldQuantity: real("yield_quantity").notNull(),
+  yieldQuantity: doublePrecision("yield_quantity").notNull(),
   yieldUnit: varchar("yield_unit", { length: 50 }).notNull(),
   ingredients: jsonb("ingredients").notNull(), // [{ ingredientId, quantity }]
   notes: text("notes"),
@@ -512,9 +514,9 @@ export const promotions = pgTable("promotions", {
   name: text("name").notNull(),
   code: varchar("code", { length: 100 }),
   type: varchar("type", { length: 50 }).notNull(), // 'PERCENT' | 'NOMINAL'
-  value: real("value").notNull(),
-  minSpend: real("min_spend"),
-  maxDiscount: real("max_discount"),
+  value: doublePrecision("value").notNull(),
+  minSpend: doublePrecision("min_spend"),
+  maxDiscount: doublePrecision("max_discount"),
   isActive: boolean("is_active").default(true).notNull(),
   startDate: text("start_date"),
   endDate: text("end_date"),
@@ -529,7 +531,7 @@ export const managerApprovalRequests = pgTable("manager_approval_requests", {
   orderId: varchar("order_id", { length: 255 }).notNull(),
   receiptNo: varchar("receipt_no", { length: 255 }).notNull(),
   type: varchar("type", { length: 50 }).notNull(), // 'REFUND' | 'VOID' | 'DISCOUNT'
-  amount: real("amount").notNull(),
+  amount: doublePrecision("amount").notNull(),
   reason: text("reason").notNull(),
   cashierName: varchar("cashier_name", { length: 255 }).notNull(),
   tableNumber: varchar("table_number", { length: 50 }),

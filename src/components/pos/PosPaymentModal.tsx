@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import { OrderType, PaymentMethod, PrintDestination, OrderModifier } from "../../types";
+import { resolvePaymentAccountId } from "../../utils/posDomainLogic";
+import { enqueueOfflineOrder } from "../../utils/posOfflineQueue";
 import {
   Banknote,
   QrCode,
@@ -14,6 +16,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Building2,
+  Phone,
+  MessageSquare,
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -84,8 +88,17 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
   const [cashReceived, setCashReceived] = useState<number>(totalAmount);
   const [referenceNo, setReferenceNo] = useState("");
   const [selectedBank, setSelectedBank] = useState("BCA");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `pay_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  );
+
+  // Active shift
+  const activeShift = useMemo(() => {
+    return shifts.find((s) => s.status === "OPEN" && (currentUser?.id ? s.userId === currentUser.id : true)) || null;
+  }, [shifts, currentUser]);
 
   // Default cash drawer account
   const defaultCashAccount = useMemo(() => {
@@ -96,12 +109,26 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
     );
   }, [cashAccounts]);
 
-  const [selectedAccountId, setSelectedAccountId] = useState(defaultCashAccount?.id || "");
+  const [selectedAccountId, setSelectedAccountId] = useState(() => {
+    return (
+      resolvePaymentAccountId("CASH", undefined, cashAccounts, activeShift?.cashAccountId) ||
+      defaultCashAccount?.id ||
+      ""
+    );
+  });
 
-  // Active shift
-  const activeShift = useMemo(() => {
-    return shifts.find((s) => s.status === "OPEN" && (currentUser?.id ? s.userId === currentUser.id : true)) || null;
-  }, [shifts, currentUser]);
+  // Otomatis arahkan akun kas ketika kasir mengganti metode pembayaran (CASH -> Laci Kasir, QRIS/EDC -> Bank/E-Wallet)
+  useEffect(() => {
+    const autoAccId = resolvePaymentAccountId(
+      paymentMethod,
+      undefined,
+      cashAccounts,
+      activeShift?.cashAccountId
+    );
+    if (autoAccId) {
+      setSelectedAccountId(autoAccId);
+    }
+  }, [paymentMethod, cashAccounts, activeShift?.cashAccountId]);
 
   // Kembalian
   const changeAmount = useMemo(() => {
@@ -209,10 +236,11 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
       } else {
         // Pembayaran Langsung (Pay First) order baru
         const payload = {
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: idempotencyKeyRef.current,
           orderType,
           tableNumber: tableNumber.trim() || (orderType === "TAKE_AWAY" ? "Takeaway" : "Meja"),
           customerName: customerName.trim() || "Tamu",
+          customerPhone: customerPhone.trim() || null,
           items: cart.map((ci) => ({
             menuName: ci.menuName,
             recipeId: ci.recipeId,
@@ -249,7 +277,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           },
         };
 
-        // Offline Cash Payment handling
+        // Offline Cash Payment handling (Outbox Queue di IndexedDB)
         if (!navigator.onLine) {
           if (paymentMethod !== "CASH") {
             throw new Error("Pembayaran non-tunai (QRIS / Kartu) memerlukan koneksi internet. Gunakan pembayaran Tunai (Cash) saat offline.");
@@ -258,11 +286,14 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           const randomSuffix = Math.floor(1000 + Math.random() * 9000);
           const receiptNo = `ORD-OFFLINE-${dateStr}-${randomSuffix}`;
           const offlineOrder = { ...payload, id: crypto.randomUUID(), receiptNo, createdAt: new Date().toISOString() };
+          
+          await enqueueOfflineOrder(offlineOrder);
           try {
             const saved = JSON.parse(localStorage.getItem("coffee_pos_offline_orders") || "[]");
             saved.push(offlineOrder);
             localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(saved));
           } catch {}
+
           onSuccess({
             ...offlineOrder,
             items: cart,
@@ -595,6 +626,27 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* CRM: Nomor WhatsApp Pelanggan (Kirim Struk Digital) */}
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90">
+            <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Nomor WhatsApp Pelanggan (Kirim Struk Digital)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">Opsional</span>
+            </label>
+            <div className="relative">
+              <input
+                type="tel"
+                placeholder="081234567890 (Kirim struk WA & kumpul poin)"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
+              />
+              <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            </div>
+          </div>
 
           {/* Akun Kas Penyimpanan */}
           <div>

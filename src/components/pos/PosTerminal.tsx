@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
+import { getLocalDateString } from "../../utils/dateUtils";
 import { Order, OrderItem, OrderType, OrderModifier, PrintDestination } from "../../types";
 import {
   Store,
@@ -48,6 +49,8 @@ import { PosPrinterSettingsModal } from "./PosPrinterSettingsModal";
 import { PosTodayOrdersModal } from "./PosTodayOrdersModal";
 import { PosShiftModal } from "./PosShiftModal";
 import { PosCustomizeModal } from "./PosCustomizeModal";
+import { PosQuickWasteModal } from "./PosQuickWasteModal";
+import { getPendingOfflineOrders, flushOfflineOutbox, subscribeOfflineQueue } from "../../utils/posOfflineQueue";
 
 interface MenuItem {
   id: string;
@@ -75,7 +78,7 @@ interface CartItem {
 }
 
 export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavigateBack }) => {
-  const { currentUser, settings, shifts, cashAccounts, recipes, logout, users, promotions } = useStore();
+  const { currentUser, settings, shifts, cashAccounts, recipes, logout, users, promotions, syncData } = useStore();
 
   // State menu & catalog
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
@@ -105,7 +108,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [pendingDiscountType, setPendingDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
   const [pendingDiscountReason, setPendingDiscountReason] = useState<string>("");
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => getLocalDateString(), []);
   const activeWhitelistPromos = useMemo(() => {
     return (promotions || []).filter((p) => {
       if (!p.isActive) return false;
@@ -133,6 +136,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
   const [isTodayOrdersOpen, setIsTodayOrdersOpen] = useState(false);
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [isQuickWasteOpen, setIsQuickWasteOpen] = useState(false);
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
 
   // Terminal Lock & Exit Guard
@@ -184,34 +188,53 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     return r === "MANAGER" || r === "OWNER" || r === "SUPER_ADMIN";
   }, [currentUser]);
 
-  // Handler unlock terminal
-  const handleUnlockTerminal = (inputPin?: string) => {
+  // Handler unlock terminal (aman dan diverifikasi server dengan rate limiting)
+  const handleUnlockTerminal = async (inputPin?: string) => {
     const pinToVerify = inputPin !== undefined ? inputPin : lockPin;
     if (!pinToVerify) {
       setLockPinError("Silakan masukkan PIN.");
       return;
     }
 
-    const isValid =
-      (currentUser?.pin && currentUser.pin === pinToVerify) ||
-      users.some((u) => {
-        const isMgr = u.role === "MANAGER" || u.role === "OWNER" || u.role === "SUPER_ADMIN";
-        if (!isMgr) return false;
-        return (
-          u.pin === pinToVerify ||
-          (pinToVerify === "123456" && (u.pin === "1234" || u.pin === "123456"))
+    try {
+      const res = await fetch("/api/pos/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pin: pinToVerify,
+          purpose: "UNLOCK",
+          currentUserId: currentUser?.id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setIsTerminalLocked(false);
+        setLockPin("");
+        setLockPinError("");
+        return;
+      }
+      setLockPinError(data.error || "PIN tidak sesuai.");
+      setLockPin("");
+    } catch {
+      // Offline fallback jika server/jaringan belum merespons
+      const supervisorPin = settings?.posSupervisorPin || "1234";
+      const isValid =
+        (currentUser?.pin && currentUser.pin === pinToVerify) ||
+        pinToVerify === supervisorPin ||
+        users.some(
+          (u) =>
+            (u.role === "MANAGER" || u.role === "SUPER_ADMIN") &&
+            u.pin === pinToVerify
         );
-      }) ||
-      pinToVerify === "1234" ||
-      pinToVerify === "123456";
 
-    if (isValid) {
-      setIsTerminalLocked(false);
-      setLockPin("");
-      setLockPinError("");
-    } else {
-      setLockPinError("PIN tidak sesuai. Silakan hubungi Supervisor / Manager.");
-      setLockPin("");
+      if (isValid) {
+        setIsTerminalLocked(false);
+        setLockPin("");
+        setLockPinError("");
+      } else {
+        setLockPinError("PIN tidak sesuai. Silakan hubungi Supervisor / Manager.");
+        setLockPin("");
+      }
     }
   };
 
@@ -259,7 +282,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const taxMode = settings?.taxMode ?? "EXCLUSIVE";
   const maxCashierDiscount = settings?.maxCashierDiscount ?? 10;
 
-  // Offline PWA state & queue
+  // Offline PWA state & queue (IndexedDB + localStorage unified)
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [offlineQueue, setOfflineQueue] = useState<any[]>(() => {
     try {
@@ -271,36 +294,79 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   });
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Subscribe to IndexedDB outbox queue changes
+  useEffect(() => {
+    const unsub = subscribeOfflineQueue(async (count) => {
+      const pending = await getPendingOfflineOrders();
+      setOfflineQueue(pending.map((p) => p.payload));
+    });
+    // Initial fetch
+    getPendingOfflineOrders().then((pending) => {
+      if (pending.length > 0) {
+        setOfflineQueue(pending.map((p) => p.payload));
+      }
+    });
+    return () => unsub();
+  }, []);
+
   // Sync offline orders to server when back online
   const syncOfflineOrders = async () => {
-    if (offlineQueue.length === 0 || !navigator.onLine || isSyncing) return;
+    if (!navigator.onLine || isSyncing) return;
     setIsSyncing(true);
     let successCount = 0;
-    const remainingQueue: any[] = [];
 
-    for (const offlineOrder of offlineQueue) {
-      try {
+    // 1. Flush IndexedDB Outbox
+    try {
+      const flushResult = await flushOfflineOutbox(async (payload) => {
         const res = await fetch("/api/pos/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(offlineOrder),
+          body: JSON.stringify(payload),
         });
         if (res.ok) {
-          successCount++;
-        } else {
-          remainingQueue.push(offlineOrder);
+          return { success: true };
         }
-      } catch {
-        remainingQueue.push(offlineOrder);
-      }
+        const err = await res.json().catch(() => ({}));
+        return { success: false, error: err.error || "Gagal menyimpan pesanan" };
+      });
+      successCount += flushResult.syncedCount;
+    } catch (e) {
+      console.warn("Outbox flush warning:", e);
     }
 
-    setOfflineQueue(remainingQueue);
-    localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(remainingQueue));
+    // 2. Flush legacy localStorage queue if any
+    try {
+      const saved = localStorage.getItem("coffee_pos_offline_orders");
+      const legacyOrders: any[] = saved ? JSON.parse(saved) : [];
+      const remainingLegacy: any[] = [];
+      for (const offlineOrder of legacyOrders) {
+        try {
+          const res = await fetch("/api/pos/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(offlineOrder),
+          });
+          if (res.ok) {
+            successCount++;
+          } else {
+            remainingLegacy.push(offlineOrder);
+          }
+        } catch {
+          remainingLegacy.push(offlineOrder);
+        }
+      }
+      localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(remainingLegacy));
+    } catch { }
+
+    // Update remaining count
+    const remaining = await getPendingOfflineOrders();
+    setOfflineQueue(remaining.map((r) => r.payload));
     setIsSyncing(false);
+
     if (successCount > 0) {
       alert(`Berhasil menyinkronkan ${successCount} pesanan offline ke server database!`);
       fetchActiveBillsCount();
+      syncData?.();
     }
   };
 
@@ -1083,6 +1149,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             )}
           </div>
 
+          {/* Catat Kalibrasi / Waste Barista */}
+          <button
+            onClick={() => setIsQuickWasteOpen(true)}
+            className="whitespace-nowrap shrink-0 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-900 border border-amber-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Catat Kalibrasi Espresso, Susu Tumpah, atau Minuman Salah Buat"
+          >
+            <Coffee className="w-4 h-4 text-amber-700 shrink-0" />
+            <span className="hidden sm:inline">Kalibrasi & Waste</span>
+          </button>
+
           {/* Riwayat Transaksi Hari Ini & Refund */}
           <button
             onClick={() => setIsTodayOrdersOpen(true)}
@@ -1436,6 +1512,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
               setAppliedPromoMaxDiscount(undefined);
               setCurrentEditingOrderId(null);
               fetchActiveBillsCount();
+              syncData().catch(() => {});
             }}
           />
         )}
@@ -1478,6 +1555,14 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         <PosReceiptModal
           orderData={completedOrder}
           onClose={() => setIsReceiptModalOpen(false)}
+        />
+      )}
+
+      {isQuickWasteOpen && (
+        <PosQuickWasteModal
+          isOpen={isQuickWasteOpen}
+          onClose={() => setIsQuickWasteOpen(false)}
+          defaultReason="KALIBRASI_PAGI"
         />
       )}
 

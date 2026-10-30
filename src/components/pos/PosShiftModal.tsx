@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import { ShiftSession } from "../../types";
+import { calculateShiftStats } from "../../utils/posDomainLogic";
 import {
   Clock,
   DollarSign,
@@ -42,6 +43,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
     cashTransactions,
     settings,
     employees,
+    syncData,
   } = useStore();
 
   const [startingCashInput, setStartingCashInput] = useState<string>("200000");
@@ -53,6 +55,12 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
   const [notes, setNotes] = useState<string>("");
   const [isZReportOpen, setIsZReportOpen] = useState(false);
   const [closedShiftData, setClosedShiftData] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      syncData().catch(() => {});
+    }
+  }, [isOpen]);
 
   const activeEmployees = useMemo(() => {
     return (employees || []).filter(
@@ -71,82 +79,9 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
     }
   }, [cashOnlyAccounts, selectedAccountId]);
 
-  // Hitung transaksi selama shift aktif
+  // Hitung transaksi selama shift aktif menggunakan domain logic terstandarisasi Julia's
   const shiftStats = useMemo(() => {
-    if (!activeShift) {
-      return {
-        salesTotal: 0,
-        cashSales: 0,
-        qrisSales: 0,
-        edcSales: 0,
-        transactionCount: 0,
-        cashIn: 0,
-        cashOut: 0,
-        expectedEndingCash: 0,
-      };
-    }
-
-    const startTime = new Date(activeShift.startTime).getTime();
-
-    // Penjualan POS / salesTransactions sejak shift dimulai
-    const txList = salesTransactions.filter(
-      (t) => new Date(t.date).getTime() >= startTime
-    );
-
-    let cashSales = 0;
-    let qrisSales = 0;
-    let edcSales = 0;
-    let salesTotal = 0;
-
-    txList.forEach((t) => {
-      salesTotal += t.totalPrice;
-      const method = (t.paymentMethod || "CASH").toUpperCase();
-      if (method === "CASH") cashSales += t.totalPrice;
-      else if (method.includes("QRIS")) qrisSales += t.totalPrice;
-      else edcSales += t.totalPrice;
-    });
-
-    // Mutasi Kas Masuk / Keluar manual ke laci kasir
-    const recentCashMovements = cashTransactions.filter(
-      (t) =>
-        new Date(t.date).getTime() >= startTime &&
-        t.accountId === activeShift.cashAccountId
-    );
-
-    const cashIn = recentCashMovements
-      .filter((t) => t.type === "CASH_IN")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const cashOut = recentCashMovements
-      .filter((t) => t.type === "CASH_OUT")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const refundCash = recentCashMovements
-      .filter(
-        (t) =>
-          t.type === "CASH_OUT" &&
-          (t.description?.toLowerCase().includes("refund") ||
-            t.description?.toLowerCase().includes("void"))
-      )
-      .reduce((s, t) => s + t.amount, 0);
-
-    const otherCashOut = Math.max(0, cashOut - refundCash);
-
-    const expectedEndingCash =
-      activeShift.startingCash + cashSales + cashIn - cashOut;
-
-    return {
-      salesTotal,
-      cashSales,
-      qrisSales,
-      edcSales,
-      transactionCount: txList.length,
-      cashIn,
-      cashOut,
-      refundCash,
-      otherCashOut,
-      expectedEndingCash,
-    };
+    return calculateShiftStats(activeShift, salesTransactions, cashTransactions);
   }, [activeShift, salesTransactions, cashTransactions]);
 
   const parsedActualCash = useMemo(() => {
