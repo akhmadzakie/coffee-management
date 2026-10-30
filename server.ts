@@ -1391,15 +1391,23 @@ async function startServer() {
       };
     }
 
-    // 3. Cek apakah PIN milik akun OWNER (Aturan #5b: Owner Read-Only tidak boleh mengotorisasi aksi operasional)
+    // 3. Cek apakah PIN milik akun OWNER
     const matchedOwner = allUsers.find(
       (u: any) => u.role === "OWNER" && (u.pin === pinHash || u.pin === cleanPin)
     );
-    if (matchedOwner && purpose === "SUPERVISOR") {
+    if (matchedOwner) {
+      if (purpose === "SUPERVISOR") {
+        return {
+          ok: false,
+          status: 403,
+          error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi harus dilakukan oleh Manager atau Super Admin.",
+        };
+      }
+      // Untuk keluar POS (EXIT_POS) atau Unlock Terminal, PIN Owner sah dan diizinkan penuh
       return {
-        ok: false,
-        status: 403,
-        error: "Akun Owner berstatus Read-Only (Pengawasan). Otorisasi harus dilakukan oleh Manager atau Super Admin.",
+        ok: true,
+        status: 200,
+        approver: { id: matchedOwner.id, name: matchedOwner.name, role: matchedOwner.role },
       };
     }
 

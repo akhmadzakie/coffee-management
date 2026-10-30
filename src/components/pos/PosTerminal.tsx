@@ -1976,10 +1976,11 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         <PosManagerPinModal
           title="Otorisasi Keluar Terminal POS"
           description="Masukkan PIN Manager / Owner untuk mengizinkan keluar dari layar kasir POS."
+          purpose="EXIT_POS"
           onClose={() => setIsExitPinModalOpen(false)}
           onSuccess={() => {
             setIsExitPinModalOpen(false);
-            if (onNavigateBack) onNavigateBack();
+            if (isManagerOrAdmin && onNavigateBack) onNavigateBack();
             else logout();
           }}
         />

@@ -23,6 +23,7 @@ interface PosManagerPinModalProps {
   tableNumber?: string;
   customerName?: string;
   actionType?: "VOID" | "REFUND" | "DISCOUNT" | "GENERAL";
+  purpose?: "SUPERVISOR" | "EXIT_POS" | "UNLOCK";
   onClose: () => void;
   onSuccess: (manager: any, reason?: string) => void;
 }
@@ -37,6 +38,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
   tableNumber,
   customerName,
   actionType,
+  purpose = "SUPERVISOR",
   onClose,
   onSuccess,
 }) => {
@@ -174,7 +176,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       const res = await fetch("/api/pos/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: currentPin, purpose: "SUPERVISOR" }),
+        body: JSON.stringify({ pin: currentPin, purpose }),
       });
       const data = await res.json();
       if (!res.ok || !data.valid) {
