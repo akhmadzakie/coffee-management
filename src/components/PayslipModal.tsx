@@ -21,6 +21,7 @@ import { useStore } from "../store/StoreContext";
 import { PayrollRecord } from "../types";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { exportSinglePayslipPDF } from "../utils/export";
 
 interface PayslipModalProps {
   payroll: PayrollRecord;
@@ -135,28 +136,45 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
     return cashAccounts.find((a) => a.id === payroll.paidVia)?.name || null;
   }, [cashAccounts, payroll.paidVia]);
 
-  // 6. Generate PDF A4
+  // 6. Generate PDF A4 (Robust Vector jsPDF + Fail-safe Fallback)
   const handleDownloadPDF = async () => {
-    if (!printRef.current) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2.5,
-        backgroundColor: "#ffffff",
-        useCORS: true,
+      // Primary: Vector jsPDF generator (0 crash risk, crisp vector typography, fast)
+      exportSinglePayslipPDF({
+        payroll,
+        employee,
+        settings,
+        attendanceBreakdown,
+        kpiDetails,
+        paidViaAccountName,
       });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(
-        `Slip_Gaji_${employee.name.replace(/\s+/g, "_")}_${payroll.period}.pdf`
-      );
     } catch (err) {
-      console.error("Gagal membuat PDF slip gaji:", err);
-      alert("Terjadi kesalahan saat memproses PDF.");
+      console.warn("Vector PDF export warning, mencoba raster fallback:", err);
+      // Secondary fallback: html2canvas with sanitized rendering
+      if (printRef.current) {
+        try {
+          const canvas = await html2canvas(printRef.current, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            logging: false,
+          });
+          const imgData = canvas.toDataURL("image/png");
+          const pdf = new jsPDF("p", "mm", "a4");
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+          pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+          pdf.save(
+            `Slip_Gaji_${employee.name.replace(/\s+/g, "_")}_${payroll.period}.pdf`
+          );
+          return;
+        } catch (innerErr) {
+          console.error("Gagal membuat PDF slip gaji via canvas:", innerErr);
+        }
+      }
+      alert("Terjadi kesalahan saat memproses PDF. Silakan gunakan tombol 'Cetak' untuk mencetak langsung atau simpan sebagai PDF via browser.");
     } finally {
       setIsExporting(false);
     }
@@ -171,7 +189,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
     <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
       <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200">
         {/* Top Action Bar */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 no-print">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-amber-400" />
             <div>
@@ -185,7 +203,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPrintMode(printMode === "standard" ? "thermal" : "standard")}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-colors hidden sm:inline-flex items-center gap-1.5"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-colors hidden sm:inline-flex items-center gap-1.5 cursor-pointer"
               title="Ganti tampilan A4 / Struk Kasir Thermal"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -195,7 +213,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
             <button
               onClick={handleDownloadPDF}
               disabled={isExporting}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{isExporting ? "Menyimpan..." : "Unduh PDF"}</span>
@@ -203,7 +221,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
             <button
               onClick={handlePrint}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1.5 shadow-xs"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak</span>
@@ -211,7 +229,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors ml-1"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors ml-1 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -223,6 +241,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
           {/* Printable Document Box */}
           <div
             ref={printRef}
+            id="printable-payslip"
             className={`bg-white shadow-md border border-slate-200/90 rounded-2xl p-6 sm:p-8 text-slate-900 transition-all ${
               printMode === "thermal" ? "w-[360px] text-xs font-mono" : "w-full max-w-xl text-sm"
             }`}
@@ -644,16 +663,43 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 no-print">
           <span>Format: {printMode === "standard" ? "A4 Standar" : "Thermal 80mm"}</span>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-colors"
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-colors cursor-pointer"
           >
             Tutup
           </button>
         </div>
       </div>
+
+      {/* Clean Print Stylesheet for Browser Printing */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-payslip, #printable-payslip * {
+            visibility: visible;
+          }
+          #printable-payslip {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 16px !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: #ffffff !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>,
     document.body
   );

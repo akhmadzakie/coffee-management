@@ -58,6 +58,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { exportSinglePayslipPDF } from "../utils/export";
 import {
   Employee,
   EmployeeContract,
@@ -1162,22 +1163,61 @@ export function HRManagement() {
 
   // --- PDF Generation ---
   const generatePDF = async () => {
-    if (!payslipRef.current) return;
+    if (!selectedPayslip) return;
     try {
-      const canvas = await html2canvas(payslipRef.current, {
-        scale: 2,
-        backgroundColor: "#ffffff",
+      const payrollRecord: any = {
+        id: selectedPayslip.id || `PAY-${selectedPayslip.period}`,
+        employeeId: selectedPayslip.employee?.id,
+        period: selectedPayslip.period,
+        basicSalary: selectedPayslip.basic || 0,
+        positionAllowance: selectedPayslip.position || 0,
+        mealAllowance: selectedPayslip.meal || 0,
+        transportAllowance: selectedPayslip.transport || 0,
+        kpiBonus: selectedPayslip.kpiBonus || 0,
+        alphaDeduction: selectedPayslip.alphaDeduction || 0,
+        grossPay:
+          (selectedPayslip.basic || 0) +
+          (selectedPayslip.position || 0) +
+          (selectedPayslip.meal || 0) +
+          (selectedPayslip.kpiBonus || 0),
+        netPay: selectedPayslip.total || 0,
+        status: "APPROVED",
+        notes: null,
+      };
+
+      exportSinglePayslipPDF({
+        payroll: payrollRecord,
+        employee: selectedPayslip.employee,
+        settings,
+        attendanceBreakdown: {
+          totalWorkingDays: selectedPayslip.attendance?.totalWorkingDays || 26,
+          presentDays: selectedPayslip.attendance?.presentDays || 0,
+          lateDays: selectedPayslip.attendance?.lateDays || 0,
+          sickOrLeaveDays: selectedPayslip.attendance?.sickOrLeaveDays || 0,
+          alphaDays: selectedPayslip.attendance?.alphaDays || 0,
+        },
       });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(
-        `Slip_Gaji_${selectedPayslip?.employee?.name?.replace(/\\s+/g, "_")}_${selectedPayslip?.period}.pdf`,
-      );
     } catch (error) {
-      console.error("Error generating PDF:", error);
+      console.warn("Vector PDF export fallback, trying raster canvas:", error);
+      if (payslipRef.current) {
+        try {
+          const canvas = await html2canvas(payslipRef.current, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+          });
+          const imgData = canvas.toDataURL("image/png");
+          const pdf = new jsPDF("p", "mm", "a4");
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+          pdf.save(
+            `Slip_Gaji_${selectedPayslip?.employee?.name?.replace(/\s+/g, "_")}_${selectedPayslip?.period}.pdf`,
+          );
+        } catch (canvasErr) {
+          console.error("Canvas fallback error:", canvasErr);
+          alert("Gagal memproses slip gaji ke PDF.");
+        }
+      }
     }
   };
 

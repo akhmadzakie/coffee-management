@@ -24,6 +24,21 @@ export const formatDateIndo = (dateStr: string | Date): string => {
   });
 };
 
+/**
+ * Bulletproof helper to instantiate jsPDF across ESM / CJS / Vite environments.
+ */
+export const createJsPdfDoc = (
+  orientation?: "p" | "portrait" | "l" | "landscape",
+  unit?: "pt" | "px" | "in" | "mm" | "cm" | "ex" | "em" | "pc",
+  format?: string | [number, number]
+): jsPDF => {
+  const Constructor: any =
+    typeof jsPDF === "function"
+      ? jsPDF
+      : (jsPDF as any)?.default || (jsPDF as any)?.jsPDF || jsPDF;
+  return new Constructor(orientation, unit, format);
+};
+
 export const exportToCSV = (filename: string, rows: any[]) => {
   if (!rows || !rows.length) return;
   const separator = ",";
@@ -203,7 +218,7 @@ export const exportSalesToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Penjualan", periodLabel);
 
   const tableData =
@@ -271,7 +286,7 @@ export const exportInventoryToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Mutasi Stok", periodLabel);
 
   const tableData =
@@ -334,7 +349,7 @@ export const exportFinanceToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Arus Kas", periodLabel);
 
   const tableData =
@@ -498,7 +513,7 @@ export const exportPayrollToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF("l", "mm", "a4");
+  const doc = createJsPdfDoc("l", "mm", "a4");
   setupPdfHeader(doc, settings, "Laporan Rekapitulasi Penggajian & Bonus", periodLabel);
 
   const tableData =
@@ -637,7 +652,7 @@ export const exportAttendanceToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Rekapitulasi Absensi & Jam Kerja", periodLabel);
 
   const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
@@ -735,7 +750,7 @@ export const exportKpiToPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Capaian KPI & Kinerja Karyawan", periodLabel);
 
   const tableData =
@@ -824,7 +839,7 @@ export const exportMasterExecutiveReportPDF = ({
   settings: Settings;
   periodLabel: string;
 }) => {
-  const doc = new jsPDF();
+  const doc = createJsPdfDoc();
   setupPdfHeader(doc, settings, "Laporan Eksekutif Master (Executive Summary)", periodLabel);
 
   const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || (s as any).total || s.totalPrice || 0), 0);
@@ -907,5 +922,390 @@ export const exportMasterExecutiveReportPDF = ({
   const storeSlug = (settings.brandName || (settings as any).storeName || "Julia_Coffee").replace(/\s+/g, "_");
   const periodSlug = periodLabel.replace(/\s+/g, "_");
   doc.save(`Laporan_Eksekutif_${storeSlug}_${periodSlug}.pdf`);
+};
+
+export interface ExportSinglePayslipParams {
+  payroll: PayrollRecord;
+  employee: Employee;
+  settings: Settings;
+  attendanceBreakdown?: {
+    totalWorkingDays: number;
+    presentDays: number;
+    lateDays: number;
+    sickOrLeaveDays: number;
+    alphaDays: number;
+  };
+  kpiDetails?: {
+    label: string;
+    ratio: number;
+    checklistDays: number;
+    expectedDays: number;
+    isLeader?: boolean;
+  };
+  paidViaAccountName?: string | null;
+}
+
+export const exportSinglePayslipPDF = ({
+  payroll,
+  employee,
+  settings,
+  attendanceBreakdown,
+  kpiDetails,
+  paidViaAccountName,
+}: ExportSinglePayslipParams) => {
+  const doc = createJsPdfDoc("p", "mm", "a4");
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
+  // 1. Header Banner (Dark Navy / Executive)
+  const headerHeight = 36;
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, pageWidth, headerHeight, "F");
+
+  // Accent Gold Line
+  doc.setFillColor(245, 158, 11); // amber-500
+  doc.rect(0, headerHeight - 1.5, pageWidth, 1.5, "F");
+
+  // Store Brand Name & Info (Left)
+  const brandName = (settings.brandName || (settings as any).storeName || "JULIA'S COFFEE & EATERY").toUpperCase();
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text(brandName, margin, 13);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(203, 213, 225); // slate-300
+  const address = (settings as any).storeAddress || settings.companyAddress || "Outlet Utama & Operasional Kedai";
+  doc.text(address.length > 60 ? address.substring(0, 58) + "..." : address, margin, 19);
+
+  const phone = (settings as any).storePhone || (settings as any).phone || "Sistem Manajemen & Penggajian Terpadu";
+  doc.text(phone.startsWith("Sistem") ? phone : `Telp: ${phone}`, margin, 24);
+
+  // Document Title & Period Badge (Right)
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(251, 191, 36); // amber-400
+  doc.text("SLIP GAJI RESMI KARYAWAN", pageWidth - margin, 13, { align: "right" });
+
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(255, 255, 255);
+
+  let periodStr = payroll.period;
+  try {
+    const [y, m] = payroll.period.split("-");
+    const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+    periodStr = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  } catch {
+    periodStr = payroll.period;
+  }
+  doc.text(`Periode: ${periodStr}`, pageWidth - margin, 19, { align: "right" });
+
+  // Status Badge
+  const statusLabel = payroll.status === "PAID"
+    ? "STATUS: LUNAS / SUDAH DITRANSFER"
+    : payroll.status === "APPROVED"
+    ? "STATUS: DISETUJUI MANAJER"
+    : "STATUS: DRAFT BELUM DISETUJUI";
+
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  if (payroll.status === "PAID") {
+    doc.setTextColor(52, 211, 153); // emerald-400
+  } else if (payroll.status === "APPROVED") {
+    doc.setTextColor(96, 165, 250); // blue-400
+  } else {
+    doc.setTextColor(251, 191, 36); // amber-400
+  }
+  doc.text(statusLabel, pageWidth - margin, 25, { align: "right" });
+
+  let curY = headerHeight + 6;
+
+  // 2. Employee Identity Box
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.roundedRect(margin, curY, contentWidth, 20, 2, 2, "FD");
+
+  const colW = contentWidth / 4;
+
+  // Col 1: Nama
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text("NAMA KARYAWAN", margin + 4, curY + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text(employee.name || "-", margin + 4, curY + 13);
+
+  // Col 2: NIK / ID
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("NIK / USERNAME", margin + colW + 4, curY + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text(employee.username || employee.id.slice(0, 8), margin + colW + 4, curY + 13);
+
+  // Col 3: Jabatan
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("JABATAN", margin + colW * 2 + 4, curY + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text(employee.position || "Staff", margin + colW * 2 + 4, curY + 13);
+
+  // Col 4: Departemen
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("DIVISI / DEPARTEMEN", margin + colW * 3 + 4, curY + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(79, 70, 229); // indigo-600
+  doc.text(employee.department || "Operasional", margin + colW * 3 + 4, curY + 13);
+
+  curY += 24;
+
+  // 3. Operational & KPI Cards
+  if (attendanceBreakdown || kpiDetails) {
+    const cardW = (contentWidth - 4) / 2;
+
+    // Left: Attendance summary card
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(224, 231, 255); // indigo-100
+    doc.roundedRect(margin, curY, cardW, 18, 2, 2, "FD");
+
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(67, 56, 202); // indigo-700
+    doc.text("REKAPITULASI PRESENSI & KEHADIRAN", margin + 4, curY + 5.5);
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    const attText = attendanceBreakdown
+      ? `Hadir: ${attendanceBreakdown.presentDays} hari  •  Telat: ${attendanceBreakdown.lateDays}x  •  Izin: ${attendanceBreakdown.sickOrLeaveDays}  •  Alpha: ${attendanceBreakdown.alphaDays}`
+      : "Data presensi terintegrasi jadwal";
+    doc.text(attText, margin + 4, curY + 12);
+
+    // Right: KPI Card
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(209, 250, 229); // emerald-100
+    doc.roundedRect(margin + cardW + 4, curY, cardW, 18, 2, 2, "FD");
+
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(4, 120, 87); // emerald-700
+    doc.text("CAPAIAN JOBDESK & KPI", margin + cardW + 8, curY + 5.5);
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    const kpiText = kpiDetails
+      ? `Capaian: ${kpiDetails.ratio}% (${kpiDetails.checklistDays}/${kpiDetails.expectedDays})  •  Bonus: +${formatCurrency(payroll.kpiBonus)}`
+      : `Bonus KPI: +${formatCurrency(payroll.kpiBonus)}`;
+    doc.text(kpiText, margin + cardW + 8, curY + 12);
+
+    curY += 22;
+  }
+
+  // 4. Financial Breakdown Table
+  const incomeItems: [string, string, string][] = [
+    ["Gaji Pokok", "Upah pokok dasar kehadiran kerja", formatCurrency(payroll.basicSalary)],
+  ];
+  if (payroll.positionAllowance > 0) {
+    const tierNote = payroll.matchedLeaderTier
+      ? `Tunjangan Jabatan (${payroll.matchedLeaderTier.grade} - ${payroll.matchedLeaderTier.payoutPercentage}%)`
+      : "Tunjangan tanggung jawab posisi";
+    incomeItems.push(["Tunjangan Jabatan", tierNote, formatCurrency(payroll.positionAllowance)]);
+  }
+  if (payroll.mealAllowance > 0) {
+    incomeItems.push(["Uang Makan", `Tunjangan makan operasional shift (${attendanceBreakdown?.presentDays || 0} hari)`, formatCurrency(payroll.mealAllowance)]);
+  }
+  if (payroll.transportAllowance > 0) {
+    incomeItems.push(["Uang Transport", "Dukungan operasional transportasi", formatCurrency(payroll.transportAllowance)]);
+  }
+  if (payroll.kpiBonus > 0) {
+    incomeItems.push(["Bonus KPI & Kinerja", kpiDetails?.label || "Insentif capaian checklist dan jobdesk", `+${formatCurrency(payroll.kpiBonus)}`]);
+  }
+  if ((payroll.targetBonus || 0) > 0) {
+    incomeItems.push(["Bonus Omzet Toko", "Insentif target omzet kedai tercapai", `+${formatCurrency(payroll.targetBonus || 0)}`]);
+  }
+  if ((payroll.overtimePay || 0) > 0) {
+    const otNote = payroll.overtimeHours ? `${payroll.overtimeHours} jam lembur disetujui` : "Uang lembur disahkan";
+    incomeItems.push(["Upah Lembur", otNote, `+${formatCurrency(payroll.overtimePay)}`]);
+  }
+
+  const deductionItems: [string, string, string][] = [];
+  if (payroll.alphaDeduction > 0) {
+    deductionItems.push(["Potongan Ketidakhadiran (Alpha)", `${attendanceBreakdown?.alphaDays || 1} hari tidak hadir tanpa keterangan`, `-${formatCurrency(payroll.alphaDeduction)}`]);
+  }
+  if ((payroll.lateDeduction || 0) > 0) {
+    const lateNote = payroll.lateHours ? `${payroll.lateHours} jam terlambat (${payroll.lateDays || 0}x)` : "Penalti keterlambatan shift";
+    deductionItems.push(["Potongan Keterlambatan", lateNote, `-${formatCurrency(payroll.lateDeduction || 0)}`]);
+  }
+  if ((payroll.otherDeductions || 0) > 0) {
+    deductionItems.push(["Potongan Kasbon / Lainnya", "Cicilan kasbon atau potongan inventaris", `-${formatCurrency(payroll.otherDeductions || 0)}`]);
+  }
+  if (deductionItems.length === 0) {
+    deductionItems.push(["Tidak Ada Potongan", "Disiplin kerja penuh tanpa pemotongan", "Rp 0"]);
+  }
+
+  const tableRows: any[] = [];
+  tableRows.push([
+    { content: "A. PENERIMAAN / PENGHASILAN (EARNINGS)", colSpan: 2, styles: { fillColor: [241, 245, 249], fontStyle: "bold", textColor: [30, 58, 138] } },
+    { content: "NOMINAL (IDR)", styles: { fillColor: [241, 245, 249], fontStyle: "bold", halign: "right", textColor: [30, 58, 138] } },
+  ]);
+  incomeItems.forEach(([title, desc, amount]) => {
+    tableRows.push([title, desc, amount]);
+  });
+  tableRows.push([
+    { content: "Subtotal Penghasilan Kotor (Gross)", colSpan: 2, styles: { fontStyle: "bold", halign: "left" } },
+    { content: formatCurrency(payroll.grossPay), styles: { fontStyle: "bold", halign: "right", textColor: [15, 23, 42] } },
+  ]);
+
+  tableRows.push([
+    { content: "B. POTONGAN (DEDUCTIONS)", colSpan: 2, styles: { fillColor: [255, 241, 242], fontStyle: "bold", textColor: [190, 18, 60] } },
+    { content: "NOMINAL (IDR)", styles: { fillColor: [255, 241, 242], fontStyle: "bold", halign: "right", textColor: [190, 18, 60] } },
+  ]);
+  deductionItems.forEach(([title, desc, amount]) => {
+    tableRows.push([title, desc, amount]);
+  });
+  const totalDeductions = (payroll.alphaDeduction || 0) + (payroll.lateDeduction || 0) + (payroll.otherDeductions || 0);
+  tableRows.push([
+    { content: "Subtotal Total Potongan", colSpan: 2, styles: { fontStyle: "bold", halign: "left", textColor: [225, 29, 72] } },
+    { content: `-${formatCurrency(totalDeductions)}`, styles: { fontStyle: "bold", halign: "right", textColor: [225, 29, 72] } },
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Komponen Gaji", "Keterangan", "Nominal (IDR)"]],
+    body: tableRows,
+    theme: "grid",
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 8.5,
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [30, 41, 59],
+      cellPadding: 2.2,
+    },
+    columnStyles: {
+      0: { cellWidth: 50, fontStyle: "bold" },
+      1: { cellWidth: 86, textColor: [100, 116, 139] },
+      2: { cellWidth: 46, halign: "right", fontStyle: "bold" },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  const finalTableY = (doc as any).lastAutoTable?.finalY || 180;
+  curY = finalTableY + 4;
+
+  // 5. TAKE HOME PAY Banner Box
+  const thpBoxHeight = 22;
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.setDrawColor(245, 158, 11); // amber-500
+  doc.setLineWidth(0.8);
+  doc.roundedRect(margin, curY, contentWidth, thpBoxHeight, 2.5, 2.5, "FD");
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(251, 191, 36); // amber-400
+  doc.text("TAKE HOME PAY (TOTAL GAJI BERSIH DITERIMA)", margin + 6, curY + 7);
+
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(formatCurrency(payroll.netPay), margin + 6, curY + 16);
+
+  if (paidViaAccountName || payroll.paidDate) {
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(203, 213, 225);
+    const paidText = paidViaAccountName
+      ? `Dibayar via: ${paidViaAccountName} (${payroll.paidDate ? new Date(payroll.paidDate).toLocaleDateString("id-ID") : "Lunas"})`
+      : `Dibayar pada: ${new Date(payroll.paidDate || Date.now()).toLocaleDateString("id-ID")}`;
+    doc.text(paidText, pageWidth - margin - 6, curY + 14, { align: "right" });
+  }
+
+  curY += thpBoxHeight + 5;
+
+  if (payroll.notes) {
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, curY, contentWidth, 10, 1.5, 1.5, "FD");
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Catatan: "${payroll.notes}"`, margin + 4, curY + 6.5);
+    curY += 14;
+  } else {
+    curY += 4;
+  }
+
+  // 6. Signatures (Penerima & Manajemen)
+  const sigBoxY = Math.max(curY, 230);
+
+  // Penerima
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.text("Penerima (Karyawan),", margin + 20, sigBoxY);
+
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(15, 23, 42);
+  doc.text(employee.name, margin + 20, sigBoxY + 20);
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.text(employee.position || "Staff", margin + 20, sigBoxY + 24);
+
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
+  doc.line(margin + 15, sigBoxY + 21, margin + 65, sigBoxY + 21);
+
+  // Manajemen
+  const managerName = payroll.approvedBy || settings.brandName || "Julia's Coffee";
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text("Manajemen / Keuangan Outlet,", pageWidth - margin - 20, sigBoxY, { align: "right" });
+
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(15, 23, 42);
+  doc.text(managerName, pageWidth - margin - 20, sigBoxY + 20, { align: "right" });
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  const approvalDate = payroll.approvedAt ? `Disetujui: ${new Date(payroll.approvedAt).toLocaleDateString("id-ID")}` : "Otorisasi Resmi Kedai";
+  doc.text(approvalDate, pageWidth - margin - 20, sigBoxY + 24, { align: "right" });
+
+  doc.line(pageWidth - margin - 65, sigBoxY + 21, pageWidth - margin - 15, sigBoxY + 21);
+
+  // 7. Footer Legal Note
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(148, 163, 184); // slate-400
+  doc.text(
+    `Dokumen ini dicetak otomatis oleh sistem ${brandName}. Disimpan secara digital dan sah tanpa tanda tangan basah bila berstatus LUNAS.`,
+    pageWidth / 2,
+    pageHeight - 8,
+    { align: "center" }
+  );
+
+  const safeEmpName = (employee.name || "Karyawan").replace(/\s+/g, "_");
+  const filename = `Slip_Gaji_${safeEmpName}_${payroll.period}.pdf`;
+  try {
+    if (typeof window !== "undefined") {
+      doc.save(filename);
+    }
+  } catch (saveErr) {
+    console.warn("doc.save() direct call skipped (running in non-browser context):", saveErr);
+  }
+  return doc;
 };
 

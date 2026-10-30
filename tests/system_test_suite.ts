@@ -24,6 +24,7 @@ import {
   buildWhatsAppReceiptText,
   buildWhatsAppReceiptUrl,
 } from "../src/utils/whatsappReceipt";
+import { exportSinglePayslipPDF } from "../src/utils/export";
 import {
   CashTransaction,
   CashAccount,
@@ -46,6 +47,7 @@ function test(description: string, fn: () => void) {
   } catch (err: any) {
     console.error(`  [FAIL] ${description}`);
     console.error(`         Error: ${err.message}`);
+    console.error(`         Stack: ${err.stack}`);
     failed++;
   }
 }
@@ -801,6 +803,80 @@ test("Format Nomor HP Indonesia & Generator URL WhatsApp Struk", () => {
   const waUrl = buildWhatsAppReceiptUrl("081234567890", dummyOrder, dummySettings, 8);
   assert.ok(waUrl.startsWith("https://api.whatsapp.com/send?phone=6281234567890"), "URL harus mengarah ke API WhatsApp dengan nomor bersih");
   assert.ok(waUrl.includes("text="), "URL harus menyertakan query param text");
+});
+
+// -------------------------------------------------------------
+// 16. GENERATOR SLIP GAJI VEKTOR PDF & REKAP KOMPONEN PAYROLL
+// -------------------------------------------------------------
+console.log("\n16. Pengujian Generator Slip Gaji Vektor PDF (Anti-Crash):");
+
+test("Pembuatan Dokumen Vektor PDF Slip Gaji Karyawan Lengkap", () => {
+  const dummyPayroll: any = {
+    id: "PAY-2026-10-001",
+    employeeId: "emp-budi",
+    period: "2026-10",
+    basicSalary: 2800000,
+    mealAllowance: 390000,
+    positionAllowance: 500000,
+    transportAllowance: 200000,
+    kpiBonus: 250000,
+    targetBonus: 150000,
+    overtimePay: 120000,
+    overtimeHours: 6,
+    alphaDeduction: 0,
+    lateDeduction: 25000,
+    lateHours: 1,
+    lateDays: 1,
+    otherDeductions: 0,
+    grossPay: 4410000,
+    netPay: 4385000,
+    status: "PAID",
+    paidDate: "2026-10-30",
+    paidVia: "acc-main-cash",
+    approvedBy: "Julia",
+    approvedAt: "2026-10-30T10:00:00Z",
+    notes: "Bonus KPI performa barista terbaik bulan ini.",
+  };
+
+  const dummyEmployee: any = {
+    id: "emp-budi",
+    name: "Budi Santoso",
+    username: "budi",
+    position: "Senior Barista",
+    department: "BAR & KITCHEN",
+  };
+
+  const dummySettings: any = {
+    brandName: "Julia's Coffee Lab",
+    storeAddress: "Jl. Boulevard No. 128, Makassar",
+    storePhone: "08123456789",
+  };
+
+  const doc = exportSinglePayslipPDF({
+    payroll: dummyPayroll,
+    employee: dummyEmployee,
+    settings: dummySettings,
+    attendanceBreakdown: {
+      totalWorkingDays: 26,
+      presentDays: 26,
+      lateDays: 1,
+      sickOrLeaveDays: 0,
+      alphaDays: 0,
+    },
+    kpiDetails: {
+      label: "Disiplin Checklist Barista 100%",
+      ratio: 100,
+      checklistDays: 26,
+      expectedDays: 26,
+      isLeader: false,
+    },
+    paidViaAccountName: "Kasir Utama (BCA)",
+  });
+
+  assert.ok(doc, "jsPDF instance harus berhasil di-generate tanpa error");
+  assert.strictEqual(typeof doc.output, "function", "Objek harus memiliki method output jsPDF");
+  const pdfBuffer = doc.output("arraybuffer");
+  assert.ok(pdfBuffer.byteLength > 1000, "Ukuran file PDF harus valid dan berisi konten");
 });
 
 // -------------------------------------------------------------
