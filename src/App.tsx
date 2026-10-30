@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { StoreProvider, useStore } from "./store/StoreContext";
 import { Layout } from "./components/Layout";
@@ -284,6 +284,19 @@ function AppContent() {
       setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
     }
   }, [currentUser?.role, currentUser?.username, employees, isPosDedicatedRoute, isKdsDedicatedRoute]);
+
+  // Dukungan navigasi URL Hash (mis. #inventory, #users, #payroll, #cash_flow, #leader_checklist)
+  useEffect(() => {
+    const handleHashNav = () => {
+      const h = window.location.hash.replace("#", "").trim() as ViewState;
+      if (h && ALL_VIEWS.includes(h)) {
+        setCurrentView(h);
+      }
+    };
+    window.addEventListener("hashchange", handleHashNav);
+    handleHashNav();
+    return () => window.removeEventListener("hashchange", handleHashNav);
+  }, []);
 
   // ─── 1. DEDICATED ROUTE: /pos (POS KASIR TERISOLASI) ──────────────────────────
   if (isPosDedicatedRoute) {
