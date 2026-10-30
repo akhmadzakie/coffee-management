@@ -43,59 +43,114 @@ const TEXT_MUTED = [100, 116, 139];  // slate-500
 const BG_LIGHT = [248, 250, 252];    // slate-50
 const BORDER_LIGHT = [226, 232, 240];// slate-200
 
-// Helper to draw clean page header
+// Helper to draw clean header & footer on content pages
 const addHeaderFooter = (doc: any, pageNumber: number, totalPages: number, sectionTitle: string) => {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
 
-  // Top header banner
+  // Top header line
   doc.setFillColor(30, 58, 138); // Navy blue
-  doc.rect(margin, 10, pageWidth - margin * 2, 0.8, "F");
+  doc.rect(margin, 9.5, pageWidth - margin * 2, 0.7, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(30, 58, 138);
   doc.text("JULIA'S COFFEE & EATERY — INTEGRATED POS & ERP", margin, 7.5);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
   doc.text(sectionTitle.toUpperCase(), pageWidth - margin, 7.5, { align: "right" });
 
   // Bottom footer line
   doc.setFillColor(226, 232, 240);
-  doc.rect(margin, pageHeight - 12, pageWidth - margin * 2, 0.5, "F");
+  doc.rect(margin, pageHeight - 11.5, pageWidth - margin * 2, 0.5, "F");
 
   doc.setFont("helvetica", "italic");
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
   doc.setTextColor(148, 163, 184);
-  doc.text("Buku Panduan Pengguna & Standar Operasional Kafe — Edisi Resmi November 2026", margin, pageHeight - 7);
+  doc.text("Buku Panduan Pengguna & SOP Kedai — Edisi Resmi November 2026", margin, pageHeight - 6.5);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setTextColor(71, 85, 105);
-  doc.text(`Halaman ${pageNumber} dari ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+  doc.text(`Halaman ${pageNumber} dari ${totalPages}`, pageWidth - margin, pageHeight - 6.5, { align: "right" });
 };
 
-// Helper for section title (Format Klasik yang Disukai Pengguna)
+// Helper for section title
 const addSectionTitle = (doc: any, title: string, yPos: number, subtitle?: string) => {
   doc.setFillColor(30, 58, 138);
-  doc.roundedRect(14, yPos, 3.5, 12, 1, 1, "F");
+  doc.roundedRect(14, yPos, 3.5, 11, 1, 1, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(title, 21, yPos + 5.5);
+  doc.text(title, 20.5, yPos + 5);
 
   if (subtitle) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
+    doc.setFontSize(7.2);
     doc.setTextColor(100, 116, 139);
-    doc.text(subtitle, 21, yPos + 10.5);
-    return yPos + 15;
+    doc.text(subtitle, 20.5, yPos + 9.8);
+    return yPos + 13.5;
   }
-  return yPos + 13;
+  return yPos + 12;
+};
+
+// Helper to draw horizontal flowchart steps with arrows
+const drawFlowchartDiagram = (
+  doc: any,
+  y: number,
+  steps: { label: string; sub: string; isDecision?: boolean }[]
+) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const stepW = (contentWidth - (steps.length - 1) * 3.5) / steps.length;
+  const stepH = 13.5;
+
+  steps.forEach((st, idx) => {
+    const x = margin + idx * (stepW + 3.5);
+
+    if (st.isDecision) {
+      doc.setFillColor(254, 243, 199); // amber-100
+      doc.setDrawColor(245, 158, 11);
+      doc.roundedRect(x, y, stepW, stepH, 1.8, 1.8, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      doc.setTextColor(146, 64, 14);
+      doc.text(st.label, x + stepW / 2, y + 5.2, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.2);
+      doc.text(st.sub, x + stepW / 2, y + 9.5, { align: "center" });
+    } else {
+      doc.setFillColor(238, 242, 255); // indigo-50
+      doc.setDrawColor(99, 102, 241);
+      doc.roundedRect(x, y, stepW, stepH, 1.5, 1.5, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      doc.setTextColor(49, 46, 129);
+      doc.text(st.label, x + stepW / 2, y + 5.2, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.2);
+      doc.setTextColor(71, 85, 105);
+      doc.text(st.sub, x + stepW / 2, y + 9.5, { align: "center" });
+    }
+
+    if (idx < steps.length - 1) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(245, 158, 11);
+      doc.text("›", x + stepW + 1, y + 7.8);
+    }
+  });
+
+  return y + stepH + 4;
 };
 
 // Helper to draw image with neat border & caption
@@ -120,12 +175,12 @@ const drawImageBox = (
     }
   }
 
-  doc.setFontSize(5.8);
+  doc.setFontSize(5.6);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(TEXT_MUTED[0], TEXT_MUTED[1], TEXT_MUTED[2]);
   doc.text(caption, x + w / 2, y + h + 4, { align: "center" });
 
-  return y + h + 8;
+  return y + h + 7.5;
 };
 
 // Helper to draw Case Study Box (Kotak Simulasi Kasus Nyata)
@@ -139,69 +194,69 @@ const drawCaseStudyBox = (
   steps: string[],
   result: string
 ) => {
-  const boxH = 39;
+  const boxH = 37.5;
   doc.setFillColor(254, 252, 232); // amber-50
   doc.setDrawColor(245, 158, 11);  // amber-500
   doc.roundedRect(x, y, w, boxH, 1.5, 1.5, "FD");
 
   // Badge Header
   doc.setFillColor(245, 158, 11);
-  doc.roundedRect(x + 2.5, y + 2.5, 36, 4, 0.8, 0.8, "F");
-  doc.setFontSize(5.8);
+  doc.roundedRect(x + 2.5, y + 2.5, 36, 3.8, 0.8, 0.8, "F");
+  doc.setFontSize(5.6);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text("CONTOH KASUS OPERASIONAL", x + 3.8, y + 5.2);
+  doc.text("CONTOH KASUS OPERASIONAL", x + 3.8, y + 5);
 
-  doc.setFontSize(6.8);
+  doc.setFontSize(6.6);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(146, 64, 14);
-  doc.text(title, x + 41, y + 5.4);
+  doc.text(title, x + 41, y + 5.2);
 
   // Scenario
-  doc.setFontSize(6);
+  doc.setFontSize(5.8);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(71, 85, 105);
-  doc.text("Skenario:", x + 3.5, y + 10);
+  doc.text("Skenario:", x + 3.5, y + 9.5);
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(30, 41, 59);
   const scLines = doc.splitTextToSize(scenario, w - 20);
-  doc.text(scLines[0], x + 17, y + 10);
+  doc.text(scLines[0], x + 16, y + 9.5);
 
   // Steps
   doc.setFont("helvetica", "bold");
   doc.setTextColor(71, 85, 105);
-  doc.text("Langkah:", x + 3.5, y + 16.5);
+  doc.text("Langkah:", x + 3.5, y + 15.5);
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(30, 41, 59);
-  let stepY = y + 16.5;
+  let stepY = y + 15.5;
   steps.slice(0, 3).forEach((st, idx) => {
     const lines = doc.splitTextToSize(`${idx + 1}. ${st}`, w - 20);
-    doc.text(lines[0], x + 17, stepY);
-    stepY += 3.6;
+    doc.text(lines[0], x + 16, stepY);
+    stepY += 3.5;
   });
 
   // Result Banner
   doc.setFillColor(240, 253, 244); // emerald-50
   doc.setDrawColor(52, 211, 153);  // emerald-400
-  doc.roundedRect(x + 2.5, y + 29.5, w - 5, 7, 1, 1, "FD");
+  doc.roundedRect(x + 2.5, y + 28.5, w - 5, 6.8, 1, 1, "FD");
 
-  doc.setFontSize(5.8);
+  doc.setFontSize(5.6);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(6, 95, 70);
-  doc.text("Hasil Sistem:", x + 4.5, y + 34);
+  doc.text("Hasil Sistem:", x + 4.5, y + 33);
 
   doc.setFont("helvetica", "normal");
-  doc.text(result, x + 21, y + 34);
+  doc.text(result, x + 20, y + 33);
 
-  return y + boxH + 4;
+  return y + boxH + 3.5;
 };
 
 // ============================================================================
-// MAIN GENERATOR: BUKU PANDUAN LENGKAP KOMBINASI TERBAIK (14 HALAMAN)
+// MAIN GENERATOR: BUKU PANDUAN LENGKAP 17 HALAMAN MASTER OPERASIONAL
 // ============================================================================
-export const generateCombinedOfficialManual = () => {
+export const generateFullMasterManual = () => {
   const doc = new JsPDFConstructor("p", "mm", "a4");
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -210,18 +265,16 @@ export const generateCombinedOfficialManual = () => {
   const colW = (contentWidth - 6) / 2;
   const descX = margin + colW + 6;
   const descW = contentWidth - (colW + 6);
-  const totalPages = 14;
+  const totalPages = 17;
 
-  console.log("Generating 14-Page Master Manual combining classic layout + real screenshots...");
+  console.log("Generating 17-Page Comprehensive Operational Manual for Julia's Coffee...");
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 1: COVER EKSEKUTIF (FORMAT KLASIK YANG DISUKAI PENGGUNA)
+  // HALAMAN 1: COVER EKSEKUTIF (6 PILAR UTAMA FORMAT LAMA)
   // ════════════════════════════════════════════════════════════════════════════
-  // Deep Navy Background
   doc.setFillColor(15, 23, 42); // slate-900
   doc.rect(0, 0, pageWidth, pageHeight, "F");
 
-  // Accent Gradient Shapes / Geometric lines
   doc.setFillColor(30, 58, 138); // blue-900
   doc.rect(0, 0, pageWidth, 110, "F");
 
@@ -231,7 +284,6 @@ export const generateCombinedOfficialManual = () => {
   doc.setFillColor(245, 158, 11); // amber-500
   doc.rect(0, 112, pageWidth, 2, "F");
 
-  // Logo in header if present
   if (LOGO_IMG) {
     try {
       doc.addImage(LOGO_IMG, "PNG", pageWidth - 48, 22, 34, 34);
@@ -264,7 +316,7 @@ export const generateCombinedOfficialManual = () => {
   doc.text("Platform All-in-One: Kasir POS, Kitchen Display, Inventori Resep, Leader, HR & Finansial", 20, 80);
   doc.text("Versi Sistem: 2.4.0 (Production Ready)  •  Edisi: November 2026", 20, 86);
 
-  // Content Feature Cards on Cover (6 Pilar Utama Format Lama)
+  // 6 Pilar Fitur Cover
   const coverFeatures = [
     { title: "Point of Sale (POS)", desc: "Kasir tablet kilat, multi-meja, open bill, split bill, cetak thermal & WhatsApp." },
     { title: "Kitchen Display (KDS)", desc: "Tiket pesanan digital tanpa kertas untuk Barista, Chef Dapur, dan Pastry Baker." },
@@ -281,7 +333,7 @@ export const generateCombinedOfficialManual = () => {
     const x = col === 0 ? 20 : 110;
     const y = cardY + row * 32;
 
-    doc.setFillColor(30, 41, 59); // slate-800
+    doc.setFillColor(30, 41, 59);
     doc.roundedRect(x, y, 80, 26, 3, 3, "F");
 
     doc.setFillColor(245, 158, 11);
@@ -299,14 +351,13 @@ export const generateCombinedOfficialManual = () => {
     doc.text(splitDesc, x + 11, y + 16);
   });
 
-  // Footer Cover
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
   doc.text("Dokumen Panduan Sah — Hak Cipta Dilindungi © 2026 Julia's Coffee & Eatery", pageWidth / 2, pageHeight - 12, { align: "center" });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 2: RINGKASAN EKSEKUTIF & DAFTAR ISI LENGKAP
+  // HALAMAN 2: RINGKASAN EKSEKUTIF & DAFTAR ISI
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
   addHeaderFooter(doc, 2, totalPages, "1. RINGKASAN & DAFTAR ISI");
@@ -325,20 +376,22 @@ export const generateCombinedOfficialManual = () => {
 
   curY += 20;
 
-  // Tabel Daftar Isi
   const tocData = [
-    ["Bab 01", "Matriks 9 Peran Pengguna & SOP Penggantian PIN Tersentralisasi", "Hal 03"],
-    ["Bab 02", "Operasional Terminal Kasir POS: Katalog, Dine In Meja & Take Away", "Hal 04"],
-    ["Bab 03", "Alur Pembayaran Kasir, Split Bill (Pecah Tagihan) & Struk Thermal / WA", "Hal 05"],
-    ["Bab 04", "Otorisasi Supervisor, Pembatalan Pesanan (Void) & Penanganan Refund", "Hal 06"],
-    ["Bab 05", "Kitchen Display System (KDS): Antrean Stasiun Bar, Dapur & Bakery", "Hal 07"],
-    ["Bab 06", "Peran LEADER: Supervisi Bar, Kalibrasi Dial-In Espresso & Waste Tracking", "Hal 08"],
-    ["Bab 07", "Prosedur Tutup Shift Kasir Malam, Rekonsiliasi Kas Laci & Z-Report", "Hal 09"],
-    ["Bab 08", "Manajemen Resep (BOM), Kartu Stok Bahan & Audit Stok Opname Mingguan", "Hal 10"],
-    ["Bab 09", "Peran FINANCE: Buku Kas, Petty Cash, Pembelian PO & Rekonsiliasi Bank", "Hal 11"],
-    ["Bab 10", "SDM, Presensi GPS Selfie & Penggajian Karyawan (Payroll)", "Hal 12"],
-    ["Bab 11", "Dashboard Eksekutif Owner, Audit Trail & Protokol Reset Data Uji Coba", "Hal 13"],
-    ["Bab 12", "Pusat Ekspor Laporan Bisnis (Excel 7-Sheet) & SOP Troubleshooting", "Hal 14"],
+    ["Bab 01", "Siklus Alur Kerja Harian 9 Role Lengkap (Pagi, Siang, Malam)", "Hal 03"],
+    ["Bab 02", "Matriks 9 Peran Pengguna & SOP Penggantian PIN Tersentralisasi", "Hal 04"],
+    ["Bab 03", "Operasional Kasir POS: Flowchart & Pemesanan Dine In Meja", "Hal 05"],
+    ["Bab 04", "Alur Pembayaran Kasir, Split Bill (Pecah Tagihan) & Struk Thermal / WA", "Hal 06"],
+    ["Bab 05", "Otorisasi Supervisor, Pembatalan Pesanan (Void) & Penanganan Refund", "Hal 07"],
+    ["Bab 06", "Kitchen Display System (KDS): Antrean Stasiun Bar, Dapur & Bakery", "Hal 08"],
+    ["Bab 07", "Peran LEADER: Supervisi Bar, Kalibrasi Dial-In Espresso & Waste Tracking", "Hal 09"],
+    ["Bab 08", "Prosedur Tutup Shift Kasir Malam, Rekonsiliasi Kas Laci & Z-Report", "Hal 10"],
+    ["Bab 09", "SOP Serah Terima Kasir Antar-Shift (Shift Handover Tanpa Selisih)", "Hal 11"],
+    ["Bab 10", "Manajemen Resep (BOM), Kartu Stok Bahan & Audit Stok Opname Mingguan", "Hal 12"],
+    ["Bab 11", "Peran FINANCE: Buku Kas, Petty Cash, Pembelian PO & Rekonsiliasi Bank", "Hal 13"],
+    ["Bab 12", "SDM, Presensi GPS Selfie & Penggajian Karyawan (Payroll)", "Hal 14"],
+    ["Bab 13", "Dashboard Eksekutif Owner, Audit Trail & Protokol Reset Data Uji Coba", "Hal 15"],
+    ["Bab 14", "Pusat Ekspor Laporan Bisnis (Excel 7-Sheet) & SOP Troubleshooting", "Hal 16"],
+    ["Bab 15", "Lembar Saku Kedaruratan Meja Kasir (Emergency Cheat Sheet)", "Hal 17"],
   ];
 
   autoTable(doc, {
@@ -346,42 +399,77 @@ export const generateCombinedOfficialManual = () => {
     head: [["Bab", "Nama Modul & Deskripsi Pembahasan", "Halaman"]],
     body: tocData,
     theme: "striped",
-    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.5 },
-    bodyStyles: { fontSize: 7, textColor: [51, 65, 85], cellPadding: 1.8 },
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.2 },
+    bodyStyles: { fontSize: 6.6, textColor: [51, 65, 85], cellPadding: 1.5 },
     columnStyles: {
-      0: { cellWidth: 18, fontStyle: "bold", textColor: [30, 58, 138] },
-      1: { cellWidth: 144 },
-      2: { cellWidth: 20, halign: "center", fontStyle: "bold", textColor: [245, 158, 11] },
+      0: { cellWidth: 16, fontStyle: "bold", textColor: [30, 58, 138] },
+      1: { cellWidth: 148 },
+      2: { cellWidth: 18, halign: "center", fontStyle: "bold", textColor: [245, 158, 11] },
     },
     margin: { left: margin, right: margin },
   });
 
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
 
-  // Box Arsitektur Hybrid Offline-Resilience (Gaya Format Lama)
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(margin, curY, contentWidth, 24, 2, 2, "FD");
+  doc.roundedRect(margin, curY, contentWidth, 23, 2, 2, "FD");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.8);
+  doc.setFontSize(7.6);
   doc.setTextColor(30, 58, 138);
-  doc.text("KEUNGGULAN ARSITEKTUR HYBRID & OFFLINE RESILIENCE", margin + 4, curY + 6);
+  doc.text("KEUNGGULAN ARSITEKTUR HYBRID & OFFLINE RESILIENCE", margin + 4, curY + 5.5);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.8);
+  doc.setFontSize(6.6);
   doc.setTextColor(71, 85, 105);
   const archText =
     "Aplikasi dirancang dengan teknologi Progressive Web App (PWA) dan local queue caching. Apabila koneksi internet kafe " +
     "terputus atau listrik padam, kasir TETAP DAPAT MELAYANI TRANSAKSI TUNAI dan mencetak struk thermal lokal secara lancar. " +
     "Seluruh antrean data disimpan aman di penyimpanan browser lokal dan otomatis tersinkronisasi ke cloud database saat online kembali.";
-  doc.text(doc.splitTextToSize(archText, contentWidth - 8), margin + 4, curY + 11.5);
+  doc.text(doc.splitTextToSize(archText, contentWidth - 8), margin + 4, curY + 11);
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 3: BAB 1 - MATRIKS 9 ROLE & CARA GANTI PIN TERSENTRALISASI
+  // HALAMAN 3: BAB 1 - SIKLUS ALUR KERJA HARIAN 9 ROLE LENGKAP
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 3, totalPages, "2. MATRIKS ROLE & GANTI PIN");
+  addHeaderFooter(doc, 3, totalPages, "2. SIKLUS KERJA 9 ROLE");
+
+  curY = addSectionTitle(doc, "Siklus Alur Kerja Harian 9 Peran (Daily Work Cycle)", 18, "Pedoman tugas terstruktur Pagi, Siang, dan Malam untuk setiap posisi staf");
+
+  const dailyRoles = [
+    ["KASIR", "Presensi GPS -> Buka Shift POS -> Input Modal Kas Rp 300.000 -> Siapkan kertas thermal.", "Input pesanan Meja/Takeaway -> Set modifier gula/es -> Simpan Bill Meja -> Terima bayar Cash/QRIS/EDC -> Split Bill -> Cetak struk & WA.", "Hitung fisik uang laci (kertas & koin) -> Input nominal fisik ke POS -> Cetak slip Z-Report -> Setor kas ke brankas."],
+    ["LEADER BAR", "Presensi GPS -> Isi Checklist Opening Bar -> Kalibrasi espresso dial-in 18g/36g -> Input kopi dialing ke Quick Waste.", "Supervisi antrean KDS Barista (SLA 3-5m) -> Dampingi kasir jika butuh otorisasi PIN Void/Refund/Diskon.", "Isi Checklist Closing Bar (backflush mesin, lap steam wand) -> Timbang sisa biji kopi & susu saat stok opname."],
+    ["BARISTA", "Presensi GPS selfie -> Siapkan susu dingin di chiller, es di ice bin, dan cup/lid.", "Pantau tablet KDS Barista -> Sentuh Kuning (Mulai) -> Racik sesuai gramatur resep -> Sentuh Hijau (Siap).", "Lapor susu pecah/kopi tumpah ke Leader untuk dicatat di menu Quick Waste -> Bersihkan area bar."],
+    ["CHEF DAPUR", "Presensi GPS -> Siapkan bahan olahan matang (suwir ayam, bumbu racik, beras, telur).", "Pantau KDS Kitchen -> Baca catatan modifier (Level pedas, No bawang) -> Masak tepat waktu (SLA 12-15m).", "Catat bahan rusak/makanan gosong ke Leader -> Bersihkan kompor dan sanitasi area dapur."],
+    ["PASTRY BAKER", "Presensi GPS -> Panggang batch croissant, bagel, danish segar -> Tata display showcase.", "Pantau KDS Bakery jika ada tamu minta pastry dihangatkan oven toaster 2 menit.", "Catat sisa display yang kedaluwarsa ke kartu waste -> Lap display etalase kue."],
+    ["FINANCE", "Cek mutasi rekening masuk dari settlement QRIS & EDC bank hari sebelumnya.", "Verifikasi kuitansi belanja kas kecil (Petty Cash es batu/gas) -> Catat pelunasan faktur supplier PO.", "Rekonsiliasi kas malam kasir vs Z-Report -> Proses rekap payroll dari presensi GPS -> Kirim slip gaji WA."],
+    ["MANAGER", "Cek presensi tim & checklist bar/dapur -> Briefing operasional pagi.", "Otorisasi PIN untuk Void/Refund & diskon khusus -> Pantau label kuning stok bahan tipis di gudang.", "Buat PO pembelian bahan ke supplier -> Dampingi kasir saat tutup shift -> Pimpin audit stok opname fisik."],
+    ["OWNER", "Buka Dashboard Owner dari HP -> Pantau target omzet & kehadiran staf.", "Pantau pergerakan Gross Sales, Net Sales, dan menu paling laris di jam sibuk.", "Evaluasi rasio HPP/COGS (target sehat 28-35%), laba bersih, dan persetujuan payroll bulanan staf."],
+    ["SUPER ADMIN", "Cek ketersediaan server & koneksi database PostgreSQL terpusat.", "User management: Reset/atur PIN staf baru di menu Users atas instruksi Manager.", "Pantau Audit Trail, backup database berkala, dan eksekusi protokol reset data uji coba sebelum go-live."]
+  ];
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Peran / Role", "Tugas Pagi (Opening)", "Tugas Siang (Peak Service)", "Tugas Malam (Closing)"]],
+    body: dailyRoles,
+    theme: "grid",
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.2 },
+    bodyStyles: { fontSize: 5.6, textColor: TEXT_DARK as any, cellPadding: 1.2 },
+    columnStyles: {
+      0: { cellWidth: 22, fontStyle: "bold", textColor: ACCENT_BLUE as any },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 50 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // HALAMAN 4: BAB 2 - MATRIKS 9 ROLE & CARA GANTI PIN TERSENTRALISASI
+  // ════════════════════════════════════════════════════════════════════════════
+  doc.addPage();
+  addHeaderFooter(doc, 4, totalPages, "3. MATRIKS ROLE & GANTI PIN");
 
   curY = addSectionTitle(doc, "Matriks Peran Pengguna (Role & Permissions)", 18, "Pembagian wewenang untuk menjamin akuntabilitas kas dan inventori");
 
@@ -402,8 +490,8 @@ export const generateCombinedOfficialManual = () => {
     head: [["Role", "User", "Nama Akun", "Cakupan Otoritas di Aplikasi"]],
     body: rolesData,
     theme: "grid",
-    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: TEXT_DARK as any, cellPadding: 1.2 },
+    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.5 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.1 },
     columnStyles: {
       0: { cellWidth: 26, fontStyle: "bold" },
       1: { cellWidth: 16, fontStyle: "bold", textColor: ACCENT_BLUE as any },
@@ -413,13 +501,12 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
 
   curY = addSectionTitle(doc, "Prosedur Resmi Penggantian PIN Pengguna (Tersentralisasi)", curY, "Kebijakan keamanan data: Staf dilarang mengganti PIN sendiri demi kepatuhan audit");
 
-  // Split: Left Steps, Right Real Screenshot of Users PIN management
   const pinSplitY = curY;
-  drawImageBox(doc, SCREEN_USERS_PIN, margin + colW + 4, pinSplitY, colW - 4, 46, "Gambar 1.1: Menu Manajemen Pengguna & Reset PIN");
+  drawImageBox(doc, SCREEN_USERS_PIN, margin + colW + 4, pinSplitY, colW - 4, 46, "Gambar 2.1: Menu Manajemen Pengguna & Reset PIN");
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
@@ -443,37 +530,46 @@ export const generateCombinedOfficialManual = () => {
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 4: BAB 2 - TERMINAL KASIR POS & PEMESANAN DINE IN
+  // HALAMAN 5: BAB 3 - TERMINAL KASIR POS: FLOWCHART & PEMESANAN DINE IN
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 4, totalPages, "3. TERMINAL KASIR POS");
+  addHeaderFooter(doc, 5, totalPages, "4. TERMINAL KASIR POS");
 
-  curY = addSectionTitle(doc, "Panduan Operasional Terminal Kasir (/pos)", 18, "Antarmuka kasir cepat: multi-meja, modifier takaran resep, & simpan bill");
+  curY = addSectionTitle(doc, "Panduan Operasional Terminal Kasir (/pos)", 18, "Alur lengkap transaksi, multi-meja, modifier takaran resep, & simpan bill");
+
+  // Diagram Flowchart Kasir
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Buka Shift", sub: "Input Rp 300rb" },
+    { label: "2. Pilih Meja", sub: "Meja 01 - 20" },
+    { label: "3. Input Menu", sub: "Set Gula/Es" },
+    { label: "4. Bayar / Simpan?", sub: "Simpan Meja?", isDecision: true },
+    { label: "5. Cetak Nota", sub: "Thermal & WA" },
+  ]);
 
   const posSplitY = curY;
-  drawImageBox(doc, SCREEN_POS, margin, posSplitY, colW + 6, 52, "Gambar 2.1: Antarmuka Terminal Kasir POS Julia's Coffee");
+  drawImageBox(doc, SCREEN_POS, margin, posSplitY, colW + 6, 50, "Gambar 3.1: Layar Kasir POS [A:Kategori] [B:Grid Menu] [C:Keranjang]");
 
-  doc.setFontSize(7.2);
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
-  doc.text("Penjelasan Area Kerja Layar Kasir:", descX, posSplitY + 4);
+  doc.text("Keterangan Callout Antarmuka Kasir:", descX, posSplitY + 4);
 
-  doc.setFontSize(6.2);
+  doc.setFontSize(6);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(TEXT_DARK[0], TEXT_DARK[1], TEXT_DARK[2]);
   const posExpl = [
-    "• Tab Tipe Layanan: Pilih 'Dine In' (Nomor Meja 01 s/d 20) atau 'Take Away' (Bungkus).",
-    "• Katalog Menu: Filter per kategori (Coffee, Non-Coffee, Eatery, Snack, Pastry) dengan indikator stok.",
-    "• Sheet Modifier: Pengaturan varian Hot/Iced, tingkat kemanisan (Normal/Less/No Sugar), dan extra shot.",
-    "• Simpan Meja (Open Bill): Mengirimkan pesanan ke KDS Dapur/Bar tanpa harus bayar seketika.",
-    "• Bayar Sekarang: Membuka jendela pembayaran lunas (Cash, QRIS, Kartu, Split Bill)."
+    "[A] Tab Layanan: Pilih 'Dine In' (Nomor Meja 01–20) atau 'Take Away' (Bungkus).",
+    "[B] Grid Menu: Kartu produk lengkap dengan foto, nama, badge stok, dan harga jual.",
+    "[C] Panel Keranjang: Daftar item pesanan, pilihan suhu (Hot/Iced), dan level gula.",
+    "[D] Tombol Simpan Meja: Mengirim tiket ke KDS dapur tanpa harus bayar duluan.",
+    "[E] Tombol Bayar Sekarang: Membuka jendela pembayaran lunas (Cash, QRIS, Split Bill)."
   ];
   posExpl.forEach((pe, idx) => {
     const l = doc.splitTextToSize(pe, descW);
-    doc.text(l, descX, posSplitY + 9 + idx * 7.5);
+    doc.text(l, descX, posSplitY + 8.5 + idx * 7.2);
   });
 
-  curY = posSplitY + 59;
+  curY = posSplitY + 57;
   curY = addSectionTitle(doc, "Studi Kasus Pemesanan Bertahap Meja 04", curY, "Simulasi tamu duduk dan memesan menu secara bertahap");
 
   drawCaseStudyBox(
@@ -492,12 +588,20 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 5: BAB 3 - PEMBAYARAN, SPLIT BILL & STRUK THERMAL/WA
+  // HALAMAN 6: BAB 4 - ALUR PEMBAYARAN, SPLIT BILL & STRUK THERMAL/WA
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 5, totalPages, "4. PEMBAYARAN & SPLIT BILL");
+  addHeaderFooter(doc, 6, totalPages, "5. PEMBAYARAN & SPLIT BILL");
 
   curY = addSectionTitle(doc, "Alur Pembayaran Kasir & Split Bill Tagihan", 18, "Mendukung Cash, QRIS Statis/Dinamis, EDC Debit, dan Split Bill per item");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Buka Meja", sub: "Cek Total Bill" },
+    { label: "2. Split Bill?", sub: "Pecah Menu?", isDecision: true },
+    { label: "3. Tagihan 1", sub: "Bayar QRIS" },
+    { label: "4. Tagihan 2", sub: "Bayar Tunai" },
+    { label: "5. Struk Terbit", sub: "2 Slip Sah" },
+  ]);
 
   autoTable(doc, {
     startY: curY,
@@ -509,8 +613,8 @@ export const generateCombinedOfficialManual = () => {
       ["SPLIT BILL MEJA", "Buka Meja -> Klik 'Split Bill' -> Pilih 'Pecah Menu' atau 'Bagi Rata' -> Selesaikan pembayaran 1 -> Selesaikan tagihan 2.", "Terbit 2 struk terpisah tanpa selisih desimal Rp."]
     ],
     theme: "grid",
-    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: TEXT_DARK as any, cellPadding: 1.8 },
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.6 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.6 },
     columnStyles: {
       0: { cellWidth: 38, fontStyle: "bold" },
       1: { cellWidth: 88 },
@@ -519,7 +623,7 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
   curY = addSectionTitle(doc, "Studi Kasus Split Bill Meja 06 (QRIS & Tunai)", curY, "Simulasi tagihan Rp 95.000 dipecah menjadi 2 pembayaran berbeda");
 
   drawCaseStudyBox(
@@ -539,12 +643,20 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 6: BAB 4 - OTORISASI SUPERVISOR, VOID & REFUND
+  // HALAMAN 7: BAB 5 - OTORISASI SUPERVISOR, VOID & REFUND
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 6, totalPages, "5. OTORISASI VOID & REFUND");
+  addHeaderFooter(doc, 7, totalPages, "6. OTORISASI VOID & REFUND");
 
   curY = addSectionTitle(doc, "Otorisasi Supervisor PIN (Anti-Fraud Control)", 18, "Kasir tidak bisa membatalkan pesanan sepihak. Wajib verifikasi fisik Manager/Leader");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Kasir Klik Void", sub: "Riwayat Nota" },
+    { label: "2. Cek Supervisor", sub: "Manager Hadir?", isDecision: true },
+    { label: "3. Input PIN", sub: "Pilih Alasan" },
+    { label: "4. Restorasi Stok", sub: "Balik ke Gudang" },
+    { label: "5. Audit Log", sub: "Catat Permanen" },
+  ]);
 
   autoTable(doc, {
     startY: curY,
@@ -555,8 +667,8 @@ export const generateCombinedOfficialManual = () => {
       ["Refund Pembayaran Tamu", "Wajib PIN MANAGER & alasan pembatalan sah.", "Bahan tidak kembali jika makanan sudah dibuat.", "Uang tunai kasir berkurang untuk refund."]
     ],
     theme: "grid",
-    headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: TEXT_DARK as any, cellPadding: 2 },
+    headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.6 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.8 },
     columnStyles: {
       0: { cellWidth: 40, fontStyle: "bold" },
       1: { cellWidth: 50 },
@@ -566,7 +678,7 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
   curY = addSectionTitle(doc, "Studi Kasus Pembatalan Nota Salah Input #JC-202610-0089", curY, "Langkah resmi pembatalan pesanan di POS dengan pendampingan Leader Bar");
 
   drawCaseStudyBox(
@@ -586,17 +698,25 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 7: BAB 5 - KITCHEN DISPLAY SYSTEM (KDS) MULTI-STATION
+  // HALAMAN 8: BAB 6 - KITCHEN DISPLAY SYSTEM (KDS) MULTI-STATION
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 7, totalPages, "6. KITCHEN DISPLAY SYSTEM");
+  addHeaderFooter(doc, 8, totalPages, "7. KITCHEN DISPLAY SYSTEM");
 
   curY = addSectionTitle(doc, "Kitchen Display System (/kds)", 18, "Antarmuka tanpa kertas (paperless) untuk efisiensi peracikan Barista, Kitchen & Bakery");
 
-  const kdsSplitY = curY;
-  drawImageBox(doc, SCREEN_KDS, margin, kdsSplitY, colW + 6, 52, "Gambar 5.1: Layar Antrean KDS Tablet Stasiun Barista & Dapur");
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Tiket Masuk", sub: "Kuning (Antrean)" },
+    { label: "2. Sentuh Tiket", sub: "Oranye (Cooking)" },
+    { label: "3. Selesai Masak", sub: "Hijau (Ready)" },
+    { label: "4. Waiter Antar", sub: "Sajikan Meja" },
+    { label: "5. Auto-Archive", sub: "Hilang dlm 10d" },
+  ]);
 
-  doc.setFontSize(7.2);
+  const kdsSplitY = curY;
+  drawImageBox(doc, SCREEN_KDS, margin, kdsSplitY, colW + 6, 50, "Gambar 6.1: Layar KDS Tablet [Kuning:Antrean] [Oranye:Proses] [Hijau:Siap]");
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
   doc.text("Arti Warna Tiket pada Layar KDS:", descX, kdsSplitY + 4);
@@ -609,20 +729,20 @@ export const generateCombinedOfficialManual = () => {
   ];
 
   kdsBadges.forEach((b, idx) => {
-    const by = kdsSplitY + 9 + idx * 10.5;
-    doc.setFontSize(6.2);
+    const by = kdsSplitY + 8.5 + idx * 10;
+    doc.setFontSize(6);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
     doc.text(b.title, descX, by);
 
-    doc.setFontSize(5.8);
+    doc.setFontSize(5.6);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(TEXT_MUTED[0], TEXT_MUTED[1], TEXT_MUTED[2]);
     const lines = doc.splitTextToSize(b.desc, descW);
-    doc.text(lines, descX, by + 4);
+    doc.text(lines, descX, by + 3.8);
   });
 
-  curY = kdsSplitY + 59;
+  curY = kdsSplitY + 57;
   curY = addSectionTitle(doc, "Standar Waktu Penyajian Pesanan (SLA Service Time)", curY, "Target durasi waktu pembuatan pesanan Julia's Coffee");
 
   autoTable(doc, {
@@ -635,8 +755,8 @@ export const generateCombinedOfficialManual = () => {
       ["Pastry & Croissant Display", "Baker / Waiter", "Maksimal 2 - 4 Menit", "Hangatkan oven toaster 2 menit, langsung antar ke meja."]
     ],
     theme: "grid",
-    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: TEXT_DARK as any, cellPadding: 1.5 },
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.6 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.4 },
     columnStyles: {
       0: { cellWidth: 46, fontStyle: "bold" },
       1: { cellWidth: 38 },
@@ -647,17 +767,25 @@ export const generateCombinedOfficialManual = () => {
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 8: BAB 6 - PERAN LEADER BAR: CHECKLIST, KALIBRASI & WASTE
+  // HALAMAN 9: BAB 7 - PERAN LEADER BAR: SUPERVISI, KALIBRASI & WASTE
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 8, totalPages, "7. PERAN LEADER BAR");
+  addHeaderFooter(doc, 9, totalPages, "8. PERAN LEADER BAR");
 
   curY = addSectionTitle(doc, "Peran LEADER: Supervisi Bar & Checklist Harian", 18, "Tanggung jawab teknis menjaga mutu espresso, kebersihan bar, dan kontrol waste");
 
-  const ldrSplitY = curY;
-  drawImageBox(doc, SCREEN_LEADER, margin, ldrSplitY, colW + 6, 52, "Gambar 6.1: Layar Checklist Supervisi Stasiun Bar");
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Opening Check", sub: "Mesin & Suhu" },
+    { label: "2. Dialing Grinder", sub: "18g in / 36g out" },
+    { label: "3. Input Quick Waste", sub: "Biji Kopi Dialing" },
+    { label: "4. Supervisi KDS", sub: "Jaga SLA 3-5m" },
+    { label: "5. Closing Check", sub: "Backflush Mesin" },
+  ]);
 
-  doc.setFontSize(7.2);
+  const ldrSplitY = curY;
+  drawImageBox(doc, SCREEN_LEADER, margin, ldrSplitY, colW + 6, 50, "Gambar 7.1: Layar Checklist Supervisi Barista Pagi & Malam");
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
   doc.text("Tugas Harian Leader Bar (Rama):", descX, ldrSplitY + 4);
@@ -671,10 +799,10 @@ export const generateCombinedOfficialManual = () => {
   ];
   ldrTasks.forEach((lt, idx) => {
     const l = doc.splitTextToSize(lt, descW);
-    doc.text(l, descX, ldrSplitY + 9 + idx * 7.5);
+    doc.text(l, descX, ldrSplitY + 8.5 + idx * 7.2);
   });
 
-  curY = ldrSplitY + 59;
+  curY = ldrSplitY + 57;
   curY = addSectionTitle(doc, "Studi Kasus Kalibrasi Dial-In 36g & Susu Pecah 200ml", curY, "Pencatatan resmi agar biaya HPP tidak bocor");
 
   drawCaseStudyBox(
@@ -693,12 +821,20 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 9: BAB 7 - TUTUP SHIFT KASIR & REKONSILIASI Z-REPORT
+  // HALAMAN 10: BAB 8 - TUTUP SHIFT KASIR & REKONSILIASI Z-REPORT
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 9, totalPages, "8. TUTUP SHIFT KASIR");
+  addHeaderFooter(doc, 10, totalPages, "9. TUTUP SHIFT KASIR");
 
   curY = addSectionTitle(doc, "Prosedur Tutup Shift Kasir Malam (Z-Report)", 18, "Pukul 22:30 WITA: Rekonsiliasi fisik uang laci disaksikan bersama Leader Bar");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Klik Tutup Shift", sub: "Pojok Atas POS" },
+    { label: "2. Hitung Fisik Kas", sub: "Kertas & Koin" },
+    { label: "3. Input Aktual", sub: "Ketik Angka Riil" },
+    { label: "4. Cek Selisih?", sub: "Rp 0 Seimbang?", isDecision: true },
+    { label: "5. Cetak Z-Report", sub: "Setor Brankas" },
+  ]);
 
   autoTable(doc, {
     startY: curY,
@@ -711,8 +847,8 @@ export const generateCombinedOfficialManual = () => {
       ["Selisih Lebih (+Rp)", "Uang Fisik Aktual > Saldo Kas Diharapkan", "Catat sebagai 'Kas Lebih' (cek kembalian tamu yang tertinggal)."]
     ],
     theme: "grid",
-    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: TEXT_DARK as any, cellPadding: 1.8 },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.6 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.6 },
     columnStyles: {
       0: { cellWidth: 46, fontStyle: "bold" },
       1: { cellWidth: 70 },
@@ -721,7 +857,7 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
   curY = addSectionTitle(doc, "Studi Kasus Penutupan Kasir dengan Selisih Kurang -Rp 10.000", curY, "Langkah resmi pencatatan uang laci kasir saat tidak seimbang");
 
   drawCaseStudyBox(
@@ -741,15 +877,84 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 10: BAB 8 - INVENTORI RESEP (BOM) & AUDIT STOK OPNAME
+  // HALAMAN 11: BAB 9 - SERAH TERIMA KASIR ANTAR-SHIFT (SHIFT HANDOVER)
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 10, totalPages, "9. INVENTORI & RESEP HPP");
+  addHeaderFooter(doc, 11, totalPages, "10. SERAH TERIMA SHIFT");
+
+  curY = addSectionTitle(doc, "SOP Serah Terima Kasir Antar-Shift (Shift Handover)", 18, "Prosedur pergantian kasir Shift Pagi (07:30–15:30) ke Shift Siang (15:00–23:00) tanpa selisih");
+
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Cetak X-Report", sub: "Rekap Sementara" },
+    { label: "2. Hitung Fisik Kas", sub: "Kasir 1 & Kasir 2" },
+    { label: "3. Setor Penjualan", sub: "Ke Brankas" },
+    { label: "4. Sisakan Modal", sub: "Rp 300rb di Laci" },
+    { label: "5. Buka Shift 2", sub: "Kasir Baru Mulai" },
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Urutan Tindakan", "Kasir Shift Pagi (Keluar)", "Kasir Shift Siang (Masuk)", "Pengawasan Leader"]],
+    body: [
+      ["1. Rekap Sementara (X-Report)", "Mencetak slip X-Report di POS (rekap penjualan jam 07:30 - 15:00).", "Memperhatikan total uang tunai yang tercatat pada slip X-Report.", "Leader memverifikasi keabsahan slip."],
+      ["2. Hitung Fisik Laci", "Mengeluarkan uang dan menghitung bersama kasir masuk.", "Ikut menghitung lembaran uang dan koin 2 kali.", "Memastikan hitungan akurat tanpa selisih."],
+      ["3. Pemisahan Modal & Setoran", "Menyetorkan seluruh uang penjualan ke brankas toko.", "Memastikan modal awal Rp 300.000 tetap tinggal di laci.", "Menandatangani form serah terima kasir."],
+      ["4. Pergantian Login", "Klik 'Logout' / 'Tutup Shift' akun kasir lama.", "Login akun kasir baru -> Masukkan PIN -> Buka Shift Kasir Siang.", "Memverifikasi sesi kasir baru aktif."]
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.6 },
+    bodyStyles: { fontSize: 6, textColor: TEXT_DARK as any, cellPadding: 1.8 },
+    columnStyles: {
+      0: { cellWidth: 38, fontStyle: "bold" },
+      1: { cellWidth: 54 },
+      2: { cellWidth: 54 },
+      3: { cellWidth: 36, textColor: [4, 120, 87] },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 5;
+  curY = addSectionTitle(doc, "Manfaat Kunci SOP Shift Handover", curY, "Mencegah perselisihan antar staf kasir mengenai kekurangan uang di malam hari");
+
+  doc.setFillColor(238, 242, 255);
+  doc.setDrawColor(99, 102, 241);
+  doc.roundedRect(margin, curY, contentWidth, 25, 1.5, 1.5, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.2);
+  doc.setTextColor(49, 46, 129);
+  doc.text("MENGAPA SHIFT HANDOVER WAJIB DILAKUKAN TEPAT WAKTU:", margin + 4, curY + 5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.4);
+  doc.setTextColor(55, 48, 163);
+  const handoverPoints = [
+    "• Menghilangkan Budaya Saling Tuding: Jika terjadi selisih kas di malam hari, kasir malam tidak bisa beralasan bahwa selisih sudah terjadi sejak kasir pagi.",
+    "• Perlindungan Integritas Staf: Kasir pagi pulang dengan tenang karena kas shift-nya sudah diaudit dan dinyatakan seimbang di jam 15:00.",
+    "• Modal Kembalian Terjaga: Kasir siang selalu memulai shift dengan modal uang kecil yang utuh Rp 300.000 untuk kelancaran tamu sore."
+  ];
+  handoverPoints.forEach((hp, idx) => {
+    doc.text(hp, margin + 4, curY + 10 + idx * 4.5);
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // HALAMAN 12: BAB 10 - INVENTORI RESEP (BOM) & AUDIT STOK OPNAME
+  // ════════════════════════════════════════════════════════════════════════════
+  doc.addPage();
+  addHeaderFooter(doc, 12, totalPages, "11. INVENTORI & RESEP HPP");
 
   curY = addSectionTitle(doc, "Inventori, Resep Otomatis (BOM) & Analisis HPP", 18, "Pengendalian biaya bahan baku (COGS) dan proteksi kebocoran persediaan");
 
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Formula Resep", sub: "Gramatur BOM" },
+    { label: "2. Kasir Jual Menu", sub: "POS Terbayar" },
+    { label: "3. Auto-Deduct", sub: "Stok Terpotong" },
+    { label: "4. Opname Fisik", sub: "Timbang Mingguan", isDecision: true },
+    { label: "5. Koreksi Stok", sub: "Akui Defisit HPP" },
+  ]);
+
   const invSplitY = curY;
-  drawImageBox(doc, SCREEN_INVENTORY, margin + colW + 4, invSplitY, colW - 4, 52, "Gambar 8.1: Layar Manajemen Stok & Resep Menu");
+  drawImageBox(doc, SCREEN_INVENTORY, margin + colW + 4, invSplitY, colW - 4, 48, "Gambar 10.1: Layar Manajemen Stok & Resep Menu");
 
   autoTable(doc, {
     startY: invSplitY,
@@ -761,16 +966,17 @@ export const generateCombinedOfficialManual = () => {
     ],
     theme: "grid",
     headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 6.2 },
-    bodyStyles: { fontSize: 5.8, textColor: TEXT_DARK as any, cellPadding: 1.5 },
+    bodyStyles: { fontSize: 5.6, textColor: TEXT_DARK as any, cellPadding: 1.4 },
     columnStyles: {
       0: { cellWidth: 26, fontStyle: "bold" },
       1: { cellWidth: 36 },
       2: { cellWidth: 24, textColor: [4, 120, 87], fontStyle: "bold" },
     },
+    tableWidth: 86,
     margin: { left: margin, right: margin + colW + 4 },
   });
 
-  curY = invSplitY + 59;
+  curY = invSplitY + 55;
   curY = addSectionTitle(doc, "Studi Kasus Audit Stok Opname Mingguan (-150g Biji Kopi)", curY, "Penyesuaian saldo gudang dan deteksi dini kebocoran bahan");
 
   drawCaseStudyBox(
@@ -790,17 +996,25 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 11: BAB 9 - PERAN FINANCE: BUKU KAS, PETTY CASH & BANK
+  // HALAMAN 13: BAB 11 - PERAN FINANCE: BUKU KAS, PETTY CASH & BANK
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 11, totalPages, "10. PERAN FINANCE & ARUS KAS");
+  addHeaderFooter(doc, 13, totalPages, "12. PERAN FINANCE & ARUS KAS");
 
   curY = addSectionTitle(doc, "Peran FINANCE: Buku Kas, Petty Cash & Rekonsiliasi Bank", 18, "Tanggung jawab pembukuan kas masuk/keluar, kas kecil, dan mutasi rekening");
 
-  const finSplitY = curY;
-  drawImageBox(doc, SCREEN_CASHFLOW, margin, finSplitY, colW + 6, 52, "Gambar 9.1: Layar Buku Kas & Arus Kas Julia's Coffee");
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Kasir Setor Kas", sub: "Cek vs Z-Report" },
+    { label: "2. Settlement QRIS", sub: "Cocokkan Rek Bank" },
+    { label: "3. Petty Cash Kasir", sub: "Verifikasi Bon Es" },
+    { label: "4. Bayar Supplier", sub: "Pelunasan PO", isDecision: true },
+    { label: "5. Laba Rugi P&L", sub: "Lapor ke Owner" },
+  ]);
 
-  doc.setFontSize(7.2);
+  const finSplitY = curY;
+  drawImageBox(doc, SCREEN_CASHFLOW, margin, finSplitY, colW + 6, 50, "Gambar 11.1: Layar Buku Kas & Arus Kas Julia's Coffee");
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
   doc.text("Tugas Utama Bagian Finance:", descX, finSplitY + 4);
@@ -814,10 +1028,10 @@ export const generateCombinedOfficialManual = () => {
   ];
   finTasks.forEach((ft, idx) => {
     const l = doc.splitTextToSize(ft, descW);
-    doc.text(l, descX, finSplitY + 9 + idx * 7.5);
+    doc.text(l, descX, finSplitY + 8.5 + idx * 7.2);
   });
 
-  curY = finSplitY + 59;
+  curY = finSplitY + 57;
   curY = addSectionTitle(doc, "Studi Kasus Pembelian Es Batu Darurat Rp 25.000 via Kas Kecil", curY, "Pencatatan resmi biaya operasional darurat di kasir");
 
   drawCaseStudyBox(
@@ -837,17 +1051,25 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 12: BAB 10 - SDM & PENGGAJIAN (PAYROLL)
+  // HALAMAN 14: BAB 12 - SDM & PENGGAJIAN (PAYROLL)
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 12, totalPages, "11. SDM & PAYROLL");
+  addHeaderFooter(doc, 14, totalPages, "13. SDM & PAYROLL");
 
   curY = addSectionTitle(doc, "SDM, Presensi GPS Selfie & Penggajian (Payroll)", 18, "Manajemen kedisiplinan kerja dan penggajian transparan otomatis");
 
-  const paySplitY = curY;
-  drawImageBox(doc, SCREEN_PAYROLL, margin + colW + 4, paySplitY, colW - 4, 52, "Gambar 10.1: Layar Manajemen Payroll & Slip Gaji");
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Clock-In GPS", sub: "Radius Kedai" },
+    { label: "2. Verifikasi Hadir", sub: "Hitung Jam Masuk" },
+    { label: "3. Upah Lembur", sub: "Approval Manager" },
+    { label: "4. Bonus Omzet?", sub: "Target Tembus?", isDecision: true },
+    { label: "5. Terbit Slip PDF", sub: "Kirim WhatsApp" },
+  ]);
 
-  doc.setFontSize(7.2);
+  const paySplitY = curY;
+  drawImageBox(doc, SCREEN_PAYROLL, margin + colW + 4, paySplitY, colW - 4, 50, "Gambar 12.1: Layar Manajemen Payroll & Slip Gaji");
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
   doc.text("Komponen Gaji Karyawan Julia's:", margin, paySplitY + 4);
@@ -862,10 +1084,10 @@ export const generateCombinedOfficialManual = () => {
   ];
   payPoints.forEach((p, idx) => {
     const l = doc.splitTextToSize(p, payDescW);
-    doc.text(l, margin, paySplitY + 9 + idx * 7.5);
+    doc.text(l, margin, paySplitY + 8.5 + idx * 7.2);
   });
 
-  curY = paySplitY + 59;
+  curY = paySplitY + 57;
   curY = addSectionTitle(doc, "Studi Kasus Penggajian Barista Budi (Periode Bulan Berjalan)", curY, "Simulasi penerbitan slip gaji digital resmi");
 
   drawCaseStudyBox(
@@ -885,17 +1107,25 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 13: BAB 11 - DASHBOARD OWNER & PROTOKOL RESET AMAN
+  // HALAMAN 15: BAB 13 - DASHBOARD OWNER & RESET UJI COBA
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 13, totalPages, "12. DASHBOARD OWNER & RESET");
+  addHeaderFooter(doc, 15, totalPages, "14. DASHBOARD OWNER & RESET");
 
   curY = addSectionTitle(doc, "Dashboard Eksekutif Owner & Protokol Reset Data Uji Coba", 18, "Pengawasan kesehatan finansial P&L dan pembersihan transaksi dummy sebelum go-live");
 
-  const dashSplitY = curY;
-  drawImageBox(doc, SCREEN_DASHBOARD, margin, dashSplitY, colW + 6, 52, "Gambar 11.1: Dashboard Eksekutif Owner & KPI Toko");
+  curY = drawFlowchartDiagram(doc, curY, [
+    { label: "1. Pantau P&L", sub: "Gross vs Net" },
+    { label: "2. Cek Rasio HPP", sub: "Sehat: 28-35%?", isDecision: true },
+    { label: "3. Akhir Uji Coba", sub: "Training Selesai" },
+    { label: "4. Input Kunci Teks", sub: "'HAPUS DATA...'" },
+    { label: "5. Clean Go-Live", sub: "Mulai dari Nol" },
+  ]);
 
-  doc.setFontSize(7.2);
+  const dashSplitY = curY;
+  drawImageBox(doc, SCREEN_DASHBOARD, margin, dashSplitY, colW + 6, 50, "Gambar 13.1: Dashboard Eksekutif Owner & KPI Toko");
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(BRAND_NAVY[0], BRAND_NAVY[1], BRAND_NAVY[2]);
   doc.text("Standar Rasio Finansial Sehat:", descX, dashSplitY + 4);
@@ -910,10 +1140,10 @@ export const generateCombinedOfficialManual = () => {
   ];
   dashRatios.forEach((dr, idx) => {
     const l = doc.splitTextToSize(dr, descW);
-    doc.text(l, descX, dashSplitY + 9 + idx * 6.5);
+    doc.text(l, descX, dashSplitY + 8.5 + idx * 6.2);
   });
 
-  curY = dashSplitY + 59;
+  curY = dashSplitY + 57;
   curY = addSectionTitle(doc, "Protokol 3-Lapis Reset Data Uji Coba Sebelum Go-Live", curY, "Langkah resmi membersihkan transaksi training tanpa merusak master data");
 
   drawCaseStudyBox(
@@ -933,10 +1163,10 @@ export const generateCombinedOfficialManual = () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // HALAMAN 14: BAB 12 - PUSAT EKSPOR LAPORAN & FAQ TROUBLESHOOTING
+  // HALAMAN 16: BAB 14 - PUSAT EKSPOR LAPORAN & FAQ TROUBLESHOOTING
   // ════════════════════════════════════════════════════════════════════════════
   doc.addPage();
-  addHeaderFooter(doc, 14, totalPages, "13. EKSPOR LAPORAN & FAQ");
+  addHeaderFooter(doc, 16, totalPages, "15. EKSPOR LAPORAN & FAQ");
 
   curY = addSectionTitle(doc, "Pusat Ekspor & Laporan Bisnis Eksekutif", 18, "Laporan terpadu siap cetak dan olah data untuk akuntan, owner & investor");
 
@@ -963,7 +1193,7 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  const faqY = (doc as any).lastAutoTable.finalY + 6;
+  const faqY = (doc as any).lastAutoTable.finalY + 5;
   curY = addSectionTitle(doc, "Standar Operasional (SOP) Penanganan Kendala (FAQ)", faqY, "Solusi cepat penanganan kendala teknis di lapangan kedai");
 
   const faqs = [
@@ -991,7 +1221,7 @@ export const generateCombinedOfficialManual = () => {
     body: faqs.map((f) => [f.q, f.a]),
     theme: "grid",
     headStyles: { fillColor: [245, 158, 11], textColor: [15, 23, 42], fontStyle: "bold", fontSize: 6.8 },
-    bodyStyles: { fontSize: 6.2, textColor: [51, 65, 85], cellPadding: 2 },
+    bodyStyles: { fontSize: 6.2, textColor: [51, 65, 85], cellPadding: 1.8 },
     columnStyles: {
       0: { cellWidth: 54, fontStyle: "bold" },
       1: { cellWidth: 128 },
@@ -999,19 +1229,122 @@ export const generateCombinedOfficialManual = () => {
     margin: { left: margin, right: margin },
   });
 
-  // End Box
-  const endY = (doc as any).lastAutoTable.finalY + 5;
+  // ════════════════════════════════════════════════════════════════════════════
+  // HALAMAN 17: BAB 15 - LEMBAR SAKU KEDARURATAN (EMERGENCY CHEAT SHEET)
+  // ════════════════════════════════════════════════════════════════════════════
+  doc.addPage();
+  addHeaderFooter(doc, 17, totalPages, "16. LEMBAR SAKU KEDARURATAN");
+
+  curY = addSectionTitle(doc, "LEMBAR SAKU KEDARURATAN MEJA KASIR & BAR", 18, "Dapat dicetak mandiri dan ditempel di dinding kasir / meja barista untuk penanganan instan");
+
+  // Poster Grid: 4 Kotak Darurat
+  const boxW = (contentWidth - 6) / 2;
+  const boxH = 46;
+
+  // Box 1: Wi-Fi Putus
+  doc.setFillColor(254, 242, 242); // red-50
+  doc.setDrawColor(239, 68, 68);
+  doc.roundedRect(margin, curY, boxW, boxH, 2, 2, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(185, 28, 28);
+  doc.text("🚨 1. WI-FI KEDAI PUTUS / MATI", margin + 4, curY + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.setTextColor(127, 29, 29);
+  const wifiLines = [
+    "• JANGAN PANIK & JANGAN TUTUP BROWSER!",
+    "• Mode Offline aktif otomatis: Lanjutkan melayani pesanan seperti biasa.",
+    "• Terimalah pembayaran TUNAI (CASH) — struk thermal tetap terbit normal.",
+    "• Begitu Wi-Fi kembali menyala, klik tombol hijau 'Sync Orders' di pojok atas untuk mengirim seluruh antrean transaksi ke database cloud."
+  ];
+  wifiLines.forEach((l, i) => {
+    const split = doc.splitTextToSize(l, boxW - 8);
+    doc.text(split, margin + 4, curY + 12 + i * 8);
+  });
+
+  // Box 2: Printer Macet
+  doc.setFillColor(254, 252, 232); // amber-50
+  doc.setDrawColor(245, 158, 11);
+  doc.roundedRect(margin + boxW + 6, curY, boxW, boxH, 2, 2, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(146, 64, 14);
+  doc.text("🖨️ 2. PRINTER THERMAL MACET / TIDAK KELUAR", margin + boxW + 10, curY + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.setTextColor(120, 53, 15);
+  const printLines = [
+    "• Buka penutup roll kertas, pastikan kertas thermal menghadap ke atas.",
+    "• Tutup tuas hingga berbunyi 'KLIK'.",
+    "• Jika Bluetooth: Matikan lalu hidupkan Bluetooth tablet -> klik 'Pindai Ulang'.",
+    "• Jika mendesak: Kirimkan Struk Digital PDF langsung ke nomor WhatsApp pelanggan dengan menginput nomor HP di layar kasir."
+  ];
+  printLines.forEach((l, i) => {
+    const split = doc.splitTextToSize(l, boxW - 8);
+    doc.text(split, margin + boxW + 10, curY + 12 + i * 8);
+  });
+
+  const row2Y = curY + boxH + 6;
+
+  // Box 3: Parameter Dialing Espresso
+  doc.setFillColor(240, 253, 244); // emerald-50
+  doc.setDrawColor(16, 185, 129);
+  doc.roundedRect(margin, row2Y, boxW, boxH, 2, 2, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(6, 95, 70);
+  doc.text("☕ 3. PARAMETER BAKU ESPRESSO JULIA'S", margin + 4, row2Y + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.setTextColor(4, 120, 87);
+  const coffeeLines = [
+    "• Dose Bubuk: 18.0 Gram (Toleransi 17.8 - 18.2 gr).",
+    "• Yield Cairan: 36.0 Gram (Rasio 1:2).",
+    "• Waktu Seduh: 26 s/d 30 Detik (Target 27 detik).",
+    "• Suhu Boiler: 93.0 °C.",
+    "• Jika ekstraksi <24 detik: Putar grinder ke arah FINER (Lebih Halus).",
+    "• Jika ekstraksi >31 detik: Putar grinder ke arah COARSER (Lebih Kasar)."
+  ];
+  coffeeLines.forEach((l, i) => {
+    doc.text(l, margin + 4, row2Y + 12 + i * 5.5);
+  });
+
+  // Box 4: Kontak Darurat Internal
+  doc.setFillColor(238, 242, 255); // indigo-50
+  doc.setDrawColor(99, 102, 241);
+  doc.roundedRect(margin + boxW + 6, row2Y, boxW, boxH, 2, 2, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(49, 46, 129);
+  doc.text("📞 4. KONTAK DARURAT INTERNAL KEDAI", margin + boxW + 10, row2Y + 6);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.setTextColor(55, 48, 163);
+  const contactLines = [
+    "• Manager Operasional: Hubungi untuk otorisasi PIN, void nota, & kas darurat.",
+    "• Leader Bar (Rama): Hubungi untuk kalibrasi grinder, mesin error, & bahan bar.",
+    "• Finance & Kasir: Hubungi untuk selisih kas laci, setoran bank, & payroll.",
+    "• Teknisi Mesin Espresso / IT: Hubungi jika kompresor/Wi-Fi/server down.",
+    "• Simpan seluruh nomor darurat ini di speed dial tablet kasir."
+  ];
+  contactLines.forEach((l, i) => {
+    const split = doc.splitTextToSize(l, boxW - 8);
+    doc.text(split, margin + boxW + 10, row2Y + 12 + i * 6.8);
+  });
+
+  const signY = row2Y + boxH + 8;
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text("— Dokumen Buku Panduan Pengguna Resmi Julia's Coffee & Eatery POS System —", pageWidth / 2, endY, { align: "center" });
+  doc.text("— Lembar Saku Standar Operasional Prosedur (SOP) Resmi Julia's Coffee & Eatery POS —", pageWidth / 2, signY + 6, { align: "center" });
 
-  // Save to target outputs
+  // Save to target output
   const outputPdfPath = path.resolve(process.cwd(), "public", "Buku_Panduan_Lengkap_Julia_Coffee.pdf");
   const buffer = Buffer.from(doc.output("arraybuffer"));
   fs.writeFileSync(outputPdfPath, buffer);
-  console.log(`[Master Combined Manual] Successfully generated 14-page master manual: ${outputPdfPath} (${buffer.length} bytes)`);
+  console.log(`[Master 17-Page Manual] Successfully generated master manual: ${outputPdfPath} (${buffer.length} bytes)`);
 };
 
 // Execute
-generateCombinedOfficialManual();
+generateFullMasterManual();
