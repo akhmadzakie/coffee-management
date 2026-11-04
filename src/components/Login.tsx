@@ -179,8 +179,9 @@ export const Login = () => {
   const getRoleBadge = (role: string) => {
     switch (role?.toUpperCase()) {
       case "SUPER_ADMIN":
+        return { label: "Super Admin", color: "text-sky-800 bg-sky-50 border-sky-200" };
       case "OWNER":
-        return { label: "Owner", color: "text-brand-800 bg-brand-50 border-brand-200" };
+        return { label: "Owner (Investor)", color: "text-amber-800 bg-amber-50 border-amber-200" };
       case "MANAGER":
         return { label: "Manager", color: "text-indigo-800 bg-indigo-50 border-indigo-200" };
       case "FINANCE":
@@ -499,7 +500,7 @@ export const Login = () => {
             onClick={() => setShowDemoDrawer(!showDemoDrawer)}
             className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1 py-1 font-medium"
           >
-            <span>Akun Pengujian Demo (Owner / Kasir / Manager)</span>
+            <span>Akun Pengujian Demo (Super Admin / Owner / Manager / Kasir)</span>
             {showDemoDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
@@ -512,9 +513,19 @@ export const Login = () => {
                 pinRef.current = "123456";
                 setPin("123456");
               }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-brand-50 hover:text-brand-800 border border-slate-200 text-xs transition-colors font-medium"
+              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-sky-50 hover:text-sky-800 border border-slate-200 text-xs transition-colors font-medium"
             >
-              👑 Owner: <span className="font-mono text-slate-800">admin / 123456</span>
+              🛠️ Super Admin (IT): <span className="font-mono text-slate-800">admin / 123456</span>
+            </button>
+            <button
+              onClick={() => {
+                setUsername("owner");
+                pinRef.current = "123456";
+                setPin("123456");
+              }}
+              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-amber-50 hover:text-amber-800 border border-slate-200 text-xs transition-colors font-medium"
+            >
+              👑 Owner (Investor): <span className="font-mono text-slate-800">owner / 123456</span>
             </button>
             <button
               onClick={() => {
@@ -524,7 +535,7 @@ export const Login = () => {
               }}
               className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:text-indigo-800 border border-slate-200 text-xs transition-colors font-medium"
             >
-              💼 Manager: <span className="font-mono text-slate-800">manager / 123456</span>
+              💼 Manager (Operasional): <span className="font-mono text-slate-800">manager / 123456</span>
             </button>
             <button
               onClick={() => {
@@ -544,7 +555,7 @@ export const Login = () => {
               }}
               className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-purple-50 hover:text-purple-800 border border-slate-200 text-xs transition-colors font-medium"
             >
-              ☕ Leader: <span className="font-mono text-slate-800">barista / 123456</span>
+              ☕ Leader QC: <span className="font-mono text-slate-800">barista / 123456</span>
             </button>
           </div>
         )}

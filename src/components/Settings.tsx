@@ -24,6 +24,10 @@ import { ConnectedDevices } from "./ConnectedDevices";
 
 export const SettingsComponent = () => {
   const { settings, updateSettings, currentUser } = useStore();
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const isManager = currentUser?.role === "MANAGER";
+  const isOwner = currentUser?.role === "OWNER";
+
   const [brandName, setBrandName] = useState(settings.brandName);
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(
     settings.logoDataUrl,
@@ -125,7 +129,7 @@ export const SettingsComponent = () => {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">
             {language === "id" ? "Pengaturan Sistem" : "Application Settings"}
@@ -135,6 +139,28 @@ export const SettingsComponent = () => {
               ? "Konfigurasi profil usaha, informasi invoice, dan keamanan sesi perangkat."
               : "Configure company profile, invoice information, and device session security."}
           </p>
+        </div>
+
+        {/* Role Access Indicator Badge */}
+        <div>
+          {isSuperAdmin && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-bold shadow-2xs">
+              <Shield className="w-3.5 h-3.5 text-sky-600" />
+              <span>Super Admin (Akses Penuh IT & Sistem)</span>
+            </span>
+          )}
+          {isManager && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold shadow-2xs">
+              <Store className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Manager Operasional (Toko, Pajak & PIN Supervisor Kasir)</span>
+            </span>
+          )}
+          {isOwner && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
+              <Eye className="w-3.5 h-3.5 text-amber-600" />
+              <span>Owner / Investor (Pengawasan Eksekutif - Read Only)</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -310,42 +336,58 @@ export const SettingsComponent = () => {
                 <input
                   type={showApiKey ? "text" : "password"}
                   value={geminiApiKey}
+                  disabled={!isSuperAdmin}
                   onChange={(e) => {
-                    setGeminiApiKey(e.target.value);
-                    setTestResult(null);
+                    if (isSuperAdmin) {
+                      setGeminiApiKey(e.target.value);
+                      setTestResult(null);
+                    }
                   }}
-                  className="w-full pl-3 pr-10 py-2.5 bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-base sm:text-xs font-mono text-stone-900 outline-none"
-                  placeholder="AIzaSy..."
+                  className={`w-full pl-3 pr-10 py-2.5 bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-base sm:text-xs font-mono text-stone-900 outline-none ${
+                    !isSuperAdmin ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
+                  }`}
+                  placeholder={isSuperAdmin ? "AIzaSy..." : "Terkunci (Hanya Super Admin)"}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 cursor-pointer"
-                  title={showApiKey ? "Sembunyikan Key" : "Tampilkan Key"}
-                >
-                  {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 cursor-pointer"
+                    title={showApiKey ? "Sembunyikan Key" : "Tampilkan Key"}
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={handleTestApiKey}
-                disabled={isTestingKey}
-                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shrink-0 flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-              >
-                {isTestingKey ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Menguji...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Tes Koneksi</span>
-                  </>
-                )}
-              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={handleTestApiKey}
+                  disabled={isTestingKey}
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shrink-0 flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                >
+                  {isTestingKey ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menguji...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Tes Koneksi</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
+
+            {!isSuperAdmin && (
+              <p className="text-[11px] text-amber-800 bg-amber-100/70 px-3 py-1.5 rounded-lg border border-amber-200 font-medium flex items-center gap-1.5">
+                <span>🔒</span>
+                <span>Konfigurasi teknis API Key & sistem AI dikelola khusus oleh <strong>Super Admin (IT)</strong>.</span>
+              </p>
+            )}
 
             {testResult && (
               <div
@@ -493,7 +535,7 @@ export const SettingsComponent = () => {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-tight">
-                  <strong className="text-slate-700">Keamanan:</strong> Kasir tidak perlu meminjam akun manajer. Cukup gunakan PIN Supervisor ini di kasir. Default: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">1234</code>.
+                  <strong className="text-slate-700">Wewenang:</strong> <strong>Manager Operasional</strong> dan <strong>Super Admin</strong> dapat memperbarui PIN ini sewaktu-waktu. Kasir cukup meminta otorisasi PIN ini di kasir untuk aksi Void & Refund tanpa meminjam akun login pribadi Manager. Default: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">1234</code>.
                 </p>
               </div>
             </div>
@@ -681,10 +723,19 @@ export const SettingsComponent = () => {
         )}
         <button
           onClick={handleSave}
-          className="flex items-center px-5 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-all shadow-xs font-bold text-xs sm:text-sm cursor-pointer active:scale-95"
+          disabled={isOwner}
+          className={`flex items-center px-5 py-2.5 rounded-xl transition-all shadow-xs font-bold text-xs sm:text-sm ${
+            isOwner
+              ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+              : "bg-brand-600 text-white hover:bg-brand-700 cursor-pointer active:scale-95"
+          }`}
         >
           <Save className="w-4 h-4 mr-2" />
-          {language === "id" ? "Simpan Pengaturan" : "Save Settings"}
+          {isOwner
+            ? "Akun Pengawasan (Hanya Baca)"
+            : language === "id"
+            ? "Simpan Pengaturan"
+            : "Save Settings"}
         </button>
       </div>
     </div>

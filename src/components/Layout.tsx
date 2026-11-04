@@ -403,6 +403,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "leader_checklist",
       "users",
       "audit_log",
+      "settings",
     ],
 
     // Finance: Penjualan, arus kas, laba rugi, nota belanja, payroll
@@ -491,8 +492,9 @@ export const Layout: React.FC<LayoutProps> = ({
   const getRoleTheme = (role?: string) => {
     switch (role?.toUpperCase()) {
       case "SUPER_ADMIN":
+        return { label: "Super Admin", bg: "bg-sky-50 text-sky-700 border-sky-200", icon: "🛠️" };
       case "OWNER":
-        return { label: "Owner", bg: "bg-brand-50 text-brand-700 border-brand-200", icon: "👑" };
+        return { label: "Owner (Investor)", bg: "bg-amber-50 text-amber-800 border-amber-200", icon: "👑" };
       case "MANAGER":
         return { label: "Manager", bg: "bg-violet-50 text-violet-700 border-violet-200", icon: "💼" };
       case "FINANCE":

@@ -225,6 +225,7 @@ function AppContent() {
       "leader_checklist",
       "users",
       "audit_log",
+      "settings",
       "pos_cashier",
       "kitchen_display",
     ],
