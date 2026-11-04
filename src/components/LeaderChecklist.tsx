@@ -1337,33 +1337,36 @@ export const LeaderChecklist: React.FC = () => {
                           return (
                             <div
                               key={itemIdx}
-                              className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                              className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors ${
                                 isDone
                                   ? "bg-emerald-50 border-emerald-200 text-emerald-950 font-medium"
                                   : "bg-white border-slate-200 text-slate-600"
                               }`}
                             >
-                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
                                 {isDone ? (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                                 ) : (
-                                  <XCircle className="w-4 h-4 text-slate-300 shrink-0" />
+                                  <XCircle className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
                                 )}
-                                <span className="truncate">{itemDetail.text}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="break-words font-medium text-slate-800 leading-relaxed">{itemDetail.text}</p>
+                                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                    {/* Role Badge */}
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                                      👑 Leader QC
+                                    </span>
 
-                                {/* Role Badge */}
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                                  👑 Leader QC
-                                </span>
-
-                                {/* Shift Badge */}
-                                {itemDetail.shift && itemDetail.shift !== "ALL" && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
-                                    {itemDetail.shift}
-                                  </span>
-                                )}
+                                    {/* Shift Badge */}
+                                    {itemDetail.shift && itemDetail.shift !== "ALL" && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">
+                                        {itemDetail.shift}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <span className={`font-bold ml-2 shrink-0 ${isDone ? "text-emerald-700" : "text-slate-400"}`}>
+                              <span className={`font-bold shrink-0 self-end sm:self-center pl-6 sm:pl-0 ${isDone ? "text-emerald-700" : "text-slate-400"}`}>
                                 {isDone ? "Selesai" : "Belum"}
                               </span>
                             </div>
@@ -2631,13 +2634,13 @@ export const LeaderChecklist: React.FC = () => {
               >
                 {/* Category Header */}
                 <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0">
                       {catIdx + 1}
                     </span>
                     <h4 className="font-bold text-slate-800 text-sm">{cat.category}</h4>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold shrink-0 ${
                     isCatComplete ? "bg-emerald-100 text-emerald-700" : catDone > 0 ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"
                   }`}>
                     {catDone}/{catTotal} Selesai ({catPct}%)
@@ -2663,7 +2666,7 @@ export const LeaderChecklist: React.FC = () => {
                           }
                           toggleLeaderTask(cat.category, item);
                         }}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all select-none ${
+                        className={`p-3 sm:p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 transition-all select-none ${
                           isShiftLocked
                             ? "bg-slate-100/70 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed"
                             : isChecked
@@ -2671,7 +2674,7 @@ export const LeaderChecklist: React.FC = () => {
                             : "bg-white border-slate-200 hover:border-slate-300 text-slate-700 cursor-pointer"
                         }`}
                       >
-                        <div className="flex items-center gap-3 flex-1">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           <div className="mt-0.5 shrink-0">
                             {isShiftLocked ? (
                               <Lock className="w-5 h-5 text-slate-400" />
@@ -2681,8 +2684,8 @@ export const LeaderChecklist: React.FC = () => {
                               <Square className="w-5 h-5 text-slate-400" />
                             )}
                           </div>
-                          <div className="flex-1">
-                            <p className={`text-xs sm:text-sm font-semibold ${
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs sm:text-sm font-semibold leading-relaxed break-words ${
                               isShiftLocked
                                 ? "text-slate-500"
                                 : isChecked
@@ -2692,14 +2695,14 @@ export const LeaderChecklist: React.FC = () => {
                               {itemDetail.text}
                             </p>
                             {isShiftLocked && (
-                              <p className="text-[10px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
+                              <p className="text-[10px] text-amber-700 font-semibold mt-1 flex items-center gap-1">
                                 🔒 Terkunci: Khusus diselesaikan pada Shift {itemDetail.shift}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap pl-8 sm:pl-0 pt-0.5 sm:pt-0">
                           {/* Role Badge on Item */}
                           {itemDetail.targetRole === "LEADER" && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shrink-0">

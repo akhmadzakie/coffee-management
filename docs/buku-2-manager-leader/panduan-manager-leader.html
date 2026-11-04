@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Operasional & Pengawasan Toko - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 16mm 16mm 16mm;
+      @bottom-right {
+        content: "Halaman " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+      @bottom-left {
+        content: "Julia's Coffee — Panduan Leader & Manager v1.0";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 88vh;
+      border: 2px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 40px;
+      background: linear-gradient(135deg, #fffbeb 0%, #ffffff 50%, #fafaf9 100%);
+    }
+
+    .badge-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: #92400e;
+      color: #fef3c7;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cover-header {
+      margin-top: 40px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #451a03;
+      line-height: 1.15;
+      margin: 16px 0 10px 0;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #92400e;
+      margin: 0 0 20px 0;
+      font-weight: 500;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #57534e;
+      max-width: 90%;
+      line-height: 1.6;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 24px;
+      border-top: 2px dashed #d6d3d1;
+      font-size: 9pt;
+      color: #57534e;
+    }
+
+    .meta-box strong {
+      display: block;
+      color: #292524;
+      font-size: 9.5pt;
+      margin-bottom: 2px;
+    }
+
+    /* Headings */
+    h1, h2, h3, h4 {
+      color: #451a03;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #fed7aa;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      color: #92400e;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 0 0 8px 0;
+    }
+
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* Step Card */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #92400e;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #1c1917;
+      margin: 0;
+    }
+
+    .step-body {
+      padding-left: 36px;
+      font-size: 9.5pt;
+      color: #292524;
+    }
+
+    /* Mockup Screenshot Box */
+    .mockup-container {
+      margin: 10px 0;
+      border: 1.5px solid #d6d3d1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f4;
+      page-break-inside: avoid;
+    }
+
+    .mockup-header {
+      background: #e7e5e4;
+      padding: 6px 12px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #57534e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #d6d3d1;
+    }
+
+    .mockup-placeholder {
+      padding: 22px;
+      text-align: center;
+      color: #78716c;
+      font-style: italic;
+      background: repeating-linear-gradient(45deg, #fafaf9, #fafaf9 10px, #f5f5f4 10px, #f5f5f4 20px);
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-caption {
+      padding: 6px 12px;
+      font-size: 8.5pt;
+      color: #44403c;
+      background: #ffffff;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    /* Tables */
+    .callout-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 8.5pt;
+    }
+
+    .callout-table th, .callout-table td {
+      border: 1px solid #e7e5e4;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .callout-table th {
+      background: #f5f5f4;
+      font-weight: 700;
+      color: #451a03;
+    }
+
+    .callout-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      background: #b45309;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 18px;
+      font-weight: bold;
+      font-size: 8pt;
+    }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .alert-tip {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+
+    .alert-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-important {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+
+    .dodont-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .dodont-table th {
+      padding: 8px 12px;
+      color: white;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .dodont-table td {
+      padding: 8px 12px;
+      border: 1px solid #e7e5e4;
+      vertical-align: top;
+    }
+
+    .th-do { background: #059669; width: 50%; }
+    .th-dont { background: #dc2626; width: 50%; }
+
+    /* Flowchart */
+    .flowchart-container {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 12px 0;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .flowchart-svg {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <span class="badge-pill">SOP &amp; USER MANUAL RESMI • BUKU 2</span>
+        <img src="screenshots/logo.png" style="height: 48px; object-fit: contain;" alt="Logo Julia's Coffee">
+      </div>
+      <div class="cover-header" style="margin-top: 20px;">
+        <h1 class="cover-title">PANDUAN OPERASIONAL &amp; PENGAWASAN TOKO</h1>
+        <h2 class="cover-subtitle">Sistem Manajemen Toko &amp; Pengawasan — Julia's Coffee</h2>
+        <p class="cover-desc">
+          Buku panduan manajerial dan kepemimpinan operasional untuk peran <strong>Shift Leader (LEADER)</strong> 
+          dan <strong>Store Manager (MANAGER)</strong>. Memuat SOP checklist supervisi harian, otorisasi transaksi kasir 
+          (Void/Refund PIN &amp; Remote Approval), manajemen stok bahan baku &amp; opname, pengadaan bahan (PO), 
+          kalkulasi HPP &amp; margin resep, hingga pemantauan dasbor 360 performa toko.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="meta-item">
+        <strong>Peran Pengguna:</strong>
+        Shift Leader, Store Manager, Assistant Manager
+      </div>
+      <div class="meta-item">
+        <strong>Versi Dokumen:</strong>
+        Rev 1.0 (November 2026)
+      </div>
+      <div class="meta-item">
+        <strong>Hak Akses Sistem:</strong>
+        Menu Inventori, Pembelian, HPP, Shift, HR, &amp; Otorisasi PIN
+      </div>
+      <div class="meta-item">
+        <strong>Sifat Dokumen:</strong>
+        Rahasia Perusahaan (Internal Manajerial)
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: MATRIKS WEWENANG ==================== -->
+  <h1>🎖️ Bab 1: Matriks Wewenang Leader vs Manager</h1>
+  
+  <p>Untuk menjaga akuntabilitas dan efisiensi kepemimpinan di outlet, sistem membagi wewenang operasional antara <strong>Shift Leader</strong> dan <strong>Store Manager</strong> sebagai berikut:</p>
+
+  <table class="callout-table">
+    <tr>
+      <th width="30%">Area Kerja / Modul</th>
+      <th width="35%">Tanggung Jawab Shift Leader (LEADER)</th>
+      <th width="35%">Tanggung Jawab Store Manager (MANAGER)</th>
+    </tr>
+    <tr>
+      <td><strong>Supervisi Harian &amp; Sanitasi</strong></td>
+      <td>Mengisi checklist pembukaan/penutupan, cek kebersihan area bar, dan kalibrasi mesin espresso.</td>
+      <td>Mengevaluasi rekap kepatuhan checklist mingguan tim dan memberi teguran/evaluasi.</td>
+    </tr>
+    <tr>
+      <td><strong>Otorisasi Kasir (PIN Approval)</strong></td>
+      <td>Memasukkan PIN langsung di meja kasir saat mendampingi pembatalan pesanan (*Void*).</td>
+      <td>Menyetujui permohonan Void/Refund langsung maupun via <em>Remote Approval</em> dari smartphone/tablet.</td>
+    </tr>
+    <tr>
+      <td><strong>Inventori &amp; Stok Opname</strong></td>
+      <td>Menghitung fisik bahan baku (*Stock Opname* harian/mingguan) dan mencatat waste tumpah.</td>
+      <td>Menyetujui hasil selisih opname, investigasi kebocoran bahan, dan penyesuaian saldo sistem.</td>
+    </tr>
+    <tr>
+      <td><strong>Pengadaan Bahan (Purchases)</strong></td>
+      <td>Membuat draf pengajuan belanja (*Purchase Order*) saat stok bahan menipis.</td>
+      <td>Menyetujui PO, memilih vendor supplier, dan meneruskan ke tim Finance untuk pembayaran.</td>
+    </tr>
+    <tr>
+      <td><strong>Menu, Resep &amp; Kalkulator HPP</strong></td>
+      <td>Memeriksa takaran resep yang digunakan barista agar konsisten dengan standar SOP.</td>
+      <td>Membuat/mengedit menu, mengatur takaran resep gramasi, dan menetapkan margin laba HPP.</td>
+    </tr>
+    <tr>
+      <td><strong>Jadwal Shift &amp; SDM</strong></td>
+      <td>Memantau kehadiran fisik rekan kerja saat bertugas di shift yang bersangkutan.</td>
+      <td>Membuat jadwal shift kerja mingguan, evaluasi KPI tim, dan review draf payroll bulanan.</td>
+    </tr>
+  </table>
+
+  <!-- ==================== BAB 2: LEADER CHECKLIST ==================== -->
+  <h1>📋 Bab 2: Checklist Supervisi Harian (Leader Checklist)</h1>
+
+  <p>Shift Leader yang bertugas wajib membuka modul <strong>Checklist Supervisi</strong> untuk memastikan seluruh standar mutu (kebersihan, kesiapan mesin, bahan, dan keselamatan) terpenuhi.</p>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="10" width="160" height="50" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+      <text x="85" y="32" font-size="10" font-weight="bold" fill="#78350f" text-anchor="middle">1. Shift Pagi (Opening)</text>
+      <text x="85" y="47" font-size="8.5" fill="#92400e" text-anchor="middle">Dial-in, Chiller 2-4°C, POS</text>
+
+      <path d="M175 35 L195 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="200" y="10" width="165" height="50" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+      <text x="282" y="32" font-size="10" font-weight="bold" fill="#065f46" text-anchor="middle">2. Operasional Siang</text>
+      <text x="282" y="47" font-size="8.5" fill="#047857" text-anchor="middle">Cek Stok Es &amp; Sanitasi Bar</text>
+
+      <path d="M375 35 L395 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="400" y="10" width="165" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="482" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">3. Shift Malam (Closing)</text>
+      <text x="482" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Backflush Espresso &amp; Sampah</text>
+
+      <path d="M575 35 L595 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="600" y="10" width="155" height="50" rx="6" fill="#f5f5f4" stroke="#57534e" stroke-width="1.5"/>
+      <text x="677" y="32" font-size="10" font-weight="bold" fill="#292524" text-anchor="middle">4. Simpan &amp; Kunci</text>
+      <text x="677" y="47" font-size="8.5" fill="#57534e" text-anchor="middle">Tercatat ke Log Leader</text>
+    </svg>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h3 class="step-title">Alur Pengisian Checklist Supervisi</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Checklist Supervisi</strong> pada bilah navigasi.</li>
+        <li>Pilih tanggal hari ini dan pilih shift yang sedang berlangsung (Pagi / Sore / Malam).</li>
+        <li>Centang kotak tugas yang telah diverifikasi secara fisik:
+          <ul>
+            <li><strong>Sanitasi &amp; Area:</strong> Meja bar bersih, area POS higienis, lantai bar tidak licin, knockbox bersih.</li>
+            <li><strong>Alat &amp; Mesin:</strong> Kalibrasi ekstraksi espresso (*dial-in rasio gramasi &amp; detik alir*), temperatur chiller susu (standar 2°C – 4°C), fungsi printer dan cash drawer.</li>
+            <li><strong>Bahan Baku:</strong> Stok biji kopi terisi di hopper, susu segar cukup, es batu higienis, sirup dan saus siap pakai.</li>
+          </ul>
+        </li>
+        <li>Tulis catatan temuan di kolom keterangan (misal: <em>"Baut portafilter head 2 sedikit longgar, sudah dikencangkan"</em>).</li>
+        <li>Klik tombol <strong>"Simpan Checklist"</strong>.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Modul Checklist Supervisi (LeaderChecklist.tsx)</span>
+          <span>Status: Shift Pagi</span>
+        </div>
+        <img src="screenshots/04_leader_checklist.png" alt="Checklist Supervisi" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Perhatian:</strong> Nilai kepatuhan checklist harian terhubung langsung dengan insentif / tunjangan kedisiplinan Leader (*Leader Allowance Rules*).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3: OTORISASI KASIR ==================== -->
+  <h1>🔐 Bab 3: Otorisasi Kasir &amp; Remote Approval</h1>
+
+  <p>Setiap pembatalan nota (*Void*), retur uang (*Refund*), pemberian diskon manual, atau pembukaan laci kasir manual mewajibkan persetujuan Leader/Manager.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h3 class="step-title">Cara Menyetujui Otorisasi Kasir (2 Metode)</h3>
+    </div>
+    <div class="step-body">
+      
+      <h4>Metode A: Otorisasi Langsung di Layar Kasir (Input PIN)</h4>
+      <ol>
+        <li>Kasir memanggil Leader/Manager ke depan meja POS.</li>
+        <li>Periksa nota atau barang yang bersangkutan (misal: nota salah input oleh kasir).</li>
+        <li>Ketikkan 4-digit PIN otorisasi Anda secara rahasia pada pop-up layar kasir.</li>
+        <li>Pilih alasan pembatalan dan tekan <em>"Setujui Pembatalan"</em>.</li>
+      </ol>
+
+      <h4>Metode B: Persetujuan Jarak Jauh (Remote Approval Modal)</h4>
+      <ol>
+        <li>Jika Manager sedang tidak berada di meja kasir (sedang di ruang kantor atau memantau via HP/Tablet), lonceng notifikasi di pojok atas akan menyala merah menandakan ada <em>"Permintaan Otorisasi Tertunda"</em>.</li>
+        <li>Klik lonceng notifikasi atau buka <strong>Manager Approval Modal</strong>.</li>
+        <li>Sistem menampilkan rincian: Nama Kasir, Nomor Transaksi, Jenis Aksi (Void/Refund/Diskon), Total Uang, dan Alasan Kasir.</li>
+        <li>Tulis catatan tanggapan, lalu klik tombol hijau <strong>"Setujui (Approve)"</strong> atau tombol merah <strong>"Tolak (Reject)"</strong>. Layar POS kasir akan terbuka seketika secara nirkabel.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Modal Otorisasi Jarak Jauh (ManagerApprovalModal.tsx)</span>
+          <span>Notifikasi Real-time</span>
+        </div>
+        <img src="screenshots/pos_manager_pin_modal.png" alt="Otorisasi Kasir &amp; Approval" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>SOP Keamanan:</strong> Jangan pernah menyetujui Refund tanpa memeriksa fisik struk asli pelanggan dan memastikan uang pelanggan benar-benar dikembalikan.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 4: MANAJEMEN STOK & INVENTORI ==================== -->
+  <h1>📦 Bab 4: Manajemen Stok &amp; Stock Opname</h1>
+
+  <p>Sistem Julia's Coffee menggunakan metode pemotongan stok otomatis (*recipe deduction*). Setiap cangkir kopi yang terjual di POS akan otomatis memotong gramasi biji kopi, mililiter susu, dan sirup di gudang.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h3 class="step-title">Alur Pelaksanaan Stock Opname (Hitung Fisik Stok)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Stok Bahan Baku (Inventory)</strong>.</li>
+        <li>Lakukan penghitungan fisik bahan baku di bar dan rak gudang (disarankan dilakukan saat toko tutup atau sebelum buka):
+          <ul>
+            <li>Timbang biji kopi (satuan gram).</li>
+            <li>Hitung kotak susu segar &amp; oatmilk (satuan pcs / liter).</li>
+            <li>Hitung sisa cup take-away, lid, dan sedotan.</li>
+          </ul>
+        </li>
+        <li>Klik tombol <strong>"Stock Opname / Sesuaikan Stok"</strong> pada bahan yang bersangkutan.</li>
+        <li>Ketikkan jumlah saldo fisik riil yang ada di tangan ke kolom <em>Stok Aktual</em>.</li>
+        <li>Sistem akan menghitung selisih secara otomatis:
+          <br><code>Selisih Stok = Stok Fisik Nyata - Saldo Catatan Sistem</code>
+        </li>
+        <li>Pilih alasan selisih (misal: <em>Hasil Stock Opname Mingguan</em> atau <em>Koreksi Selisih Timbangan</em>) dan klik <strong>"Simpan Penyesuaian"</strong>.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Daftar Stok Bahan Baku &amp; Peringatan Menipis (Inventory.tsx)</span>
+        </div>
+        <img src="screenshots/05_inventory_screen.png" alt="Stok Bahan Baku" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Peringatan Otomatis (*Low Stock Alert*):</strong> Bahan yang berada di bawah batas minimum (*Safety Stock*) akan berwarna kuning menyala untuk segera diajukan pembelian (PO).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5: PENGADAAN BAHAN (PURCHASES) ==================== -->
+  <h1>🛒 Bab 5: Pengadaan Bahan &amp; Supplier (PO Belanja)</h1>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Pengadaan Bahan &amp; Purchase Order (Purchases.tsx)</span>
+    </div>
+    <img src="screenshots/07_purchases_screen.png" alt="Pengadaan Bahan &amp; PO" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>Manajemen Pengadaan:</strong> Daftar PO bahan baku, status persetujuan, dan tombol verifikasi barang masuk (*Mark Received*).
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">4</span>
+      <h3 class="step-title">Alur Pembuatan Purchase Order (PO) &amp; Penerimaan Barang</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Masuk ke menu <strong>Pembelian Bahan (Purchases)</strong> &rarr; Klik tombol <strong>"+ Buat Pengajuan PO"</strong>.</li>
+        <li>Pilih nama vendor/rekanan dari daftar <strong>Pemasok / Supplier</strong> (contoh: <em>PT Greenfields Indonesia</em> atau <em>Roastery Mitra</em>).</li>
+        <li>Pilih item bahan yang akan dipesan, masukkan kuantitas belanja dan harga beli per satuan.</li>
+        <li>Klik <strong>"Simpan Pengajuan PO"</strong>. Status PO awal adalah <code>PENDING</code>.</li>
+        <li>Setelah disetujui Manager dan barang pesanan tiba di outlet:
+          <ul>
+            <li>Periksa fisik barang: Pastikan segel utuh, kemasan tidak bocor, dan tanggal kedaluwarsa (*expired*) masih lama.</li>
+            <li>Buka kembali dokumen PO tersebut di sistem &rarr; Klik tombol <strong>"Terima Barang (Mark Received)"</strong>.</li>
+            <li>Saldo stok bahan di sistem akan otomatis bertambah seketika, dan faktur belanja diteruskan ke modul Finance untuk pembayaran kas.</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 6: MANAJEMEN MENU & HPP ==================== -->
+  <h1>☕ Bab 6: Manajemen Menu, Resep, &amp; Kalkulator HPP</h1>
+
+  <p>Modul <strong>Katalog Menu &amp; Kalkulator HPP</strong> digunakan untuk mengontrol margin keuntungan toko agar biaya modal (*Cost of Goods Sold*) tidak membengkak.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">5</span>
+      <h3 class="step-title">Cara Mengatur Resep &amp; Menghitung HPP Otomatis</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Kalkulator &amp; HPP (HppCalculator.tsx)</strong>.</li>
+        <li>Pilih produk minuman/makanan yang ingin diatur (contoh: <em>Iced Caramel Macchiato</em>).</li>
+        <li>Tambahkan rincian bahan baku ke dalam resep:
+          <ul>
+            <li><code>18 gram</code> House Blend Espresso @ Rp 250/g = <strong>Rp 4.500</strong></li>
+            <li><code>160 ml</code> Fresh Milk @ Rp 18/ml = <strong>Rp 2.880</strong></li>
+            <li><code>20 ml</code> Caramel Syrup @ Rp 120/ml = <strong>Rp 2.400</strong></li>
+            <li><code>1 pcs</code> Cup 16oz + Straw + Lid + Sleeve = <strong>Rp 1.200</strong></li>
+          </ul>
+        </li>
+        <li>Sistem menjumlahkan total modal: <strong>Total HPP = Rp 10.980</strong>.</li>
+        <li>Ketikkan rencana harga jual (misal: <code>Rp 32.000</code>).</li>
+        <li>Sistem akan langsung menampilkan kalkulasi:
+          <br><strong>Laba Kotor (Gross Profit):</strong> <code>Rp 21.020</code>
+          <br><strong>Persentase HPP (% COGS):</strong> <code>34,3%</code> (Kategori Sehat/Ideal).
+        </li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Kalkulator HPP &amp; Analisis Margin (HppCalculator.tsx)</span>
+        </div>
+        <img src="screenshots/08_hpp_calculator_screen.png" alt="Kalkulator HPP &amp; Analisis Margin" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Standar Industri Kafe:</strong> Jaga persentase HPP produk minuman kopi di kisaran <strong>28% – 35%</strong> dari harga jual agar outlet tetap memiliki profitabilitas yang sehat.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 7: PROMOSI & DISKON ==================== -->
+  <h1>🏷️ Bab 7: Manajemen Promo &amp; Diskon Toko</h1>
+
+  <p>Untuk menaikkan omzet pada hari sepi (*slow hours*), Manager dapat mengatur promo diskon melalui menu <strong>Promo &amp; Diskon</strong>:</p>
+
+  <div class="step-card">
+    <div class="step-body">
+      <ol>
+        <li>Klik menu <strong>Promo &amp; Diskon</strong> &rarr; Klik tombol <strong>"+ Tambah Promo Baru"</strong>.</li>
+        <li>Isi nama promo (contoh: <em>"Diskon Pelajar / Happy Hour Sore 20%"</em>).</li>
+        <li>Pilih tipe potongan:
+          <ul>
+            <li><strong>Persentase (%):</strong> Misal diskon 15% atau 20% (dapat diberi batas maksimal potongan nominal).</li>
+            <li><strong>Nominal Tetap (Rp):</strong> Misal potongan Rp 5.000 untuk pembelian minimal Rp 50.000.</li>
+          </ul>
+        </li>
+        <li>Atur masa berlaku (tanggal mulai &amp; tanggal selesai) serta jam aktif promo.</li>
+        <li>Tentukan apakah promo berlaku untuk semua menu atau hanya menu tertentu.</li>
+        <li>Klik <strong>"Aktifkan Promo"</strong>. Promo ini akan langsung muncul di tombol kasir POS tanpa kasir perlu menghitung diskon secara manual.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 8: SHIFT & SDM ==================== -->
+  <h1>👥 Bab 8: Manajemen Shift &amp; Tim Kerja (Shifts &amp; HR)</h1>
+
+  <div class="step-card">
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Data Karyawan &amp; Shift (HR)</strong>.</li>
+        <li>Di tab <strong>Jadwal Shift</strong>, atur penugasan karyawan per hari untuk Shift Pagi, Mid, dan Malam.</li>
+        <li>Pantau rekap kehadiran harian:
+          <ul>
+            <li>Lihat foto selfie kedatangan staf.</li>
+            <li>Periksa jam *Clock In* nyata vs jam jadwal shift (mendeteksi staf yang telat hadir).</li>
+            <li>Koreksi status kehadiran staf jika ada yang izin sakit atau cuti mendesak.</li>
+          </ul>
+        </li>
+        <li>Seluruh data jam kerja dan kehadiran ini akan otomatis disinkronkan ke modul penggajian (*Payroll*) tim Finance di akhir bulan.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 9: DASBOR 360 MANAJER ==================== -->
+  <h1>📊 Bab 9: Membaca Dasbor Manajer (Dasbor 360 Toko)</h1>
+
+  <p>Manager memiliki dasbor komprehensif untuk memantau detak jantung operasional outlet secara langsung:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Dasbor Manajer Toko (ManagerDashboard.tsx)</span>
+      <span>Live Real-time</span>
+    </div>
+    <img src="screenshots/16_dashboard_manager.png" alt="Dasbor Manajer Toko" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>4 Metrik Utama yang Wajib Dipantau Manager Setiap Hari:</strong>
+      <ol>
+        <li><strong>Omzet Penjualan Hari Ini:</strong> Target harian toko tercapai atau belum.</li>
+        <li><strong>Rata-rata Transaksi (Basket Size):</strong> Nilai rata-rata belanja per struk pelanggan.</li>
+        <li><strong>Grafik Jam Sibuk (Peak Hours):</strong> Mengatur waktu istirahat tim agar meja kasir dan bar tidak kosong saat pelanggan membludak.</li>
+        <li><strong>Stok Kritis:</strong> Bahan yang harus segera di-order agar operasional besok tidak macet.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 10: DO & DON'T MANAJERIAL ==================== -->
+  <h1>⚖️ Bab 10: Aturan Emas Leader &amp; Manager (DO &amp; DON'T)</h1>
+
+  <table class="dodont-table">
+    <tr>
+      <th class="th-do">✅ HAL WAJIB DILAKUKAN (DO)</th>
+      <th class="th-dont">❌ DILARANG KERAS (DON'T)</th>
+    </tr>
+    <tr>
+      <td>Selalu periksa fisik nota dan alasan pelanggan sebelum memasukkan PIN otorisasi Void/Refund.</td>
+      <td>Memberitahukan 4-digit PIN otorisasi kepada kasir agar kasir bisa input sendiri (*Bypass PIN*).</td>
+    </tr>
+    <tr>
+      <td>Lakukan kalibrasi grinder espresso (*dial-in*) dan cek temperatur chiller susu di awal shift.</td>
+      <td>Mengabaikan atau menunda pencatatan selisih *Stock Opname* hingga akhir bulan.</td>
+    </tr>
+    <tr>
+      <td>Periksa kesesuaian fisik barang masuk dari supplier dengan dokumen pesanan (PO) sebelum klik 'Terima'.</td>
+      <td>Membuat PO pembelian fiktif atau menerima barang pesanan yang kemasannya rusak/kedaluwarsa.</td>
+    </tr>
+    <tr>
+      <td>Berikan evaluasi berkala kepada kasir yang memiliki frekuensi pembatalan nota (*Void*) tidak wajar.</td>
+      <td>Meninggalkan outlet tanpa menunjuk penanggung jawab Shift Leader saat jam operasional berlangsung.</td>
+    </tr>
+  </table>
+
+</body>
+</html>

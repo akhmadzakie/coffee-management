@@ -216,6 +216,20 @@ export function HRManagement() {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [verifyingAttendance, setVerifyingAttendance] = useState<any | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
+
+  const handleDownloadPhoto = (dataUrl: string, filename: string) => {
+    try {
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error("Gagal mendownload foto:", e);
+    }
+  };
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [attendanceDateFilter, setAttendanceDateFilter] = useState<string>("");
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
@@ -2148,7 +2162,7 @@ export function HRManagement() {
                   </div>
 
                   {/* Copy Schedule & Approval / Revision Action Buttons */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     {/* Master Shift Configuration Button for HRD / Manager */}
                     {isHRD && (
                       <button
@@ -2211,7 +2225,7 @@ export function HRManagement() {
 
                     {/* Manager Approval & Revision Buttons */}
                     {isHRD && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {isWeekPending && !isWeekApproved && (
                           <button
                             type="button"
@@ -3591,17 +3605,17 @@ export function HRManagement() {
         <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100 my-auto">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 z-10 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
+            <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-100 flex justify-between items-start sm:items-center bg-slate-50/80 z-10 shrink-0 gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
                   {emp?.name ? emp.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900 leading-tight">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
                       {emp?.name || getEmployeeName(verifyingAttendance.employeeId)}
                     </h3>
-                    <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                    <span className={`px-2 py-0.5 text-[11px] sm:text-xs font-bold rounded-full ${
                       verifyingAttendance.status === 'HADIR' ? 'bg-emerald-100 text-emerald-800' :
                       verifyingAttendance.status === 'TERLAMBAT' ? 'bg-amber-100 text-amber-800' :
                       verifyingAttendance.status === 'ALPHA' ? 'bg-rose-100 text-rose-800' :
@@ -3620,14 +3634,14 @@ export function HRManagement() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">
                     {emp?.position || 'Staff'} • {emp?.department || 'Main'} | Tanggal: <span className="font-bold text-slate-700">{verifyingAttendance.date}</span>
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsVerificationModalOpen(false)} 
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -3674,25 +3688,38 @@ export function HRManagement() {
                           <Camera className="w-3.5 h-3.5 text-slate-400" /> Foto Selfie Masuk
                         </span>
                         {verifyingAttendance.clockInPhotoUrl && (
-                          <a
-                            href={verifyingAttendance.clockInPhotoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          <button
+                            type="button"
+                            onClick={() => setLightboxPhoto({
+                              url: verifyingAttendance.clockInPhotoUrl,
+                              title: `Foto Selfie Masuk - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
+                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                            })}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
-                            Buka Foto Penuh ↗
-                          </a>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Buka Foto Penuh ↗</span>
+                          </button>
                         )}
                       </div>
                       {verifyingAttendance.clockInPhotoUrl ? (
-                        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner">
+                        <div 
+                          onClick={() => setLightboxPhoto({
+                            url: verifyingAttendance.clockInPhotoUrl,
+                            title: `Foto Selfie Masuk - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
+                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                          })}
+                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner cursor-pointer"
+                          title="Klik untuk melihat foto ukuran penuh"
+                        >
                           <img 
                             src={verifyingAttendance.clockInPhotoUrl} 
                             alt="Foto Clock In" 
                             className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-102" 
                           />
-                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded">
-                            Kamera Selfie
+                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                            <Camera className="w-3 h-3" />
+                            <span>Kamera Selfie • Tap untuk Perbesar</span>
                           </div>
                         </div>
                       ) : (
@@ -3771,25 +3798,38 @@ export function HRManagement() {
                           <Camera className="w-3.5 h-3.5 text-slate-400" /> Foto Selfie Pulang
                         </span>
                         {verifyingAttendance.clockOutPhotoUrl && (
-                          <a
-                            href={verifyingAttendance.clockOutPhotoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                          <button
+                            type="button"
+                            onClick={() => setLightboxPhoto({
+                              url: verifyingAttendance.clockOutPhotoUrl,
+                              title: `Foto Selfie Pulang - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
+                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                            })}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
-                            Buka Foto Penuh ↗
-                          </a>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Buka Foto Penuh ↗</span>
+                          </button>
                         )}
                       </div>
                       {verifyingAttendance.clockOutPhotoUrl ? (
-                        <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner">
+                        <div 
+                          onClick={() => setLightboxPhoto({
+                            url: verifyingAttendance.clockOutPhotoUrl,
+                            title: `Foto Selfie Pulang - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
+                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                          })}
+                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner cursor-pointer"
+                          title="Klik untuk melihat foto ukuran penuh"
+                        >
                           <img 
                             src={verifyingAttendance.clockOutPhotoUrl} 
                             alt="Foto Clock Out" 
                             className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-102" 
                           />
-                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded">
-                            Kamera Selfie
+                          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                            <Camera className="w-3 h-3" />
+                            <span>Kamera Selfie • Tap untuk Perbesar</span>
                           </div>
                         </div>
                       ) : (
@@ -3853,16 +3893,16 @@ export function HRManagement() {
             </div>
 
             {/* Modal Actions Footer */}
-            <div className="px-6 py-4 bg-slate-50 flex items-center justify-between gap-3 border-t border-slate-100 shrink-0">
+            <div className="p-4 sm:px-6 sm:py-4 bg-slate-50 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-100 shrink-0">
               <button 
                 type="button"
                 onClick={() => setIsVerificationModalOpen(false)} 
-                className="px-5 py-2.5 text-slate-600 font-semibold hover:bg-slate-200/70 rounded-xl text-sm transition-colors"
+                className="w-full sm:w-auto px-5 py-2.5 text-slate-600 font-semibold hover:bg-slate-200/70 rounded-xl text-sm transition-colors text-center"
               >
                 Tutup
               </button>
               
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <button 
                   type="button"
                   onClick={() => {
@@ -3875,7 +3915,7 @@ export function HRManagement() {
                       setIsVerificationModalOpen(false);
                     }
                   }} 
-                  className="px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-sm transition-colors"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-sm transition-colors text-center"
                 >
                   Tolak (Set Alpha)
                 </button>
@@ -3888,7 +3928,7 @@ export function HRManagement() {
                     });
                     setIsVerificationModalOpen(false);
                   }} 
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Verifikasi Sah (Approve)</span>
@@ -4445,6 +4485,80 @@ export function HRManagement() {
           document.body
         );
       })()}
+
+      {/* Photo Lightbox Modal Portal */}
+      {lightboxPhoto && createPortal(
+        <div 
+          className="fixed inset-0 z-99999 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          {/* Lightbox Top Bar */}
+          <div 
+            className="flex items-center justify-between gap-4 text-white p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 max-w-4xl mx-auto w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm sm:text-base font-bold text-white truncate">
+                {lightboxPhoto.title}
+              </h4>
+              {lightboxPhoto.subtitle && (
+                <p className="text-[11px] sm:text-xs text-slate-300 truncate mt-0.5">
+                  {lightboxPhoto.subtitle}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleDownloadPhoto(lightboxPhoto.url, `${lightboxPhoto.title.replace(/\s+/g, "_")}.jpg`)}
+                className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Download foto ke perangkat"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Simpan Foto</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxPhoto(null)}
+                className="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Tutup (ESC)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Lightbox Image Stage */}
+          <div 
+            className="flex-1 flex items-center justify-center p-2 sm:p-4 min-h-0"
+            onClick={() => setLightboxPhoto(null)}
+          >
+            <img
+              src={lightboxPhoto.url}
+              alt={lightboxPhoto.title}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[70vh] sm:max-h-[78vh] w-auto max-w-full object-contain rounded-2xl shadow-2xl border border-white/10 select-none transition-transform"
+            />
+          </div>
+
+          {/* Lightbox Bottom Mobile Close Bar */}
+          <div 
+            className="flex items-center justify-center py-2 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxPhoto(null)}
+              className="px-6 py-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-bold tracking-wide transition-colors flex items-center gap-2 cursor-pointer shadow-lg"
+            >
+              <X className="w-4 h-4" />
+              <span>Tutup Tampilan Penuh</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

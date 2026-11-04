@@ -36,6 +36,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
 }) => {
   const {
     currentUser,
+    users,
     cashAccounts,
     openShift,
     closeShift,
@@ -56,17 +57,26 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
   const [isZReportOpen, setIsZReportOpen] = useState(false);
   const [closedShiftData, setClosedShiftData] = useState<any | null>(null);
 
+  // Sync data saat modal dibuka dihapus agar tidak menimpa shift aktif lokal sebelum tersinkronisasi ke server
   useEffect(() => {
-    if (isOpen) {
-      syncData().catch(() => {});
-    }
+    // No-op to protect activeShift integrity
   }, [isOpen]);
 
   const activeEmployees = useMemo(() => {
-    return (employees || []).filter(
+    const list = (employees || []).filter(
       (e) => e.status === "AKTIF" || (e.status as any) === "ACTIVE" || !e.status
     );
-  }, [employees]);
+    if (list.length > 0) return list;
+    if (users && users.length > 0) {
+      return users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        position: u.role,
+        status: "AKTIF",
+      }));
+    }
+    return currentUser ? [{ id: currentUser.id, name: currentUser.name, position: currentUser.role, status: "AKTIF" }] : [];
+  }, [employees, users, currentUser]);
 
   const cashOnlyAccounts = useMemo(() => {
     return cashAccounts.filter((a) => a.type === "CASH");

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Lembar Cepat Meja Kasir - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 10mm 12mm 10mm 12mm;
+      @bottom-right {
+        content: "Julia's Coffee • Lembar Meja Kasir (Laminating)";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+      font-size: 8.5pt;
+      line-height: 1.4;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #451a03;
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+
+    .header-title {
+      font-size: 14pt;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-badge {
+      background: #b45309;
+      color: #ffffff;
+      font-size: 7.5pt;
+      font-weight: bold;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .card {
+      border: 1.5px solid #d6d3d1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fafaf9;
+    }
+
+    .card-title {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #451a03;
+      border-bottom: 1.5px solid #fed7aa;
+      padding-bottom: 4px;
+      margin-top: 0;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .step-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .step-list li {
+      margin-bottom: 4px;
+    }
+
+    .key-badge {
+      display: inline-block;
+      background: #e7e5e4;
+      border: 1px solid #a8a29e;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: monospace;
+      font-size: 8pt;
+      font-weight: bold;
+      color: #292524;
+    }
+
+    .alert-box {
+      background: #fef2f2;
+      border-left: 3px solid #ef4444;
+      color: #991b1b;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 8pt;
+      margin-top: 8px;
+    }
+
+    .success-box {
+      background: #ecfdf5;
+      border-left: 3px solid #10b981;
+      color: #065f46;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 8pt;
+      margin-top: 8px;
+    }
+
+    table.mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 7.5pt;
+      margin-top: 6px;
+    }
+
+    table.mini-table th, table.mini-table td {
+      border: 1px solid #d6d3d1;
+      padding: 3px 5px;
+      text-align: left;
+    }
+
+    table.mini-table th {
+      background: #e7e5e4;
+      font-weight: bold;
+      color: #451a03;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar">
+    <div class="header-title">
+      ☕ JULIA'S COFFEE — PANDUAN CEPAT MEJA KASIR
+    </div>
+    <div>
+      <span class="header-badge">SOP Saku Meja Kasir • Rev 1.0</span>
+    </div>
+  </div>
+
+  <div class="grid-container">
+
+    <!-- KOLOM 1: BUKA & TUTUP SHIFT -->
+    <div class="card">
+      <h3 class="card-title">1. BUKA &amp; TUTUP SHIFT KASIR</h3>
+      
+      <strong>🌅 Buka Shift Pagi / Siang:</strong>
+      <ol class="step-list">
+        <li>Login akun kasir &rarr; Buka modul <strong>POS Kasir</strong>.</li>
+        <li>Hitung fisik uang receh kembalian di laci.</li>
+        <li>Ketikkan jumlah modal ke form <strong>Modal Awal</strong> (misal: <code>Rp 300.000</code>).</li>
+        <li>Klik tombol hijau <em>"Buka Shift Sekarang"</em>.</li>
+      </ol>
+
+      <hr style="border:none; border-top:1px dashed #d6d3d1; margin:8px 0;">
+
+      <strong>🌙 Tutup Shift Malam / Pergantian:</strong>
+      <ol class="step-list">
+        <li>Pastikan tidak ada pesanan <em>Open Bill</em> yang tertinggal.</li>
+        <li>Klik menu profil &rarr; <strong>Tutup Shift Kasir</strong>.</li>
+        <li>Keluarkan seluruh uang dari laci &amp; hitung fisik total.</li>
+        <li>Ketik nominal uang fisik ke kolom <em>Uang Fisik Kasir</em>.</li>
+        <li>Jika ada selisih, <strong>WAJIB isi catatan alasan</strong>.</li>
+        <li>Klik <em>"Konfirmasi Tutup Shift &amp; Cetak Laporan"</em>.</li>
+        <li>Masukkan uang setoran ke amplop + rekatkan struk closing.</li>
+      </ol>
+
+      <div class="success-box">
+        <strong>Aturan Laci:</strong> Modal awal wajib ditinggalkan di laci untuk kasir shift berikutnya; hanya uang omzet yang disetor ke brankas.
+      </div>
+    </div>
+
+    <!-- KOLOM 2: TRANSAKSI & PEMBAYARAN -->
+    <div class="card">
+      <h3 class="card-title">2. TRANSAKSI CEPAT &amp; BAYAR</h3>
+
+      <strong>⚡ Pintasan &amp; Alur Pesanan:</strong>
+      <ul class="step-list">
+        <li>Cari cepat menu: Ketik 2 huruf di kolom pencarian.</li>
+        <li>Atur Gula/Es/Susu: Klik produk &rarr; pilih pada pop-up <em>Modifier</em>.</li>
+        <li>Batal item: Klik ikon tempat sampah merah pada baris item.</li>
+        <li>Simpan meja: Klik tombol <span class="key-badge">Open Bill</span>.</li>
+        <li>Selesai order: Klik tombol hijau <span class="key-badge">Bayar</span>.</li>
+      </ul>
+
+      <hr style="border:none; border-top:1px dashed #d6d3d1; margin:8px 0;">
+
+      <strong>💳 Metode Pembayaran:</strong>
+      <table class="mini-table">
+        <tr>
+          <th>Metode</th>
+          <th>SOP Wajib Kasir</th>
+        </tr>
+        <tr>
+          <td><strong>Tunai</strong></td>
+          <td>Ketik uang diterima &rarr; Sebutkan lantang: <em>"Uang Rp 100rb, kembalian Rp 35rb ya Kak"</em>.</td>
+        </tr>
+        <tr>
+          <td><strong>QRIS</strong></td>
+          <td>Tunjukkan QR dinamis &rarr; Pastikan notifikasi "Lunas Berhasil" muncul di layar sebelum cetak struk.</td>
+        </tr>
+        <tr>
+          <td><strong>Split Bill</strong></td>
+          <td>Klik tombol <em>Split Bill</em> &rarr; Centang item per orang &rarr; Bayar sebagian bertahap.</td>
+        </tr>
+      </table>
+
+      <div class="alert-box" style="margin-top:6px;">
+        <strong>Etika Kasir:</strong> Jangan membuka laci uang sebelum nominal uang dari pelanggan diterima di tangan!
+      </div>
+    </div>
+
+    <!-- KOLOM 3: KENDALA, PIN & DARURAT -->
+    <div class="card">
+      <h3 class="card-title">3. PENANGANAN KENDALA &amp; PIN</h3>
+
+      <strong>🔐 Tindakan Wajib PIN Manager:</strong>
+      <p style="margin:2px 0 4px 0; font-size:7.5pt;">Panggil Shift Leader/Manager untuk memasukkan 4-digit PIN pada aksi:</p>
+      <ul class="step-list" style="color:#b91c1c; font-weight:bold;">
+        <li>Void Pesanan (Pembatalan setelah order tersimpan).</li>
+        <li>Refund / Pengembalian Uang Pelanggan.</li>
+        <li>Diskon Khusus Manual / Diskon Karyawan.</li>
+        <li>Buka Laci Kasir Manual Tanpa Transaksi.</li>
+      </ul>
+
+      <hr style="border:none; border-top:1px dashed #d6d3d1; margin:8px 0;">
+
+      <strong>🖨️ Kertas Printer Thermal Habis:</strong>
+      <ol class="step-list">
+        <li>Buka penutup printer, masukkan roll kertas baru (arah gulungan menghadap ke atas).</li>
+        <li>Masuk ke menu <strong>Pesanan Hari Ini</strong> &rarr; Cari pesanan terakhir &rarr; Klik <strong>Cetak Ulang (Reprint)</strong>.</li>
+      </ol>
+
+      <hr style="border:none; border-top:1px dashed #d6d3d1; margin:6px 0;">
+
+      <strong>📞 Kontak Darurat Outlet:</strong>
+      <table class="mini-table">
+        <tr><td>Store Manager:</td><td><strong>0812-XXXX-XXXX</strong></td></tr>
+        <tr><td>Shift Leader:</td><td><strong>0857-XXXX-XXXX</strong></td></tr>
+        <tr><td>Teknisi POS / IT:</td><td><strong>0813-XXXX-XXXX</strong></td></tr>
+      </table>
+    </div>
+
+  </div>
+
+</body>
+</html>

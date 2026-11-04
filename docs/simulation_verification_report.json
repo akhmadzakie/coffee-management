@@ -1,0 +1,214 @@
+{
+  "timestamp": "2026-11-03T09:37:27.897Z",
+  "totalScreens": 23,
+  "detectedBugs": [],
+  "results": [
+    {
+      "id": "LOGIN",
+      "filename": "01_login_screen.png",
+      "title": "Halaman Login Keypad PIN",
+      "category": "Auth",
+      "sizeBytes": 71671,
+      "status": "OK",
+      "notes": "Menampilkan pemilihan akun staf & keypad PIN 6-digit"
+    },
+    {
+      "id": "ATTENDANCE",
+      "filename": "02_clock_in_attendance.png",
+      "title": "Presensi Selfie Kamera & GPS",
+      "category": "Karyawan / Kasir",
+      "sizeBytes": 106474,
+      "status": "OK",
+      "notes": "Menampilkan jendela selfie, koordinat GPS, shift kerja & tombol Clock In"
+    },
+    {
+      "id": "BUKA_SHIFT",
+      "filename": "pos_buka_shift_modal.png",
+      "title": "Modal Form Buka Shift Kasir",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58611,
+      "status": "OK",
+      "notes": "Menampilkan form input Modal Awal Rp 300.000 dan pemilihan PIC Kasir"
+    },
+    {
+      "id": "CUSTOMIZE_MODIFIER",
+      "filename": "pos_customize_modal.png",
+      "title": "Modal Kustomisasi Menu & Modifier",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58629,
+      "status": "OK",
+      "notes": "Menampilkan opsi Level Gula (Sweetness), Es, Varian Susu (Oatmilk), dan Extra Shot"
+    },
+    {
+      "id": "POS_TERMINAL",
+      "filename": "03_pos_terminal.png",
+      "title": "Layar Kerja POS Kasir Aktif",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58653,
+      "status": "OK",
+      "notes": "Menampilkan katalog produk aktif, keranjang belanja terisi, Meja 05, dan kalkulasi subtotal"
+    },
+    {
+      "id": "PAYMENT_MODAL",
+      "filename": "18_pos_payment_modal.png",
+      "title": "Jendela Pembayaran Kasir Lengkap",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58669,
+      "status": "OK",
+      "notes": "Menampilkan tab Tunai, QRIS Dinamis, Split Bill, pecahan cepat dan kembalian"
+    },
+    {
+      "id": "MANAGER_PIN",
+      "filename": "pos_manager_pin_modal.png",
+      "title": "Pop-up Otorisasi PIN Manager",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58578,
+      "status": "OK",
+      "notes": "Menampilkan keypad PIN keamanan 4-6 digit untuk approval diskon > 10% dan void pesanan"
+    },
+    {
+      "id": "TUTUP_SHIFT",
+      "filename": "pos_tutup_shift_modal.png",
+      "title": "Form Tutup Shift & Rekonsiliasi Kas",
+      "category": "Kasir (POS)",
+      "sizeBytes": 58665,
+      "status": "OK",
+      "notes": "Menampilkan total penerimaan kas, input fisik laci kas, perhitungan selisih, dan cetak Z-Report"
+    },
+    {
+      "id": "KDS",
+      "filename": "04_kds_screen.png",
+      "title": "Layar Antrean Pesanan KDS Barista & Kitchen",
+      "category": "Operasional Bar / Kitchen",
+      "sizeBytes": 35668,
+      "status": "OK",
+      "notes": "Menampilkan kartu pesanan masuk, stasiun BAR & KITCHEN, status Menunggu -> Diproses -> Selesai"
+    },
+    {
+      "id": "LEADER_CHECKLIST",
+      "filename": "04_leader_checklist.png",
+      "title": "Checklist Supervisi Shift Leader",
+      "category": "Leader & Manager",
+      "sizeBytes": 219169,
+      "status": "OK",
+      "notes": "Daftar cek opening, kebersihan bar, suhu chiller, kelayakan mesin kopi, dan closing"
+    },
+    {
+      "id": "INVENTORY",
+      "filename": "05_inventory_screen.png",
+      "title": "Manajemen Stok Bahan Baku & Opname",
+      "category": "Leader & Manager",
+      "sizeBytes": 210078,
+      "status": "OK",
+      "notes": "Monitoring stok bahan baku (biji kopi, susu, sirup), batas minimum, waste tracking & opname"
+    },
+    {
+      "id": "PURCHASES",
+      "filename": "07_purchases_screen.png",
+      "title": "Pengadaan & Pembelian Bahan (PO)",
+      "category": "Leader & Manager",
+      "sizeBytes": 234204,
+      "status": "OK",
+      "notes": "Pencatatan Purchase Order ke supplier, penerimaan barang, dan status pelunasan invoice"
+    },
+    {
+      "id": "HPP_CALCULATOR",
+      "filename": "08_hpp_calculator_screen.png",
+      "title": "Kalkulator HPP & Simulasi Resep Menu",
+      "category": "Leader & Manager",
+      "sizeBytes": 287886,
+      "status": "OK",
+      "notes": "Rincian gramatur resep per porsi, kalkulasi HPP otomatis, margin laba kotor & penetapan harga"
+    },
+    {
+      "id": "PROMOTIONS",
+      "filename": "09_promotions_screen.png",
+      "title": "Manajemen Promo & Diskon Toko",
+      "category": "Leader & Manager",
+      "sizeBytes": 219227,
+      "status": "OK",
+      "notes": "Pengaturan promo diskon persentase, nominal potongan, promo jam happy hour, dan batas tanggal"
+    },
+    {
+      "id": "DASHBOARD_MANAGER",
+      "filename": "16_dashboard_manager.png",
+      "title": "Dasbor Operasional Shift Manager",
+      "category": "Leader & Manager",
+      "sizeBytes": 384179,
+      "status": "OK",
+      "notes": "Ringkasan penjualan real-time, status staf bertugas, bahan baku menipis & peringatan operasional"
+    },
+    {
+      "id": "CASH_FLOW",
+      "filename": "06_cashflow_screen.png",
+      "title": "Buku Kas & Arus Kas Operasional",
+      "category": "Finance & Accounting",
+      "sizeBytes": 176960,
+      "status": "OK",
+      "notes": "Pencatatan kas masuk / keluar operasional, kategori biaya (Beban Listrik, Kebersihan), upload bukti struk"
+    },
+    {
+      "id": "FINANCE_REPORTS",
+      "filename": "11_finance_reports_screen.png",
+      "title": "Laporan Laba Rugi Toko & Kunci Periode",
+      "category": "Finance & Accounting",
+      "sizeBytes": 192325,
+      "status": "OK",
+      "notes": "Laporan Pendapatan, HPP bahan baku, Beban Operasional, Laba Bersih (Net Profit) & fitur Lock Periode"
+    },
+    {
+      "id": "PAYROLL",
+      "filename": "07_payroll_screen.png",
+      "title": "Penggajian Karyawan & Slip Gaji",
+      "category": "Finance & HR",
+      "sizeBytes": 289021,
+      "status": "OK",
+      "notes": "Rekap kehadiran, perhitungan gaji pokok, tunjangan shift, lembur, potongan & pratinjau slip gaji PDF"
+    },
+    {
+      "id": "DASHBOARD_FINANCE",
+      "filename": "17_dashboard_finance.png",
+      "title": "Dasbor Keuangan & Likuiditas Kas",
+      "category": "Finance & Accounting",
+      "sizeBytes": 292693,
+      "status": "OK",
+      "notes": "Saldo kas di laci & rekening bank, grafik perputaran kas, tagihan jatuh tempo & rasio kesehatan kas"
+    },
+    {
+      "id": "DASHBOARD_OWNER",
+      "filename": "02_dashboard_owner.png",
+      "title": "Dasbor Eksekutif Bisnis Owner",
+      "category": "Owner & Direksi",
+      "sizeBytes": 194666,
+      "status": "OK",
+      "notes": "Total omzet bulanan, margin keuntungan bersih, top 5 menu terlaris, dan tren pertumbuhan tahunan"
+    },
+    {
+      "id": "USERS",
+      "filename": "08_users_pin_screen.png",
+      "title": "Manajemen Karyawan, Hak Akses & PIN",
+      "category": "Super Admin",
+      "sizeBytes": 185861,
+      "status": "OK",
+      "notes": "Daftar pengguna terdaftar, hierarki role (KASIR, BAR, LEADER, MANAGER, FINANCE, OWNER), reset PIN"
+    },
+    {
+      "id": "AUDIT_LOG",
+      "filename": "14_audit_log_screen.png",
+      "title": "Audit Log Aktivitas & Jejak Forensik",
+      "category": "Super Admin",
+      "sizeBytes": 140749,
+      "status": "OK",
+      "notes": "Rekaman jejak aktivitas sistem secara kronologis (login, buka shift, persetujuan PIN, void, mutasi kas)"
+    },
+    {
+      "id": "SETTINGS",
+      "filename": "15_settings_screen.png",
+      "title": "Pengaturan Sistem, Pajak PB1 & Printer",
+      "category": "Super Admin",
+      "sizeBytes": 169201,
+      "status": "OK",
+      "notes": "Konfigurasi identitas Julia's Coffee, tarif pajak PB1 10%, printer thermal ESC/POS, dan PIN Supervisor"
+    }
+  ]
+}

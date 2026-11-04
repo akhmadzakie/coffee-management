@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Keuangan & Pembukuan - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 16mm 16mm 16mm;
+      @bottom-right {
+        content: "Halaman " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+      @bottom-left {
+        content: "Julia's Coffee — Panduan Keuangan & Payroll v1.0";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 88vh;
+      border: 2px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 40px;
+      background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #fafaf9 100%);
+    }
+
+    .badge-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: #065f46;
+      color: #d1fae5;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cover-header {
+      margin-top: 40px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #064e3b;
+      line-height: 1.15;
+      margin: 16px 0 10px 0;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #047857;
+      margin: 0 0 20px 0;
+      font-weight: 500;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #57534e;
+      max-width: 90%;
+      line-height: 1.6;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 24px;
+      border-top: 2px dashed #d6d3d1;
+      font-size: 9pt;
+      color: #57534e;
+    }
+
+    .meta-box strong {
+      display: block;
+      color: #292524;
+      font-size: 9.5pt;
+      margin-bottom: 2px;
+    }
+
+    /* Headings */
+    h1, h2, h3, h4 {
+      color: #064e3b;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #a7f3d0;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      color: #047857;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 0 0 8px 0;
+    }
+
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* Step Card */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #047857;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #1c1917;
+      margin: 0;
+    }
+
+    .step-body {
+      padding-left: 36px;
+      font-size: 9.5pt;
+      color: #292524;
+    }
+
+    /* Mockup Screenshot Box */
+    .mockup-container {
+      margin: 10px 0;
+      border: 1.5px solid #d6d3d1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f4;
+      page-break-inside: avoid;
+    }
+
+    .mockup-header {
+      background: #e7e5e4;
+      padding: 6px 12px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #57534e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #d6d3d1;
+    }
+
+    .mockup-placeholder {
+      padding: 22px;
+      text-align: center;
+      color: #78716c;
+      font-style: italic;
+      background: repeating-linear-gradient(45deg, #fafaf9, #fafaf9 10px, #f5f5f4 10px, #f5f5f4 20px);
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-caption {
+      padding: 6px 12px;
+      font-size: 8.5pt;
+      color: #44403c;
+      background: #ffffff;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    /* Tables */
+    .callout-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 8.5pt;
+    }
+
+    .callout-table th, .callout-table td {
+      border: 1px solid #e7e5e4;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .callout-table th {
+      background: #f5f5f4;
+      font-weight: 700;
+      color: #064e3b;
+    }
+
+    .callout-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      background: #047857;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 18px;
+      font-weight: bold;
+      font-size: 8pt;
+    }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .alert-tip {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+
+    .alert-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-important {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+
+    .dodont-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .dodont-table th {
+      padding: 8px 12px;
+      color: white;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .dodont-table td {
+      padding: 8px 12px;
+      border: 1px solid #e7e5e4;
+      vertical-align: top;
+    }
+
+    .th-do { background: #059669; width: 50%; }
+    .th-dont { background: #dc2626; width: 50%; }
+
+    /* Flowchart */
+    .flowchart-container {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 12px 0;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .flowchart-svg {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <span class="badge-pill">SOP &amp; USER MANUAL RESMI • BUKU 3</span>
+        <img src="screenshots/logo.png" style="height: 48px; object-fit: contain;" alt="Logo Julia's Coffee">
+      </div>
+      <div class="cover-header" style="margin-top: 20px;">
+        <h1 class="cover-title">PANDUAN KEUANGAN &amp; PEMBUKUAN</h1>
+        <h2 class="cover-subtitle">Sistem Manajemen Keuangan &amp; Payroll — Julia's Coffee</h2>
+        <p class="cover-desc">
+          Buku panduan back-office resmi untuk staf <strong>Keuangan &amp; Akuntansi (FINANCE)</strong>. 
+          Memuat tata cara pengelolaan arus kas harian (*Cash Flow*), klasifikasi biaya operasional (*OPEX*), 
+          verifikasi faktur belanja supplier (*Purchases*), rekonsiliasi mutasi rekening bank &amp; QRIS, 
+          proses penggajian karyawan (*Payroll &amp; Payslip*), hingga penyusunan Laporan Laba Rugi bulanan.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="meta-item">
+        <strong>Peran Pengguna:</strong>
+        Finance &amp; Accounting, Cash Officer, HR Payroll
+      </div>
+      <div class="meta-item">
+        <strong>Versi Dokumen:</strong>
+        Rev 1.0 (November 2026)
+      </div>
+      <div class="meta-item">
+        <strong>Hak Akses Sistem:</strong>
+        Finance Dashboard, Cash Flow, Expense, Purchases, Payroll, &amp; Laporan
+      </div>
+      <div class="meta-item">
+        <strong>Sifat Dokumen:</strong>
+        Sangat Rahasia (Financial Confidential)
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: SIKLUS KEUANGAN ==================== -->
+  <h1>💹 Bab 1: Siklus Akuntansi &amp; Keuangan Toko</h1>
+  
+  <p>Tim Finance bertanggung jawab atas ketertiban pencatatan seluruh aliran uang masuk dan keluar dari outlet dengan alur siklus bulanan berikut:</p>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="10" width="135" height="50" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+      <text x="72" y="32" font-size="10" font-weight="bold" fill="#065f46" text-anchor="middle">1. Kas Harian</text>
+      <text x="72" y="47" font-size="8.5" fill="#047857" text-anchor="middle">Cek Setoran Kasir &amp; Biaya</text>
+
+      <path d="M145 35 L160 35" stroke="#047857" stroke-width="1.5"/>
+
+      <rect x="165" y="10" width="135" height="50" rx="6" fill="#f0fdf4" stroke="#059669" stroke-width="1.5"/>
+      <text x="232" y="32" font-size="10" font-weight="bold" fill="#065f46" text-anchor="middle">2. Verifikasi PO</text>
+      <text x="232" y="47" font-size="8.5" fill="#047857" text-anchor="middle">Bayar Faktur Supplier</text>
+
+      <path d="M305 35 L320 35" stroke="#047857" stroke-width="1.5"/>
+
+      <rect x="325" y="10" width="145" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="397" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">3. Rekonsiliasi Bank</text>
+      <text x="397" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Cocokkan Mutasi &amp; QRIS</text>
+
+      <path d="M475 35 L490 35" stroke="#047857" stroke-width="1.5"/>
+
+      <rect x="495" y="10" width="125" height="50" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+      <text x="557" y="32" font-size="10" font-weight="bold" fill="#78350f" text-anchor="middle">4. Payroll Tim</text>
+      <text x="557" y="47" font-size="8.5" fill="#92400e" text-anchor="middle">Gaji, Shift &amp; Slip Gaji</text>
+
+      <path d="M625 35 L640 35" stroke="#047857" stroke-width="1.5"/>
+
+      <rect x="645" y="10" width="110" height="50" rx="6" fill="#fdf2f8" stroke="#db2777" stroke-width="1.5"/>
+      <text x="700" y="32" font-size="10" font-weight="bold" fill="#9d174d" text-anchor="middle">5. Tutup Buku</text>
+      <text x="700" y="47" font-size="8.5" fill="#be185d" text-anchor="middle">Laporan Laba Rugi</text>
+    </svg>
+  </div>
+
+  <!-- ==================== BAB 2: DASBOR KEUANGAN ==================== -->
+  <h1>📊 Bab 2: Membaca Dasbor Keuangan (Finance Dashboard)</h1>
+
+  <p>Dasbor Keuangan memberikan gambaran posisi likuiditas toko secara real-time:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Dasbor Keuangan Eksekutif (FinanceDashboard.tsx)</span>
+      <span>Saldo Toko Terpadu</span>
+    </div>
+    <img src="screenshots/17_dashboard_finance.png" alt="Dasbor Keuangan Finance" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <table class="callout-table">
+        <tr>
+          <th width="15%">No</th>
+          <th width="35%">Komponen Saldo</th>
+          <th>Penjelasan Akuntansi</th>
+        </tr>
+        <tr>
+          <td><span class="callout-num">1</span></td>
+          <td>Kas Tunai di Brankas (Cash on Hand)</td>
+          <td>Uang fisik hasil setoran amplop tutup shift kasir yang tersimpan di brankas outlet.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">2</span></td>
+          <td>Rekening Bank Operasional</td>
+          <td>Saldo bank aktif untuk pembayaran PO supplier, tagihan listrik, dan gaji tim.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">3</span></td>
+          <td>Saldo Penampungan QRIS / EDC</td>
+          <td>Dana penjualan non-tunai yang sedang menunggu jadwal transfer (*settlement*) otomatis ke bank.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">4</span></td>
+          <td>Arus Kas Bersih (Net Cash Flow)</td>
+          <td>Total pemasukan dikurangi total pengeluaran tunai pada bulan berjalan.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3: PENCATATAN ARUS KAS ==================== -->
+  <h1>💸 Bab 3: Pencatatan Arus Kas &amp; Kategori Biaya (Cash Flow)</h1>
+
+  <p>Setiap pengeluaran operasional toko yang dibayarkan menggunakan kas kecil (*petty cash*) atau transfer bank wajib dicatat seketika di menu <strong>Buku Kas &amp; Arus Kas (Cash Flow)</strong>.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h3 class="step-title">Cara Mencatat Pengeluaran Operasional Toko</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Buku Kas &amp; Arus Kas</strong> &rarr; Klik tombol <strong>"+ Catat Transaksi Kas"</strong>.</li>
+        <li>Pilih tipe transaksi: <strong>"Pengeluaran (Cash Out)"</strong>.</li>
+        <li>Tentukan sumber dana: <em>Kas Kecil Toko (Petty Cash)</em> atau <em>Rekening Bank Operasional</em>.</li>
+        <li>Pilih <strong>Kategori Kas &amp; Biaya</strong> yang sesuai:
+          <ul>
+            <li><code>Beban Utilitas:</code> Pembayaran token listrik PLN, air PDAM, atau internet Wi-Fi.</li>
+            <li><code>Beban Operasional Bar:</code> Pembelian es batu darurat, air galon, gas elpiji.</li>
+            <li><code>Beban Kebersihan:</code> Sabun cuci piring, kantong sampah, tisu, cairan sanitasi.</li>
+            <li><code>Beban Maintenance:</code> Servis berkala mesin espresso, water filter, atau perbaikan AC.</li>
+            <li><code>Beban Pemasaran:</code> Cetak banner, sponsor event, atau biaya iklan sosial media.</li>
+          </ul>
+        </li>
+        <li>Masukkan nominal pengeluaran dan tulis keterangan transaksi yang jelas.</li>
+        <li>Lampirkan foto/file nota bukti pembayaran fisik &rarr; Klik <strong>"Simpan Transaksi Kas"</strong>.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Buku Kas &amp; Riwayat Transaksi (CashFlow.tsx)</span>
+        </div>
+        <img src="screenshots/06_cashflow_screen.png" alt="Buku Kas &amp; Arus Kas" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Aturan Wajib Finance:</strong> Setiap pengeluaran kas tanpa bukti struk fisik/faktur resmi tidak akan disetujui dalam audit bulanan (*Unapproved Expense*).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 4: VERIFIKASI PO SUPPLIER ==================== -->
+  <h1>📦 Bab 4: Verifikasi &amp; Pembayaran PO Supplier</h1>
+
+  <p>Tim Finance bertindak sebagai gerbang pembayaran untuk pengadaan bahan baku yang diajukan oleh Store Manager.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h3 class="step-title">Alur Verifikasi Pembayaran Belanja Bahan (PO)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Pembelian Bahan (Purchases)</strong>.</li>
+        <li>Filter status dokumen ke: <code>DITERIMA (RECEIVED)</code>.
+          <br><em>(Catatan: Jangan pernah membayar PO yang masih berstatus PENDING karena barang belum diverifikasi secara fisik oleh Leader di outlet!).</em>
+        </li>
+        <li>Cocokkan fisik surat jalan / invoice asli dari vendor dengan angka di sistem (kuantitas dan total tagihan).</li>
+        <li>Lakukan pembayaran ke nomor rekening resmi vendor supplier.</li>
+        <li>Di sistem, ubah status pembayaran PO menjadi <strong>"LUNAS (PAID)"</strong> dan catat nomor referensi transfer bank.</li>
+        <li>Sistem akan otomatis mencatat pengeluaran tersebut ke buku kas dan mengelompokkannya sebagai biaya persediaan / HPP (*COGS*).</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5: REKONSILIASI BANK & QRIS ==================== -->
+  <h1>🏦 Bab 5: Rekonsiliasi Bank &amp; Penjualan (Settlement)</h1>
+
+  <p>Rekonsiliasi bertujuan memastikan setiap rupiah pesanan yang tercatat di kasir benar-benar masuk ke rekening bank toko tanpa ada transaksi menggantung.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h3 class="step-title">Langkah Rekonsiliasi Penjualan Harian</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Rekap Penjualan (Import Sales / Sales Reconciliation)</strong>.</li>
+        <li>Pilih rentang tanggal transaksi (misal: 1 hari kemarin atau minggu lalu).</li>
+        <li>Unduh rekening koran (*bank statement*) atau laporan transaksi dari dashboard Payment Gateway QRIS.</li>
+        <li>Cocokkan 3 indikator:
+          <ul>
+            <li><strong>Total Transaksi QRIS di POS:</strong> Harus sama dengan total uang yang diselesaikan (*settled*) oleh payment gateway (setelah dipotong biaya MDR resmi).</li>
+            <li><strong>Total Uang Tunai di POS:</strong> Harus sama persis dengan amplop setoran fisik yang diserahkan kasir ke brankas.</li>
+            <li><strong>Selisih (Discrepancy):</strong> Jika terdapat selisih, periksa catatan nota batal di <em>Audit Log</em> atau hubungi kasir yang bertugas pada shift tersebut.</li>
+          </ul>
+        </li>
+        <li>Klik tombol <strong>"Tandai Telah Direkonsiliasi"</strong> untuk mengunci audit hari tersebut.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 6: PENGGAJIAN KARYAWAN (PAYROLL) ==================== -->
+  <h1>👥 Bab 6: Penggajian Karyawan &amp; Cetak Slip Gaji (Payroll)</h1>
+
+  <p>Modul <strong>Penggajian (Payroll)</strong> mengotomatisasi penghitungan gaji berdasarkan rekap kehadiran selfie, jumlah shift, dan tunjangan kepemimpinan.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">4</span>
+      <h3 class="step-title">Alur Proses Gaji &amp; Penerbitan Slip Gaji Bulanan</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Penggajian (Payroll)</strong> &rarr; Pilih bulan periode penggajian.</li>
+        <li>Klik tombol <strong>"Hitung Otomatis dari Kehadiran"</strong>. Sistem akan menghitung:
+          <ul>
+            <li><strong>Gaji Pokok / Rate Harian:</strong> Dikalikan jumlah kehadiran valid (*Clock In* terverifikasi).</li>
+            <li><strong>Tunjangan Shift Leader:</strong> Dihitung otomatis berdasarkan skor kepatuhan checklist harian (*Leader Allowance Rules*).</li>
+            <li><strong>Bonus Lembur:</strong> Ditambahkan jika ada penugasan lembur yang disetujui Manager.</li>
+          </ul>
+        </li>
+        <li>Periksa dan masukkan potongan jika ada:
+          <ul>
+            <li>Potongan cicilan kasbon karyawan.</li>
+            <li>Denda keterlambatan jam hadir (*late penalty*).</li>
+          </ul>
+        </li>
+        <li>Klik nama karyawan &rarr; Buka <strong>Pratinjau Slip Gaji (PayslipModal)</strong> untuk memeriksa ketepatan angka.</li>
+        <li>Klik tombol <strong>"Cetak Slip Gaji (PDF)"</strong> untuk dibagikan ke masing-masing karyawan secara privat.</li>
+        <li>Klik tombol <strong>"Ekspor ke Excel (.xlsx)"</strong> untuk mendapatkan daftar transfer payroll bank massal (*bank bulk transfer format*).</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Pratinjau Slip Gaji Karyawan (PayslipModal.tsx)</span>
+        </div>
+        <img src="screenshots/07_payroll_screen.png" alt="Penggajian &amp; Slip Gaji" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Kerahasiaan:</strong> Slip gaji bersifat rahasia perorangan. Jangan pernah menyebarkan rekap gaji menyeluruh ke grup umum staf toko.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 7: LAPORAN LABA RUGI ==================== -->
+  <h1>📈 Bab 7: Laporan Laba Rugi &amp; Tutup Buku (Finance Reports)</h1>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Laporan Laba Rugi Kafe (FinanceReports.tsx)</span>
+    </div>
+    <img src="screenshots/11_finance_reports_screen.png" alt="Laporan Laba Rugi Kafe" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>Laporan Finansial Bulanan:</strong> Rincian penjualan bersih, potongan HPP, biaya OPEX, dan laba bersih dengan fitur kunci periode.
+    </div>
+  </div>
+
+  <p>Laporan Laba Rugi merangkum performa finansial murni outlet Julia's Coffee:</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">5</span>
+      <h3 class="step-title">Struktur Laporan Laba Rugi Kafe</h3>
+    </div>
+    <div class="step-body">
+      <table class="callout-table">
+        <tr style="background:#f0fdf4; font-weight:bold;">
+          <th width="70%">Pos Akuntansi</th>
+          <th width="30%">Rumus / Keterangan</th>
+        </tr>
+        <tr>
+          <td><strong>Penjualan Kotor (Gross Sales)</strong></td>
+          <td>Total seluruh pesanan yang terjual di POS.</td>
+        </tr>
+        <tr>
+          <td><em>Dikurangi:</em> Potongan Diskon &amp; Voucher Promo</td>
+          <td>(-) Total diskon yang dinikmati pelanggan.</td>
+        </tr>
+        <tr style="background:#fafaf9; font-weight:bold;">
+          <td>= Penjualan Bersih (Net Sales)</td>
+          <td>Omzet murni yang diterima toko.</td>
+        </tr>
+        <tr>
+          <td><em>Dikurangi:</em> HPP Bahan Baku (Cost of Goods Sold - COGS)</td>
+          <td>(-) Total biaya modal bahan (biji kopi, susu, cup, sirup).</td>
+        </tr>
+        <tr style="background:#fef3c7; font-weight:bold;">
+          <td>= Laba Kotor (Gross Profit)</td>
+          <td>Keuntungan murni dari penjualan menu.</td>
+        </tr>
+        <tr>
+          <td><em>Dikurangi:</em> Total Beban Operasional (OPEX)
+            <br>&bull; Gaji Karyawan &amp; Tunjangan (Payroll)
+            <br>&bull; Listrik, Air, &amp; Wi-Fi
+            <br>&bull; Sewa Tempat &amp; Perawatan Mesin
+          </td>
+          <td>(-) Seluruh biaya operasional pendukung toko.</td>
+        </tr>
+        <tr style="background:#d1fae5; font-weight:bold; font-size:10pt;">
+          <td>= LABA BERSIH TOKO (NET PROFIT)</td>
+          <td>Hasil akhir keuntungan bersih outlet.</td>
+        </tr>
+      </table>
+
+      <h3 style="margin-top:14px;">Fitur Kunci Pembukuan (Lock Month Period):</h3>
+      <p>Setelah seluruh data bulan tersebut klop dan disetujui Owner, klik tombol <strong>"Kunci Pembukuan Bulan Ini (Lock Period)"</strong>. Tindakan ini akan mengunci seluruh database transaksi di bulan tersebut sehingga tidak ada kasir atau staf manajerial yang dapat mengedit, menambah, atau menghapus transaksi masa lalu.</p>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 8: DO & DON'T FINANCE ==================== -->
+  <h1>⚖️ Bab 8: Aturan Emas Keuangan (DO &amp; DON'T)</h1>
+
+  <table class="dodont-table">
+    <tr>
+      <th class="th-do">✅ HAL WAJIB DILAKUKAN (DO)</th>
+      <th class="th-dont">❌ DILARANG KERAS (DON'T)</th>
+    </tr>
+    <tr>
+      <td>Selalu lampirkan foto/file bukti transfer atau nota fisik asli untuk setiap transaksi pengeluaran kas.</td>
+      <td>Mengeluarkan uang kas toko tanpa tanda terima atau kuitansi bertanda tangan penerima.</td>
+    </tr>
+    <tr>
+      <td>Lakukan rekonsiliasi kas fisik brankas toko dengan catatan sistem secara berkala minimal 1 minggu sekali.</td>
+      <td>Membayar tagihan supplier untuk barang yang belum diverifikasi kedatangannya oleh tim outlet.</td>
+    </tr>
+    <tr>
+      <td>Kunci periode pembukuan bulanan segera setelah laporan Laba Rugi diserahkan ke Owner.</td>
+      <td>Mengizinkan perubahan data transaksi masa lalu setelah laporan keuangan periode tersebut ditutup.</td>
+    </tr>
+    <tr>
+      <td>Jaga kerahasiaan nominal gaji, tunjangan, dan bonus karyawan dari pihak luar dan staf non-manajerial.</td>
+      <td>Menggabungkan rekening operasional toko dengan rekening pribadi tanpa pencatatan pembukuan terpisah.</td>
+    </tr>
+  </table>
+
+</body>
+</html>

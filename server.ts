@@ -1360,7 +1360,12 @@ async function startServer() {
     batch_preparations: [],
     suppliers: [],
     purchase_orders: [],
-    employees: [],
+    employees: [
+      { id: "emp-kasir", username: "kasir", name: "Ahmad Kasir", position: "KASIR", department: "OPERASIONAL", status: "AKTIF", joinDate: "2024-01-10" },
+      { id: "emp-barista", username: "barista", name: "Bima Barista", position: "BAR", department: "OPERASIONAL", status: "AKTIF", joinDate: "2024-01-15" },
+      { id: "emp-leader", username: "leader", name: "Dian Leader", position: "LEADER", department: "OPERASIONAL", status: "AKTIF", joinDate: "2023-08-01" },
+      { id: "emp-manager", username: "manager", name: "Siti Manager", position: "MANAGER", department: "MANAJEMEN", status: "AKTIF", joinDate: "2023-01-01" },
+    ],
     contracts: [],
     employeeShifts: [],
     attendances: [],

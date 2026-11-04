@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Teknis & Pengaturan Sistem - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 16mm 16mm 16mm;
+
+      @bottom-right {
+        content: "Halaman " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+
+      @bottom-left {
+        content: "Julia's Coffee — Panduan Super Admin & Sistem v1.0";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 88vh;
+      border: 2px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 40px;
+      background: linear-gradient(135deg, #f8fafc 0%, #ffffff 50%, #f1f5f9 100%);
+    }
+
+    .badge-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: #0f172a;
+      color: #f8fafc;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cover-header {
+      margin-top: 40px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.15;
+      margin: 16px 0 10px 0;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #334155;
+      margin: 0 0 20px 0;
+      font-weight: 500;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #475569;
+      max-width: 90%;
+      line-height: 1.6;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 24px;
+      border-top: 2px dashed #cbd5e1;
+      font-size: 9pt;
+      color: #475569;
+    }
+
+    .meta-box strong {
+      display: block;
+      color: #0f172a;
+      font-size: 9.5pt;
+      margin-bottom: 2px;
+    }
+
+    /* Headings */
+    h1,
+    h2,
+    h3,
+    h4 {
+      color: #0f172a;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #cbd5e1;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      color: #334155;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 0 0 8px 0;
+    }
+
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* Step Card */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #0f172a;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0;
+    }
+
+    .step-body {
+      padding-left: 36px;
+      font-size: 9.5pt;
+      color: #334155;
+    }
+
+    /* Mockup Screenshot Box */
+    .mockup-container {
+      margin: 10px 0;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f8fafc;
+      page-break-inside: avoid;
+    }
+
+    .mockup-header {
+      background: #e2e8f0;
+      padding: 6px 12px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #475569;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    .mockup-placeholder {
+      padding: 22px;
+      text-align: center;
+      color: #64748b;
+      font-style: italic;
+      background: repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #f1f5f9 10px, #f1f5f9 20px);
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .mockup-caption {
+      padding: 6px 12px;
+      font-size: 8.5pt;
+      color: #334155;
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    /* Tables */
+    .callout-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 8.5pt;
+    }
+
+    .callout-table th,
+    .callout-table td {
+      border: 1px solid #e2e8f0;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .callout-table th {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .callout-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      background: #0f172a;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 18px;
+      font-weight: bold;
+      font-size: 8pt;
+    }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .alert-tip {
+      background: #f0fdf4;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+
+    .alert-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-important {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+
+    .dodont-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .dodont-table th {
+      padding: 8px 12px;
+      color: white;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .dodont-table td {
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+
+    .th-do {
+      background: #059669;
+      width: 50%;
+    }
+
+    .th-dont {
+      background: #dc2626;
+      width: 50%;
+    }
+
+    /* Flowchart */
+    .flowchart-container {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 12px 0;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .flowchart-svg {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <span class="badge-pill">SOP &amp; USER MANUAL RESMI • BUKU 5</span>
+        <img src="screenshots/logo.png" style="height: 48px; object-fit: contain;" alt="Logo Julia's Coffee">
+      </div>
+      <div class="cover-header" style="margin-top: 20px;">
+        <h1 class="cover-title">PANDUAN TEKNIS &amp; PENGATURAN SISTEM</h1>
+        <h2 class="cover-subtitle">Konfigurasi Administrator &amp; Master Sistem — Julia's Coffee</h2>
+        <p class="cover-desc">
+          Buku panduan teknis resmi untuk peran <strong>Super Administrator (SUPER_ADMIN)</strong> dan Tim IT Toko.
+          Memuat tata cara manajemen akun staf &amp; hak akses (Role-Based Access Control), pengaturan profil toko &amp;
+          struk,
+          konfigurasi pajak PB1 &amp; service charge, integrasi printer thermal Bluetooth/USB/LAN ESC-POS,
+          aktivasi Asisten AI Google Gemini, hingga prosedur pencadangan (*Backup Database*) dan penanganan darurat.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="meta-item">
+        <strong>Peran Pengguna:</strong>
+        Super Administrator, IT Support Toko
+      </div>
+      <div class="meta-item">
+        <strong>Versi Dokumen:</strong>
+        Rev 1.0 (November 2026)
+      </div>
+      <div class="meta-item">
+        <strong>Tingkat Hak Akses:</strong>
+        Akses Penuh Semua Modul (ALL_VIEWS)
+      </div>
+      <div class="meta-item">
+        <strong>Sifat Dokumen:</strong>
+        Dokumen Teknis Terbatas (System Restricted)
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: WEWENANG SUPER ADMIN ==================== -->
+  <h1>⚙️ Bab 1: Peran &amp; Tanggung Jawab Super Admin</h1>
+
+  <p>Peran <strong>`SUPER_ADMIN`</strong> adalah pemegang kunci teknis seluruh ekosistem aplikasi Julia's Coffee.
+    Berbeda dari peran Owner yang berfokus pada analisis bisnis, Super Admin bertanggung jawab atas kelancaran
+    infrastruktur sistem:</p>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="10" width="165" height="50" rx="6" fill="#f8fafc" stroke="#334155" stroke-width="1.5" />
+      <text x="87" y="32" font-size="10" font-weight="bold" fill="#0f172a" text-anchor="middle">1. Kelola
+        Pengguna</text>
+      <text x="87" y="47" font-size="8.5" fill="#475569" text-anchor="middle">Akun, PIN &amp; 9 Role Resmi</text>
+
+      <path d="M180 35 L200 35" stroke="#334155" stroke-width="1.5" />
+
+      <rect x="205" y="10" width="165" height="50" rx="6" fill="#f8fafc" stroke="#334155" stroke-width="1.5" />
+      <text x="287" y="32" font-size="10" font-weight="bold" fill="#0f172a" text-anchor="middle">2. Konfigurasi
+        Toko</text>
+      <text x="287" y="47" font-size="8.5" fill="#475569" text-anchor="middle">Pajak PB1, Service, Profil</text>
+
+      <path d="M380 35 L400 35" stroke="#334155" stroke-width="1.5" />
+
+      <rect x="405" y="10" width="165" height="50" rx="6" fill="#f8fafc" stroke="#334155" stroke-width="1.5" />
+      <text x="487" y="32" font-size="10" font-weight="bold" fill="#0f172a" text-anchor="middle">3. Perangkat
+        Printer</text>
+      <text x="487" y="47" font-size="8.5" fill="#475569" text-anchor="middle">Bluetooth, USB, Network LAN</text>
+
+      <path d="M580 35 L600 35" stroke="#334155" stroke-width="1.5" />
+
+      <rect x="605" y="10" width="150" height="50" rx="6" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5" />
+      <text x="680" y="32" font-size="10" font-weight="bold" fill="#991b1b" text-anchor="middle">4. Backup &amp;
+        Keamanan</text>
+      <text x="680" y="47" font-size="8.5" fill="#b91c1c" text-anchor="middle">Cadangan Data &amp; Audit</text>
+    </svg>
+  </div>
+
+  <!-- ==================== BAB 2: USER MANAGEMENT ==================== -->
+  <h1>👤 Bab 2: Manajemen Pengguna &amp; Pembagian Role (Users)</h1>
+
+  <p>Pengelolaan akun pengguna dilakukan melalui modul <strong>Manajemen Pengguna (Users.tsx)</strong>. Sistem mendukung
+    9 role resmi dengan hierarki akses yang ketat:</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h3 class="step-title">Alur Pembuatan Akun Karyawan Baru</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Manajemen Pengguna</strong> &rarr; Klik tombol <strong>"+ Tambah Pengguna"</strong>.</li>
+        <li>Isi <strong>Nama Lengkap</strong> dan <strong>Username Unik</strong> (misal: <code>budi_kasir</code>).</li>
+        <li>Tentukan <strong>Peran (Role)</strong> sesuai penugasan:
+          <table class="callout-table" style="margin: 8px 0;">
+            <tr>
+              <th width="20%">Role</th>
+              <th width="35%">Tingkat Akses</th>
+              <th>Pengguna Ideal</th>
+            </tr>
+            <tr>
+              <td><code>SUPER_ADMIN</code></td>
+              <td>Akses Penuh Seluruh Sistem &amp; Database</td>
+              <td>IT Administrator / Pemilik Sistem</td>
+            </tr>
+            <tr>
+              <td><code>OWNER</code></td>
+              <td>Mode Pantau (View-Only) Laporan &amp; Dasbor</td>
+              <td>Pemilik Usaha / Investor</td>
+            </tr>
+            <tr>
+              <td><code>MANAGER</code></td>
+              <td>Operasional Toko, Inventori, Menu, Otorisasi PIN</td>
+              <td>Store Manager / Asisten Manajer</td>
+            </tr>
+            <tr>
+              <td><code>FINANCE</code></td>
+              <td>Pembukuan Kas, PO Belanja, Payroll Gaji</td>
+              <td>Staf Keuangan &amp; Akunting</td>
+            </tr>
+            <tr>
+              <td><code>LEADER</code></td>
+              <td>Checklist Supervisi, Opname Stok, Resep</td>
+              <td>Shift Leader / Supervisor Bar</td>
+            </tr>
+            <tr>
+              <td><code>KASIR</code></td>
+              <td>POS Kasir, Shift Drawer, Layar KDS</td>
+              <td>Kasir Frontliner</td>
+            </tr>
+            <tr>
+              <td><code>BAR / KITCHEN / BAKER</code></td>
+              <td>Dasbor Karyawan &amp; Presensi Selfie</td>
+              <td>Barista, Koki Dapur, &amp; Pembuat Roti</td>
+            </tr>
+          </table>
+        </li>
+        <li>Tentukan <strong>Departemen:</strong> <code>BAR</code>, <code>KITCHEN</code>, atau
+          <code>MAIN (Gudang Utama)</code>.</li>
+        <li>Tetapkan <strong>4-Digit / 6-Digit PIN</strong> untuk login cepat di tablet POS.</li>
+        <li>Hubungkan dengan data profil karyawan (*Employee Linking*) agar kehadiran dan jam shift tersinkron ke modul
+          Payroll.</li>
+        <li>Klik <strong>"Simpan Pengguna"</strong>.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Manajemen Pengguna &amp; PIN (Users.tsx)</span>
+        </div>
+        <img src="screenshots/08_users_pin_screen.png" alt="Manajemen Pengguna &amp; PIN" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #cbd5e1;">
+        <div class="mockup-caption">
+          <strong>Hierarki Pengguna:</strong> Super Admin dapat mengedit PIN, mengatur role, dan mengaktifkan/menonaktifkan akun staf outlet secara real-time.
+        </div>
+      </div>
+
+      <div class="alert alert-important">
+        <strong>Aturan Pengamanan Mantan Karyawan:</strong> Saat staf berhenti bekerja atau habis kontrak, Super Admin
+        <strong>WAJIB segera menonaktifkan atau menghapus akun</strong> tersebut untuk mencegah akses jarak jauh ke
+        sistem kasir.
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3: PENGATURAN TOKO & STRUK ==================== -->
+  <h1>🏪 Bab 3: Pengaturan Profil Toko &amp; Struk (Settings)</h1>
+
+  <p>Pengaturan identitas outlet dilakukan pada menu <strong>Pengaturan Sistem (Settings.tsx)</strong>:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Pengaturan Profil Outlet &amp; Struk (Settings.tsx)</span>
+    </div>
+    <img src="screenshots/15_settings_screen.png" alt="Pengaturan Profil Outlet &amp; Struk" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #cbd5e1;">
+    <div class="mockup-caption">
+      <table class="callout-table">
+        <tr>
+          <th width="15%">No</th>
+          <th width="30%">Kolom Pengaturan</th>
+          <th>Dampak pada Struk &amp; Layar</th>
+        </tr>
+        <tr>
+          <td><span class="callout-num">1</span></td>
+          <td>Nama Brand (Brand Name)</td>
+          <td>Tampil sebagai header nama toko paling atas di struk thermal dan judul aplikasi web.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">2</span></td>
+          <td>Logo Toko (Logo Data URL)</td>
+          <td>Logo grafis yang dicetak pada printer thermal 80mm dan layar login tablet kasir.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">3</span></td>
+          <td>Alamat &amp; Kontak Outlet</td>
+          <td>Informasi alamat cabang, nomor WhatsApp pemesanan, dan akun Instagram di struk.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">4</span></td>
+          <td>Pesan Kaki (Footer Message)</td>
+          <td>Pesan penutup di bawah struk (misal: <em>"Password Wi-Fi: kopiinidulu • Terima Kasih!"</em>).</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">5</span></td>
+          <td>Detail Rekening Toko</td>
+          <td>Nomor rekening resmi toko untuk verifikasi nota transfer pelanggan.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 4: PAJAK & SERVICE CHARGE ==================== -->
+  <h1>🧾 Bab 4: Konfigurasi Pajak (PB1) &amp; Biaya Layanan (Service Charge)</h1>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h3 class="step-title">Cara Mengatur Pajak Restoran &amp; Service Charge</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Di menu <strong>Pengaturan Sistem</strong>, gulir ke seksi <strong>Pajak &amp; Biaya Layanan</strong>.</li>
+        <li><strong>Pajak Resto (PB1 / Tax):</strong>
+          <ul>
+            <li>Centang tombol <em>"Aktifkan Pajak"</em> jika outlet memungut pajak daerah resmi.</li>
+            <li>Masukkan tarif persentase (standar pajak restoran di Indonesia adalah <code>10%</code>).</li>
+            <li>Sistem akan otomatis menghitung 10% dari subtotal pesanan dan mencetak baris <em>PB1 (10%)</em> di
+              struk.</li>
+          </ul>
+        </li>
+        <li><strong>Biaya Layanan (Service Charge):</strong>
+          <ul>
+            <li>Aktifkan jika kafe menerapkan biaya layanan untuk pesanan Dine-In (misal: <code>5%</code>).</li>
+            <li>Biaya layanan akan dihitung sebelum pajak PB1 dikenakan.</li>
+          </ul>
+        </li>
+        <li>Klik tombol <strong>"Simpan Pengaturan"</strong>. Pengaturan ini akan langsung berlaku ke seluruh kasir saat
+          transaksi berikutnya dibuat.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5: PRINTER THERMAL ESC/POS ==================== -->
+  <h1>🖨️ Bab 5: Konfigurasi Perangkat Keras &amp; Printer Thermal</h1>
+
+  <p>Sistem Julia's Coffee mendukung standar protokol cetak industri <strong>ESC/POS</strong> untuk printer kasir dan
+    printer dapur (*Kitchen/Bar*):</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h3 class="step-title">Panduan Koneksi Printer Berdasarkan Tipe Antarmuka</h3>
+    </div>
+    <div class="step-body">
+
+      <h4>1. Printer Bluetooth (Khusus Tablet Android):</h4>
+      <ol>
+        <li>Nyalakan printer thermal Bluetooth dan aktifkan Bluetooth pada tablet kasir.</li>
+        <li>Lakukan pairing Bluetooth di pengaturan Android tablet (PIN pairing standar: <code>0000</code> atau
+          <code>1234</code>).</li>
+        <li>Buka menu <strong>Pengaturan Printer (PosPrinterSettingsModal)</strong> di modul POS &rarr; Pilih tipe
+          <em>Bluetooth</em> &rarr; Klik nama printer yang terdeteksi &rarr; Klik <strong>"Tes Cetak Struk"</strong>.
+        </li>
+      </ol>
+
+      <h4>2. Printer USB (Koneksi Kabel POS PC / Laptop):</h4>
+      <ol>
+        <li>Hubungkan kabel USB printer ke port USB komputer kasir.</li>
+        <li>Pastikan driver printer thermal (58mm/80mm Series) sudah terpasang di Windows.</li>
+        <li>Di sistem POS, pilih printer USB sebagai printer kasir *default*.</li>
+      </ol>
+
+      <h4>3. Printer Network LAN / Wi-Fi (Sangat Direkomendasikan untuk Area Bar &amp; Kitchen):</h4>
+      <ol>
+        <li>Hubungkan printer thermal bar ke router WiFi kafe menggunakan kabel LAN RJ45.</li>
+        <li>Ketahui IP Address printer (tahan tombol *Feed* saat menyalakan printer untuk mencetak slip konfigurasi IP,
+          misal: <code>192.168.1.200</code>).</li>
+        <li>Di pengaturan sistem, masukkan IP Address dan Port standar <code>9100</code>.</li>
+        <li>Keunggulan: Setiap pesanan kopi otomatis tercetak langsung di bar secara nirkabel tanpa kabel panjang.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Modal Pengaturan Printer &amp; Stasiun Cetak (PosPrinterSettingsModal.tsx)</span>
+        </div>
+        <img src="screenshots/15_settings_screen.png" alt="Pengaturan Perangkat &amp; Printer Thermal" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #cbd5e1;">
+        <div class="mockup-caption">
+          <strong>Fitur Auto-Drawer Kick:</strong> Centang opsi <em>"Buka Laci Kasir Otomatis"</em> agar printer
+          mengirim sinyal pulsa RJ11 ke laci kasir saat tombol cetak struk ditekan.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 6: ASISTEN AI ==================== -->
+  <h1>🤖 Bab 6: Konfigurasi Asisten AI (Google Gemini API Key)</h1>
+
+  <div class="step-card">
+    <div class="step-body">
+      <p>Fitur Asisten AI Cerdas di dasbor ditenagai oleh Google Gemini API. Untuk mengaktifkan atau mengganti kunci
+        lisensi AI:</p>
+      <ol>
+        <li>Buka menu <strong>Pengaturan Sistem</strong> &rarr; Gulir ke seksi <strong>Konfigurasi AI
+            Assistant</strong>.</li>
+        <li>Ketikkan API Key resmi dari Google AI Studio ke kolom <strong>Gemini API Key</strong>.</li>
+        <li>Klik tombol <strong>"Tes Koneksi API"</strong>.</li>
+        <li>Jika muncul centang hijau <span style="color:#059669; font-weight:bold;">"Koneksi Berhasil"</span>, klik
+          <strong>"Simpan Pengaturan"</strong>. Seluruh fitur analisis bisnis AI di akun Owner dan Manager akan aktif
+          sepenuhnya.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 7: BACKUP & DATABASE ==================== -->
+  <h1>💾 Bab 7: Pemeliharaan Database &amp; Tindakan Darurat</h1>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">4</span>
+      <h3 class="step-title">SOP Pencadangan Data (Database Backup)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Di menu <strong>Pengaturan Sistem</strong>, cari seksi <strong>Pencadangan Data (Data Backup)</strong>.</li>
+        <li>Klik tombol <strong>"Unduh Cadangan Database (.json / .sql)"</strong> minimal <strong>1 minggu
+            sekali</strong> (disarankan setiap hari Minggu malam setelah tutup toko).</li>
+        <li>Simpan file cadangan tersebut di Google Drive atau flashdisk khusus IT toko.</li>
+        <li><strong>Penanganan Lupa PIN Manager:</strong> Jika Store Manager lupa 4-digit PIN otorisasi, Super Admin
+          dapat masuk ke menu <strong>Manajemen Pengguna</strong> &rarr; Klik tombol edit pada akun Manager &rarr;
+          Ketikkan PIN 4-digit baru &rarr; Klik Simpan.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 8: DO & DON'T SUPER ADMIN ==================== -->
+  <h1>⚖️ Bab 8: Aturan Emas Super Admin (DO &amp; DON'T)</h1>
+
+  <table class="dodont-table">
+    <tr>
+      <th class="th-do">✅ HAL WAJIB DILAKUKAN (DO)</th>
+      <th class="th-dont">❌ DILARANG KERAS (DON'T)</th>
+    </tr>
+    <tr>
+      <td>Lakukan unduh cadangan (*Backup*) database secara rutin setiap minggu dan simpan di lokasi penyimpanan aman.
+      </td>
+      <td>Memberikan akun Super Admin kepada kasir atau pihak luar yang tidak memiliki kompetensi teknis.</td>
+    </tr>
+    <tr>
+      <td>Segera nonaktifkan akun staf yang telah selesai masa kontraknya demi keamanan transaksi outlet.</td>
+      <td>Mengubah konfigurasi tarif pajak atau service charge di tengah jam sibuk operasional kasir.</td>
+    </tr>
+    <tr>
+      <td>Lakukan uji coba cetak struk (*Test Print*) setiap kali mengganti printer atau router Wi-Fi baru.</td>
+      <td>Mengubah skema database secara langsung tanpa melakukan backup data terlebih dahulu.</td>
+    </tr>
+    <tr>
+      <td>Terapkan prinsip *Least Privilege*: berikan role akun yang paling minimal sesuai tanggung jawab staf di
+        lapangan.</td>
+      <td>Membiarkan kredensial login default atau PIN standar (seperti '1234') digunakan oleh akun manajerial.</td>
+    </tr>
+  </table>
+
+</body>
+
+</html>

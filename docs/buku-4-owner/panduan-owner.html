@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Pemilik Usaha - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 16mm 16mm 16mm;
+      @bottom-right {
+        content: "Halaman " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+      @bottom-left {
+        content: "Julia's Coffee — Panduan Eksekutif Owner v1.0";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 88vh;
+      border: 2px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 40px;
+      background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #fafaf9 100%);
+    }
+
+    .badge-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: #1e3a8a;
+      color: #dbeafe;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cover-header {
+      margin-top: 40px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #172554;
+      line-height: 1.15;
+      margin: 16px 0 10px 0;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #1d4ed8;
+      margin: 0 0 20px 0;
+      font-weight: 500;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #57534e;
+      max-width: 90%;
+      line-height: 1.6;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 24px;
+      border-top: 2px dashed #d6d3d1;
+      font-size: 9pt;
+      color: #57534e;
+    }
+
+    .meta-box strong {
+      display: block;
+      color: #292524;
+      font-size: 9.5pt;
+      margin-bottom: 2px;
+    }
+
+    /* Headings */
+    h1, h2, h3, h4 {
+      color: #172554;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #bfdbfe;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      color: #1d4ed8;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 0 0 8px 0;
+    }
+
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* Step Card */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #1d4ed8;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #1c1917;
+      margin: 0;
+    }
+
+    .step-body {
+      padding-left: 36px;
+      font-size: 9.5pt;
+      color: #292524;
+    }
+
+    /* Mockup Screenshot Box */
+    .mockup-container {
+      margin: 10px 0;
+      border: 1.5px solid #d6d3d1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f4;
+      page-break-inside: avoid;
+    }
+
+    .mockup-header {
+      background: #e7e5e4;
+      padding: 6px 12px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #57534e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #d6d3d1;
+    }
+
+    .mockup-placeholder {
+      padding: 22px;
+      text-align: center;
+      color: #78716c;
+      font-style: italic;
+      background: repeating-linear-gradient(45deg, #fafaf9, #fafaf9 10px, #f5f5f4 10px, #f5f5f4 20px);
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-caption {
+      padding: 6px 12px;
+      font-size: 8.5pt;
+      color: #44403c;
+      background: #ffffff;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    /* Tables */
+    .callout-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 8.5pt;
+    }
+
+    .callout-table th, .callout-table td {
+      border: 1px solid #e7e5e4;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .callout-table th {
+      background: #f5f5f4;
+      font-weight: 700;
+      color: #172554;
+    }
+
+    .callout-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      background: #1d4ed8;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 18px;
+      font-weight: bold;
+      font-size: 8pt;
+    }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .alert-tip {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      color: #1e40af;
+    }
+
+    .alert-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-important {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+
+    .dodont-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .dodont-table th {
+      padding: 8px 12px;
+      color: white;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .dodont-table td {
+      padding: 8px 12px;
+      border: 1px solid #e7e5e4;
+      vertical-align: top;
+    }
+
+    .th-do { background: #059669; width: 50%; }
+    .th-dont { background: #dc2626; width: 50%; }
+
+    /* Flowchart */
+    .flowchart-container {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 12px 0;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .flowchart-svg {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <span class="badge-pill">SOP &amp; USER MANUAL RESMI • BUKU 4</span>
+        <img src="screenshots/logo.png" style="height: 48px; object-fit: contain;" alt="Logo Julia's Coffee">
+      </div>
+      <div class="cover-header" style="margin-top: 20px;">
+        <h1 class="cover-title">PANDUAN PEMILIK USAHA (OWNER GUIDE)</h1>
+        <h2 class="cover-subtitle">Mode Pantau Eksekutif &amp; Analisis Bisnis — Julia's Coffee</h2>
+        <p class="cover-desc">
+          Buku panduan eksekutif resmi untuk peran <strong>Pemilik Usaha (OWNER)</strong>. 
+          Dirancang dalam <em>Mode Pantau (View-Only)</em> untuk memonitor kinerja bisnis real-time, 
+          evaluasi margin laba rugi kotor &amp; bersih, grafik jam ramai pelanggan (*Peak Hours*), 
+          audit log pengawasan keamanan toko (pencegahan kecurangan), hingga konsultasi strategi bisnis 
+          menggunakan Asisten AI Cerdas.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="meta-item">
+        <strong>Peran Pengguna:</strong>
+        Pemilik Usaha (Owner), Co-Founder, Investor
+      </div>
+      <div class="meta-item">
+        <strong>Versi Dokumen:</strong>
+        Rev 1.0 (November 2026)
+      </div>
+      <div class="meta-item">
+        <strong>Mode Akses:</strong>
+        Mode Pantau Eksekutif (View-Only Real-time)
+      </div>
+      <div class="meta-item">
+        <strong>Aksesibilitas:</strong>
+        Smartphone, Tablet, &amp; Laptop Pribadi
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: MODE PANTAU ==================== -->
+  <h1>👑 Bab 1: Peran Pemilik Usaha &amp; Filosofi Mode Pantau</h1>
+  
+  <p>Di dalam sistem Julia's Coffee, akun <strong>`OWNER`</strong> sengaja diatur dalam <strong>Mode Pantau (View-Only)</strong>. Hal ini merupakan standar tata kelola bisnis (*Good Corporate Governance*) untuk memisahkan pengawasan dari eksekusi teknis harian:</p>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="10" width="165" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="87" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">1. Pantau Omzet &amp; Tren</text>
+      <text x="87" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Analisis Dasbor Eksekutif</text>
+
+      <path d="M180 35 L200 35" stroke="#2563eb" stroke-width="1.5"/>
+
+      <rect x="205" y="10" width="165" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="287" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">2. Evaluasi Laba Bersih</text>
+      <text x="287" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Review Laporan Laba Rugi</text>
+
+      <path d="M380 35 L400 35" stroke="#2563eb" stroke-width="1.5"/>
+
+      <rect x="405" y="10" width="165" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="487" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">3. Audit Transaksi</text>
+      <text x="487" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Inspeksi Audit Log Viewer</text>
+
+      <path d="M580 35 L600 35" stroke="#2563eb" stroke-width="1.5"/>
+
+      <rect x="605" y="10" width="150" height="50" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+      <text x="680" y="32" font-size="10" font-weight="bold" fill="#78350f" text-anchor="middle">4. Konsultasi AI</text>
+      <text x="680" y="47" font-size="8.5" fill="#92400e" text-anchor="middle">Insight &amp; Strategi Bisnis</text>
+    </svg>
+  </div>
+
+  <div class="alert alert-tip">
+    <strong>Keuntungan Mode Pantau bagi Pemilik:</strong>
+    <ul>
+      <li><strong>Independensi Audit:</strong> Pemilik mengawasi angka murni tanpa risiko salah memencet tombol kasir yang dapat mengacaukan pembukuan shift staf.</li>
+      <li><strong>Akses Dari Mana Saja:</strong> Dasbor dapat dipantau dari rumah atau perjalanan luar kota secara real-time melalui browser HP.</li>
+      <li><strong>Transparansi Penuh:</strong> Seluruh transaksi penjualan, mutasi kas, dan perubahan data karyawan dapat dilihat tanpa ada yang ditutup-tutupi.</li>
+    </ul>
+  </div>
+
+  <!-- ==================== BAB 2: MEMBACA DASBOR OWNER ==================== -->
+  <h1>📈 Bab 2: Membaca Dasbor Eksekutif (Owner Dashboard)</h1>
+
+  <p>Dasbor Owner merangkum indikator performa utama (*Key Performance Indicators - KPI*) bisnis kafe dalam satu layar terpadu:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Dasbor Eksekutif Pemilik (OwnerDashboard.tsx)</span>
+      <span>Live Real-time</span>
+    </div>
+    <img src="screenshots/02_dashboard_owner.png" alt="Dasbor Eksekutif Pemilik" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <table class="callout-table">
+        <tr>
+          <th width="15%">No</th>
+          <th width="35%">Indikator Bisnis</th>
+          <th>Arti &amp; Nilai Strategis</th>
+        </tr>
+        <tr>
+          <td><span class="callout-num">1</span></td>
+          <td>Omzet Penjualan (Total Revenue)</td>
+          <td>Total pemasukan kotor dari seluruh transaksi di outlet pada periode terpilih (Hari/Minggu/Bulan).</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">2</span></td>
+          <td>Rata-rata Belanja (Average Ticket Size)</td>
+          <td>Berapa rata-rata rupiah yang dibelanjakan pelanggan dalam sekali kunjungan.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">3</span></td>
+          <td>Komposisi Pembayaran (Cash vs QRIS)</td>
+          <td>Melihat preferensi pelanggan (misal: 70% QRIS, 30% Tunai) untuk mempersiapkan uang modal kembalian.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">4</span></td>
+          <td>Top 5 Produk Terlaris (Best Sellers)</td>
+          <td>Produk kopi atau makanan yang menjadi tulang punggung pemasukan omzet toko.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3: JAM SIBUK & ANALISIS MENU ==================== -->
+  <h1>⏰ Bab 3: Analisis Jam Ramai (Peak Hours) &amp; Performa Menu</h1>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h3 class="step-title">Cara Menggunakan Grafik Jam Sibuk untuk Efisiensi Staf</h3>
+    </div>
+    <div class="step-body">
+      Di Dasbor Owner, terdapat grafik batang distribusi transaksi per jam:
+      <ul>
+        <li><strong>Morning Peak (Jam 08:00 – 10:30):</strong> Puncak pesanan kopi kerja / take-away.
+          <br><em>Rekomendasi Owner:</em> Pastikan kasir dan 2 barista siap di bar, tidak sedang melakukan pekerjaan prep/belanja.
+        </li>
+        <li><strong>Afternoon Drop (Jam 13:30 – 15:30):</strong> Jam santai dengan transaksi lebih sedikit.
+          <br><em>Rekomendasi Owner:</em> Jam yang ideal untuk pergantian shift, istirahat makan staf, atau pelaksanaan promo <em>"Happy Hour Diskon 20%"</em>.
+        </li>
+        <li><strong>Evening Hangout (Jam 18:30 – 21:30):</strong> Puncak pesanan nongkrong dine-in &amp; cemilan pastry.
+          <br><em>Rekomendasi Owner:</em> Pastikan kebersihan meja lantai 1 dan 2 diperiksa secara berkala oleh Shift Leader.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h3 class="step-title">Evaluasi Menu Terlaris vs Produk Lambat (Slow-Moving)</h3>
+    </div>
+    <div class="step-body">
+      Gunakan daftar performa produk untuk membuat keputusan berkala:
+      <ol>
+        <li><strong>Bintang Penjualan (*Stars*):</strong> Menu dengan volume tinggi dan margin besar (misal: <em>Aren Latte &amp; Caramel Macchiato</em>). Jangan pernah kehabisan stok bahan bakunya!</li>
+        <li><strong>Menu Lambat Laku (*Dogs*):</strong> Menu yang dalam 30 hari terjual kurang dari 10 porsi. Evaluasi apakah resepnya perlu diganti, dinaikkan promonya, atau dihapus dari buku menu agar bahan bakunya tidak kedaluwarsa sia-sia di gudang.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 4: EVALUASI LABA RUGI ==================== -->
+  <h1>💰 Bab 4: Evaluasi Laporan Laba Rugi &amp; Margin Bersih</h1>
+
+  <p>Owner dapat membuka modul <strong>Laporan Laba Rugi (Finance Reports)</strong> untuk mengevaluasi kesehatan finansial kafe secara menyeluruh:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Laporan Laba Rugi Bulanan (FinanceReports.tsx)</span>
+    </div>
+    <img src="screenshots/11_finance_reports_screen.png" alt="Laporan Laba Rugi Bulanan" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>3 Rasio Emas Bisnis Kafe yang Wajib Dicek Owner Setiap Akhir Bulan:</strong>
+      <ol>
+        <li><strong>Rasio HPP (% Food &amp; Beverage Cost):</strong> Maksimal <strong>30% – 35%</strong> dari omzet bersih. Jika lebih dari 38%, periksa apakah ada bahan tumpah (*waste*) yang tidak wajar atau harga beli dari supplier naik.</li>
+        <li><strong>Rasio Beban Karyawan (% Labor Cost):</strong> Idealnya <strong>18% – 25%</strong> dari omzet bersih toko.</li>
+        <li><strong>Margin Laba Bersih Toko (% Net Margin):</strong> Kafe yang sehat menghasilkan margin laba bersih murni di kisaran <strong>20% – 30%</strong> setelah seluruh beban dibayar lunas.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5: AUDIT LOG KEAMANAN ==================== -->
+  <h1>🛡️ Bab 5: Pengawasan Keamanan &amp; Deteksi Kecurangan (Audit Log)</h1>
+
+  <p>Sistem Julia's Coffee mencatat setiap tindakan kritis ke dalam modul <strong>Audit Log Aktivitas (AuditLogViewer.tsx)</strong> yang tidak dapat dimanipulasi atau dihapus oleh kasir maupun manajer.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h3 class="step-title">Cara Melacak Aktivitas Sensitif Toko</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Audit Log Aktivitas</strong> pada navigasi samping.</li>
+        <li>Pilih rentang tanggal dan filter berdasarkan nama pengguna atau jenis tabel.</li>
+        <li><strong>Titik Pemeriksaan Wajib Owner:</strong>
+          <ul>
+            <li><strong>Aktivitas Void &amp; Refund:</strong> Periksa apakah ada kasir yang memiliki pembatalan nota terlalu sering. Cocokkan alasan yang dimasukkan dengan bukti fisik.</li>
+            <li><strong>Pembukaan Laci Manual:</strong> Cek catatan pembukaan laci (*Manual Cash Drawer Open*) di luar jam transaksi belanja.</li>
+            <li><strong>Perubahan Harga Produk / Diskon:</strong> Pastikan tidak ada staf yang mengubah harga jual menu tanpa persetujuan Owner.</li>
+            <li><strong>Perubahan Data Karyawan &amp; Rekening Gaji:</strong> Pastikan rekening penerima payroll karyawan tidak diubah ke rekening orang lain.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Pelacak Audit Log Keamanan (AuditLogViewer.tsx)</span>
+        </div>
+        <img src="screenshots/14_audit_log_screen.png" alt="Pelacak Audit Log Keamanan" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Transparansi Forensik:</strong> Setiap perubahan data menampilkan status <em>Sebelum</em> vs <em>Sesudah</em>, menjamin integritas penuh operasional outlet Anda.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 6: ASISTEN AI CERDAS ==================== -->
+  <h1>🤖 Bab 6: Konsultasi Bisnis dengan Asisten AI Cerdas</h1>
+
+  <p>Di sudut kanan atas aplikasi terdapat ikon berkilau <span style="color:#d97706; font-weight:bold;">✨ Asisten AI</span> yang terhubung langsung dengan teknologi Gemini AI untuk membantu Owner menganalisis performa bisnis:</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">4</span>
+      <h3 class="step-title">Contoh Pertanyaan Efektif yang Bisa Ditanyakan ke AI:</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li><em>"Bagaimana performa penjualan minggu ini dibanding minggu lalu, dan produk apa yang paling berkontribusi?"</em></li>
+        <li><em>"Bahan baku apa yang paling sering menipis dan berisiko mengganggu operasional di akhir pekan?"</em></li>
+        <li><em>"Berikan saran promo bundle untuk meningkatkan penjualan pastry di jam 14.00 – 17.00."</em></li>
+        <li><em>"Berdasarkan jam ramai saat ini, apakah jadwal 2 kasir di hari Jumat malam sudah ideal?"</em></li>
+      </ol>
+      <div class="alert alert-tip">
+        <strong>Fitur Tambahan:</strong> Owner juga dapat mengunggah file spreadsheet atau foto rekap nota lama ke dalam jendela AI untuk meminta analisis tren secara instan.
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 7: DO & DON'T OWNER ==================== -->
+  <h1>⚖️ Bab 7: Aturan Emas Kepemimpinan Pemilik (DO &amp; DON'T)</h1>
+
+  <table class="dodont-table">
+    <tr>
+      <th class="th-do">✅ HAL WAJIB DILAKUKAN (DO)</th>
+      <th class="th-dont">❌ DILARANG KERAS (DON'T)</th>
+    </tr>
+    <tr>
+      <td>Pantau laporan laba rugi bulanan dan bandingkan dengan target margin keuntungan outlet.</td>
+      <td>Mengambil uang kas di laci kasir secara langsung tanpa pencatatan resmi sebagai transaksi 'Prive'.</td>
+    </tr>
+    <tr>
+      <td>Periksa riwayat <em>Audit Log</em> secara berkala untuk menjaga disiplin dan kepatuhan tim toko.</td>
+      <td>Memberikan akun login Owner kepada staf operasional toko.</td>
+    </tr>
+    <tr>
+      <td>Gunakan data grafik jam sibuk (*Peak Hours*) sebagai dasar penambahan staf atau ekspansi outlet.</td>
+      <td>Mengubah resep menu secara sepihak tanpa mengkalkulasi ulang dampaknya di Kalkulator HPP.</td>
+    </tr>
+    <tr>
+      <td>Lakukan evaluasi bulanan bersama Store Manager dengan bersumber pada angka riil di sistem.</td>
+      <td>Membuat keputusan bisnis berdasarkan asumsi perasaan tanpa memeriksa data analitik sistem.</td>
+    </tr>
+  </table>
+
+</body>
+</html>

@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Panduan Kasir & Operasional Bar - Julia's Coffee</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 16mm 16mm 16mm;
+      @bottom-right {
+        content: "Halaman " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+      @bottom-left {
+        content: "Julia's Coffee — SOP & Panduan Kasir v1.0";
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #78716c;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1c1917;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 88vh;
+      border: 2px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 40px;
+      background: linear-gradient(135deg, #fefce8 0%, #ffffff 50%, #fafaf9 100%);
+    }
+
+    .badge-pill {
+      display: inline-block;
+      align-self: flex-start;
+      background: #78350f;
+      color: #fef3c7;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cover-header {
+      margin-top: 40px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #451a03;
+      line-height: 1.15;
+      margin: 16px 0 10px 0;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #78350f;
+      margin: 0 0 20px 0;
+      font-weight: 500;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #57534e;
+      max-width: 90%;
+      line-height: 1.6;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 24px;
+      border-top: 2px dashed #d6d3d1;
+      font-size: 9pt;
+      color: #57534e;
+    }
+
+    .meta-box strong {
+      display: block;
+      color: #292524;
+      font-size: 9.5pt;
+      margin-bottom: 2px;
+    }
+
+    /* Headings */
+    h1, h2, h3, h4 {
+      color: #451a03;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #fed7aa;
+      padding-bottom: 6px;
+      margin-top: 26px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12.5pt;
+      color: #78350f;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    p {
+      margin: 0 0 8px 0;
+    }
+
+    /* Page Breaks */
+    .page-break {
+      page-break-after: always;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+    }
+
+    /* Step Card */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #78350f;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9pt;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #1c1917;
+      margin: 0;
+    }
+
+    .step-body {
+      padding-left: 36px;
+      font-size: 9.5pt;
+      color: #292524;
+    }
+
+    /* Mockup Screenshot Box */
+    .mockup-container {
+      margin: 10px 0;
+      border: 1.5px solid #d6d3d1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f4;
+      page-break-inside: avoid;
+    }
+
+    .mockup-header {
+      background: #e7e5e4;
+      padding: 6px 12px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #57534e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #d6d3d1;
+    }
+
+    .mockup-placeholder {
+      padding: 24px;
+      text-align: center;
+      color: #78716c;
+      font-style: italic;
+      background: repeating-linear-gradient(45deg, #fafaf9, #fafaf9 10px, #f5f5f4 10px, #f5f5f4 20px);
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .mockup-caption {
+      padding: 6px 12px;
+      font-size: 8.5pt;
+      color: #44403c;
+      background: #ffffff;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    /* Callout Table */
+    .callout-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 8.5pt;
+    }
+
+    .callout-table th, .callout-table td {
+      border: 1px solid #e7e5e4;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .callout-table th {
+      background: #f5f5f4;
+      font-weight: 700;
+      color: #451a03;
+    }
+
+    .callout-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      background: #b45309;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 18px;
+      font-weight: bold;
+      font-size: 8pt;
+    }
+
+    /* Alerts */
+    .alert {
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .alert-tip {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+
+    .alert-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-important {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+
+    /* Do and Don't Table */
+    .dodont-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    .dodont-table th {
+      padding: 8px 12px;
+      color: white;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .dodont-table td {
+      padding: 8px 12px;
+      border: 1px solid #e7e5e4;
+      vertical-align: top;
+    }
+
+    .th-do { background: #059669; width: 50%; }
+    .th-dont { background: #dc2626; width: 50%; }
+
+    /* SVG Flowchart Container */
+    .flowchart-container {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 12px 0;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .flowchart-svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Checklist Box */
+    .checklist-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 9pt;
+    }
+
+    .checklist-table td {
+      border: 1px solid #d6d3d1;
+      padding: 6px 10px;
+    }
+
+    .checkbox-square {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #57534e;
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <span class="badge-pill">SOP & USER MANUAL RESMI • BUKU 1</span>
+        <img src="screenshots/logo.png" style="height: 48px; object-fit: contain;" alt="Logo Julia's Coffee">
+      </div>
+      <div class="cover-header" style="margin-top: 20px;">
+        <h1 class="cover-title">PANDUAN KASIR &amp; OPERASIONAL BAR</h1>
+        <h2 class="cover-subtitle">Sistem Manajemen Toko &amp; POS Kasir — Julia's Coffee</h2>
+        <p class="cover-desc">
+          Buku panduan operasional frontliner untuk staf <strong>Kasir (KASIR)</strong>, 
+          <strong>Barista (BAR)</strong>, <strong>Kitchen</strong>, dan <strong>Baker</strong>. 
+          Memuat tata cara presensi selfie, pembukaan laci kasir, penerimaan pesanan &amp; modifier, 
+          pembayaran tunai &amp; QRIS, otorisasi PIN Manager, hingga penutupan shift dan rekonsiliasi kas.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="meta-item">
+        <strong>Peran Pengguna:</strong>
+        Kasir, Barista, Kitchen, Shift Leader
+      </div>
+      <div class="meta-item">
+        <strong>Versi Dokumen:</strong>
+        Rev 1.0 (November 2026)
+      </div>
+      <div class="meta-item">
+        <strong>Perangkat Kerja:</strong>
+        Tablet POS 10", Monitor KDS Bar, Smartphone Staf
+      </div>
+      <div class="meta-item">
+        <strong>Sifat Dokumen:</strong>
+        Wajib Dipahami Sebelum Bertugas Mandiri
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: SIKLUS HARIAN ==================== -->
+  <h1>☕ Bab 1: Siklus Harian Operasional Toko</h1>
+  <p>Setiap staf operasional frontliner wajib menjalankan 5 tahap alur kerja harian berikut secara tertib:</p>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Step 1 -->
+      <rect x="5" y="15" width="130" height="60" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+      <text x="70" y="42" font-size="11" font-weight="bold" fill="#78350f" text-anchor="middle">1. Presensi Masuk</text>
+      <text x="70" y="58" font-size="9" fill="#92400e" text-anchor="middle">Selfie &amp; Lokasi GPS</text>
+
+      <!-- Arrow 1 -->
+      <path d="M140 45 L155 45" stroke="#78350f" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- Step 2 -->
+      <rect x="160" y="15" width="130" height="60" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+      <text x="225" y="42" font-size="11" font-weight="bold" fill="#78350f" text-anchor="middle">2. Buka Shift Kasir</text>
+      <text x="225" y="58" font-size="9" fill="#92400e" text-anchor="middle">Input Modal Awal Laci</text>
+
+      <!-- Arrow 2 -->
+      <path d="M295 45 L310 45" stroke="#78350f" stroke-width="2"/>
+
+      <!-- Step 3 -->
+      <rect x="315" y="15" width="130" height="60" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <text x="380" y="42" font-size="11" font-weight="bold" fill="#065f46" text-anchor="middle">3. Transaksi &amp; Bar</text>
+      <text x="380" y="58" font-size="9" fill="#047857" text-anchor="middle">POS &amp; Layar KDS</text>
+
+      <!-- Arrow 3 -->
+      <path d="M450 45 L465 45" stroke="#78350f" stroke-width="2"/>
+
+      <!-- Step 4 -->
+      <rect x="470" y="15" width="130" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+      <text x="535" y="42" font-size="11" font-weight="bold" fill="#1e40af" text-anchor="middle">4. Tutup Shift Kasir</text>
+      <text x="535" y="58" font-size="9" fill="#1d4ed8" text-anchor="middle">Hitung Kas &amp; Setoran</text>
+
+      <!-- Arrow 4 -->
+      <path d="M605 45 L620 45" stroke="#78350f" stroke-width="2"/>
+
+      <!-- Step 5 -->
+      <rect x="625" y="15" width="130" height="60" rx="8" fill="#f5f5f4" stroke="#57534e" stroke-width="2"/>
+      <text x="690" y="42" font-size="11" font-weight="bold" fill="#292524" text-anchor="middle">5. Presensi Pulang</text>
+      <text x="690" y="58" font-size="9" fill="#57534e" text-anchor="middle">Clock Out Selesai</text>
+    </svg>
+  </div>
+
+  <h2>Jadwal &amp; Pembagian Tugas Shift:</h2>
+  <ul>
+    <li><strong>Shift 1 (Pagi / Opening):</strong> Wajib tiba 30 menit sebelum toko buka untuk kalibrasi mesin espresso, cek persediaan susu &amp; es, dan input modal awal kasir.</li>
+    <li><strong>Shift 2 (Siang / Mid):</strong> Serah terima kas tengah hari (opsional) dan fokus kelancaran layanan di jam ramai (*rush hour*).</li>
+    <li><strong>Shift 3 (Malam / Closing):</strong> Tutup transaksi kasir, cetak laporan shift, setoran uang ke amplop brankas, dan deep-cleaning mesin bar.</li>
+  </ul>
+
+  <!-- ==================== BAB 2: PRESENSI SELFIE ==================== -->
+  <h1>📸 Bab 2: Presensi Selfie &amp; Dasbor Karyawan</h1>
+  
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h3 class="step-title">Cara Melakukan Presensi Masuk (Clock In)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Buka menu <strong>Presensi &amp; Clock In</strong> pada layar navigasi atau klik tombol <em>Clock In</em> di pojok atas.</li>
+        <li>Izinkan akses kamera dan lokasi browser (GPS).</li>
+        <li>Pastikan wajah terlihat jelas di dalam lingkaran kamera, lalu klik tombol <strong>"Ambil Foto &amp; Clock In"</strong>.</li>
+        <li>Sistem akan mencatat jam masuk, foto selfie, dan koordinat lokasi toko secara otomatis.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Layar Presensi Masuk (Attendance Clock)</span>
+          <span>Status: Kamera Aktif</span>
+        </div>
+        <img src="screenshots/02_clock_in_attendance.png" alt="Layar Presensi Masuk Selfie &amp; GPS" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <table class="callout-table">
+            <tr>
+              <th width="15%">Callout</th>
+              <th width="35%">Elemen Layar</th>
+              <th>Fungsi</th>
+            </tr>
+            <tr>
+              <td><span class="callout-num">1</span></td>
+              <td>Pratinjau Kamera Selfie</td>
+              <td>Mendeteksi wajah staf untuk verifikasi kehadiran tanpa joki absen.</td>
+            </tr>
+            <tr>
+              <td><span class="callout-num">2</span></td>
+              <td>Indikator GPS Toko</td>
+              <td>Memastikan staf sudah berada di dalam radius outlet kafe.</td>
+            </tr>
+            <tr>
+              <td><span class="callout-num">3</span></td>
+              <td>Tombol "Ambil Foto"</td>
+              <td>Mengambil foto dan mengunci jam kehadiran ke server database.</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="alert alert-warning">
+        <strong>Peringatan Presensi:</strong> Foto selfie yang gelap, membelakangi lampu, atau memakai masker/topi berlebih dapat ditolak saat verifikasi payroll bulanan oleh tim Finance.
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3: BUKA SHIFT & MODAL AWAL ==================== -->
+  <h1>💵 Bab 3: Buka Shift Kasir &amp; Modal Awal Laci</h1>
+  
+  <p>Sebelum transaksi pertama dapat dilayani, kasir yang bertugas wajib membuka shift dan mencatat modal awal uang tunai di laci (*cash drawer*).</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h3 class="step-title">Langkah Pembukaan Laci Kasir</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Masuk ke modul <strong>POS Kasir</strong>. Jika shift belum aktif, layar pop-up <em>"Buka Shift Kasir"</em> akan muncul otomatis.</li>
+        <li>Hitung fisik uang receh kembalian yang ada di dalam laci kasir (misal: lembaran 2.000, 5.000, 10.000, dan 20.000).</li>
+        <li>Ketikkan jumlah total uang modal tersebut ke kolom <strong>"Modal Awal (Starting Cash)"</strong> (contoh: <code>Rp 300.000</code>).</li>
+        <li>Pilih nama kasir yang bertugas, lalu klik <strong>"Buka Shift Sekarang"</strong>.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Modal Pop-up: Buka Shift Kasir (PosShiftModal.tsx)</span>
+        </div>
+        <img src="screenshots/pos_buka_shift_modal.png" alt="Form Buka Shift Kasir &amp; Modal Awal" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Penting:</strong> Modal awal ini adalah uang pengembalian untuk pelanggan, BUKAN hasil omzet penjualan. Angka ini akan otomatis dikurangkan saat penghitungan setoran tutup kasir nanti malam.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 4: OPERASIONAL POS KASIR ==================== -->
+  <h1>🛒 Bab 4: Operasional POS &amp; Alur Pemesanan</h1>
+
+  <div class="flowchart-container">
+    <svg class="flowchart-svg" viewBox="0 0 760 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="10" width="135" height="50" rx="6" fill="#f5f5f4" stroke="#78350f" stroke-width="1.5"/>
+      <text x="72" y="32" font-size="10" font-weight="bold" fill="#451a03" text-anchor="middle">Pilih Kategori</text>
+      <text x="72" y="47" font-size="8.5" fill="#78716c" text-anchor="middle">Coffee, Non-Coffee, Pastry</text>
+
+      <path d="M145 35 L160 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="165" y="10" width="135" height="50" rx="6" fill="#f5f5f4" stroke="#78350f" stroke-width="1.5"/>
+      <text x="232" y="32" font-size="10" font-weight="bold" fill="#451a03" text-anchor="middle">Klik Menu &amp; Varian</text>
+      <text x="232" y="47" font-size="8.5" fill="#78716c" text-anchor="middle">Hot / Iced, Regular / Large</text>
+
+      <path d="M305 35 L320 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="325" y="10" width="145" height="50" rx="6" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+      <text x="397" y="32" font-size="10" font-weight="bold" fill="#78350f" text-anchor="middle">Sesuaikan Modifier</text>
+      <text x="397" y="47" font-size="8.5" fill="#92400e" text-anchor="middle">Sugar, Ice, Oatmilk, Shot</text>
+
+      <path d="M475 35 L490 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="495" y="10" width="125" height="50" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+      <text x="557" y="32" font-size="10" font-weight="bold" fill="#065f46" text-anchor="middle">Tipe Pesanan</text>
+      <text x="557" y="47" font-size="8.5" fill="#047857" text-anchor="middle">Dine-In (Meja) / Take-Away</text>
+
+      <path d="M625 35 L640 35" stroke="#78350f" stroke-width="1.5"/>
+
+      <rect x="645" y="10" width="110" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="700" y="32" font-size="10" font-weight="bold" fill="#1e40af" text-anchor="middle">Proses Bayar</text>
+      <text x="700" y="47" font-size="8.5" fill="#1d4ed8" text-anchor="middle">Buka Layar Payment</text>
+    </svg>
+  </div>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Tampilan Utama POS Terminal (PosTerminal.tsx)</span>
+      <span>Status Kasir: Shift 1 — Buka</span>
+    </div>
+    <img src="screenshots/03_pos_terminal.png" alt="Layar Kerja POS Kasir" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <table class="callout-table">
+        <tr>
+          <th width="12%">No</th>
+          <th width="30%">Bagian Layar</th>
+          <th>Penjelasan &amp; Cara Pakai</th>
+        </tr>
+        <tr>
+          <td><span class="callout-num">1</span></td>
+          <td>Tab Kategori Menu</td>
+          <td>Memfilter produk: Kopi Espresso, Manual Brew, Tea &amp; Milk, Makanan/Pastry.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">2</span></td>
+          <td>Kolom Pencarian</td>
+          <td>Ketik 2 huruf nama produk (misal: "la" untuk Caffe Latte) untuk akses kilat.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">3</span></td>
+          <td>Keranjang Pesanan</td>
+          <td>Menampilkan daftar item terpilih, kuantitas, catatan tambahan, dan tombol hapus.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">4</span></td>
+          <td>Tombol Buka Tagihan (Open Bill)</td>
+          <td>Simpan pesanan sementara untuk pelanggan yang masih ingin menambah menu nanti.</td>
+        </tr>
+        <tr>
+          <td><span class="callout-num">5</span></td>
+          <td>Tombol Hijau "Bayar (F9)"</td>
+          <td>Menampilkan total tagihan (termasuk pajak PB1) dan membuka jendela pembayaran.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Modal Kustomisasi Menu & Modifier (PosCustomizeModal.tsx)</span>
+      <span>Kopi Susu Gula Aren • Suhu, Manis, Es, Susu & Add-on</span>
+    </div>
+    <img src="screenshots/pos_customize_modal.png" alt="Modal Kustomisasi Minuman dan Modifier Kasir" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>Kustomisasi Pesanan:</strong> Varian Dingin/Panas, Tingkat Kemanisan (Sweetness), Porsi Es, Pilihan Susu (Fresh Milk / Oat Milk), dan Ekstra Topping (Espresso Shot, Syrup).
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h3 class="step-title">Pengaturan Modifier (Customization Modal)</h3>
+    </div>
+    <div class="step-body">
+      Saat produk kopi diklik, jendela modifier akan terbuka untuk memilih:
+      <ul>
+        <li><strong>Sweetness Level:</strong> Normal (100%), Less Sugar (70%), Half Sugar (50%), No Sugar (0%).</li>
+        <li><strong>Ice Level:</strong> Normal Ice, Less Ice, Extra Ice.</li>
+        <li><strong>Milk Option:</strong> Fresh Milk (Standar), Oatmilk (+Rp 8.000), Almond Milk (+Rp 10.000).</li>
+        <li><strong>Extra Add-ons:</strong> Extra Espresso Shot (+Rp 6.000), Vanilla Syrup (+Rp 5.000).</li>
+      </ul>
+      <div class="alert alert-tip">
+        <strong>Tips Cepat Kasir:</strong> Jika pesanan pelanggan adalah standar (*default*), cukup tekan <em>Enter</em> atau klik tombol <em>"Tambahkan ke Keranjang"</em> tanpa mengubah modifier.
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5: METODE PEMBAYARAN ==================== -->
+  <h1>💳 Bab 5: Metode Pembayaran (Payment Modal)</h1>
+
+  <p>Sistem mendukung 3 jenis metode pembayaran resmi dengan alur verifikasi berikut:</p>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Jendela Pembayaran Kasir (PosPaymentModal.tsx)</span>
+      <span>Metode: Tunai, QRIS &amp; Split Bill</span>
+    </div>
+    <img src="screenshots/18_pos_payment_modal.png" alt="Jendela Pembayaran Kasir" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>Pilihan Pembayaran Lengkap:</strong> Tab Tunai / Cash (pecahan cepat Rp 50rb/100rb), Tab QRIS dinamis, dan Tombol Split Bill.
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">A</span>
+      <h3 class="step-title">Pembayaran Tunai (Cash)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Pilih opsi tab <strong>"Tunai / Cash"</strong> di layar pembayaran.</li>
+        <li>Gunakan tombol pecahan cepat (<code>Rp 50.000</code>, <code>Rp 100.000</code>, atau <em>Uang Pas</em>) atau ketik nominal uang fisik yang diberikan pelanggan.</li>
+        <li>Sistem akan menghitung nominal kembalian (*Change*) secara otomatis dalam teks besar berwarna hijau.</li>
+        <li><strong>SOP Wajib Kasir:</strong> Sebutkan nominal kembalian dengan lantang di depan pelanggan: <em>"Total tagihan Rp 65.000, uang diterima Rp 100.000, kembalian Rp 35.000 ya Kak."</em></li>
+        <li>Laci uang (*cash drawer*) akan terbuka otomatis dan struk transaksi tercetak.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">B</span>
+      <h3 class="step-title">Pembayaran Non-Tunai / QRIS Dinamis</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Pilih tab <strong>"QRIS"</strong>. Kode QRIS dinamis akan muncul di layar atau dikirim ke monitor kedua yang menghadap pelanggan.</li>
+        <li>Arahkan pelanggan untuk memindai kode QRIS menggunakan m-Banking atau e-Wallet (GoPay, OVO, ShopeePay, Dana, dll).</li>
+        <li>Tunggu notifikasi suara atau centang hijau berhasil dari sistem payment gateway.</li>
+        <li>Klik tombol <strong>"Konfirmasi Lunas &amp; Cetak Struk"</strong>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">C</span>
+      <h3 class="step-title">Pisah Tagihan (Split Bill)</h3>
+    </div>
+    <div class="step-body">
+      Jika satu meja rombongan ingin membayar secara terpisah:
+      <ol>
+        <li>Di jendela pembayaran, klik tombol <strong>"Split Bill"</strong> di pojok kiri bawah.</li>
+        <li>Pilih item mana saja yang akan dibayar pada tagihan pertama (misal: 2 Latte dibayar Tunai oleh Pembeli A).</li>
+        <li>Selesaikan pembayaran bagian pertama. Sistem akan mencetak struk bagian A.</li>
+        <li>Sisa item (misal: 2 Croissant) akan otomatis tetap tersimpan di keranjang untuk diselesaikan oleh Pembeli B (misal: via QRIS).</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 6: OTORISASI PIN MANAGER ==================== -->
+  <h1>🔐 Bab 6: Otorisasi PIN Manager (Void, Refund &amp; Diskon)</h1>
+
+  <div class="alert alert-important">
+    <strong>ATURAN KEAMANAN TOKO:</strong> Untuk mencegah kebocoran kas dan manipulasi nota, kasir TIDAK memiliki wewenang membatalkan transaksi yang sudah tersimpan atau memberikan diskon di luar promo resmi tanpa persetujuan Store Manager atau Shift Leader.
+  </div>
+
+  <div class="mockup-container">
+    <div class="mockup-header">
+      <span>Pop-up Otorisasi PIN (PosManagerPinModal.tsx)</span>
+      <span>Aksi Sensitif: Void Pesanan</span>
+    </div>
+    <img src="screenshots/pos_manager_pin_modal.png" alt="Pop-up Otorisasi PIN Manager" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+    <div class="mockup-caption">
+      <strong>Prosedur:</strong> Panggil Shift Leader / Manager ke meja kasir &rarr; Leader memeriksa kebenaran alasan pembatalan &rarr; Leader memasukkan 4-digit PIN otorisasi &rarr; Layar terbuka kembali dan aksi tercatat di <em>Audit Log</em>.
+    </div>
+  </div>
+
+  <h3>Tindakan yang Memerlukan PIN Manager:</h3>
+  <table class="callout-table">
+    <tr>
+      <th width="25%">Tindakan</th>
+      <th width="35%">Kapan Dilakukan?</th>
+      <th>Dampak di Sistem</th>
+    </tr>
+    <tr>
+      <td><strong>Void Pesanan</strong></td>
+      <td>Pelanggan membatalkan pesanan sebelum pembayaran diselesaikan.</td>
+      <td>Pesanan dibatalkan, tiket KDS bar ditarik, tidak ada uang yang masuk.</td>
+    </tr>
+    <tr>
+      <td><strong>Refund (Pengembalian)</strong></td>
+      <td>Pelanggan komplain / pesanan salah setelah pembayaran lunas.</td>
+      <td>Saldo kas dikurangi sesuai nominal refund, bukti retur dicetak.</td>
+    </tr>
+    <tr>
+      <td><strong>Diskon Manual Khusus</strong></td>
+      <td>Diskon relasi owner, kompensasi komplain, atau voucher khusus.</td>
+      <td>Mengurangi total tagihan dan mewajibkan catatan keterangan diskon.</td>
+    </tr>
+    <tr>
+      <td><strong>Buka Laci Kasir Manual</strong></td>
+      <td>Menukar uang kembalian tanpa adanya transaksi penjualan.</td>
+      <td>Membuka *cash drawer* dan mencatat jam pembukaan laci ke log audit.</td>
+    </tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 7: TUTUP SHIFT & REKONSILIASI KAS ==================== -->
+  <h1>📊 Bab 7: Tutup Shift &amp; Rekonsiliasi Kas</h1>
+
+  <p>Di akhir jam kerja, kasir yang bertugas WAJIB melakukan tutup shift (*closing shift*) untuk mencocokkan uang fisik dengan catatan sistem.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">4</span>
+      <h3 class="step-title">Prosedur Tutup Shift Kasir (Shift Closing)</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Pastikan semua pesanan yang menggantung (*open bills*) sudah lunas atau dibatalkan.</li>
+        <li>Klik menu profil kasir di kanan atas, lalu pilih <strong>"Tutup Shift Kasir"</strong>.</li>
+        <li>Keluarkan seluruh uang tunai dari laci kasir dan hitung secara fisik per pecahan uang.</li>
+        <li>Ketikkan jumlah uang fisik yang ada di tangan ke kolom <strong>"Uang Fisik Kasir (Actual Cash)"</strong>.</li>
+        <li>Sistem akan otomatis menghitung:
+          <br><code>Selisih = Uang Fisik - (Modal Awal + Penjualan Tunai - Pengeluaran Kas Kecil)</code>
+        </li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Form Tutup Shift &amp; Rekapitulasi (PosShiftModal.tsx)</span>
+        </div>
+        <img src="screenshots/pos_tutup_shift_modal.png" alt="Form Tutup Shift &amp; Rekapitulasi Kas Fisik" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Indikator Hasil Kasir:</strong>
+          <span style="color:#059669; font-weight:bold;">Hijau (Rp 0 / Klop)</span>: Kas sempurna &bull; 
+          <span style="color:#dc2626; font-weight:bold;">Merah (Minus)</span>: Kas Kurang (Kasir wajib mengganti) &bull; 
+          <span style="color:#d97706; font-weight:bold;">Kuning (Plus)</span>: Kas Berlebih (Harus dicatat alasannya).
+        </div>
+      </div>
+
+      <ol start="6">
+        <li>Jika ada selisih, <strong>WAJIB</strong> isi kolom catatan alasan (misal: <em>"Selisih Rp 2.000 karena pelanggan menolak uang receh kembalian"</em>).</li>
+        <li>Klik <strong>"Konfirmasi Tutup Shift &amp; Cetak Laporan"</strong>.</li>
+        <li>Masukkan uang setoran hasil penjualan ke dalam amplop setoran, rekatkan struk tutup shift di luar amplop, dan masukkan ke dalam brankas toko bersama Shift Leader.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 8: OPERASIONAL BAR (KDS) ==================== -->
+  <h1>📺 Bab 8: Layar Barista &amp; Dapur (Kitchen Display System - KDS)</h1>
+
+  <p>Layar KDS menggantikan kertas tiket manual untuk barista bar dan juru masak dapur.</p>
+
+  <div class="step-card">
+    <div class="step-header">
+      <span class="step-badge">5</span>
+      <h3 class="step-title">Alur Kerja Barista di Layar KDS</h3>
+    </div>
+    <div class="step-body">
+      <ol>
+        <li>Saat kasir menyelesaikan pembayaran, tiket pesanan otomatis muncul di layar KDS disertai bunyi lonceng peringatan (*Audio Alert*).</li>
+        <li>Tiket berwarna <strong>Kuning (Pending)</strong>: Barista membaca varian, tingkat gula, es, dan catatan meja.</li>
+        <li>Klik kartu tiket sekali untuk mengubah status menjadi <strong>Biru (Sedang Dibuat / In Progress)</strong>.</li>
+        <li>Setelah minuman selesai diracik dan diletakkan di meja penyerahan (*pickup counter*), klik tombol <strong>"Siap Saji (Ready)"</strong>.</li>
+        <li>Panggil nomor pesanan atau nama pelanggan. Setelah pesanan diambil pelanggan, klik <strong>"Selesai (Served)"</strong> untuk mengarsipkan tiket dari layar.</li>
+      </ol>
+
+      <div class="mockup-container">
+        <div class="mockup-header">
+          <span>Tampilan Layar KDS Barista (KitchenDisplaySystem.tsx)</span>
+          <span>Filter: Stasiun BAR</span>
+        </div>
+        <img src="screenshots/04_kds_screen.png" alt="Layar KDS Barista" style="width: 100%; height: auto; display: block; border-bottom: 1px solid #d6d3d1;">
+        <div class="mockup-caption">
+          <strong>Fitur Tambahan Barista:</strong> Tombol Fullscreen (Layar Penuh), Tombol Nada Lonceng, dan Tombol <em>Quick Waste</em> jika ada bahan yang tumpah saat peracikan.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 9: PENCATATAN BAHAN TUMPAH (WASTE) ==================== -->
+  <h1>🗑️ Bab 9: Pencatatan Bahan Rusak / Tumpah (Quick Waste)</h1>
+
+  <p>Untuk mencegah selisih stok saat *Stock Opname* mingguan, setiap susu yang basi, espresso terbuang saat kalibrasi grinder, atau minuman yang salah racik <strong>WAJIB dicatat seketika</strong>.</p>
+
+  <div class="step-card">
+    <div class="step-body">
+      <ol>
+        <li>Di layar POS atau KDS, klik tombol <strong>"Quick Waste / Catat Buang"</strong>.</li>
+        <li>Pilih bahan baku yang terbuang (contoh: <em>Fresh Milk Greenfields</em> atau <em>House Blend Espresso</em>).</li>
+        <li>Masukkan jumlah yang terbuang (contoh: <code>200 ml</code> susu tumpah, atau <code>18 gram</code> espresso).</li>
+        <li>Pilih alasan: <em>Kalibrasi Pagi</em>, <em>Tumpah / Rusak (Spill)</em>, <em>Salah Pembuatan Resep</em>, atau <em>Basi / Expired</em>.</li>
+        <li>Klik <strong>"Simpan Pencatatan Waste"</strong>. Saldo inventori sistem akan disesuaikan otomatis tanpa mengacaukan omzet kasir.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 10: SKENARIO LAPANGAN ==================== -->
+  <h1>💡 Bab 10: Skenario Nyata di Lapangan ("Bagaimana Jika...")</h1>
+
+  <div class="step-card">
+    <h3 style="color:#b45309;">Skenario 1: Saldo QRIS Pelanggan Terpotong tapi POS Belum Terupdate</h3>
+    <p><strong>Penyebab:</strong> Keterlambatan jaringan internet dari bank atau e-wallet pelanggan.</p>
+    <p><strong>Solusi Resmi:</strong></p>
+    <ul>
+      <li>Minta pelanggan memperlihatkan bukti transaksi di aplikasinya. Cocokkan <strong>Nomor Referensi (RRN)</strong> dan jam transaksi.</li>
+      <li>Klik tombol <strong>"Cek Status Pembayaran Ulang"</strong> pada layar POS.</li>
+      <li>Jika tetap pending lebih dari 2 menit dan antrean panjang, hubungi Shift Leader untuk verifikasi dashboard gateway atau catat nomor telepon pelanggan secara sopan.</li>
+    </ul>
+  </div>
+
+  <div class="step-card">
+    <h3 style="color:#b45309;">Skenario 2: Kertas Printer Thermal Habis di Tengah Transaksi</h3>
+    <p><strong>Solusi Resmi:</strong></p>
+    <ul>
+      <li>Jangan panik; transaksi sudah tersimpan aman di database sistem.</li>
+      <li>Buka penutup printer, masukkan gulungan kertas thermal 58mm/80mm baru (pastikan arah gulungan menghadap ke atas, tidak terbalik).</li>
+      <li>Tutup cover printer sampai berbunyi *klik*.</li>
+      <li>Buka menu <strong>"Pesanan Hari Ini (Today Orders)"</strong> &rarr; Cari nomor nota terakhir &rarr; Klik tombol <strong>"Cetak Ulang Struk (Reprint)"</strong>.</li>
+    </ul>
+  </div>
+
+  <div class="step-card">
+    <h3 style="color:#b45309;">Skenario 3: Internet Toko Tiba-tiba Putus (Mode Offline)</h3>
+    <p><strong>Solusi Resmi:</strong></p>
+    <ul>
+      <li>Sistem POS Julia's Coffee dilengkapi <strong>Offline Queue Outbox</strong>. Ikon sinyal di pojok kanan atas akan berubah menjadi <span style="color:#dc2626; font-weight:bold;">Offline (Kuning/Merah)</span>.</li>
+      <li>Kasir <strong>tetap dapat melayani transaksi tunai seperti biasa</strong>. Transaksi akan disimpan di memori lokal tablet.</li>
+      <li>Saat internet toko kembali menyala, sistem akan otomatis menyinkronkan seluruh antrean nota ke server pusat tanpa ada data yang hilang.</li>
+    </ul>
+  </div>
+
+  <!-- ==================== BAB 11: DO & DON'T ==================== -->
+  <h1>⚖️ Bab 11: Aturan Emas Kasir &amp; Barista (DO &amp; DON'T)</h1>
+
+  <table class="dodont-table">
+    <tr>
+      <th class="th-do">✅ HAL WAJIB DILAKUKAN (DO)</th>
+      <th class="th-dont">❌ DILARANG KERAS (DON'T)</th>
+    </tr>
+    <tr>
+      <td>Selalu sebutkan nominal uang yang diterima dan jumlah kembalian dengan jelas di depan pelanggan.</td>
+      <td>Membuka laci kasir menggunakan tuas darurat tanpa transaksi atau tanpa izin Shift Leader.</td>
+    </tr>
+    <tr>
+      <td>Selalu berikan struk fisik kepada pelanggan kecuali pelanggan menolak secara lisan.</td>
+      <td>Memberikan atau meminjamkan PIN akun kasir kepada rekan kerja lainnya.</td>
+    </tr>
+    <tr>
+      <td>Langsung catat bahan yang tumpah atau salah racik ke menu <em>Quick Waste</em> seketika.</td>
+      <td>Menunda pencatatan susu/biji kopi tumpah hingga akhir shift (menyebabkan selisih stok opname).</td>
+    </tr>
+    <tr>
+      <td>Hitung uang tunai di depan Shift Leader saat serah terima pergantian shift.</td>
+      <td>Menyimpan uang pribadi (dompet/HP kasir) di dalam atau di atas meja laci kasir (*cash drawer*).</td>
+    </tr>
+    <tr>
+      <td>Periksa keaslian uang lembar Rp 50.000 dan Rp 100.000 dengan lampu UV atau metode 3D (Dilihat, Diraba, Diterawang).</td>
+      <td>Mengubah harga jual menu atau memberikan diskon pertemanan tanpa otorisasi PIN Manager resmi.</td>
+    </tr>
+  </table>
+
+  <!-- ==================== BAB 12: GLOSARIUM ==================== -->
+  <h1>📖 Bab 12: Glosarium Istilah Kafe &amp; POS</h1>
+
+  <table class="callout-table">
+    <tr>
+      <th width="20%">Istilah</th>
+      <th>Arti &amp; Definisi Sederhana</th>
+    </tr>
+    <tr>
+      <td><strong>Cash Drawer</strong></td>
+      <td>Laci kasir elektronik yang otomatis membuka saat tombol cetak struk ditekan.</td>
+    </tr>
+    <tr>
+      <td><strong>Modifier</strong></td>
+      <td>Pilihan tambahan pada menu minuman/makanan (contoh: Level gula, Es, Jenis susu, Extra shot).</td>
+    </tr>
+    <tr>
+      <td><strong>Open Bill</strong></td>
+      <td>Fitur menyimpan pesanan sementara untuk meja dine-in yang belum ingin membayar langsung.</td>
+    </tr>
+    <tr>
+      <td><strong>Void</strong></td>
+      <td>Pembatalan pesanan sebelum uang transaksi dibayarkan ke kasir.</td>
+    </tr>
+    <tr>
+      <td><strong>Refund</strong></td>
+      <td>Pengembalian dana kepada pelanggan untuk transaksi yang sudah selesai/lunas karena komplain pesanan.</td>
+    </tr>
+    <tr>
+      <td><strong>KDS</strong></td>
+      <td><em>Kitchen Display System</em>; monitor khusus di area barista/dapur untuk melihat antrean pesanan secara langsung.</td>
+    </tr>
+    <tr>
+      <td><strong>Quick Waste</strong></td>
+      <td>Form pencatatan kilat untuk bahan baku yang tumpah, basi, atau salah pembuatan.</td>
+    </tr>
+    <tr>
+      <td><strong>Stock Opname</strong></td>
+      <td>Kegiatan menghitung fisik seluruh bahan baku di gudang/bar untuk dicocokkan dengan saldo sistem.</td>
+    </tr>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 13: CHECKLIST ONBOARDING ==================== -->
+  <h1>📋 Bab 13: Lembar Verifikasi Mandiri &amp; Training Karyawan Baru</h1>
+
+  <p>Sebelum staf baru diizinkan melayani pelanggan secara mandiri, seluruh poin di bawah ini wajib dipraktikkan dan ditandatangani bersama Shift Leader / Store Manager:</p>
+
+  <table class="checklist-table">
+    <tr style="background:#f5f5f4; font-weight:bold;">
+      <td width="8%">Status</td>
+      <td width="52%">Materi Praktik Lapangan</td>
+      <td width="20%">Tanggal Uji</td>
+      <td width="20%">Paraf Leader</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat melakukan Clock In selfie &amp; membaca Dasbor Karyawan.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat membuka shift kasir dan mengisi nominal modal awal.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat memilih kategori menu, varian, dan modifier pesanan.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat menyelesaikan transaksi Tunai &amp; menyebutkan kembalian.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat menyelesaikan pembayaran QRIS dan verifikasi lunas.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat mempraktikkan fitur Pisah Tagihan (Split Bill).</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Memahami alur pemanggilan PIN Manager untuk Void &amp; Refund.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat mengganti kertas roll printer thermal dan reprint struk.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat menggunakan layar KDS Barista &amp; update status minuman.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat mencatat susu/bahan tumpah di menu Quick Waste.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+    <tr>
+      <td><span class="checkbox-square"></span> Lulus</td>
+      <td>Dapat melakukan Tutup Shift Kasir, hitung fisik, &amp; buat setoran.</td>
+      <td>____/____/2026</td>
+      <td>_____________</td>
+    </tr>
+  </table>
+
+  <br>
+
+  <div style="display:flex; justify-content:space-between; margin-top:20px; page-break-inside:avoid;">
+    <div style="text-align:center; width:45%;">
+      <p>Karyawan yang Diuji:</p>
+      <br><br><br>
+      <p><strong>( ____________________________ )</strong><br>Nama Kasir / Barista Baru</p>
+    </div>
+    <div style="text-align:center; width:45%;">
+      <p>Penguji / Verifikator:</p>
+      <br><br><br>
+      <p><strong>( ____________________________ )</strong><br>Shift Leader / Store Manager</p>
+    </div>
+  </div>
+
+</body>
+</html>
