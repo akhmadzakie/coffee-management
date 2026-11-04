@@ -5,7 +5,6 @@ import { ShiftSession } from "../../types";
 import { calculateShiftStats } from "../../utils/posDomainLogic";
 import {
   Clock,
-  DollarSign,
   Play,
   Square,
   AlertTriangle,

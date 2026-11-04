@@ -20,8 +20,7 @@ import { motion } from "motion/react";
 import {
   TrendingUp,
   TrendingDown,
-  DollarSign,
-  Package,
+    Package,
   ReceiptText,
   AlertTriangle,
   Download,

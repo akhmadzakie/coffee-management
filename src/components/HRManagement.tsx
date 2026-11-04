@@ -5,12 +5,12 @@ import { Role, DEFAULT_LEADER_ALLOWANCE_RULES, DEFAULT_SHIFT_DEFINITIONS, ShiftD
 import { getLocalDateString } from "../utils/dateUtils";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
+import { RupiahSign } from "./common/RupiahSign";
 import {
   Users,
   FileText,
   Target,
   Calendar,
-  DollarSign,
   Plus,
   Edit2,
   Trash2,
@@ -1367,7 +1367,7 @@ export function HRManagement() {
       icon: Calendar,
     },
     { id: "kpi", label: "KPI", icon: Target },
-    { id: "payroll", label: "Payroll", icon: DollarSign },
+    { id: "payroll", label: "Payroll", icon: RupiahSign },
   ];
 
   return (
@@ -1530,7 +1530,7 @@ export function HRManagement() {
                       {isIndo ? "Proyeksi Payroll" : "Payroll Projection"}
                     </h3>
                     <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
-                      <DollarSign className="w-5 h-5" />
+                      <RupiahSign className="w-5 h-5" />
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-blue-900">

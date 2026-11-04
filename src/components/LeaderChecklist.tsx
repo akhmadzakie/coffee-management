@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, XCircle, Plus, Trash2, RotateCcw, 
   Coffee, Utensils, Croissant, Users, ClipboardList, 
   Sliders, TrendingUp, Check, Layers, ChevronDown, ChevronUp,
-  Sun, Moon, Sunset, DollarSign, Award, Sparkles, Filter,
+  Sun, Moon, Sunset, Award, Sparkles, Filter,
   Lock, Edit2, ShieldCheck
 } from "lucide-react";
 import { motion } from "framer-motion";

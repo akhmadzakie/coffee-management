@@ -1,7 +1,8 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
 import { 
   Save, X, BookOpen, Target, Award, Sparkles, 
-  Users, Sliders, TrendingUp, CheckCircle2, AlertCircle, DollarSign, Check
+  Users, Sliders, TrendingUp, CheckCircle2, AlertCircle, Check
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -574,7 +575,7 @@ export const KPI: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-indigo-600" />
+                    <RupiahSign className="w-4 h-4 text-indigo-600" />
                     Konfigurasi Besaran Target & Bonus Toko
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">

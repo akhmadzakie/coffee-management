@@ -1,3 +1,4 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -9,8 +10,7 @@ import {
   Smartphone,
   TrendingUp,
   TrendingDown,
-  DollarSign,
-  ReceiptText,
+    ReceiptText,
   AlertCircle,
   CreditCard,
   FileSpreadsheet,
@@ -515,7 +515,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               Total Likuiditas Kas
             </span>
             <div className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
-              <DollarSign className="w-4 h-4" />
+              <RupiahSign className="w-4 h-4" />
             </div>
           </div>
           <div className="relative z-10">

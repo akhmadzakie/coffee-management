@@ -1,3 +1,4 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
@@ -41,8 +42,7 @@ import {
   Calendar,
   CheckCheck,
   Check,
-  DollarSign,
-  Wallet,
+    Wallet,
   Activity,
   ShoppingBag,
   Truck,
@@ -648,7 +648,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               Omzet Hari Ini
             </span>
             <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
-              <DollarSign className="w-4 h-4" />
+              <RupiahSign className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">

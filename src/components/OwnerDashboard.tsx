@@ -1,3 +1,4 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
@@ -22,8 +23,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   TrendingUp,
   TrendingDown,
-  DollarSign,
-  Coffee,
+    Coffee,
   ShoppingBag,
   AlertTriangle,
   ArrowUpRight,
@@ -807,7 +807,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Laba Bersih Riil</span>
             <div className="w-11 h-11 rounded-2xl bg-emerald-50/80 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-              <DollarSign className="w-5 h-5 stroke-[2.2]" />
+              <RupiahSign className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
           <div>
@@ -1082,7 +1082,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estimasi Payroll</span>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs">
-                <DollarSign className="w-4 h-4 stroke-[2.2]" />
+                <RupiahSign className="w-4 h-4 stroke-[2.2]" />
               </div>
             </div>
             <div className="text-2xl font-extrabold text-slate-900 tracking-tight">

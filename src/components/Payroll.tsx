@@ -23,7 +23,6 @@ import {
   CheckCircle2,
   Users,
   TrendingUp,
-  DollarSign,
   ChevronRight,
   ShieldCheck,
   RotateCcw,
@@ -33,6 +32,7 @@ import {
 } from "lucide-react";
 import { PayslipModal } from "./PayslipModal";
 import { ExportModal } from "./ExportModal";
+import { RupiahSign } from "./common/RupiahSign";
 import { exportPayrollToXlsx } from "../utils/exportXlsx";
 import { motion, AnimatePresence } from "motion/react";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
@@ -675,7 +675,7 @@ export function Payroll() {
               Total Penggajian
             </span>
             <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 border border-brand-200/80 flex items-center justify-center shrink-0">
-              <DollarSign className="w-4 h-4" />
+              <RupiahSign className="w-4 h-4" />
             </div>
           </div>
           <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">

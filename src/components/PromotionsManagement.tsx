@@ -1,10 +1,10 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
 import {
   Tag,
   Plus,
   Percent,
-  DollarSign,
-  Search,
+    Search,
   CheckCircle2,
   XCircle,
   Edit2,
@@ -339,7 +339,7 @@ export const PromotionsManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Potongan Flat</span>
             <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <DollarSign className="w-4 h-4" />
+              <RupiahSign className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-blue-800">{nominalCount}</div>
@@ -457,7 +457,7 @@ export const PromotionsManagement: React.FC = () => {
                             {promo.type === "PERCENT" ? (
                               <Percent className="w-4 h-4" />
                             ) : (
-                              <DollarSign className="w-4 h-4" />
+                              <RupiahSign className="w-4 h-4" />
                             )}
                           </div>
                           <div>
@@ -749,7 +749,7 @@ export const PromotionsManagement: React.FC = () => {
                           : "border-slate-200 text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      <DollarSign className="w-4 h-4" />
+                      <RupiahSign className="w-4 h-4" />
                       <span>Nominal (Rp)</span>
                     </button>
                   </div>

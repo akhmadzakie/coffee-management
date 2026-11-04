@@ -1,3 +1,4 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -6,8 +7,7 @@ import {
   Square,
   History,
   AlertCircle,
-  DollarSign,
-  Clock,
+    Clock,
   TrendingUp,
   TrendingDown,
   CheckCircle2,
@@ -423,7 +423,7 @@ export const ShiftManagement = () => {
                       {formatCurrency(expectedEndingCash)}
                     </p>
                   </div>
-                  <DollarSign className="w-14 h-14 text-white/10 relative z-10" />
+                  <RupiahSign className="w-14 h-14 text-white/10 relative z-10" />
                 </div>
               </motion.div>
 

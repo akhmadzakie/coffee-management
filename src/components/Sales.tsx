@@ -1,3 +1,4 @@
+import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import {
@@ -11,8 +12,7 @@ import {
   Receipt,
   Eye,
   Filter,
-  DollarSign,
-  CreditCard,
+    CreditCard,
   QrCode,
   Banknote,
   RotateCcw,
@@ -619,7 +619,7 @@ export const Sales = () => {
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
-              <DollarSign className="w-5 h-5" />
+              <RupiahSign className="w-5 h-5" />
             </div>
             Penjualan & Omzet Kasir
           </h1>
@@ -660,7 +660,7 @@ export const Sales = () => {
                   transition={{ type: "spring", stiffness: 450, damping: 32 }}
                 />
               )}
-              <DollarSign className="w-4 h-4 text-brand-600 relative z-10" />
+              <RupiahSign className="w-4 h-4 text-brand-600 relative z-10" />
               <span className="relative z-10">Rekap Harian</span>
               {dailySalesRecaps.length > 0 && (
                 <span className="relative z-10 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
@@ -823,7 +823,7 @@ export const Sales = () => {
                     Omzet Kasir
                   </span>
                   <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-brand-300">
-                    <DollarSign className="w-4 h-4" />
+                    <RupiahSign className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
@@ -1194,7 +1194,7 @@ export const Sales = () => {
                     Total Omzet
                   </span>
                   <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-brand-300">
-                    <DollarSign className="w-4 h-4" />
+                    <RupiahSign className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
@@ -1267,7 +1267,7 @@ export const Sales = () => {
           <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-50 via-indigo-50 to-amber-50 border border-brand-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs shrink-0">
-                <DollarSign className="w-5 h-5" />
+                <RupiahSign className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900">
@@ -1324,7 +1324,7 @@ export const Sales = () => {
                     <tr>
                       <td colSpan={isReadOnly ? 8 : 9} className="p-10 text-center text-slate-400">
                         <div className="max-w-md mx-auto space-y-2">
-                          <DollarSign className="w-10 h-10 text-slate-300 mx-auto" />
+                          <RupiahSign className="w-10 h-10 text-slate-300 mx-auto" />
                           <p className="font-bold text-slate-700 text-sm">Belum Ada Rekapitulasi Omzet</p>
                           <p className="text-xs text-slate-400">
                             {isOwner
@@ -1427,7 +1427,7 @@ export const Sales = () => {
             <div className="block md:hidden divide-y divide-slate-100 p-3 space-y-3">
               {filteredRecaps.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 space-y-2">
-                  <DollarSign className="w-10 h-10 text-slate-300 mx-auto" />
+                  <RupiahSign className="w-10 h-10 text-slate-300 mx-auto" />
                   <p className="font-bold text-slate-700 text-sm">Belum Ada Rekapitulasi</p>
                   <p className="text-xs text-slate-400">
                     Belum ada data omzet harian yang tersimpan.
@@ -1554,7 +1554,7 @@ export const Sales = () => {
                     Total Omzet POS
                   </span>
                   <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-brand-300">
-                    <DollarSign className="w-4 h-4" />
+                    <RupiahSign className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
@@ -2468,7 +2468,7 @@ export const Sales = () => {
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs">
-                    <DollarSign className="w-5 h-5" />
+                    <RupiahSign className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-900">

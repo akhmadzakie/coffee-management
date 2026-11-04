@@ -27,7 +27,6 @@ import {
   Minimize2,
   RotateCcw,
   Sliders,
-  DollarSign,
   Percent,
   X,
   FileText,
