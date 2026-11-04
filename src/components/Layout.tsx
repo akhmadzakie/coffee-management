@@ -913,15 +913,15 @@ export const Layout: React.FC<LayoutProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsManagerApprovalOpen(true)}
-                  className={`relative items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                  className={`relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
                     pendingApprovalsCount > 0
-                      ? "flex bg-rose-600 hover:bg-rose-700 text-white animate-pulse"
-                      : "hidden sm:flex bg-white hover:bg-slate-50 text-slate-700 border border-slate-200"
+                      ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-2 ring-rose-400"
+                      : "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
                   }`}
                   title="Persetujuan Jarak Jauh Otorisasi Kasir (Remote Approval)"
                 >
                   <ShieldAlert className={`w-3.5 h-3.5 ${pendingApprovalsCount > 0 ? "text-white" : "text-amber-600"}`} />
-                  <span className="hidden sm:inline">Otorisasi</span>
+                  <span className="inline font-bold">Otorisasi</span>
                   {pendingApprovalsCount > 0 && (
                     <span className="px-1.5 py-0.2 rounded-full bg-white text-rose-600 text-[10px] font-black">
                       {pendingApprovalsCount}

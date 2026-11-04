@@ -27,6 +27,14 @@ import {
 import { PosReceiptModal } from "./PosReceiptModal";
 import { PosManagerPinModal } from "./PosManagerPinModal";
 
+const QUICK_REFUND_REASONS = [
+  "Salah Input Menu Kasir",
+  "Pelanggan Membatalkan Pesanan",
+  "Komplain Kualitas / Basi / Dingin",
+  "Waktu Tunggu Terlalu Lama",
+  "Kelebihan / Double Bayar",
+];
+
 interface PosTodayOrdersModalProps {
   onClose: () => void;
 }
@@ -109,7 +117,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
 
   const handleStartRefund = (ord: any) => {
     setOrderToRefund(ord);
-    setRefundReason("");
+    setRefundReason(QUICK_REFUND_REASONS[0]);
     setRefundMethod(ord.paymentMethod === "CASH" ? "CASH" : ord.paymentMethod === "QRIS" ? "QRIS" : "CASH");
     setRefundRestockOption("RETURN_TO_STOCK");
     setRefundAmount(ord.totalAmount || 0);
@@ -120,10 +128,8 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
   };
 
   const handleProceedToPin = () => {
-    if (!refundReason.trim()) {
-      setRefundError("Alasan refund wajib diisi untuk SOP dan pelaporan audit kasir.");
-      return;
-    }
+    const finalReason = refundReason.trim() || QUICK_REFUND_REASONS[0];
+    setRefundReason(finalReason);
     setRefundError(null);
     setShowPinModal(true);
   };
@@ -139,7 +145,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           managerPin: manager.pin,
-          refundReason: refundReason.trim(),
+          refundReason: refundReason.trim() || QUICK_REFUND_REASONS[0],
           refundMethod,
           refundRestockOption,
           refundAmount,
@@ -173,10 +179,8 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
   // Kirim Permintaan Remote Approval ke HP/Dashboard Manager
   const handleRequestRemoteApproval = async () => {
     if (!orderToRefund) return;
-    if (!refundReason.trim()) {
-      setRefundError("Alasan refund wajib diisi agar manager memahami latar belakang pengajuan.");
-      return;
-    }
+    const finalReason = refundReason.trim() || QUICK_REFUND_REASONS[0];
+    setRefundReason(finalReason);
     setIsRequestingRemote(true);
     setRefundError(null);
 
@@ -189,7 +193,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
           receiptNo: orderToRefund.receiptNo,
           type: "REFUND",
           amount: refundAmount,
-          reason: refundReason.trim(),
+          reason: refundReason.trim() || QUICK_REFUND_REASONS[0],
           cashierName: orderToRefund.cashierName || "Kasir",
           tableNumber: orderToRefund.tableNumber || "-",
           customerName: orderToRefund.customerName || "Tamu",
@@ -269,15 +273,8 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
     return matchesQuery && matchesStatus;
   });
 
-  const quickRefundReasons = [
-    "Salah Input Menu Kasir",
-    "Komplain Kualitas / Basi / Dingin",
-    "Pelanggan Membatalkan Pesanan",
-    "Waktu Tunggu Terlalu Lama",
-    "Kelebihan / Double Bayar",
-  ];
-
-  return (
+  const quickRefundReasons = QUICK_REFUND_REASONS;
+return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
       <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
@@ -682,14 +679,13 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
             ) : (
               /* FORM PENGAJUAN REFUND UTAMA */
               <>
-                <div className="p-5 overflow-y-auto space-y-4 text-xs">
-                  {/* Notice SOP */}
-                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
-                    <p className="font-bold flex items-center gap-1.5 text-amber-800 mb-0.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      SOP Otorisasi Manager Julia's Coffee
+                <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-xs">
+                  {/* Notice SOP Ringkas */}
+                  <div className="p-2.5 px-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <p className="leading-snug">
+                      <strong className="text-amber-800">SOP Otorisasi Kasir:</strong> Refund dana kasir wajib disetujui via PIN Supervisor di tempat atau Remote Approval ke HP Manager.
                     </p>
-                    Setiap pengembalian uang dari laci kasir wajib mendapatkan persetujuan Manager/Owner via Remote Approval (HP) atau verifikasi PIN langsung di kasir.
                   </div>
 
                   {refundError && (
@@ -699,165 +695,177 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                     </div>
                   )}
 
-                  {/* Nominal Refund */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      Nominal Refund:
-                    </label>
-                    <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between">
-                      <span className="text-slate-500 font-medium">Dana yang dikembalikan ke pelanggan</span>
-                      <span className="text-sm font-black text-rose-600">
-                        {formatCurrency(refundAmount)}
-                      </span>
+                  {/* Nominal & Metode Pengembalian (2 Kolom) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Nominal Refund */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Nominal Refund:
+                      </label>
+                      <div className="p-2.5 px-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between">
+                        <span className="text-slate-500 font-medium text-[11px]">Kembalikan ke Tamu</span>
+                        <span className="text-base font-black text-rose-600">
+                          {formatCurrency(refundAmount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Metode Refund */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Metode Pengembalian:
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setRefundMethod("CASH")}
+                          className={`p-2 rounded-xl border flex flex-col items-center gap-0.5 text-center transition cursor-pointer ${
+                            refundMethod === "CASH"
+                              ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs ring-1 ring-rose-600"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <Banknote className="w-3.5 h-3.5" />
+                          <span className="text-[10px]">Tunai/Laci</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRefundMethod("TRANSFER")}
+                          className={`p-2 rounded-xl border flex flex-col items-center gap-0.5 text-center transition cursor-pointer ${
+                            refundMethod === "TRANSFER"
+                              ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs ring-1 ring-rose-600"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span className="text-[10px]">Transfer</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRefundMethod("QRIS")}
+                          className={`p-2 rounded-xl border flex flex-col items-center gap-0.5 text-center transition cursor-pointer ${
+                            refundMethod === "QRIS"
+                              ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs ring-1 ring-rose-600"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span className="text-[10px]">QRIS/Wallet</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Metode Refund */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">
-                      Metode Pengembalian Dana:
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRefundMethod("CASH")}
-                        className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 text-center transition ${
-                          refundMethod === "CASH"
-                            ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Banknote className="w-4 h-4" />
-                        <span className="text-[11px]">Tunai / Laci</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRefundMethod("TRANSFER")}
-                        className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 text-center transition ${
-                          refundMethod === "TRANSFER"
-                            ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        <span className="text-[11px]">Transfer Bank</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRefundMethod("QRIS")}
-                        className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 text-center transition ${
-                          refundMethod === "QRIS"
-                            ? "bg-rose-50 border-rose-600 text-rose-900 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        <QrCode className="w-4 h-4" />
-                        <span className="text-[11px]">QRIS / E-Wallet</span>
-                      </button>
+                  {/* Alasan Refund (Wajib) - Diletakkan Strategis di Tengah! */}
+                  <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="font-bold text-slate-800 block text-xs">
+                        Alasan Refund (Wajib Audit):
+                      </label>
+                      <span className="text-[10px] text-slate-400">Pilih cepat atau ketik sendiri</span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      {refundMethod === "CASH"
-                        ? "Otomatis mencatat Kas Keluar (CASH_OUT) dari laci kasir shift aktif."
-                        : "Dana dikembalikan non-tunai melalui rekening usaha atau e-wallet."}
-                    </p>
-                  </div>
 
-                  {/* Perlakuan Stok Bahan Baku */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">
-                      Perlakuan Stok Bahan Baku:
-                    </label>
-                    <div className="space-y-1.5">
-                      <label
-                        onClick={() => setRefundRestockOption("RETURN_TO_STOCK")}
-                        className={`p-2.5 px-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition ${
-                          refundRestockOption === "RETURN_TO_STOCK"
-                            ? "bg-emerald-50/50 border-emerald-500 text-emerald-950 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <PackageCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-xs">Kembalikan ke Stok Gudang (Restock)</p>
-                          <p className="text-[10px] text-slate-500 font-normal">
-                            Bahan baku belum diproses atau produk masih layak & utuh.
-                          </p>
-                        </div>
-                      </label>
-
-                      <label
-                        onClick={() => setRefundRestockOption("WASTE")}
-                        className={`p-2.5 px-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition ${
-                          refundRestockOption === "WASTE"
-                            ? "bg-amber-50/50 border-amber-500 text-amber-950 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Trash2 className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-xs">Catat Kerusakan / Terbuang (Waste)</p>
-                          <p className="text-[10px] text-slate-500 font-normal">
-                            Minuman/makanan sudah dibuat & rusak/dibuang karena basi atau salah racik.
-                          </p>
-                        </div>
-                      </label>
-
-                      <label
-                        onClick={() => setRefundRestockOption("NONE")}
-                        className={`p-2.5 px-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition ${
-                          refundRestockOption === "NONE"
-                            ? "bg-slate-100 border-slate-400 text-slate-900 font-bold shadow-xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <MinusCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-xs">Tanpa Perubahan Stok</p>
-                          <p className="text-[10px] text-slate-500 font-normal">
-                            Hanya rekonsiliasi pengembalian dana keuangan kasir.
-                          </p>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Alasan Refund */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      Alasan Refund (Wajib):
-                    </label>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {quickRefundReasons.map((qr) => (
                         <button
                           key={qr}
                           type="button"
-                          onClick={() => setRefundReason(qr)}
-                          className={`text-[10px] px-2.5 py-1 rounded-lg border transition ${
+                          onClick={() => {
+                            setRefundReason(qr);
+                            setRefundError(null);
+                          }}
+                          className={`text-[10px] px-2.5 py-1 rounded-lg border transition cursor-pointer active:scale-95 ${
                             refundReason === qr
-                              ? "bg-rose-100 border-rose-300 text-rose-800 font-bold"
-                              : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                              ? "bg-rose-600 border-rose-600 text-white font-bold shadow-xs"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
                           }`}
                         >
                           {qr}
                         </button>
                       ))}
                     </div>
-                    <textarea
-                      rows={2}
+
+                    <input
+                      type="text"
                       value={refundReason}
-                      onChange={(e) => setRefundReason(e.target.value)}
-                      placeholder="Ketik keterangan rinci keluhan atau alasan pengembalian dana..."
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600"
+                      onChange={(e) => {
+                        setRefundReason(e.target.value);
+                        if (refundError) setRefundError(null);
+                      }}
+                      placeholder="Ketik keterangan rinci alasan refund..."
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600 font-medium"
                     />
+                  </div>
+
+                  {/* Perlakuan Stok Bahan Baku (Kompak Horizontal 3 Kolom) */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Perlakuan Stok Bahan Baku:
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRefundRestockOption("RETURN_TO_STOCK")}
+                        className={`p-2.5 px-3 rounded-xl border flex flex-col items-start gap-1 text-left transition cursor-pointer ${
+                          refundRestockOption === "RETURN_TO_STOCK"
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-xs ring-1 ring-emerald-500"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <PackageCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-[11px]">Restock Gudang</span>
+                        </div>
+                        <span className="text-[9.5px] text-slate-500 font-normal leading-tight">
+                          Bahan utuh/belum dibuat
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRefundRestockOption("WASTE")}
+                        className={`p-2.5 px-3 rounded-xl border flex flex-col items-start gap-1 text-left transition cursor-pointer ${
+                          refundRestockOption === "WASTE"
+                            ? "bg-amber-50 border-amber-500 text-amber-950 font-bold shadow-xs ring-1 ring-amber-500"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Trash2 className="w-3.5 h-3.5 text-amber-600" />
+                          <span className="text-[11px]">Catat Waste</span>
+                        </div>
+                        <span className="text-[9.5px] text-slate-500 font-normal leading-tight">
+                          Produk rusak/basi/dibuang
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRefundRestockOption("NONE")}
+                        className={`p-2.5 px-3 rounded-xl border flex flex-col items-start gap-1 text-left transition cursor-pointer ${
+                          refundRestockOption === "NONE"
+                            ? "bg-slate-100 border-slate-500 text-slate-900 font-bold shadow-xs ring-1 ring-slate-500"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <MinusCircle className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[11px]">Tanpa Stok</span>
+                        </div>
+                        <span className="text-[9.5px] text-slate-500 font-normal leading-tight">
+                          Hanya rekonsiliasi kas
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Footer dengan 2 Pilihan: Remote Approval (HP) & PIN di Tempat */}
-                <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="p-3.5 px-6 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setOrderToRefund(null)}
-                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold"
+                    className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold cursor-pointer active:scale-95 transition"
                   >
                     Batal
                   </button>
@@ -867,10 +875,10 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                     <button
                       type="button"
                       onClick={handleProceedToPin}
-                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 font-bold text-xs flex items-center gap-1.5 transition"
+                      className="px-4 py-2.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border-2 border-rose-300 hover:border-rose-400 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
                       title="Manager mengetik PIN langsung di layar kasir ini"
                     >
-                      <Lock className="w-3.5 h-3.5" />
+                      <Lock className="w-3.5 h-3.5 text-rose-600" />
                       <span>PIN di Tempat</span>
                     </button>
 
@@ -879,7 +887,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
                       type="button"
                       onClick={handleRequestRemoteApproval}
                       disabled={isRequestingRemote}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 disabled:opacity-50"
                       title="Kirim notifikasi persetujuan langsung ke HP atau laptop Manager"
                     >
                       <Smartphone className="w-4 h-4" />

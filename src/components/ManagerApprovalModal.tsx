@@ -56,6 +56,8 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchPending();
+      const interval = setInterval(fetchPending, 3000);
+      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -241,14 +243,14 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 sm:flex sm:items-center sm:justify-end">
                     <button
                       type="button"
                       disabled={isProcessing}
                       onClick={() => handleRespond(req.id, "REJECT", req.receiptNo)}
-                      className="px-4 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                     >
-                      <XCircle className="w-3.5 h-3.5" />
+                      <XCircle className="w-4 h-4 text-rose-600" />
                       <span>Tolak</span>
                     </button>
 
@@ -256,16 +258,16 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
                       type="button"
                       disabled={isProcessing}
                       onClick={() => handleRespond(req.id, "APPROVE", req.receiptNo)}
-                      className="px-5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="w-full sm:w-auto px-5 py-2.5 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                           <span>Memproses...</span>
                         </>
                       ) : (
                         <>
-                          <Check className="w-3.5 h-3.5 stroke-3" />
+                          <Check className="w-4 h-4 stroke-[3]" />
                           <span>Setujui (Approve)</span>
                         </>
                       )}

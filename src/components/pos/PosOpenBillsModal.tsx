@@ -131,7 +131,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
           receiptNo: selectedVoidOrder.receiptNo,
           type: "VOID",
           amount: selectedVoidOrder.totalAmount || 0,
-          reason: voidReason.trim(),
+          reason: voidReason.trim() || "Tamu Batal / Walk-out",
           cashierName: selectedVoidOrder.cashierName || "Kasir",
           tableNumber: selectedVoidOrder.tableNumber || "-",
           customerName: selectedVoidOrder.customerName || "Tamu",
@@ -556,7 +556,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                   <button
                     type="button"
                     onClick={handleRequestRemoteApproval}
-                    disabled={isRequestingRemote || !voidReason.trim()}
+                    disabled={isRequestingRemote}
                     className="w-full py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                   >
                     {isRequestingRemote ? (
