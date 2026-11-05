@@ -1342,7 +1342,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">Belum Ada Transaksi Pada Periode Ini</h4>
                 <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
-                  Peta jam sibuk (pagi, siang, sore, malam) akan terisi otomatis saat kasir memproses pesanan pelanggan.
+                  Peta jam sibuk (pagi, siang, sore, malam) akan terisi otomatis dari data rekap / impor penjualan.
                 </p>
               </div>
             ) : (

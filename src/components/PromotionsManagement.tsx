@@ -233,10 +233,10 @@ export const PromotionsManagement: React.FC = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                Promo & Diskon POS
+                Promo & Diskon Menu
               </h1>
               <p className="text-sm text-slate-500">
-                Kelola whitelist diskon yang diizinkan untuk kasir. Mencegah manipulasi diskon manual di kasir.
+                Kelola daftar promosi resmi kafe (persen, nominal, atau bundling menu) dan masa berlakunya.
               </p>
             </div>
           </div>
@@ -270,7 +270,7 @@ export const PromotionsManagement: React.FC = () => {
                 Mode Pemantauan Owner (Read-Only):
               </span>
               <p className="text-amber-800 mt-0.5 leading-relaxed">
-                Sesuai aturan bisnis kafe, akun Owner berstatus read-only. Anda dapat meninjau katalog promo, syarat belanja, dan efektivitas diskon kasir, namun wewenang penambahan, perubahan, dan aktivasi promo dikelola oleh Manager dan Super Admin.
+                Sesuai aturan bisnis kafe, akun Owner berstatus read-only. Anda dapat meninjau katalog promo, syarat belanja, dan efektivitas diskon penjualan, namun wewenang penambahan, perubahan, dan aktivasi promo dikelola oleh Manager dan Super Admin.
               </p>
             </div>
           </div>
@@ -286,10 +286,10 @@ export const PromotionsManagement: React.FC = () => {
           <Sparkles className="w-5 h-5" />
         </div>
         <div className="text-sm">
-          <span className="font-bold text-brand-950">Kebijakan Otorisasi POS Julia's Coffee (Aturan #12):</span>
+          <span className="font-bold text-brand-950">Kebijakan Promosi & Diskon Julia's Coffee:</span>
           <p className="text-brand-800 mt-0.5 leading-relaxed">
-            Kasir hanya dapat memilih promo yang statusnya <strong>Aktif Berlaku</strong> pada tabel di bawah. 
-            Kasir <strong>tidak dapat</strong> menginput diskon manual secara bebas. Setiap diskon manual di luar daftar ini wajib mendapat persetujuan PIN Manajer.
+            Seluruh promosi yang berstatus <strong>Aktif Berlaku</strong> menjadi acuan resmi perhitungan potongan harga menu di rekap penjualan dan kalkulasi laba operasional.
+
           </p>
         </div>
       </div>
@@ -309,7 +309,7 @@ export const PromotionsManagement: React.FC = () => {
 
         <div className="bg-white p-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/30 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Aktif di Kasir</span>
+            <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Aktif Berlaku</span>
             <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
             </div>
@@ -321,7 +321,7 @@ export const PromotionsManagement: React.FC = () => {
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
           </div>
-          <p className="text-xs text-emerald-600 mt-1">Tampil di tablet kasir</p>
+          <p className="text-xs text-emerald-600 mt-1">Sedang aktif berjalan</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-purple-100 bg-gradient-to-br from-white to-purple-50/30 shadow-xs">
@@ -404,7 +404,7 @@ export const PromotionsManagement: React.FC = () => {
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-brand-500"
           >
             <option value="ALL">Semua Status</option>
-            <option value="ACTIVE">Aktif Berlaku di Kasir</option>
+            <option value="ACTIVE">Aktif Berlaku</option>
             <option value="UPCOMING">Akan Datang (Terjadwal)</option>
             <option value="EXPIRED">Kedaluwarsa</option>
             <option value="INACTIVE">Nonaktif Manual</option>
@@ -422,7 +422,7 @@ export const PromotionsManagement: React.FC = () => {
                 <th className="py-3.5 px-4">Tipe & Nilai Diskon</th>
                 <th className="py-3.5 px-4">Syarat Belanja</th>
                 <th className="py-3.5 px-4">Masa Berlaku</th>
-                <th className="py-3.5 px-4 text-center">Status di Kasir</th>
+                <th className="py-3.5 px-4 text-center">Status Promo</th>
                 <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
@@ -562,12 +562,12 @@ export const PromotionsManagement: React.FC = () => {
                             }`}
                             title={
                               status === "ACTIVE"
-                                ? "Klik untuk nonaktifkan dari kasir"
+                                ? "Klik untuk nonaktifkan promo"
                                 : status === "EXPIRED"
                                 ? "Masa berlaku telah lewat. Klik untuk perbarui tanggal berakhir."
                                 : status === "UPCOMING"
                                 ? "Promo akan otomatis aktif sesuai tanggal mulai."
-                                : "Klik untuk aktifkan ke kasir"
+                                : "Klik untuk aktifkan promo"
                             }
                           >
                             {status === "ACTIVE" ? (
@@ -830,9 +830,9 @@ export const PromotionsManagement: React.FC = () => {
               {/* Active Toggle */}
               <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-sm text-slate-800">Status Aktif di Kasir</div>
+                  <div className="font-semibold text-sm text-slate-800">Status Promo Aktif</div>
                   <p className="text-xs text-slate-500">
-                    Jika aktif, kasir dapat memilih promo ini langsung di tablet POS.
+                    Jika aktif, promo ini berlaku dan otomatis diperhitungkan pada transaksi.
                   </p>
                 </div>
                 <button
@@ -850,7 +850,7 @@ export const PromotionsManagement: React.FC = () => {
               <div className="p-4 bg-gradient-to-br from-brand-50 to-amber-50/50 border border-brand-200/60 rounded-xl">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-brand-900 mb-2">
                   <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Simulasi Kalkulasi Kasir (Contoh Order Rp 100.000):</span>
+                  <span>Simulasi Kalkulasi Diskon (Contoh Transaksi Rp 100.000):</span>
                 </div>
                 {previewSimulation.applied ? (
                   <div className="space-y-1 text-xs">
@@ -904,7 +904,7 @@ export const PromotionsManagement: React.FC = () => {
             </div>
             <h4 className="text-lg font-bold text-slate-900">Hapus Promo Ini?</h4>
             <p className="text-xs text-slate-500 mt-1 mb-5">
-              Promo ini tidak akan tersedia lagi untuk dipilih di kasir POS. Riwayat pesanan sebelumnya tidak akan terhapus.
+              Promo ini tidak akan berlaku lagi untuk transaksi mendatang. Riwayat pesanan sebelumnya tidak akan terhapus.
             </p>
             <div className="flex gap-2">
               <button

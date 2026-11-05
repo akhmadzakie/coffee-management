@@ -39,6 +39,8 @@ import {
 import { useTranslation } from "../utils/i18n";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 
+import { FEATURES } from "../config/features";
+
 export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const {
     salesTransactions,
@@ -281,8 +283,8 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Active Shift Banner */}
-      {(() => {
+      {/* Active Shift Banner (Khusus bila modul POS aktif) */}
+      {FEATURES.POS && (() => {
         const activeShift = shifts.find((s) => s.status === "OPEN");
         if (!activeShift) return null;
         const shiftDuration = Math.floor(

@@ -1928,7 +1928,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Riwayat Mutasi & Pemakaian Bahan</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Audit otomatis setiap bahan yang keluar untuk order kasir, terbuang (waste), atau masuk dari PO.
+                Audit otomatis setiap bahan yang keluar untuk penjualan/order, terbuang (waste), atau masuk dari PO.
               </p>
             </div>
             <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
@@ -1982,7 +1982,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                               : "bg-slate-100 text-slate-700 border-slate-200"
                           }`}
                         >
-                          {mov.type === "USAGE" ? "Kasir (Order)" : mov.type === "WASTE" ? "Terbuang / Rusak" : mov.type}
+                          {mov.type === "USAGE" ? "Penjualan (Order)" : mov.type === "WASTE" ? "Terbuang / Rusak" : mov.type}
                         </span>
                       </td>
                       <td className="p-4 text-slate-600">{(mov as any).location || "BAR"}</td>
@@ -2053,7 +2053,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                 : "bg-slate-100 text-slate-700 border-slate-200"
                             }`}
                           >
-                            {mov.type === "USAGE" ? "Kasir" : mov.type === "WASTE" ? "Waste" : mov.type}
+                            {mov.type === "USAGE" ? "Penjualan" : mov.type === "WASTE" ? "Waste" : mov.type}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
                             • {(mov as any).location || "BAR"}
@@ -2184,7 +2184,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       const msg =
                         diffCount > 0
                           ? `Terdapat ${diffCount} bahan dengan selisih stok. Sistem akan otomatis memperbarui stok riil dan mencatat mutasi koreksi. Lanjutkan finalisasi?`
-                          : "Semua stok fisik sesuai dengan sistem kasir. Lanjutkan finalisasi?";
+                          : "Semua stok fisik sesuai dengan sistem. Lanjutkan finalisasi?";
                       if (confirm(msg)) {
                         saveOpname("FINAL");
                       }
@@ -2615,7 +2615,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     <div>
                       <h4 className="text-base font-bold text-slate-900">Audit Fisik Stok (Stok Opname)</h4>
                       <p className="text-xs text-slate-600 mt-1 max-w-xl leading-relaxed">
-                        Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di stasiun dengan catatan sistem kasir. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
+                        Lakukan perhitungan fisik secara rutin untuk membandingkan jumlah riil bahan baku di stasiun dengan catatan sistem inventori. Leader Bar, Leader Kitchen, dan Supervisor dapat langsung memulai audit fisik.
                       </p>
                     </div>
                   </div>
@@ -2647,7 +2647,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
                     <div className="text-xs font-bold text-slate-800">Cek Selisih Real-Time</div>
                     <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                      Sistem menghitung otomatis selisih minus (defisit/waste) atau plus (surplus) terhadap transaksi kasir.
+                      Sistem menghitung otomatis selisih minus (defisit/waste) atau plus (surplus) terhadap transaksi penjualan.
                     </p>
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70">
@@ -2865,7 +2865,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Resep Takaran Menu (Bill of Materials)</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Setiap resep menentukan bahan apa saja yang otomatis dipotong saat pesanan dibuat di kasir POS.
+                Setiap resep menentukan bahan apa saja yang otomatis dipotong saat pesanan penjualan dicatat atau diimpor.
               </p>
             </div>
           </div>

@@ -1360,7 +1360,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 onChange={(e) => setIsActive(e.target.value === "true")}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
               >
-                <option value="true">Aktif (Tampil di Menu Kasir)</option>
+                <option value="true">Aktif (Tampil di Katalog Menu)</option>
                 <option value="false">Nonaktif (Draft / Sembunyikan)</option>
               </select>
             </div>

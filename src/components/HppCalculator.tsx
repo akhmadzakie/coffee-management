@@ -898,7 +898,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             : "Cukup tinggi. Disarankan menaikkan harga jual atau mencari opsi supplier susu/sirup dengan harga grosir."
         }\n` +
         `2. **Laba Kotor (Rp ${Math.round(grossProfit).toLocaleString("id-ID")}):** Tiap cup menghasilkan margin bersih yang signifikan jika penjualan harian mencapai target.\n` +
-        `3. **Tips Bundling:** Pasangkan menu ini dengan roti/croissant dengan diskon paket hemat untuk menaikkan nilai rata-rata transaksi kasir.`
+        `3. **Tips Bundling:** Pasangkan menu ini dengan roti/croissant dengan diskon paket hemat untuk menaikkan nilai rata-rata transaksi (basket size).`
       );
     } finally {
       setIsAiLoading(false);
@@ -1523,7 +1523,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     <label className="text-xs font-bold text-slate-900">
                       Rencana Harga Jual Toko (Rp)
                     </label>
-                    <span className="text-[11px] text-slate-500">Harga Nett Kasir</span>
+                    <span className="text-[11px] text-slate-500">Harga Nett Jual</span>
                   </div>
 
                   <div className="relative">
@@ -1774,7 +1774,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 Katalog Resep & Estimasi HPP Toko
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Daftar semua resep yang terhubung ke sistem kasir dan pengurangan stok otomatis.
+                Daftar resep yang terhubung ke katalog menu dan kalkulasi HPP / stok.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -2033,7 +2033,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <span className="font-bold font-mono text-brand-950">{formatCurrency(totalHpp)}</span>
                 </div>
                 <div className="flex justify-between text-slate-700">
-                  <span>Harga Jual Resmi Kasir:</span>
+                  <span>Harga Jual Resmi Menu:</span>
                   <span className="font-extrabold font-mono text-slate-900">{formatCurrency(targetSellingPrice)}</span>
                 </div>
                 <div className="flex justify-between text-emerald-800 font-bold pt-1 border-t border-brand-200">
@@ -2045,7 +2045,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </div>
 
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                Produk ini akan terdaftar di <b>Katalog Menu Toko</b>. Kasir dan tim bar/kitchen akan langsung dapat melihat harga jual resmi, estimasi laba, dan live ketersediaan porsi berdasarkan stok bahan baku.
+                Produk ini akan terdaftar di <b>Katalog Menu Toko</b> lengkap dengan harga jual resmi, estimasi laba, dan live ketersediaan porsi berdasarkan stok bahan baku.
               </p>
             </div>
 

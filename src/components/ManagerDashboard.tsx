@@ -933,7 +933,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 {formatCurrency(todayRevenue)}
               </p>
               <p className="text-xs text-stone-500 mt-1">
-                Dari {todaySalesList.length} transaksi di kasir toko
+                Dari {todaySalesList.length} transaksi penjualan toko
               </p>
             </div>
             <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
@@ -955,7 +955,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 {formatCurrency(todaySalesList.length > 0 ? Math.round(todayRevenue / todaySalesList.length) : 0)}
               </p>
               <p className="text-xs text-stone-500 mt-1">
-                Rata-rata belanja per struk kasir
+                Rata-rata belanja per transaksi penjualan
               </p>
             </div>
           </div>
@@ -2077,10 +2077,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   <div>
                     <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
                       <Tag className="w-4 h-4 text-emerald-600" />
-                      Promo & Diskon Kasir Aktif
+                      Promo & Diskon Toko Aktif
                     </h2>
                     <p className="text-xs text-stone-500 mt-0.5">
-                      Promosi resmi yang dapat dipilih staf di terminal POS.
+                      Promosi resmi yang berlaku untuk produk & pesanan kafe.
                     </p>
                   </div>
                   <button
@@ -2117,7 +2117,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       </div>
 
                       <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase shrink-0">
-                        AKTIF DI KASIR
+                        AKTIF BERLAKU
                       </span>
                     </div>
                   ))}
@@ -2125,7 +2125,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   {(promotions || []).filter((p) => p.isActive).length === 0 && (
                     <div className="py-8 text-center text-xs text-stone-400">
                       <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                      Tidak ada promo yang sedang aktif di terminal kasir saat ini.
+                      Tidak ada promo yang sedang aktif saat ini.
                     </div>
                   )}
                 </div>
@@ -2156,7 +2156,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   Menu Terlaris Hari Ini (Best Sellers)
                 </h2>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  Menu yang paling banyak terjual oleh kasir hari ini.
+                  Menu yang paling banyak terjual hari ini.
                 </p>
               </div>
               <button

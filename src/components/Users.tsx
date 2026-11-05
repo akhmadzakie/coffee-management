@@ -12,7 +12,7 @@ const ALL_ROLES: { value: string; label: string; description: string }[] = [
   { value: "OWNER",       label: "Owner / Pemilik",   description: "Pantau data, tidak bisa edit" },
   { value: "MANAGER",     label: "Manager",           description: "Kelola operasional & keuangan" },
   { value: "FINANCE",     label: "Finance / Keuangan", description: "Akses modul keuangan" },
-  { value: "KASIR",       label: "Kasir",             description: "Shift, penjualan" },
+  { value: "KASIR",       label: "Kasir",             description: "Presensi & portal staf" },
   { value: "LEADER",      label: "Leader (Bar/Kitchen)", description: "Inventori & operasional" },
   { value: "BAR",         label: "Karyawan Bar",      description: "Akses absen" },
   { value: "KITCHEN",     label: "Karyawan Kitchen",  description: "Akses absen" },

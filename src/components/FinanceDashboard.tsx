@@ -367,7 +367,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
                   </h3>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Data entry kas secepat kalimat narasi kasir, ekstraksi struk/invoice otomatis (OCR), & audit saldo bank.
+                  Pencatatan kas instan berbasis AI, ekstraksi struk/invoice otomatis (OCR), & audit saldo bank.
                 </p>
               </div>
             </div>
@@ -548,7 +548,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               {formatCurrency(totalCashIn)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
-              Omzet kasir: {formatCurrency(totalSalesRevenue)}
+              Omzet penjualan: {formatCurrency(totalSalesRevenue)}
             </p>
           </div>
         </motion.div>
@@ -665,7 +665,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               Rincian Pos Kas & Rekening Bank
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Distribusi saldo riil di laci kasir, rekening bank operasional, dan e-wallet.
+              Distribusi saldo riil di kas fisik toko, rekening bank operasional, dan e-wallet.
             </p>
           </div>
           <button

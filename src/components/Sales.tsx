@@ -630,7 +630,7 @@ export const Sales = () => {
             Rekap Penjualan & Omzet
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1.5 max-w-3xl leading-relaxed">
-            Rekapitulasi penerimaan kasir, arsip struk transaksi POS lengkap dengan item & pembayaran, serta riwayat mutasi penjualan.
+            {FEATURES.POS ? "Rekapitulasi penerimaan kasir, arsip struk transaksi POS lengkap dengan item & pembayaran, serta riwayat mutasi penjualan." : "Rekapitulasi omzet penjualan harian, impor data dari aplikasi POS eksternal, dan riwayat mutasi transaksi."}
           </p>
         </div>
 

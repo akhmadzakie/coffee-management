@@ -417,7 +417,7 @@ export const SettingsComponent = () => {
             <div className="flex items-center justify-between">
               <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
                 <Store className="w-4 h-4 text-brand-600" />
-                <span>Pengaturan POS Kasir & Pajak Restoran (PB1)</span>
+                <span>{FEATURES.POS ? "Pengaturan POS Kasir & Pajak Restoran (PB1)" : "Pengaturan Pajak Restoran (PB1)"}</span>
               </label>
             </div>
 
@@ -429,7 +429,7 @@ export const SettingsComponent = () => {
                     Aktifkan Pajak Restoran (PB1)
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Otomatis tambahkan atau hitung pajak PB1 di kasir POS tablet.
+                    {FEATURES.POS ? "Otomatis tambahkan atau hitung pajak PB1 di kasir POS tablet." : "Otomatis tambahkan atau hitung pajak PB1 pada perhitungan omzet penjualan."}
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -565,10 +565,10 @@ export const SettingsComponent = () => {
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold text-slate-800">
-                    Potong Stok Bahan Otomatis dari Penjualan POS
+                    Potong Stok Bahan Otomatis dari Penjualan {FEATURES.POS ? "POS" : "(Rekap/Impor)"}
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Saat pesanan lunas, bahan baku resep otomatis dipotong secara real-time. Jika dimatikan, stok hanya berubah dari mutasi manual atau stok opname.
+                    Saat transaksi penjualan masuk atau diimpor, bahan baku resep otomatis dipotong. Jika dimatikan, stok hanya berubah dari mutasi manual atau stok opname.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -589,7 +589,7 @@ export const SettingsComponent = () => {
                     Mode Operasional Anti-Macet (Izinkan Jual saat Stok Sistem Habis)
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Kasir tetap bisa melayani tamu walaupun stok di sistem tercatat 0 (misal akibat staf terlambat input stok opname atau nota belanja). Stok akan tercatat minus untuk direkonsiliasi kemudian.
+                    Penjualan tetap dapat diproses dan dicatat walaupun stok di sistem tercatat 0 (misal akibat staf terlambat input stok opname atau nota belanja). Stok akan tercatat minus untuk direkonsiliasi kemudian.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -632,7 +632,7 @@ export const SettingsComponent = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className={`grid grid-cols-1 ${FEATURES.POS || FEATURES.KDS ? "md:grid-cols-3" : "md:grid-cols-2"} gap-3`}>
               {/* Card 1: Master Guide */}
               <a
                 href="/Buku_Panduan_Lengkap_Julia_Coffee.pdf"
@@ -660,7 +660,8 @@ export const SettingsComponent = () => {
                 </div>
               </a>
 
-              {/* Card 2: Kasir & KDS */}
+              {(FEATURES.POS || FEATURES.KDS) && (
+              /* Card 2: Kasir & KDS */
               <a
                 href="/Panduan_Operasional_Kasir_dan_KDS.pdf"
                 target="_blank"
@@ -686,6 +687,7 @@ export const SettingsComponent = () => {
                   <FileText className="w-3.5 h-3.5" /> Unduh PDF Kasir & KDS (3 Hal)
                 </div>
               </a>
+              )}
 
               {/* Card 3: Owner & Manager */}
               <a

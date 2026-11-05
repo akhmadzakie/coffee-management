@@ -730,7 +730,7 @@ const FinanceReports: React.FC = () => {
                   </tr>
                   <tr className="hover:bg-slate-50/50">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700">
-                      Penjualan Kasir / Omzet Kotor (Gross Sales)
+                      Penjualan Toko / Omzet Kotor (Gross Sales)
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
                       {formatCurrency(grossSales)}
@@ -1124,7 +1124,7 @@ const FinanceReports: React.FC = () => {
                     <Receipt className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-slate-900">Rekonsiliasi Omzet Kasir</h3>
+                    <h3 className="font-bold text-sm text-slate-900">Rekonsiliasi Omzet Penjualan</h3>
                     <p className="text-[11px] text-slate-500">Penjualan POS vs Kas Masuk (Cash In)</p>
                   </div>
                 </div>
@@ -1317,7 +1317,7 @@ const FinanceReports: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-slate-900">Rekonsiliasi Bank</h3>
-                    <p className="text-[11px] text-slate-500">Kesesuaian Catatan Kasir vs Rekening Koran</p>
+                    <p className="text-[11px] text-slate-500">Kesesuaian Catatan Penjualan vs Rekening Koran</p>
                   </div>
                 </div>
                 <span
@@ -1374,7 +1374,7 @@ const FinanceReports: React.FC = () => {
                   <span>Posisi Likuiditas Kas Toko Saat Ini</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Saldo riil di seluruh pos kas fisik (laci kasir) dan akun bank operasional kafe.
+                  Saldo riil di seluruh pos kas fisik (kas toko) dan akun bank operasional kafe.
                 </p>
               </div>
               <div className="text-right">

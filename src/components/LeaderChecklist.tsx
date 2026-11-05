@@ -22,7 +22,7 @@ export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
     items: [
       { text: "Inspeksi kebersihan & sanitasi seluruh meja bar serta undercounter", shift: "ALL", targetRole: "LEADER", isActive: true },
       { text: "Verifikasi backflush mesin espresso & sanitasi portafilter", shift: "SORE", targetRole: "LEADER", isActive: true },
-      { text: "Inspeksi kebersihan hopper grinder kopi & area POS kasir", shift: "ALL", targetRole: "LEADER", isActive: true },
+      { text: "Inspeksi kebersihan hopper grinder kopi & area meja counter", shift: "ALL", targetRole: "LEADER", isActive: true },
       { text: "Pemeriksaan kebersihan lantai bar & ampas kopi di knockbox", shift: "SORE", targetRole: "LEADER", isActive: true },
       { text: "Cek kebersihan sink bar, drain tray, & pembuangan sampah", shift: "SORE", targetRole: "LEADER", isActive: true },
     ],
@@ -34,7 +34,7 @@ export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
       { text: "Kalibrasi timbangan digital & dial-in espresso (rasio/ekstraksi)", shift: "PAGI", targetRole: "LEADER", isActive: true },
       { text: "Cek tekanan pompa & temperatur steam wand mesin espresso", shift: "PAGI", targetRole: "LEADER", isActive: true },
       { text: "Cek temperatur chiller susu (standar 2°C - 4°C) & ice maker", shift: "PAGI", targetRole: "LEADER", isActive: true },
-      { text: "Cek fungsi tablet POS kasir, jaringan internet, & printer struk", shift: "PAGI", targetRole: "LEADER", isActive: true },
+      { text: "Cek fungsi perangkat operasional, koneksi internet, & printer", shift: "PAGI", targetRole: "LEADER", isActive: true },
     ],
   },
   {
