@@ -1,4 +1,6 @@
 import { RupiahSign } from './common/RupiahSign';
+import { FEATURES } from "../config/features";
+import { mapSalesRows } from "../utils/salesImportMapper";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import {
@@ -108,7 +110,7 @@ export const Sales = () => {
   };
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
-  const [activeTab, setActiveTab] = useState<"cashier_analytics" | "daily_recap" | "pos_orders" | "sales" | "logs">("cashier_analytics");
+  const [activeTab, setActiveTab] = useState<"cashier_analytics" | "daily_recap" | "pos_orders" | "sales" | "logs">(FEATURES.POS ? "cashier_analytics" : "daily_recap");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
@@ -289,7 +291,7 @@ export const Sales = () => {
   };
 
   useEffect(() => {
-    if (activeTab === "pos_orders" || activeTab === "cashier_analytics") {
+    if (FEATURES.POS && (activeTab === "pos_orders" || activeTab === "cashier_analytics")) {
       fetchPosOrders();
     }
   }, [activeTab, posStatusFilter, posStartDate, posEndDate]);
@@ -491,29 +493,23 @@ export const Sales = () => {
       return;
     }
 
-    const newTransactions = parsedData
-      .map((row) => {
-        const rawDate = row["Tanggal"] || new Date().toISOString().slice(0, 10);
-        let dateStr = "";
-        if (typeof rawDate === "object" && rawDate instanceof Date) {
-          dateStr = rawDate.toISOString().slice(0, 10);
-        } else {
-          dateStr = String(rawDate).trim();
-        }
-
-        const menuName = String(row["Nama Menu"] || "").trim();
-        const quantitySold = parseInt(row["Quantity"], 10) || 1;
-        const totalPrice = parseFloat(row["Total Penjualan"]) || 0;
-
-        return {
-          date: dateStr,
-          menuName,
-          quantitySold,
-          totalPrice,
-          importLogId: "",
-        };
-      })
-      .filter((t) => t.menuName.length > 0 && t.totalPrice >= 0);
+    // Pemetaan kolom fleksibel: mendukung ekspor dari aplikasi POS lain
+    // (mis. "Date/Item/Qty/Net Sales") dan menyamakan nama menu dengan katalog.
+    const mapped = mapSalesRows(
+      parsedData,
+      (products || []).map((p: any) => p.name)
+    );
+    if (!mapped.mapping.mapped["Nama Menu"] || !mapped.mapping.mapped["Total Penjualan"]) {
+      alert(
+        "Kolom wajib tidak ditemukan di file.\n\n" +
+          "Dibutuhkan minimal kolom nama menu dan total penjualan.\n" +
+          "Kolom terbaca di file: " + (mapped.mapping.detected.join(", ") || "-") + "\n\n" +
+          "Contoh nama kolom yang dikenali: Nama Menu / Item / Produk, dan Total Penjualan / Net Sales / Subtotal / Omzet.\n" +
+          "Atau gunakan template resmi dari tombol unduh template."
+      );
+      return;
+    }
+    const newTransactions = mapped.rows.map((r) => ({ ...r, importLogId: "" }));
 
     if (newTransactions.length === 0) {
       alert("Tidak ada baris data penjualan yang valid untuk diimpor. Pastikan kolom 'Nama Menu' terisi.");
@@ -575,11 +571,21 @@ export const Sales = () => {
     }
 
     addSalesTransactions(uniqueTransactions, actualFileName);
+    const notes: string[] = [];
+    if (duplicateRowsCount > 0) notes.push(`${duplicateRowsCount} baris duplikat dilewati otomatis (Aturan #7)`);
+    if (mapped.skippedRows > 0) notes.push(`${mapped.skippedRows} baris dilewati karena nama menu kosong`);
+    if (mapped.autoMatchedCount > 0) notes.push(`${mapped.autoMatchedCount} nama menu disamakan otomatis dengan katalog`);
+    if (mapped.unmatchedMenus.length > 0) {
+      const sample = mapped.unmatchedMenus.slice(0, 5).join(", ");
+      notes.push(
+        `${mapped.unmatchedMenus.length} nama menu belum ada di katalog (${sample}${mapped.unmatchedMenus.length > 5 ? ", ..." : ""}) sehingga stok/HPP-nya belum terhitung. Tambahkan menu tersebut di Katalog & Menu atau samakan namanya`
+      );
+    }
     setUploadStatus({
-      type: "success",
-      message: duplicateRowsCount > 0
-        ? `Berhasil mengimpor ${uniqueTransactions.length} baris penjualan (${actualFileName}). ${duplicateRowsCount} baris duplikat dilewati secara otomatis (Aturan #7).`
-        : `Berhasil mengimpor ${uniqueTransactions.length} baris penjualan (${actualFileName}) ke sistem.`,
+      type: mapped.unmatchedMenus.length > 0 ? "error" : "success",
+      message:
+        `Berhasil mengimpor ${uniqueTransactions.length} baris penjualan (${actualFileName}).` +
+        (notes.length > 0 ? " Catatan: " + notes.join("; ") + "." : ""),
     });
   };
 
@@ -621,7 +627,7 @@ export const Sales = () => {
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
               <RupiahSign className="w-5 h-5" />
             </div>
-            Penjualan & Omzet Kasir
+            Rekap Penjualan & Omzet
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1.5 max-w-3xl leading-relaxed">
             Rekapitulasi penerimaan kasir, arsip struk transaksi POS lengkap dengan item & pembayaran, serta riwayat mutasi penjualan.
@@ -631,6 +637,7 @@ export const Sales = () => {
         {/* Dedicated Tab Navigation Strip */}
         <div className="px-4 sm:px-7 py-3 bg-slate-50/70 border-t border-slate-200/80 flex items-center overflow-x-auto no-scrollbar">
           <div className="inline-flex items-center gap-1.5 p-1 bg-slate-200/60 rounded-2xl border border-slate-200/80 shrink-0">
+            {FEATURES.POS && (
             <button
               onClick={() => setActiveTab("cashier_analytics")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
@@ -647,6 +654,7 @@ export const Sales = () => {
               <Sparkles className="w-4 h-4 text-brand-600 relative z-10" />
               <span className="relative z-10">Dasbor & Audit Kasir</span>
             </button>
+            )}
             <button
               onClick={() => setActiveTab("daily_recap")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
@@ -669,6 +677,7 @@ export const Sales = () => {
               )}
             </button>
 
+            {FEATURES.POS && (
             <button
               onClick={() => setActiveTab("pos_orders")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
@@ -690,6 +699,7 @@ export const Sales = () => {
                 </span>
               )}
             </button>
+            )}
 
             <button
               onClick={() => setActiveTab("sales")}

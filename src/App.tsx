@@ -125,8 +125,10 @@ const ComingSoon = ({ title }: { title: string }) => (
   </div>
 );
 
+import { FEATURES, DISABLED_VIEWS } from "./config/features";
+
 function AppContent() {
-  const isPosDedicatedRoute = (() => {
+  const isPosDedicatedRoute = FEATURES.POS && (() => {
     try {
       const pathname = window.location.pathname.toLowerCase();
       const params = new URLSearchParams(window.location.search);
@@ -141,7 +143,7 @@ function AppContent() {
     }
   })();
 
-  const isKdsDedicatedRoute = (() => {
+  const isKdsDedicatedRoute = FEATURES.KDS && (() => {
     try {
       const pathname = window.location.pathname.toLowerCase();
       const params = new URLSearchParams(window.location.search);
@@ -177,7 +179,7 @@ function AppContent() {
   };
 
   // Daftar view yang diizinkan per role (SUPER_ADMIN mendapat semua akses)
-  const ALL_VIEWS: ViewState[] = [
+  const ALL_VIEWS: ViewState[] = ([
     "dashboard_owner",
     "dashboard_employee",
     "dashboard_manager",
@@ -186,7 +188,7 @@ function AppContent() {
     "inventory", "import_sales", "hr", "payroll", "leader_checklist",
     "users", "audit_log", "shifts", "suppliers", "purchases", "settings",
     "attendance_clock", "menu_management", "hpp_calculator", "promotions", "pos_cashier", "kitchen_display"
-  ];
+  ] as ViewState[]).filter((v) => !DISABLED_VIEWS.includes(v));
 
   const roleAllowedViews: Record<string, ViewState[]> = {
     SUPER_ADMIN: ALL_VIEWS,
@@ -260,6 +262,11 @@ function AppContent() {
     KITCHEN: ["dashboard_employee", "attendance_clock", "kitchen_display"],
     BAKER: ["dashboard_employee", "attendance_clock", "kitchen_display"],
   };
+
+  // Buang view modul yang dinonaktifkan (POS / KDS / Shift Kasir) dari semua role
+  Object.keys(roleAllowedViews).forEach((role) => {
+    roleAllowedViews[role] = roleAllowedViews[role].filter((v) => !DISABLED_VIEWS.includes(v));
+  });
 
   React.useEffect(() => {
     if (!currentUser) {

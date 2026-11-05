@@ -1514,6 +1514,25 @@ async function startServer() {
     };
   };
 
+  // ─── Feature flag modul operasional ───────────────────────────────────────
+  // Sistem ini difokuskan sebagai aplikasi management (back-office). Modul kasir/POS
+  // dan layar dapur (KDS) berjalan di aplikasi lain, sehingga endpoint-nya ditolak
+  // secara default. Aktifkan kembali lewat ENABLE_POS=true / ENABLE_KDS=true.
+  const POS_MODULE_ENABLED = process.env.ENABLE_POS === "true";
+  const KDS_MODULE_ENABLED = process.env.ENABLE_KDS === "true";
+  app.use("/api/pos", (_req, res, next) => {
+    if (POS_MODULE_ENABLED) return next();
+    return res.status(410).json({
+      error: "Modul POS dinonaktifkan. Sistem ini hanya untuk kebutuhan management.",
+    });
+  });
+  app.use("/api/kds", (_req, res, next) => {
+    if (KDS_MODULE_ENABLED) return next();
+    return res.status(410).json({
+      error: "Modul KDS dinonaktifkan. Sistem ini hanya untuk kebutuhan management.",
+    });
+  });
+
   const pinVerifyLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 15,

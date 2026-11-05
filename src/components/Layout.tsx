@@ -6,6 +6,7 @@ import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
 import { AIAssistantModal } from "./AIAssistantModal";
 import { ManagerApprovalModal } from "./ManagerApprovalModal";
+import { FEATURES } from "../config/features";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -188,6 +189,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   // ─── Polling Remote Approvals untuk Manager & Super Admin ───
   useEffect(() => {
+    if (!FEATURES.POS) return;
     if (currentUser?.role !== "MANAGER" && currentUser?.role !== "SUPER_ADMIN") return;
 
     let isMounted = true;
@@ -500,7 +502,7 @@ export const Layout: React.FC<LayoutProps> = ({
       case "FINANCE":
         return { label: "Finance", bg: "bg-sky-50 text-sky-700 border-sky-200", icon: "📊" };
       case "KASIR":
-        return { label: "Kasir POS", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "💳" };
+        return { label: "Kasir", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "💳" };
       case "LEADER": {
         const emp = employees?.find(
           (e) => e.id === currentUser?.employeeId || e.username?.toLowerCase() === currentUser?.username?.toLowerCase()
@@ -592,16 +594,18 @@ export const Layout: React.FC<LayoutProps> = ({
       />
 
       {/* ─── Remote Manager Approval Modal ─── */}
-      <ManagerApprovalModal
-        isOpen={isManagerApprovalOpen}
-        onClose={() => setIsManagerApprovalOpen(false)}
-        onProcessed={() => {
-          fetch("/api/pos/approvals/pending")
-            .then((r) => r.json())
-            .then((d) => setPendingApprovalsCount(Array.isArray(d) ? d.length : 0))
-            .catch(() => {});
-        }}
-      />
+      {FEATURES.POS && (
+        <ManagerApprovalModal
+          isOpen={isManagerApprovalOpen}
+          onClose={() => setIsManagerApprovalOpen(false)}
+          onProcessed={() => {
+            fetch("/api/pos/approvals/pending")
+              .then((r) => r.json())
+              .then((d) => setPendingApprovalsCount(Array.isArray(d) ? d.length : 0))
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {/* ─── SIDEBAR (DESKTOP) ─── */}
       <aside
@@ -908,7 +912,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
 
             {/* Manager-only Operational Station Launcher (Tab Terpisah /pos & /kds) */}
-            {(currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
+            {(FEATURES.POS || FEATURES.KDS) && (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
@@ -1248,7 +1252,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 )}
 
                 {/* Manager Operational Stations in Mobile Drawer */}
-                {(currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
+                {(FEATURES.POS || FEATURES.KDS) && (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
                   <div className="px-3 py-2 border-b border-slate-100 bg-brand-50/40">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
                       Stasiun Operasional (Tab Terpisah)
@@ -1373,7 +1377,7 @@ export const Layout: React.FC<LayoutProps> = ({
               <ShieldCheck className="w-4 h-4 shrink-0 text-amber-700" />
               <div>
                 <strong className="font-bold">Mode Manajerial (Operasional & Kontrol): </strong>
-                <span>Anda masuk sebagai <strong>Manager</strong> — mengawasi operasional harian, otorisasi kasir, performa omzet, keuangan, dan inventori toko.</span>
+                <span>Anda masuk sebagai <strong>Manager</strong> — mengawasi operasional harian, performa omzet, keuangan, dan inventori toko.</span>
               </div>
             </div>
           )}

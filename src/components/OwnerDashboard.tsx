@@ -1,4 +1,5 @@
 import { RupiahSign } from './common/RupiahSign';
+import { FEATURES } from "../config/features";
 import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
@@ -106,6 +107,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   });
 
   useEffect(() => {
+    if (!FEATURES.POS) return;
     const fetchLossPreventionData = async () => {
       try {
         const [resHist, resToday] = await Promise.all([
@@ -959,7 +961,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       </div>
 
       {/* ─── Peringatan Dini & Deteksi Kebocoran (Loss Prevention) ─────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${FEATURES.POS ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
         {/* Kebocoran 1: Diskon & Promo */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
@@ -979,6 +981,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Kebocoran 2: Selisih Laci & Void */}
+{FEATURES.POS && (
+<>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Selisih Kasir / Void</span>
@@ -996,7 +1000,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </div>
         </div>
 
-        {/* Kebocoran 3: Waste Cost */}
+        </>
+)}
+{/* Kebocoran 3: Waste Cost */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Bahan Terbuang (Waste)</span>
@@ -1249,7 +1255,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 <PieIcon className="w-8 h-8 text-slate-300 mb-1.5" />
                 <p className="text-xs font-semibold text-slate-600">Belum Ada Omzet Tercatat</p>
                 <p className="text-[11px] text-slate-400 max-w-[200px] mt-0.5">
-                  Distribusi lini produk akan otomatis terbentuk dari transaksi kasir.
+                  Distribusi lini produk akan otomatis terbentuk dari data penjualan yang diimpor.
                 </p>
               </div>
             ) : (
@@ -1404,7 +1410,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">Belum Ada Menu Terjual</h4>
                 <p className="text-[11px] text-slate-500 max-w-xs mt-0.5">
-                  Transaksi kasir atau impor penjualan POS akan otomatis menampilkan menu terlaris kafe di sini.
+                  Impor rekap penjualan dari aplikasi POS akan otomatis menampilkan menu terlaris kafe di sini.
                 </p>
                 <div className="flex items-center gap-2 mt-4">
                   <button
@@ -1413,12 +1419,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   >
                     Impor Data POS
                   </button>
+                  {FEATURES.POS && (
                   <button
                     onClick={() => onNavigate("shifts")}
                     className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95 transition-all cursor-pointer"
                   >
                     Buka Kasir
                   </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1455,6 +1463,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       </div>
 
       {/* ─── Pengawasan Fraud, Void & Refund (Loss Prevention) ───────────── */}
+{FEATURES.POS && (
+<>
       <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -1657,7 +1667,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
       </div>
 
-      {/* ─── Navigasi Cepat Eksekutif (Bottom Actions) ──────────────────────── */}
+      </>
+)}
+{/* ─── Navigasi Cepat Eksekutif (Bottom Actions) ──────────────────────── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-6 sm:p-7 shadow-xl border border-indigo-950/40 flex flex-col md:flex-row items-center justify-between gap-5">
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/15 blur-3xl pointer-events-none" />
         <div className="relative z-10 space-y-1 text-center md:text-left">

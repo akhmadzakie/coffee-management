@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { FEATURES } from "../config/features";
 import { useStore } from "../store/StoreContext";
 import {
   Upload,
@@ -152,7 +153,7 @@ export const SettingsComponent = () => {
           {isManager && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold shadow-2xs">
               <Store className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Manager Operasional (Toko, Pajak & PIN Supervisor Kasir)</span>
+              <span>Manager Operasional (Toko & Pajak)</span>
             </span>
           )}
           {isOwner && (
@@ -479,6 +480,8 @@ export const SettingsComponent = () => {
             </div>
 
             {/* Plafon Diskon Kasir */}
+{FEATURES.POS && (
+<>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
               <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
                 <span>Batas Plafon Diskon Mandiri Kasir (%)</span>
@@ -540,7 +543,9 @@ export const SettingsComponent = () => {
               </div>
             </div>
 
-            {/* Otomatisasi & Kontrol Stok POS */}
+            </>
+)}
+{/* Otomatisasi & Kontrol Stok POS */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
@@ -548,10 +553,10 @@ export const SettingsComponent = () => {
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-800">
-                    Otomatisasi Stok Bahan dari Penjualan Kasir
+                    Otomatisasi Stok Bahan dari Penjualan
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Atur bagaimana penjualan di kasir memengaruhi stok bahan baku.
+                    Atur bagaimana rekap/impor penjualan memengaruhi stok bahan baku.
                   </p>
                 </div>
               </div>

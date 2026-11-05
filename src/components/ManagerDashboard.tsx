@@ -1,4 +1,5 @@
 import { RupiahSign } from './common/RupiahSign';
+import { FEATURES } from "../config/features";
 import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
@@ -116,6 +117,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   };
 
   useEffect(() => {
+    if (!FEATURES.POS) return;
     fetchApprovalsData();
     const interval = setInterval(fetchApprovalsData, 8000);
     return () => clearInterval(interval);
@@ -571,7 +573,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       : 100;
     const checklistScore = (avgProgress / 100) * 25;
 
-    const shiftScore = activeShift ? 15 : 8;
+    const shiftScore = !FEATURES.POS || activeShift ? 15 : 8;
 
     return Math.min(100, Math.round(attScore + stockScore + checklistScore + shiftScore));
   }, [activeEmployees, attendanceStats, stockValuation, divisionChecklists, activeShift]);
@@ -590,7 +592,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             Dashboard Operasional Manajer
           </h1>
           <p className="text-xs text-stone-500 mt-0.5">
-            Pantau sesi kasir, kehadiran selfie staf, progres checklist jobdesk divisi, dan stok bahan baku toko.
+            Pantau kehadiran selfie staf, progres checklist jobdesk divisi, dan stok bahan baku toko.
           </p>
         </div>
 
@@ -608,7 +610,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       </div>
 
       {/* Remote Approval Alert Banner */}
-      {pendingApprovals.length > 0 && (
+      {FEATURES.POS && pendingApprovals.length > 0 && (
         <div className="p-4 px-6 bg-gradient-to-r from-amber-500 via-rose-500 to-rose-600 rounded-3xl text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse-subtle">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
@@ -655,7 +657,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             {formatCurrency(todayRevenue)}
           </p>
           <div className="flex items-center justify-between text-xs text-stone-500 mt-2">
-            <span>{todaySalesList.length} pesanan kasir</span>
+            <span>{todaySalesList.length} baris penjualan</span>
             <span className="text-emerald-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
               Lihat Tren <ArrowRight className="w-3 h-3" />
             </span>
@@ -1562,9 +1564,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
           </div>
 
-          {/* Live Operational Section: Kasir & Absensi */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Live Operational Section: Kehadiran Staf (dan Shift Kasir bila modul POS aktif) */}
+          <div className={`grid grid-cols-1 ${FEATURES.POS ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
             {/* Sesi Kasir & Shift Hari Ini */}
+{FEATURES.POS && (
+<>
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -1666,7 +1670,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               </div>
             </div>
 
-            {/* Kehadiran Staf Hari Ini (Live Attendance) */}
+            </>
+)}
+{/* Kehadiran Staf Hari Ini (Live Attendance) */}
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -1959,9 +1965,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
           </div>
 
-          {/* Bagian Pengawasan Otorisasi & Promo Kasir (Fase 4) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Bagian Pengawasan Otorisasi & Promo (Fase 4) */}
+          <div className={`grid grid-cols-1 ${FEATURES.POS ? "lg:grid-cols-2" : "lg:grid-cols-1"} gap-6`}>
             {/* Card 1: Log Otorisasi Terkini (Void & Refund) */}
+{FEATURES.POS && (
+<>
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -2060,7 +2068,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               </div>
             </div>
 
-            {/* Card 2: Efektivitas Promo & Diskon POS */}
+            </>
+)}
+{/* Card 2: Efektivitas Promo & Diskon POS */}
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -2369,11 +2379,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       </AnimatePresence>
 
       {/* Modal Pusat Otorisasi Remote (Remote In-App Approval) */}
-      <ManagerApprovalModal
-        isOpen={isApprovalModalOpen}
-        onClose={() => setIsApprovalModalOpen(false)}
-        onProcessed={fetchApprovalsData}
-      />
+      {FEATURES.POS && (
+        <ManagerApprovalModal
+          isOpen={isApprovalModalOpen}
+          onClose={() => setIsApprovalModalOpen(false)}
+          onProcessed={fetchApprovalsData}
+        />
+      )}
     </div>
   );
 };
