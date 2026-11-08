@@ -463,6 +463,10 @@ async function ensureTables() {
         notes TEXT
       )`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
+    `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS vendor_name TEXT`,
+    `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS receipt_no TEXT`,
+    `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS payment_method TEXT`,
+    `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS items_json TEXT`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_pay NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC DEFAULT 0`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_rate NUMERIC DEFAULT 0`,
@@ -918,6 +922,14 @@ async function startServer() {
       category: String(f.category || ""),
       categoryId: f.categoryId ? String(f.categoryId) : null,
       referenceId: f.referenceId ? String(f.referenceId) : null,
+      vendorName: f.vendorName ? String(f.vendorName) : null,
+      receiptNo: f.receiptNo ? String(f.receiptNo) : null,
+      paymentMethod: f.paymentMethod ? String(f.paymentMethod) : null,
+      itemsJson: typeof f.itemsJson === "string" && f.itemsJson.trim()
+        ? f.itemsJson
+        : Array.isArray(f.items) && f.items.length > 0
+          ? JSON.stringify(f.items)
+          : null,
     };
   };
 

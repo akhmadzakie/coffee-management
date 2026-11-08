@@ -122,6 +122,10 @@ export const cashTransactions = pgTable("cash_transactions", {
   category: text("category").notNull(), // kept for backward compat
   categoryId: varchar("category_id", { length: 255 }), // FK to expenseCategories
   referenceId: varchar("reference_id", { length: 255 }),
+  vendorName: text("vendor_name"),
+  receiptNo: text("receipt_no"),
+  paymentMethod: varchar("payment_method", { length: 100 }),
+  itemsJson: text("items_json"),
 });
 
 export const users = pgTable("users", {

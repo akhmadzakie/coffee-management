@@ -4,7 +4,7 @@ import {
   Tag,
   Plus,
   Percent,
-    Search,
+  Search,
   CheckCircle2,
   XCircle,
   Edit2,
@@ -346,18 +346,15 @@ export const PromotionsManagement: React.FC = () => {
           <p className="text-xs text-blue-600 mt-1">Potongan flat Rp</p>
         </div>
 
-        <div className={`p-4 rounded-2xl border shadow-xs ${
-          expiredCount > 0
+        <div className={`p-4 rounded-2xl border shadow-xs ${expiredCount > 0
             ? "bg-rose-50/60 border-rose-200 text-rose-900"
             : "bg-white border-slate-200/80 text-slate-700"
-        }`}>
+          }`}>
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-semibold uppercase tracking-wider ${
-              expiredCount > 0 ? "text-rose-700" : "text-slate-500"
-            }`}>Kedaluwarsa</span>
-            <div className={`p-2 rounded-lg ${
-              expiredCount > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"
-            }`}>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${expiredCount > 0 ? "text-rose-700" : "text-slate-500"
+              }`}>Kedaluwarsa</span>
+            <div className={`p-2 rounded-lg ${expiredCount > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"
+              }`}>
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
@@ -448,11 +445,10 @@ export const PromotionsManagement: React.FC = () => {
                       <td className="py-3.5 px-4">
                         <div className="flex items-start gap-2.5">
                           <div
-                            className={`p-2 rounded-xl shrink-0 mt-0.5 ${
-                              promo.type === "PERCENT"
+                            className={`p-2 rounded-xl shrink-0 mt-0.5 ${promo.type === "PERCENT"
                                 ? "bg-purple-100 text-purple-700"
                                 : "bg-blue-100 text-blue-700"
-                            }`}
+                              }`}
                           >
                             {promo.type === "PERCENT" ? (
                               <Percent className="w-4 h-4" />
@@ -551,23 +547,22 @@ export const PromotionsManagement: React.FC = () => {
                                 togglePromotionStatus(promo.id);
                               }
                             }}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                              status === "ACTIVE"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${status === "ACTIVE"
                                 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                                 : status === "EXPIRED"
-                                ? "bg-rose-100 text-rose-800 hover:bg-rose-200"
-                                : status === "UPCOMING"
-                                ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                            }`}
+                                  ? "bg-rose-100 text-rose-800 hover:bg-rose-200"
+                                  : status === "UPCOMING"
+                                    ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                              }`}
                             title={
                               status === "ACTIVE"
                                 ? "Klik untuk nonaktifkan promo"
                                 : status === "EXPIRED"
-                                ? "Masa berlaku telah lewat. Klik untuk perbarui tanggal berakhir."
-                                : status === "UPCOMING"
-                                ? "Promo akan otomatis aktif sesuai tanggal mulai."
-                                : "Klik untuk aktifkan promo"
+                                  ? "Masa berlaku telah lewat. Klik untuk perbarui tanggal berakhir."
+                                  : status === "UPCOMING"
+                                    ? "Promo akan otomatis aktif sesuai tanggal mulai."
+                                    : "Klik untuk aktifkan promo"
                             }
                           >
                             {status === "ACTIVE" ? (
@@ -594,15 +589,14 @@ export const PromotionsManagement: React.FC = () => {
                           </button>
                         ) : (
                           <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
-                              status === "ACTIVE"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${status === "ACTIVE"
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                 : status === "EXPIRED"
-                                ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                : status === "UPCOMING"
-                                ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                : "bg-slate-100 text-slate-500 border border-slate-200"
-                            }`}
+                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                  : status === "UPCOMING"
+                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                    : "bg-slate-100 text-slate-500 border border-slate-200"
+                              }`}
                           >
                             {status === "ACTIVE" ? (
                               <>
@@ -731,11 +725,10 @@ export const PromotionsManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, type: "PERCENT" })}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${
-                        formData.type === "PERCENT"
+                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${formData.type === "PERCENT"
                           ? "bg-purple-50 border-purple-300 text-purple-700 font-bold"
                           : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <Percent className="w-4 h-4" />
                       <span>Persen (%)</span>
@@ -743,11 +736,10 @@ export const PromotionsManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, type: "NOMINAL" })}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${
-                        formData.type === "NOMINAL"
+                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${formData.type === "NOMINAL"
                           ? "bg-blue-50 border-blue-300 text-blue-700 font-bold"
                           : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <RupiahSign className="w-4 h-4" />
                       <span>Nominal (Rp)</span>
@@ -838,9 +830,8 @@ export const PromotionsManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
-                    formData.isActive ? "bg-emerald-600 justify-end" : "bg-slate-300 justify-start"
-                  }`}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${formData.isActive ? "bg-emerald-600 justify-end" : "bg-slate-300 justify-start"
+                    }`}
                 >
                   <div className="w-4 h-4 bg-white rounded-full shadow-md" />
                 </button>

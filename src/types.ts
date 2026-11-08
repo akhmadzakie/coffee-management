@@ -404,6 +404,14 @@ export interface CashAccount {
   isDefault: boolean;
 }
 
+export interface CashTransactionItem {
+  name: string;
+  qty: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+}
+
 export interface CashTransaction {
   id: string;
   accountId: string;
@@ -413,7 +421,12 @@ export interface CashTransaction {
   description: string;
   category: string; // kept for backward compat
   categoryId?: string | null; // FK to ExpenseCategory
-  referenceId?: string;
+  referenceId?: string | null;
+  vendorName?: string | null;
+  receiptNo?: string | null;
+  paymentMethod?: string | null;
+  items?: CashTransactionItem[];
+  itemsJson?: string | null;
   createdBy?: string;
 }
 

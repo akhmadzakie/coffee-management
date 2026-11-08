@@ -20,7 +20,7 @@ import { motion } from "motion/react";
 import {
   TrendingUp,
   TrendingDown,
-    Package,
+  Package,
   ReceiptText,
   AlertTriangle,
   Download,
@@ -64,7 +64,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   );
 
   const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER" || currentUser?.role === "OWNER" || currentUser?.role === "FINANCE";
-  
+
   const recentMovements = useMemo(() => {
     return [...stockMovements]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -155,7 +155,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
             return d.getMonth() === i && d.getFullYear() === filterYear;
           })
           .reduce((sum, s) => sum + s.totalPrice, 0);
-          
+
         const monthExpense = cashTransactions
           .filter((c) => {
             if (c.type !== 'CASH_OUT') return false;
@@ -163,7 +163,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
             return d.getMonth() === i && d.getFullYear() === filterYear;
           })
           .reduce((sum, c) => sum + c.amount, 0);
-          
+
         return {
           name: new Date(filterYear, i).toLocaleString("default", {
             month: "short",
@@ -179,11 +179,11 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
         const daySales = filteredSales
           .filter((s) => new Date(s.date).getDate() === i + 1)
           .reduce((sum, s) => sum + s.totalPrice, 0);
-          
+
         const dayExpense = filteredFinance
           .filter((c) => c.type === 'CASH_OUT' && new Date(c.date).getDate() === i + 1)
           .reduce((sum, c) => sum + c.amount, 0);
-          
+
         return {
           name: `${i + 1}`,
           sales: daySales,
@@ -203,12 +203,12 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     today.setHours(0, 0, 0, 0); // Normalize today
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(today.getDate() + 30);
-    
+
     return contracts.filter(c => {
       // Check if the employee is still active, otherwise the contract doesn't matter
       const emp = employees.find(e => e.id === c.employeeId);
       if (!emp || emp.status !== "AKTIF") return false;
-      
+
       if (c.status !== 'ACTIVE' || !c.endDate) return false;
       const end = new Date(c.endDate);
       return end >= today && end <= thirtyDaysFromNow;
@@ -219,17 +219,17 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const expiredContracts = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Normalize today
-    
+
     return contracts.filter(c => {
       const emp = employees.find(e => e.id === c.employeeId);
       if (!emp || emp.status !== "AKTIF") return false;
-      
+
       if (c.status !== 'ACTIVE' || !c.endDate) return false;
       const end = new Date(c.endDate);
       return end < today;
     });
   }, [contracts, employees]);
-  
+
   // Expense by Category (Donut Chart)
   const expenseByCategory = useMemo(() => {
     const expenses: Record<string, number> = {};
@@ -237,7 +237,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
       const catName = expenseCategories.find(c => c.id === f.categoryId)?.name || 'Lainnya';
       expenses[catName] = (expenses[catName] || 0) + f.amount;
     });
-    
+
     // Sort and take top 5 + Others
     const sorted = Object.entries(expenses).sort((a, b) => b[1] - a[1]);
     const top = sorted.slice(0, 5).map(([name, value]) => ({ name, value }));
@@ -247,7 +247,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     }
     return top;
   }, [filteredFinance, expenseCategories]);
-  
+
   const COLORS = ['#c27803', '#241813', '#d97706', '#059669', '#78350f', '#b45309'];
 
   // Dynamic year options: 5 years back to current
@@ -482,17 +482,17 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                 <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#d97706" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#d97706" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e11d48" stopOpacity={0.20}/>
-                      <stop offset="95%" stopColor="#e11d48" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#e11d48" stopOpacity={0.20} />
+                      <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1ece6" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#a8a29e' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                  <YAxis tick={{ fontSize: 11, fill: '#a8a29e' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip content={<RupiahTooltip />} />
                   <Area type="monotone" dataKey="sales" name="sales" stroke="#d97706" strokeWidth={2.5} fill="url(#colorSales)" dot={false} />
                   <Area type="monotone" dataKey="expense" name="expense" stroke="#e11d48" strokeWidth={2.5} fill="url(#colorExpense)" dot={false} />

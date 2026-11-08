@@ -530,7 +530,7 @@ interface StoreContextType {
   updateUser: (user: User) => void;
   deleteUser: (id: string) => void;
 
-  addCashAccount: (account: Omit<CashAccount, "id">) => void;
+  addCashAccount: (account: Omit<CashAccount, "id">) => string;
   updateCashAccount: (account: CashAccount) => void;
   deleteCashAccount: (id: string) => void;
 
@@ -1087,10 +1087,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setCashAccounts(data.cash_accounts);
         if (Array.isArray(data.cash_transactions))
           setCashTransactions(
-            data.cash_transactions.map((tx: any) => ({
-              ...tx,
-              type: normalizeCashTrxType(tx.type),
-            }))
+            data.cash_transactions.map((tx: any) => {
+              let parsedItems = Array.isArray(tx.items) ? tx.items : undefined;
+              if (!parsedItems && typeof tx.itemsJson === "string" && tx.itemsJson.trim()) {
+                try {
+                  const p = JSON.parse(tx.itemsJson);
+                  if (Array.isArray(p)) parsedItems = p;
+                } catch {}
+              }
+              return {
+                ...tx,
+                type: normalizeCashTrxType(tx.type),
+                items: parsedItems,
+              };
+            })
           );
         if (data.settings) {
           const s = data.settings;
@@ -1974,6 +1984,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setCashAccounts((prev) => [...prev, { ...acc, id }]);
     writeAuditLog("CREATE", "cash_accounts", id);
     markChanged("cash_accounts");
+    return id;
   };
 
   const updateCashAccount = (acc: CashAccount) => {
@@ -1990,9 +2001,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addCashTransaction = (trx: Omit<CashTransaction, "id">) => {
     const id = generateId();
+    const cleanItems = Array.isArray(trx.items)
+      ? trx.items.filter((it) => Number(it.totalPrice) > 0 || Number(it.unitPrice) > 0)
+      : undefined;
+    const itemsJson =
+      cleanItems && cleanItems.length > 0
+        ? JSON.stringify(cleanItems)
+        : trx.itemsJson || null;
     const normalizedTrx: CashTransaction = {
       ...trx,
       type: normalizeCashTrxType(trx.type),
+      items: cleanItems && cleanItems.length > 0 ? cleanItems : undefined,
+      itemsJson,
       id,
     };
     setCashTransactions((prev) => [...prev, normalizedTrx]);
@@ -2001,9 +2021,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateCashTransaction = (trx: CashTransaction) => {
+    const cleanItems = Array.isArray(trx.items)
+      ? trx.items.filter((it) => Number(it.totalPrice) > 0 || Number(it.unitPrice) > 0)
+      : undefined;
+    const itemsJson =
+      cleanItems && cleanItems.length > 0
+        ? JSON.stringify(cleanItems)
+        : null;
     const normalizedTrx: CashTransaction = {
       ...trx,
       type: normalizeCashTrxType(trx.type),
+      items: cleanItems && cleanItems.length > 0 ? cleanItems : undefined,
+      itemsJson,
     };
     setCashTransactions((prev) =>
       prev.map((t) => (t.id === trx.id ? normalizedTrx : t)),

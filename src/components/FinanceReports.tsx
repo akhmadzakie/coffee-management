@@ -109,7 +109,14 @@ const FinanceReports: React.FC = () => {
 
   // ─── FILTER DATA BY PERIOD ────────────────────────────────────────────────
   const periodTransactions = useMemo(() => {
-    return cashTransactions.filter((t) => t.date.startsWith(period));
+    return cashTransactions.filter((t) => {
+      if (!t.date.startsWith(period)) return false;
+      const ref = String(t.referenceId || "");
+      const cat = String(t.category || "").toLowerCase();
+      if (t.type === "TRANSFER" || ref.startsWith("TRANSFER:") || ref.startsWith("OPENING:")) return false;
+      if (cat === "transfer antar kas" || cat === "saldo awal") return false;
+      return true;
+    });
   }, [cashTransactions, period]);
 
   const periodSales = useMemo(() => {
