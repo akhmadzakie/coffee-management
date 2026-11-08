@@ -383,6 +383,13 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: "cat-bpjs", name: "BPJS & Asuransi", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "shield", isActive: true, sortOrder: 2 },
   { id: "cat-tunjangan", name: "Bonus, Kasbon & Tunjangan", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "gift", isActive: true, sortOrder: 3 },
   { id: "cat-pelatihan", name: "Pelatihan & Seragam", type: "HRD", parentId: "cat-hrd", color: "#C4B5FD", icon: "book-open", isActive: true, sortOrder: 4 },
+  // Sub-Kategori: Pembelian Aset
+  { id: "cat-aset-mesin", name: "Mesin & Peralatan Bar/Dapur", type: "ASET", parentId: "cat-aset", color: "#A5B4FC", icon: "briefcase", isActive: true, sortOrder: 1 },
+  { id: "cat-aset-furnitur", name: "Furnitur & Interior", type: "ASET", parentId: "cat-aset", color: "#A5B4FC", icon: "home", isActive: true, sortOrder: 2 },
+  { id: "cat-aset-renovasi", name: "Renovasi & Inventaris", type: "ASET", parentId: "cat-aset", color: "#A5B4FC", icon: "settings", isActive: true, sortOrder: 3 },
+  // Sub-Kategori: Lainnya
+  { id: "cat-admin-bank", name: "Biaya Admin Bank & Pajak", type: "LAINNYA", parentId: "cat-lainnya", color: "#9CA3AF", icon: "shield", isActive: true, sortOrder: 1 },
+  { id: "cat-lain-rupa", name: "Pengeluaran Lain-lain", type: "LAINNYA", parentId: "cat-lainnya", color: "#9CA3AF", icon: "more-horizontal", isActive: true, sortOrder: 2 },
 ];
 
 interface StoreContextType {
@@ -425,6 +432,7 @@ interface StoreContextType {
   addExpenseCategory: (cat: ExpenseCategory) => void;
   updateExpenseCategory: (cat: ExpenseCategory) => void;
   deleteExpenseCategory: (id: string) => void;
+  restoreDefaultExpenseCategories: () => number;
 
   // Fase 2: Finance
   budgets: Budget[];
@@ -538,7 +546,7 @@ interface StoreContextType {
   updateCashTransaction: (transaction: CashTransaction) => void;
   deleteCashTransaction: (id: string) => void;
 
-  addIngredient: (ingredient: Omit<Ingredient, "id">) => void;
+  addIngredient: (ingredient: Omit<Ingredient, "id">) => string;
   updateIngredient: (ingredient: Ingredient) => void;
   deleteIngredient: (id: string) => void;
 
@@ -838,6 +846,23 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           const childIds = expenseCategories.filter((c) => c.parentId === toDelete.id).map((c) => c.id);
           setExpenseCategories((prev) => prev.filter((c) => c.id !== action.payload && !childIds.includes(c.id)));
         }
+        break;
+      }
+      case "RESTORE_DEFAULT_EXPENSE_CATEGORIES": {
+        markChanged("expense_categories");
+        setExpenseCategories((prev) => {
+          const existingMap = new Map(prev.map((c) => [c.id, c]));
+          const restored: ExpenseCategory[] = [...prev.map((c) => ({ ...c, isActive: true }))];
+          DEFAULT_EXPENSE_CATEGORIES.forEach((def) => {
+            if (!existingMap.has(def.id)) {
+              restored.push(def);
+            }
+          });
+          try {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(restored));
+          } catch {}
+          return restored;
+        });
         break;
       }
       case "ADD_PAYROLL_RECORD":
@@ -1190,9 +1215,23 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
         // Fase 1-4
         if (Array.isArray(data.expense_categories) && data.expense_categories.length > 0) {
-          setExpenseCategories(data.expense_categories);
+          let loadedCategories: ExpenseCategory[] = data.expense_categories;
           try {
-            localStorage.setItem("app_expense_categories_cache", JSON.stringify(data.expense_categories));
+            const restoredOnce = localStorage.getItem("julia_restored_default_cats_v2");
+            if (!restoredOnce) {
+              const existingIds = new Set(loadedCategories.map((c: any) => c.id));
+              const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id));
+              if (missingDefaults.length > 0) {
+                loadedCategories = [...loadedCategories, ...missingDefaults];
+                dirtyTablesRef.current.add("expense_categories");
+                hasLocalChanges.current = true;
+              }
+              localStorage.setItem("julia_restored_default_cats_v2", "1");
+            }
+          } catch {}
+          setExpenseCategories(loadedCategories);
+          try {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(loadedCategories));
           } catch {}
         }
         if (Array.isArray(data.budgets)) setBudgets(data.budgets);
@@ -2047,11 +2086,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged("cash_transactions");
   };
 
-  const addIngredient = (ing: Omit<Ingredient, "id">) => {
+  const addIngredient = (ing: Omit<Ingredient, "id">): string => {
     const id = generateId();
     setIngredients((prev) => [...prev, { ...ing, id }]);
     writeAuditLog("CREATE", "ingredients", id);
     markChanged("ingredients");
+    return id;
   };
 
   const updateIngredient = (ing: Ingredient) => {
@@ -2846,6 +2886,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: cat }),
         updateExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "UPDATE_EXPENSE_CATEGORY", payload: cat }),
         deleteExpenseCategory: (id: string) => dispatch({ type: "DELETE_EXPENSE_CATEGORY", payload: id }),
+        restoreDefaultExpenseCategories: () => {
+          const existingIds = new Set(expenseCategories.map((c) => c.id));
+          const missingCount = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id)).length;
+          dispatch({ type: "RESTORE_DEFAULT_EXPENSE_CATEGORIES" });
+          return missingCount;
+        },
         budgets,
         addBudget: (b: Budget) => dispatch({ type: "ADD_BUDGET", payload: b }),
         updateBudget: (b: Budget) => dispatch({ type: "UPDATE_BUDGET", payload: b }),

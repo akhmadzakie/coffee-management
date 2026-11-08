@@ -29,6 +29,8 @@ import {
   FileText,
   Package,
   Calculator,
+  RotateCcw,
+  ChevronRight,
 } from "lucide-react";
 import { CashAccount, CashTransaction, CashTransactionItem } from "../types";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -86,6 +88,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     deleteCashAccount,
     isReadOnly,
     expenseCategories,
+    restoreDefaultExpenseCategories,
     salesTransactions,
     salesImportLogs,
     closedPeriods,
@@ -113,6 +116,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const [formToAccountId, setFormToAccountId] = useState<string>("");
   const [formDate, setFormDate] = useState<string>(() => getLocalDateString());
   const [formAmount, setFormAmount] = useState<string>("");
+  const [formParentCategoryId, setFormParentCategoryId] = useState<string>("");
   const [formCategoryId, setFormCategoryId] = useState<string>("");
   const [formCustomCategory, setFormCustomCategory] = useState<string>("");
   const [formDescription, setFormDescription] = useState<string>("");
@@ -251,8 +255,27 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   const netCashFlow = totalCashIn - totalCashOut;
 
-  // ─── Filtered Transactions for Table / Mobile List ─────────────────────────
+  // ───Filtered Transactions for Table / Mobile List ─────────────────────────
   const filteredTransactions = useMemo(() => {
+    // Jika filter kategori memilih Kategori Utama (Root), tampilkan juga seluruh transaksi pada sub-kategori turunannya
+    const matchedFilterRoot = expenseCategories.find(
+      (c: any) => !c.parentId && (c.name === categoryFilter || c.id === categoryFilter)
+    );
+    const childNamesOfRoot = matchedFilterRoot
+      ? new Set(
+          expenseCategories
+            .filter((c: any) => c.parentId === matchedFilterRoot.id)
+            .map((c: any) => c.name)
+        )
+      : null;
+    const childIdsOfRoot = matchedFilterRoot
+      ? new Set(
+          expenseCategories
+            .filter((c: any) => c.parentId === matchedFilterRoot.id)
+            .map((c: any) => c.id)
+        )
+      : null;
+
     return scopeTransactions
       .filter((f) => {
         if (typeFilter === "TRANSFER") {
@@ -260,8 +283,16 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         } else if (typeFilter !== "ALL") {
           if (getNormalizedType(f.type) !== typeFilter) return false;
         }
-        if (categoryFilter !== "ALL" && f.category !== categoryFilter) {
-          return false;
+        if (categoryFilter !== "ALL") {
+          const directMatch = f.category === categoryFilter || f.categoryId === categoryFilter;
+          const childMatch =
+            Boolean(matchedFilterRoot) &&
+            (f.categoryId === matchedFilterRoot!.id ||
+              (f.categoryId && childIdsOfRoot?.has(f.categoryId)) ||
+              childNamesOfRoot?.has(f.category));
+          if (!directMatch && !childMatch) {
+            return false;
+          }
         }
         if (searchTerm.trim()) {
           const q = searchTerm.toLowerCase();
@@ -283,7 +314,48 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         if (diff !== 0) return diff;
         return String(b.id).localeCompare(String(a.id));
       });
-  }, [scopeTransactions, typeFilter, categoryFilter, searchTerm]);
+  }, [scopeTransactions, typeFilter, categoryFilter, searchTerm, expenseCategories]);
+
+  // ─── Category Helpers for Two-Step Cascading Selection (Kategori Utama -> Sub-Kategori) ──
+  const activeRootCategories = useMemo(() => {
+    return expenseCategories
+      .filter((c: any) => !c.parentId && c.isActive !== false)
+      .filter((c: any) =>
+        trxType === "CASH_IN" ? c.type === "PENDAPATAN" : c.type !== "PENDAPATAN"
+      )
+      .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }, [expenseCategories, trxType]);
+
+  const activeSubCategories = useMemo(() => {
+    if (!formParentCategoryId) return [];
+    return expenseCategories
+      .filter((c: any) => c.parentId === formParentCategoryId && c.isActive !== false)
+      .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }, [expenseCategories, formParentCategoryId]);
+
+  const getCategoryHierarchyInfo = (trx: CashTransaction) => {
+    const matched =
+      expenseCategories.find((c: any) => c.id === trx.categoryId) ||
+      expenseCategories.find(
+        (c: any) =>
+          c.name.toLowerCase() === String(trx.category || "").toLowerCase() ||
+          c.id === trx.category
+      );
+    if (!matched) {
+      return { parentName: null, categoryName: trx.category || "Lainnya" };
+    }
+    if (matched.parentId) {
+      const parent = expenseCategories.find((c: any) => c.id === matched.parentId);
+      return {
+        parentName: parent?.name || null,
+        categoryName: matched.name,
+      };
+    }
+    return {
+      parentName: null,
+      categoryName: matched.name,
+    };
+  };
 
   // Available categories for filter dropdown
   const availableCategoriesInScope = useMemo(() => {
@@ -382,8 +454,14 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     setFormToAccountId(secondAccId);
     setFormDate(getLocalDateString());
     setFormAmount("");
+    const defaultRoot = expenseCategories
+      .filter((c: any) => !c.parentId && c.isActive !== false)
+      .find((c: any) =>
+        initialType === "CASH_IN" ? c.type === "PENDAPATAN" : c.type !== "PENDAPATAN"
+      );
+    setFormParentCategoryId(defaultRoot?.id || "");
     setFormCategoryId("");
-    setFormCustomCategory(initialType === "CASH_IN" ? "Penjualan Toko" : "");
+    setFormCustomCategory("");
     setFormDescription("");
     setFormVendorName("");
     setFormReceiptNo("");
@@ -396,13 +474,42 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const openEditModal = (trx: CashTransaction) => {
     setEditingTrx(trx);
     const normType = getNormalizedType(trx.type);
-    setTrxType(normType === "TRANSFER" ? "CASH_OUT" : normType);
+    const effectiveType = normType === "TRANSFER" ? "CASH_OUT" : normType;
+    setTrxType(effectiveType);
     setFormAccountId(trx.accountId);
     setFormToAccountId("");
     setFormDate(getLocalDateString(new Date(trx.date)));
     setFormAmount(String(Math.round(Number(trx.amount || 0))));
-    setFormCategoryId(trx.categoryId || "");
-    setFormCustomCategory(trx.category || "");
+
+    // Lacak Kategori Utama (Parent) & Sub-Kategori dari categoryId atau nama category
+    const matchedCat =
+      expenseCategories.find((c: any) => c.id === trx.categoryId) ||
+      expenseCategories.find(
+        (c: any) =>
+          c.name.toLowerCase() === String(trx.category || "").toLowerCase() ||
+          c.id === trx.category
+      );
+
+    if (matchedCat) {
+      if (matchedCat.parentId) {
+        setFormParentCategoryId(matchedCat.parentId);
+        setFormCategoryId(matchedCat.id);
+      } else {
+        setFormParentCategoryId(matchedCat.id);
+        setFormCategoryId(matchedCat.id);
+      }
+      setFormCustomCategory("");
+    } else {
+      const defaultRoot = expenseCategories
+        .filter((c: any) => !c.parentId && c.isActive !== false)
+        .find((c: any) =>
+          effectiveType === "CASH_IN" ? c.type === "PENDAPATAN" : c.type !== "PENDAPATAN"
+        );
+      setFormParentCategoryId(defaultRoot?.id || "");
+      setFormCategoryId("");
+      setFormCustomCategory(trx.category || "");
+    }
+
     setFormDescription(trx.description || "");
     setFormVendorName(trx.vendorName || "");
     setFormReceiptNo(trx.receiptNo || "");
@@ -531,12 +638,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       return;
     }
 
-    // Resolve category name & ID
-    const matchedCat = expenseCategories.find((c: any) => c.id === formCategoryId);
+    // Resolve category name & ID (Mendukung pilihan Kategori Utama -> Sub-Kategori)
+    const effectiveCatId = formCategoryId || formParentCategoryId;
+    const matchedCat = expenseCategories.find((c: any) => c.id === effectiveCatId);
     const finalCategoryName =
       matchedCat?.name ||
       formCustomCategory.trim() ||
-      (trxType === "CASH_IN" ? "Pendapatan Lainnya" : "Pengeluaran Operasional");
+      (trxType === "CASH_IN" ? "Pendapatan" : "Pengeluaran Operasional");
 
     // Auto-build description if left blank but items are filled
     let finalDescription = formDescription.trim();
@@ -1347,18 +1455,31 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   </div>
                 )}
 
-                {/* Category Filter */}
+                {/* Category Filter (Bertingkat: Kategori Utama & Sub-Kategori) */}
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
                   className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/70 hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
-                  <option value="ALL">Semua Kategori</option>
-                  {availableCategoriesInScope.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
+                  <option value="ALL">Semua Kategori & Sub-Kategori</option>
+                  {expenseCategories
+                    .filter((c: any) => !c.parentId && c.isActive !== false)
+                    .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                    .map((root: any) => {
+                      const children = expenseCategories
+                        .filter((c: any) => c.parentId === root.id && c.isActive !== false)
+                        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                      return (
+                        <optgroup key={root.id} label={`📁 ${root.name}`}>
+                          <option value={root.name}>Semua di {root.name}</option>
+                          {children.map((sub: any) => (
+                            <option key={sub.id} value={sub.name}>
+                              ↳ {sub.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                 </select>
               </div>
 
@@ -1468,9 +1589,20 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                               </>
                             )}
                           </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 font-semibold text-[11px]">
-                            {trx.category}
-                          </span>
+                          {(() => {
+                            const { parentName, categoryName } = getCategoryHierarchyInfo(trx);
+                            return parentName ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-[11px]">
+                                <span className="text-slate-400 font-medium">{parentName}</span>
+                                <ChevronRight className="w-3 h-3 text-slate-400" />
+                                <span>{categoryName}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 font-semibold text-[11px]">
+                                {categoryName}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
 
@@ -1679,9 +1811,20 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-[10px]">
-                        {trx.category}
-                      </span>
+                      {(() => {
+                        const { parentName, categoryName } = getCategoryHierarchyInfo(trx);
+                        return parentName ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                            <span className="text-slate-400">{parentName}</span>
+                            <ChevronRight className="w-2.5 h-2.5 text-slate-400" />
+                            <span>{categoryName}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                            {categoryName}
+                          </span>
+                        );
+                      })()}
                       {trx.vendorName && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200/60 text-[10px] font-medium">
                           <Store className="w-2.5 h-2.5" />
@@ -1787,6 +1930,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       onClick={() => {
                         setTrxType("CASH_OUT");
                         if (!editingTrx) setUseItemBreakdown(true);
+                        const defaultExpenseRoot = expenseCategories
+                          .filter((c: any) => !c.parentId && c.isActive !== false)
+                          .find((c: any) => c.type !== "PENDAPATAN");
+                        setFormParentCategoryId(defaultExpenseRoot?.id || "");
+                        setFormCategoryId("");
                       }}
                       className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                         trxType === "CASH_OUT"
@@ -1801,6 +1949,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       onClick={() => {
                         setTrxType("CASH_IN");
                         if (!editingTrx) setUseItemBreakdown(false);
+                        const defaultIncomeRoot = expenseCategories
+                          .filter((c: any) => !c.parentId && c.isActive !== false)
+                          .find((c: any) => c.type === "PENDAPATAN");
+                        setFormParentCategoryId(defaultIncomeRoot?.id || "");
+                        setFormCategoryId("");
                       }}
                       className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                         trxType === "CASH_IN"
@@ -2090,33 +2243,65 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                         )}
                       </div>
 
-                      {/* Row 2: Total Nominal & Kategori */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                            Total Nominal Transaksi (Rp)
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
-                              Rp
-                            </span>
-                            <input
-                              type="number"
-                              value={formAmount}
-                              onChange={(e) => setFormAmount(e.target.value)}
-                              required
-                              min="1"
-                              placeholder="0"
-                              className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                            />
-                          </div>
+                      {/* Row 2: Total Nominal */}
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          Total Nominal Transaksi (Rp)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                            Rp
+                          </span>
+                          <input
+                            type="number"
+                            value={formAmount}
+                            onChange={(e) => setFormAmount(e.target.value)}
+                            required
+                            min="1"
+                            placeholder="0"
+                            className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                          />
                         </div>
+                      </div>
 
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                              Kategori {trxType === "CASH_IN" ? "Pemasukan" : "Pengeluaran"}
-                            </label>
+                      {/* Row 2B: Pilihan Kategori Bertingkat (1. Kategori Utama -> 2. Sub-Kategori) */}
+                      <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <Tag className="w-3.5 h-3.5 text-brand-600" />
+                            <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                              Klasifikasi Kategori {trxType === "CASH_IN" ? "Pemasukan" : "Pengeluaran"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {restoreDefaultExpenseCategories && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const restored = restoreDefaultExpenseCategories();
+                                  const defaultRoot = expenseCategories
+                                    .filter((c: any) => !c.parentId && c.isActive !== false)
+                                    .find((c: any) =>
+                                      trxType === "CASH_IN"
+                                        ? c.type === "PENDAPATAN"
+                                        : c.type !== "PENDAPATAN"
+                                    );
+                                  if (!formParentCategoryId && defaultRoot) {
+                                    setFormParentCategoryId(defaultRoot.id);
+                                  }
+                                  alert(
+                                    restored > 0
+                                      ? `Berhasil memulihkan ${restored} kategori & sub-kategori standar.`
+                                      : "Semua kategori & sub-kategori standar sudah lengkap."
+                                  );
+                                }}
+                                className="text-[11px] text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 cursor-pointer"
+                                title="Pulihkan kategori standar yang sempat terhapus"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Pulihkan Kategori
+                              </button>
+                            )}
                             {onNavigate && (
                               <button
                                 type="button"
@@ -2126,52 +2311,116 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                 }}
                                 className="text-[11px] text-brand-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
                               >
-                                <Tag className="w-3 h-3" />+ Atur Kategori
+                                + Kelola Kategori
                               </button>
                             )}
                           </div>
+                        </div>
 
-                          {trxType === "CASH_IN" ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Step 1: Kategori Utama (Parent) */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              1. Pilih Kategori Utama (Induk) *
+                            </label>
                             <select
-                              value={formCustomCategory}
+                              value={formParentCategoryId}
                               onChange={(e) => {
-                                setFormCustomCategory(e.target.value);
+                                const nextParentId = e.target.value;
+                                setFormParentCategoryId(nextParentId);
                                 setFormCategoryId("");
+                                setFormCustomCategory("");
                               }}
-                              required
-                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                              required={!formCustomCategory}
+                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white transition-all"
                             >
-                              <option value="Penjualan Toko">Penjualan Toko / Omzet</option>
-                              <option value="Setoran Modal / Top Up Kas">
-                                Setoran Modal / Top Up Kas
-                              </option>
-                              <option value="Pendapatan Catering / Event">
-                                Pendapatan Catering / Event
-                              </option>
-                              <option value="Pengembalian Dana / Refund Supplier">
-                                Pengembalian Dana / Refund Supplier
-                              </option>
-                              <option value="Pendapatan Lainnya">Pendapatan Lainnya</option>
+                              <option value="">-- Pilih Kategori Utama --</option>
+                              {activeRootCategories.map((root: any) => {
+                                const subCount = expenseCategories.filter(
+                                  (c: any) => c.parentId === root.id && c.isActive !== false
+                                ).length;
+                                return (
+                                  <option key={root.id} value={root.id}>
+                                    {root.name} {subCount > 0 ? `(${subCount} sub)` : ""}
+                                  </option>
+                                );
+                              })}
                             </select>
-                          ) : (
+                          </div>
+
+                          {/* Step 2: Sub-Kategori (Child) */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                              2. Pilih Sub-Kategori (Rincian Pos)
+                            </label>
                             <select
                               value={formCategoryId}
-                              onChange={(e) => setFormCategoryId(e.target.value)}
-                              required={!formCustomCategory}
-                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                              onChange={(e) => {
+                                setFormCategoryId(e.target.value);
+                                setFormCustomCategory("");
+                              }}
+                              disabled={!formParentCategoryId}
+                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white disabled:bg-slate-100 disabled:text-slate-400 transition-all"
                             >
-                              <option value="">-- Pilih Kategori Biaya --</option>
-                              {expenseCategories
-                                .filter((c: any) => c.isActive)
-                                .map((cat: any) => (
-                                  <option key={cat.id} value={cat.id}>
-                                    {cat.parentId ? "— " : ""}
-                                    {cat.name} ({cat.type})
+                              {!formParentCategoryId ? (
+                                <option value="">Pilih Kategori Utama terlebih dahulu...</option>
+                              ) : activeSubCategories.length === 0 ? (
+                                <option value={formParentCategoryId}>
+                                  -- Gunakan Kategori Utama (Tidak ada sub-kategori) --
+                                </option>
+                              ) : (
+                                <>
+                                  <option value="">
+                                    -- Pilih Sub-Kategori ({activeSubCategories.length} tersedia) --
                                   </option>
-                                ))}
+                                  {activeSubCategories.map((sub: any) => (
+                                    <option key={sub.id} value={sub.id}>
+                                      {sub.name}
+                                    </option>
+                                  ))}
+                                  <option value={formParentCategoryId}>
+                                    Umum / Lainnya di {
+                                      activeRootCategories.find((r: any) => r.id === formParentCategoryId)?.name || "Kategori Utama"
+                                    }
+                                  </option>
+                                </>
+                              )}
                             </select>
-                          )}
+                          </div>
                         </div>
+
+                        {/* Preview Breadcrumb Kategori Terpilih */}
+                        {(formParentCategoryId || formCategoryId || formCustomCategory) && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200/80">
+                            <span className="text-slate-400 font-semibold">Pos Terpilih:</span>
+                            {(() => {
+                              const parentObj = expenseCategories.find(
+                                (c: any) => c.id === formParentCategoryId
+                              );
+                              const subObj = expenseCategories.find(
+                                (c: any) => c.id === formCategoryId && c.id !== formParentCategoryId
+                              );
+                              if (parentObj && subObj) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+                                    <span>{parentObj.name}</span>
+                                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                                    <span className="text-brand-700">{subObj.name}</span>
+                                  </span>
+                                );
+                              }
+                              if (parentObj) {
+                                return (
+                                  <span className="font-bold text-slate-800">
+                                    {parentObj.name}{" "}
+                                    <span className="text-slate-400 font-normal">(Pos Utama)</span>
+                                  </span>
+                                );
+                              }
+                              return <span className="font-bold text-slate-800">{formCustomCategory}</span>;
+                            })()}
+                          </div>
+                        )}
                       </div>
 
                       {/* Row 3: Nama Toko/Vendor, No. Nota, & Metode Bayar */}

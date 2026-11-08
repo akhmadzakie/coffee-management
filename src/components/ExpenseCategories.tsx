@@ -38,6 +38,7 @@ import {
   ChevronsUpDown,
   AlertTriangle,
   FolderPlus,
+  RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -649,8 +650,17 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function ExpenseCategories() {
-  const { expenseCategories, dispatch } = useStore() as any;
+  const { expenseCategories, dispatch, restoreDefaultExpenseCategories } = useStore() as any;
   const categories: ExpenseCategory[] = expenseCategories ?? [];
+
+  const handleRestoreDefaults = () => {
+    const restoredCount = restoreDefaultExpenseCategories ? restoreDefaultExpenseCategories() : 0;
+    if (restoredCount > 0) {
+      alert(`Berhasil memulihkan ${restoredCount} kategori & sub-kategori standar yang sebelumnya terhapus.`);
+    } else {
+      alert("Seluruh kategori & sub-kategori standar sudah lengkap dan aktif.");
+    }
+  };
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null);
@@ -831,7 +841,17 @@ export function ExpenseCategories() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={handleRestoreDefaults}
+            className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            title="Kembalikan kategori dan sub-kategori bawaan yang tidak sengaja terhapus"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>Pulihkan Kategori Standar</span>
+          </button>
+
           <CsvImportExport
             onImport={handleImportCategories}
             templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
@@ -1032,12 +1052,20 @@ export function ExpenseCategories() {
                 ? "Tidak ada pos yang cocok dengan pencarian atau filter tipe Anda."
                 : "Belum ada bagan akun yang dibuat. Mulai tambahkan pos kategori pertama Anda."}
             </p>
-            <button
-              onClick={handleAddRoot}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-xs hover:bg-brand-700 transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> Tambah Kategori Pertama
-            </button>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+              <button
+                onClick={handleRestoreDefaults}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold shadow-xs hover:bg-amber-600 transition cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" /> Pulihkan Kategori Standar
+              </button>
+              <button
+                onClick={handleAddRoot}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-xs hover:bg-brand-700 transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Tambah Kategori Baru
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">

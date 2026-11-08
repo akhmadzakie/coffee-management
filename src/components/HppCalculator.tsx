@@ -302,6 +302,7 @@ const STANDARD_RECIPE_PRESETS: StandardRecipePreset[] = [
 export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const {
     ingredients,
+    addIngredient,
     recipes,
     addRecipe,
     updateRecipe,
@@ -478,15 +479,85 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
-  // Sinkronisasi saat memilih resep eksisting toko
-  const handleLoadExistingRecipe = (recipeId: string) => {
-    setSelectedRecipeId(recipeId);
-    if (!recipeId) return;
+  // Sinkronisasi saat memilih resep eksisting toko atau produk dari Katalog Menu
+  const handleLoadExistingRecipe = (selectionId: string) => {
+    setSelectedRecipeId(selectionId);
+    if (!selectionId) return;
 
-    const r = recipes.find((rec) => rec.id === recipeId);
+    // Jika memilih dari Katalog Produk Menu (format: PROD:productId:variantId)
+    if (selectionId.startsWith("PROD:")) {
+      const [, prodId, varId] = selectionId.split(":");
+      const prod = products.find((p) => p.id === prodId);
+      if (!prod) return;
+      const variant = (prod.variants || []).find((v) => v.id === varId) || prod.variants?.[0];
+
+      setMenuName(prod.name);
+      if (prod.division) handleDivisionChange(prod.division);
+      if (prod.category) setPublishCategory(prod.category);
+      if (variant) {
+        setServingNote(variant.name || "Reguler");
+        if (variant.price > 0) setTargetSellingPrice(variant.price);
+        if (Array.isArray(variant.recipe) && variant.recipe.length > 0) {
+          const mappedItems: RecipeIngredientItem[] = variant.recipe.map((ri, idx) => {
+            const ing = ingredients.find((i) => i.id === ri.ingredientId);
+            return {
+              id: `item-${Date.now()}-${idx}`,
+              ingredientId: ri.ingredientId,
+              name: ing ? ing.name : "Bahan Resep",
+              quantity: ri.quantity,
+              unit: ing ? ing.unit : "gr",
+              costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
+            };
+          });
+          setItems(mappedItems);
+        } else {
+          // Coba cari di tabel recipes berdasarkan nama menu
+          const fallbackRec = recipes.find(
+            (r) => r.menuName.trim().toLowerCase() === prod.name.trim().toLowerCase()
+          );
+          if (fallbackRec) {
+            const safeIngs = getSafeRecipeIngredients(fallbackRec);
+            setItems(
+              safeIngs.map((ri, idx) => {
+                const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                return {
+                  id: `item-${Date.now()}-${idx}`,
+                  ingredientId: ri.ingredientId,
+                  name: ing ? ing.name : "Bahan Resep",
+                  quantity: ri.quantity,
+                  unit: ing ? ing.unit : "gr",
+                  costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
+                };
+              })
+            );
+          }
+        }
+      }
+      setSaveSuccessMessage(
+        `Berhasil memuat produk "${prod.name}${variant ? ` (${variant.name})` : ""}" dari Database Menu`
+      );
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      return;
+    }
+
+    const r = recipes.find((rec) => rec.id === selectionId);
     if (!r) return;
 
     setMenuName(r.menuName);
+
+    // Cek apakah ada di Katalog Produk juga untuk mengambil harga jual & divisi
+    const matchedProd = products.find(
+      (p) => p.name.trim().toLowerCase() === r.menuName.trim().toLowerCase()
+    );
+    if (matchedProd) {
+      if (matchedProd.division) setSelectedDivision(matchedProd.division);
+      if (matchedProd.category) setPublishCategory(matchedProd.category);
+      const firstVar = matchedProd.variants?.[0];
+      if (firstVar) {
+        if (firstVar.name) setServingNote(firstVar.name);
+        if (firstVar.price > 0) setTargetSellingPrice(firstVar.price);
+      }
+    }
 
     // Map ingredients from store
     const safeIngs = getSafeRecipeIngredients(r);
@@ -646,6 +717,73 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     };
   }, [foodCostPercent]);
 
+  // Helper: Pastikan semua bahan (termasuk bahan kustom yang belum ada di Master Inventori) terdaftar otomatis di database bahan baku
+  const ensureRecipeIngredientsRegistered = (): { ingredientId: string; quantity: number }[] => {
+    const resolvedList: { ingredientId: string; quantity: number }[] = [];
+    const updatedUiItems = [...items];
+    let hasNewCustomIng = false;
+
+    updatedUiItems.forEach((it, idx) => {
+      if (it.quantity <= 0) return;
+
+      if (it.ingredientId) {
+        resolvedList.push({
+          ingredientId: it.ingredientId,
+          quantity: it.quantity,
+        });
+        return;
+      }
+
+      // Cari apakah nama bahan kustom sudah ada di master ingredients
+      const cleanName = (it.name || "Bahan Baru").trim();
+      const existingIng = ingredients.find(
+        (ing) => ing.name.trim().toLowerCase() === cleanName.toLowerCase()
+      );
+
+      if (existingIng) {
+        updatedUiItems[idx] = { ...it, ingredientId: existingIng.id };
+        hasNewCustomIng = true;
+        resolvedList.push({
+          ingredientId: existingIng.id,
+          quantity: it.quantity,
+        });
+      } else if (cleanName) {
+        // Otomatis daftarkan ke Master Stok Bahan Baku agar masuk ke database menu secara utuh
+        const newIngId = addIngredient({
+          name: cleanName,
+          unit: it.unit || "gr",
+          currentStock: 0,
+          minStock: 100,
+          category:
+            selectedDivision === "KITCHEN"
+              ? "Kitchen"
+              : selectedDivision === "BAKER"
+                ? "Bakery"
+                : "Bahan Bar",
+          costPerUnit: Number(it.costPerUnit) || 0,
+          storageLocation:
+            selectedDivision === "KITCHEN"
+              ? "KITCHEN"
+              : selectedDivision === "BAKER"
+                ? "BAKERY"
+                : "BAR",
+        });
+        updatedUiItems[idx] = { ...it, ingredientId: newIngId };
+        hasNewCustomIng = true;
+        resolvedList.push({
+          ingredientId: newIngId,
+          quantity: it.quantity,
+        });
+      }
+    });
+
+    if (hasNewCustomIng) {
+      setItems(updatedUiItems);
+    }
+
+    return resolvedList;
+  };
+
   // Simpan ke Master Resep Toko
   const handleSaveToStoreRecipes = () => {
     if (!menuName.trim()) {
@@ -657,15 +795,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       return;
     }
 
-    const validIngredients = items
-      .filter((it) => it.ingredientId && it.quantity > 0)
-      .map((it) => ({
-        ingredientId: it.ingredientId,
-        quantity: it.quantity,
-      }));
+    const validIngredients = ensureRecipeIngredientsRegistered();
 
     if (validIngredients.length === 0) {
-      alert("Pilih bahan baku dari master inventori agar resep terhubung dengan stok otomatis!");
+      alert("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
       return;
     }
 
@@ -691,18 +824,13 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
-  // Terbitkan Langsung ke Katalog Produk Toko
+  // Terbitkan Langsung ke Katalog Produk Toko (Database Menu + Master Resep + Bahan Kustom)
   const handlePublishToProductCatalog = () => {
     if (!menuName.trim()) {
       alert("Nama menu tidak boleh kosong.");
       return;
     }
-    const validIngredients = items
-      .filter((it) => it.ingredientId && it.quantity > 0)
-      .map((it) => ({
-        ingredientId: it.ingredientId,
-        quantity: it.quantity,
-      }));
+    const validIngredients = ensureRecipeIngredientsRegistered();
 
     const existingProd = products.find(
       (p) => p.name.trim().toLowerCase() === menuName.trim().toLowerCase()
@@ -1072,20 +1200,41 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   </p>
                 </div>
 
-                {/* Dropdown Muat Resep */}
-                {recipes.length > 0 && (
-                  <div className="relative w-full sm:w-auto sm:min-w-[220px]">
+                {/* Dropdown Muat Resep & Produk Katalog Menu */}
+                {(products.length > 0 || recipes.length > 0) && (
+                  <div className="relative w-full sm:w-auto sm:min-w-[260px]">
                     <select
                       value={selectedRecipeId}
                       onChange={(e) => handleLoadExistingRecipe(e.target.value)}
                       className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     >
-                      <option value="">-- Muat Resep Toko --</option>
-                      {recipes.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.menuName} ({getSafeRecipeIngredients(r).length} bahan)
-                        </option>
-                      ))}
+                      <option value="">-- Muat dari Database Menu / Resep --</option>
+                      {products.length > 0 && (
+                        <optgroup label="📖 Katalog Menu Produk Toko">
+                          {products.flatMap((prod) =>
+                            (prod.variants && prod.variants.length > 0
+                              ? prod.variants
+                              : [{ id: "default", name: "Reguler", price: 0, recipe: [] }]
+                            ).map((v) => (
+                              <option
+                                key={`PROD:${prod.id}:${v.id}`}
+                                value={`PROD:${prod.id}:${v.id}`}
+                              >
+                                {prod.name} — {v.name} ({formatCurrency(v.price || 0)})
+                              </option>
+                            ))
+                          )}
+                        </optgroup>
+                      )}
+                      {recipes.length > 0 && (
+                        <optgroup label="🧪 Master Resep Gramasi">
+                          {recipes.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.menuName} ({getSafeRecipeIngredients(r).length} bahan)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                 )}
@@ -1251,7 +1400,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
                         {/* Pilih dari Master Inventori atau Kustom */}
-                        <div className="sm:col-span-5">
+                        <div className="sm:col-span-4">
                           <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Pilih Bahan Master
                           </label>
@@ -1260,7 +1409,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             onChange={(e) => handleUpdateItem(item.id, { ingredientId: e.target.value })}
                             className="w-full text-base sm:text-xs font-medium px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
                           >
-                            <option value="">-- Input Bahan Kustom --</option>
+                            <option value="">-- Input Bahan Kustom (Baru) --</option>
                             {(Object.entries(groupedIngredients) as [string, Ingredient[]][]).map(([cat, list]) => (
                               <optgroup key={cat} label={`📂 ${cat}`}>
                                 {list.map((ing) => {
@@ -1291,19 +1440,40 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                           />
                         </div>
 
-                        {/* Takaran / Porsi */}
-                        <div className="sm:col-span-2">
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                            Takaran ({item.unit})
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            value={item.quantity}
-                            onChange={(e) => handleUpdateItem(item.id, { quantity: Number(e.target.value) })}
-                            className="w-full text-base sm:text-xs font-bold font-mono px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
-                          />
+                        {/* Takaran & Satuan */}
+                        <div className="grid grid-cols-2 sm:col-span-3 gap-1.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                              Takaran
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={item.quantity}
+                              onChange={(e) => handleUpdateItem(item.id, { quantity: Number(e.target.value) })}
+                              className="w-full text-base sm:text-xs font-bold font-mono px-2 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                              Satuan
+                            </label>
+                            <select
+                              value={item.unit}
+                              onChange={(e) => handleUpdateItem(item.id, { unit: e.target.value })}
+                              className="w-full text-base sm:text-xs font-semibold px-1.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                            >
+                              {["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                              {!["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].includes(item.unit) && (
+                                <option value={item.unit}>{item.unit}</option>
+                              )}
+                            </select>
+                          </div>
                         </div>
 
                         {/* Biaya per unit */}
@@ -1687,7 +1857,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       className="w-full py-3 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                     >
                       <UtensilsCrossed className="w-4 h-4 text-brand-200" />
-                      Terbitkan ke Katalog
+                      Simpan ke Database Menu
                     </button>
                     <button
                       type="button"
