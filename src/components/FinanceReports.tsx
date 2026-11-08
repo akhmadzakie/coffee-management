@@ -231,13 +231,29 @@ const FinanceReports: React.FC = () => {
   // ─── IV. BEBAN OPERASIONAL (OPERATING EXPENSES / OPEX) ─────────────────────
   // 1. Beban SDM / HRD / Payroll
   const hrdTransactions = useMemo(() => {
+    const hrdKeywords = [
+      "gaji",
+      "upah",
+      "bonus",
+      "tunjangan",
+      "kasbon",
+      "lembur",
+      "bpjs",
+      "asuransi",
+      "pelatihan",
+      "seragam",
+      "hrd",
+      "sdm",
+      "payroll",
+    ];
     return periodTransactions.filter((t) => {
       if (t.type !== "CASH_OUT") return false;
       const catType = getCategoryType(t.categoryId);
+      const catText = (t.category || "").toLowerCase();
       return (
         catType === "HRD" ||
         t.categoryId === "cat-hrd" ||
-        (t.category && t.category.toLowerCase().includes("gaji"))
+        (!t.categoryId && hrdKeywords.some((kw) => catText.includes(kw)))
       );
     });
   }, [periodTransactions, expenseCategories]);
@@ -245,6 +261,20 @@ const FinanceReports: React.FC = () => {
   const totalHrdExpense = useMemo(() => {
     return hrdTransactions.reduce((sum, t) => sum + t.amount, 0);
   }, [hrdTransactions]);
+
+  // Rincian Beban HRD per Sub-Kategori (Gaji, Bonus/Tunjangan, BPJS, Seragam/Pelatihan)
+  const hrdBreakdown = useMemo(() => {
+    const map: Record<string, { name: string; amount: number }> = {};
+    hrdTransactions.forEach((t) => {
+      const cat = expenseCategories.find((c) => c.id === t.categoryId);
+      const label = cat ? cat.name : t.category || "Gaji & Biaya SDM Lainnya";
+      if (!map[label]) {
+        map[label] = { name: label, amount: 0 };
+      }
+      map[label].amount += t.amount;
+    });
+    return Object.values(map).sort((a, b) => b.amount - a.amount);
+  }, [hrdTransactions, expenseCategories]);
 
   // 2. Beban Utilitas
   const utilityTransactions = useMemo(() => {
@@ -837,13 +867,13 @@ const FinanceReports: React.FC = () => {
                       IV. Beban Usaha / Operasional (Operating Expenses / OPEX)
                     </td>
                   </tr>
-                  {/* Gaji / HRD */}
+                  {/* Gaji / HRD & Sub-Kategori SDM */}
                   <tr className="hover:bg-slate-50/50">
-                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2 font-semibold">
                       <Users className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                      <span>Beban Gaji Karyawan, Upah Lembur & Tunjangan (HRD)</span>
+                      <span>Beban SDM, Payroll, Bonus & Tunjangan (HRD & Personalia)</span>
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-600">
+                    <td className="p-3 text-right font-mono text-slate-700 font-bold">
                       {formatCurrency(totalHrdExpense)}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
@@ -851,6 +881,21 @@ const FinanceReports: React.FC = () => {
                       {netSales > 0 ? ((totalHrdExpense / netSales) * 100).toFixed(1) : 0}%
                     </td>
                   </tr>
+                  {hrdBreakdown.map((item, idx) => (
+                    <tr key={`hrd-sub-${idx}`} className="bg-purple-50/20 hover:bg-purple-50/40 text-[11px]">
+                      <td className="py-2 px-4 sm:px-6 pl-14 text-slate-600 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                        <span>Sub: {item.name}</span>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono text-slate-600">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="py-2 px-4 sm:px-6 text-right font-mono text-slate-300">-</td>
+                      <td className="py-2 px-3 text-center text-slate-400">
+                        {netSales > 0 ? ((item.amount / netSales) * 100).toFixed(1) : 0}%
+                      </td>
+                    </tr>
+                  ))}
                   {/* Utilitas */}
                   <tr className="hover:bg-slate-50/50">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">

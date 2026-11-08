@@ -73,6 +73,8 @@ export function Payroll() {
   const [editingPayroll, setEditingPayroll] = useState<PayrollRecord | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payrollToPay, setPayrollToPay] = useState<PayrollRecord | null>(null);
+  const [bulkPayModalOpen, setBulkPayModalOpen] = useState(false);
+  const [paymentSplitMode, setPaymentSplitMode] = useState<"SPLIT_CATEGORY" | "SINGLE_COMBINED">("SPLIT_CATEGORY");
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [manualForm, setManualForm] = useState({
@@ -504,6 +506,195 @@ export function Payroll() {
         });
       });
     }
+  };
+
+  // Breakdown komponen slip gaji ke Sub-Kategori HRD & Personalia
+  const getPayrollCategoryBreakdown = (record: PayrollRecord) => {
+    const basicGross = record.basicSalary || 0;
+    const totalDeductions =
+      (record.alphaDeduction || 0) +
+      (record.lateDeduction || 0) +
+      (record.otherDeductions || 0);
+
+    const rawBonusAndAllowance =
+      (record.mealAllowance || 0) +
+      (record.transportAllowance || 0) +
+      (record.positionAllowance || 0) +
+      (record.kpiBonus || 0) +
+      (record.targetBonus || 0) +
+      (record.overtimePay || 0);
+
+    // Potongan disiplin memotong Gaji Pokok terlebih dahulu, sisanya memotong tunjangan agar total pas = netPay
+    const deductionFromBasic = Math.min(basicGross, totalDeductions);
+    const remainingDeduction = Math.max(0, totalDeductions - deductionFromBasic);
+
+    const netBasicPortion = Math.max(0, basicGross - deductionFromBasic);
+    const netBonusAllowancePortion = Math.max(0, rawBonusAndAllowance - remainingDeduction);
+
+    // Rincian item untuk Sub-Kategori "Bonus, Kasbon & Tunjangan"
+    const bonusItems: { name: string; qty: number; unit: string; unitPrice: number; total: number }[] = [];
+    if ((record.mealAllowance || 0) > 0) {
+      bonusItems.push({
+        name: "Uang Makan Kehadiran",
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.mealAllowance,
+        total: record.mealAllowance,
+      });
+    }
+    if ((record.transportAllowance || 0) > 0) {
+      bonusItems.push({
+        name: "Tunjangan Transport",
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.transportAllowance || 0,
+        total: record.transportAllowance || 0,
+      });
+    }
+    if ((record.positionAllowance || 0) > 0) {
+      bonusItems.push({
+        name: "Tunjangan Jabatan Leader",
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.positionAllowance,
+        total: record.positionAllowance,
+      });
+    }
+    if ((record.kpiBonus || 0) > 0) {
+      bonusItems.push({
+        name: "Bonus KPI & Capaian Divisi",
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.kpiBonus,
+        total: record.kpiBonus,
+      });
+    }
+    if ((record.targetBonus || 0) > 0) {
+      bonusItems.push({
+        name: "Bonus Target Omzet Toko",
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.targetBonus || 0,
+        total: record.targetBonus || 0,
+      });
+    }
+    if ((record.overtimePay || 0) > 0) {
+      bonusItems.push({
+        name: `Upah Lembur Shift${record.overtimeHours ? ` (${record.overtimeHours} Jam)` : ""}`,
+        qty: 1,
+        unit: "periode",
+        unitPrice: record.overtimePay || 0,
+        total: record.overtimePay || 0,
+      });
+    }
+
+    const salaryItems: { name: string; qty: number; unit: string; unitPrice: number; total: number }[] = [];
+    if (netBasicPortion > 0) {
+      salaryItems.push({
+        name:
+          deductionFromBasic > 0
+            ? `Gaji Pokok Kehadiran (${formatCurrency(basicGross)} - Potongan ${formatCurrency(deductionFromBasic)})`
+            : "Gaji Pokok Kehadiran",
+        qty: 1,
+        unit: "periode",
+        unitPrice: netBasicPortion,
+        total: netBasicPortion,
+      });
+    }
+
+    const combinedItems = [...salaryItems, ...bonusItems];
+
+    return {
+      netBasicPortion,
+      netBonusAllowancePortion,
+      totalDeductions,
+      salaryItems,
+      bonusItems,
+      combinedItems,
+    };
+  };
+
+  const disburseSinglePayrollRecord = (
+    record: PayrollRecord,
+    accountId: string,
+    splitMode: "SPLIT_CATEGORY" | "SINGLE_COMBINED"
+  ) => {
+    const empName =
+      employees.find((e: any) => e.id === record.employeeId)?.name ||
+      users.find((u: any) => u.id === record.employeeId)?.name ||
+      "Karyawan";
+
+    const salaryCat =
+      expenseCategories?.find((c: any) => c.id === "cat-gaji") ||
+      expenseCategories?.find((c: any) => c.name.toLowerCase().includes("gaji"));
+
+    const bonusCat =
+      expenseCategories?.find((c: any) => c.id === "cat-tunjangan") ||
+      expenseCategories?.find(
+        (c: any) =>
+          c.name.toLowerCase().includes("bonus") ||
+          c.name.toLowerCase().includes("tunjangan")
+      ) ||
+      salaryCat;
+
+    const breakdown = getPayrollCategoryBreakdown(record);
+    const nowIso = new Date().toISOString();
+
+    if (splitMode === "SPLIT_CATEGORY" && breakdown.netBonusAllowancePortion > 0 && breakdown.netBasicPortion > 0) {
+      // 1. Transaksi Gaji Pokok -> Sub-Kategori "Gaji & Upah Karyawan" (cat-gaji)
+      addCashTransaction({
+        accountId,
+        type: "CASH_OUT",
+        date: nowIso,
+        amount: breakdown.netBasicPortion,
+        description: `Gaji Pokok Karyawan - ${empName} (${record.period})`,
+        category: salaryCat ? salaryCat.name : "Gaji & Upah Karyawan",
+        categoryId: salaryCat ? salaryCat.id : "cat-gaji",
+        referenceId: record.id,
+        items: breakdown.salaryItems,
+        quantity: 1,
+        unitPrice: breakdown.netBasicPortion,
+      });
+
+      // 2. Transaksi Bonus, Tunjangan & Lembur -> Sub-Kategori "Bonus, Kasbon & Tunjangan" (cat-tunjangan)
+      addCashTransaction({
+        accountId,
+        type: "CASH_OUT",
+        date: nowIso,
+        amount: breakdown.netBonusAllowancePortion,
+        description: `Tunjangan, Bonus & Lembur SDM - ${empName} (${record.period})`,
+        category: bonusCat ? bonusCat.name : "Bonus, Kasbon & Tunjangan",
+        categoryId: bonusCat ? bonusCat.id : "cat-tunjangan",
+        referenceId: `${record.id}-bonus`,
+        items: breakdown.bonusItems,
+        quantity: breakdown.bonusItems.length || 1,
+        unitPrice: breakdown.netBonusAllowancePortion,
+      });
+    } else {
+      // Gabung 1 Transaksi Slip Gaji Utuh (atau jika hanya salah satu komponen yang > 0)
+      const isOnlyBonus = breakdown.netBasicPortion === 0 && breakdown.netBonusAllowancePortion > 0;
+      const targetCat = isOnlyBonus ? bonusCat : salaryCat;
+      addCashTransaction({
+        accountId,
+        type: "CASH_OUT",
+        date: nowIso,
+        amount: record.netPay,
+        description: `Pembayaran Slip Gaji & Tunjangan - ${empName} (${record.period})`,
+        category: targetCat ? targetCat.name : "Gaji & Upah Karyawan",
+        categoryId: targetCat ? targetCat.id : "cat-gaji",
+        referenceId: record.id,
+        items: breakdown.combinedItems,
+        quantity: breakdown.combinedItems.length || 1,
+        unitPrice: record.netPay,
+      });
+    }
+
+    updatePayrollRecord({
+      ...record,
+      status: "PAID",
+      paidDate: nowIso,
+      paidVia: accountId,
+    });
   };
 
   const handleQuickExportXlsx = () => {
@@ -1117,11 +1308,16 @@ export function Payroll() {
                 </button>
               )}
 
-              {canPay && approvedCount > 0 && (
-                <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs">
-                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{approvedCount} slip final siap dicairkan kas</span>
-                </div>
+              {canPay && approvedCount > 0 && !closedPeriods.some((p: any) => p.period === period) && (
+                <button
+                  type="button"
+                  onClick={() => setBulkPayModalOpen(true)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+                  title="Cairkan seluruh slip gaji berstatus FINAL (Disetujui) sekaligus ke Buku Kas"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span>Cairkan Semua Slip Final ({approvedCount})</span>
+                </button>
               )}
             </div>
           </div>
@@ -2476,117 +2672,379 @@ export function Payroll() {
         />
       )}
 
-      {/* ─── MODAL BAYAR GAJI KARYAWAN ─── */}
-      {paymentModalOpen && payrollToPay && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-          <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-md flex flex-col border border-slate-200/80 overflow-hidden max-h-[85vh] sm:max-h-[88vh]">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
-              <h2 className="text-lg font-black text-slate-800 flex items-center">
-                <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
-                Bayar Gaji Karyawan
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentModalOpen(false);
-                  setPayrollToPay(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      {/* ─── MODAL BAYAR GAJI KARYAWAN (SINGLE SLIP) ─── */}
+      {paymentModalOpen && payrollToPay && (() => {
+        const breakdown = getPayrollCategoryBreakdown(payrollToPay);
+        const empName =
+          employees.find((e: any) => e.id === payrollToPay.employeeId)?.name ||
+          users.find((u: any) => u.id === payrollToPay.employeeId)?.name ||
+          "Karyawan";
 
-            <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
-              <div className="mb-5 p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
-                <p className="text-xs text-slate-500 mb-1">Penerima</p>
-                <p className="font-bold text-slate-900 text-base">
-                  {employees.find((e: any) => e.id === payrollToPay.employeeId)?.name}
-                </p>
-                <div className="mt-3 flex justify-between items-end border-t border-slate-200/60 pt-3">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-0.5">Total Dibayarkan (THP)</p>
-                    <p className="text-2xl font-black font-mono text-emerald-700">
-                      {formatCurrency(payrollToPay.netPay)}
-                    </p>
-                  </div>
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
+            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
+                <div>
+                  <h2 className="text-lg font-black text-slate-800 flex items-center">
+                    <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
+                    Pencairan Slip Gaji & Tunjangan SDM
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Terintegrasi langsung ke Buku Kas & Laporan Laba Rugi (HRD & Personalia)
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentModalOpen(false);
+                    setPayrollToPay(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  const accountId = formData.get("accountId") as string;
-                  if (!accountId) return;
-                  
-                  const account = cashAccounts.find((a: any) => a.id === accountId);
-                  const salaryCat = expenseCategories?.find((c: any) => c.name.toLowerCase().includes("gaji"));
+              <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">Penerima</p>
+                      <p className="font-black text-slate-900 text-base">{empName}</p>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      Periode {payrollToPay.period}
+                    </span>
+                  </div>
 
-                  addCashTransaction({
-                    accountId: account.id,
-                    type: "CASH_OUT",
-                    date: new Date().toISOString(),
-                    amount: payrollToPay.netPay,
-                    description: `Pembayaran Gaji - ${employees.find((e: any) => e.id === payrollToPay.employeeId)?.name} (${payrollToPay.period})`,
-                    category: salaryCat ? salaryCat.name : "Gaji Karyawan",
-                    categoryId: salaryCat ? salaryCat.id : null,
-                    referenceId: payrollToPay.id,
-                  });
+                  {/* Rincian Alokasi Sub-Kategori HRD */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
+                      <span className="text-[10px] font-bold text-purple-700 uppercase block">
+                        Sub: Gaji & Upah Karyawan
+                      </span>
+                      <span className="font-mono font-black text-slate-900 text-sm">
+                        {formatCurrency(breakdown.netBasicPortion)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Gaji Pokok {breakdown.totalDeductions > 0 ? `(Net setelah potongan)` : `Kehadiran`}
+                      </span>
+                    </div>
 
-                  updatePayrollRecord({
-                    ...payrollToPay,
-                    status: "PAID",
-                    paidDate: new Date().toISOString(),
-                    paidVia: account.id
-                  });
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
+                      <span className="text-[10px] font-bold text-amber-700 uppercase block">
+                        Sub: Bonus, Kasbon & Tunjangan
+                      </span>
+                      <span className="font-mono font-black text-amber-700 text-sm">
+                        {formatCurrency(breakdown.netBonusAllowancePortion)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Makan, Transport, Leader, Bonus & Lembur
+                      </span>
+                    </div>
+                  </div>
 
-                  setPaymentModalOpen(false);
-                  setPayrollToPay(null);
-                }}
-              >
-                <div className="mb-5">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Gunakan Pos Kas / Rekening:
-                  </label>
-                  <select
-                    name="accountId"
-                    required
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-base sm:text-xs font-semibold bg-white"
-                  >
-                    <option value="">-- Pilih Pos Kas Pembayaran --</option>
-                    {cashAccounts.map((a: any) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.type})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex justify-between items-center border-t border-slate-200/70 pt-3">
+                    <span className="text-xs font-bold text-slate-600">Total Take Home Pay (THP):</span>
+                    <span className="text-xl font-black font-mono text-emerald-700">
+                      {formatCurrency(payrollToPay.netPay)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentModalOpen(false);
-                      setPayrollToPay(null);
-                    }}
-                    className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Konfirmasi Bayar
-                  </button>
-                </div>
-              </form>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const accountId = formData.get("accountId") as string;
+                    if (!accountId) return;
+
+                    disburseSinglePayrollRecord(payrollToPay, accountId, paymentSplitMode);
+                    setPaymentModalOpen(false);
+                    setPayrollToPay(null);
+                  }}
+                  className="space-y-4"
+                >
+                  {/* Pilihan Mode Pencatatan Kategori di Buku Kas */}
+                  {breakdown.netBonusAllowancePortion > 0 && breakdown.netBasicPortion > 0 && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                        Mode Pencatatan Kategori di Buku Kas:
+                      </label>
+                      <div className="grid grid-cols-1 gap-2 text-xs">
+                        <label
+                          className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                            paymentSplitMode === "SPLIT_CATEGORY"
+                              ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="splitMode"
+                            checked={paymentSplitMode === "SPLIT_CATEGORY"}
+                            onChange={() => setPaymentSplitMode("SPLIT_CATEGORY")}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-bold flex items-center gap-1.5">
+                              <span>Pisah Otomatis ke Sub-Kategori HRD</span>
+                              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black">
+                                Rekomendasi
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                              Otomatis membuat 2 pencatatan terperinci di Buku Kas: <strong>Gaji & Upah Karyawan</strong> ({formatCurrency(breakdown.netBasicPortion)}) serta <strong>Bonus, Kasbon & Tunjangan</strong> ({formatCurrency(breakdown.netBonusAllowancePortion)}).
+                            </p>
+                          </div>
+                        </label>
+
+                        <label
+                          className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                            paymentSplitMode === "SINGLE_COMBINED"
+                              ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="splitMode"
+                            checked={paymentSplitMode === "SINGLE_COMBINED"}
+                            onChange={() => setPaymentSplitMode("SINGLE_COMBINED")}
+                            className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-bold">Gabung 1 Transaksi Slip Gaji Utuh</div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                              Mencatat 1 transaksi sebesar {formatCurrency(payrollToPay.netPay)} ke sub-kategori <strong>Gaji & Upah Karyawan</strong> lengkap dengan rincian item komponen di dalamnya.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Gunakan Pos Kas / Rekening Pembayaran:
+                    </label>
+                    <select
+                      name="accountId"
+                      required
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-base sm:text-xs font-semibold bg-white"
+                    >
+                      <option value="">-- Pilih Pos Kas Pembayaran --</option>
+                      {cashAccounts.map((a: any) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentModalOpen(false);
+                        setPayrollToPay(null);
+                      }}
+                      className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Konfirmasi & Catat ke Buku Kas
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* ─── MODAL CAIRKAN SEMUA SLIP FINAL SEKALIGUS (BATCH PAY) ─── */}
+      {bulkPayModalOpen && (() => {
+        const approvedSlips = allPeriodRecords.filter((r: PayrollRecord) => r.status === "APPROVED");
+        const totalBatchNet = approvedSlips.reduce((sum: number, r: PayrollRecord) => sum + (r.netPay || 0), 0);
+        const totalBatchBasic = approvedSlips.reduce(
+          (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBasicPortion,
+          0
+        );
+        const totalBatchBonus = approvedSlips.reduce(
+          (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBonusAllowancePortion,
+          0
+        );
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
+            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
+                <div>
+                  <h2 className="text-lg font-black text-slate-800 flex items-center">
+                    <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
+                    Pencairan Serentak Slip Gaji Final ({approvedSlips.length} Staf)
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Periode {period} • Otomatis masuk ke Buku Kas & Laporan Laba Rugi
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkPayModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
+                      <span className="text-[10px] font-bold text-purple-700 uppercase block">
+                        Total Sub: Gaji & Upah Karyawan
+                      </span>
+                      <span className="font-mono font-black text-slate-900 text-sm">
+                        {formatCurrency(totalBatchBasic)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
+                      <span className="text-[10px] font-bold text-amber-700 uppercase block">
+                        Total Sub: Bonus, Kasbon & Tunjangan
+                      </span>
+                      <span className="font-mono font-black text-amber-700 text-sm">
+                        {formatCurrency(totalBatchBonus)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center border-t border-slate-200/70 pt-3">
+                    <span className="text-xs font-bold text-slate-600">
+                      Total Kas Keluar ({approvedSlips.length} Slip Final):
+                    </span>
+                    <span className="text-xl font-black font-mono text-emerald-700">
+                      {formatCurrency(totalBatchNet)}
+                    </span>
+                  </div>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const accountId = formData.get("accountId") as string;
+                    if (!accountId || approvedSlips.length === 0) return;
+
+                    approvedSlips.forEach((slip: PayrollRecord) => {
+                      disburseSinglePayrollRecord(slip, accountId, paymentSplitMode);
+                    });
+
+                    setBulkPayModalOpen(false);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Mode Pencatatan Kategori di Buku Kas:
+                    </label>
+                    <div className="grid grid-cols-1 gap-2 text-xs">
+                      <label
+                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                          paymentSplitMode === "SPLIT_CATEGORY"
+                            ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="batchSplitMode"
+                          checked={paymentSplitMode === "SPLIT_CATEGORY"}
+                          onChange={() => setPaymentSplitMode("SPLIT_CATEGORY")}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="font-bold flex items-center gap-1.5">
+                            <span>Pisah Otomatis Gaji Pokok vs Bonus/Tunjangan</span>
+                            <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black">
+                              Rekomendasi
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Memisahkan porsi Gaji Pokok ke <strong>Gaji & Upah Karyawan</strong> dan porsi Tunjangan/Bonus/Lembur ke <strong>Bonus, Kasbon & Tunjangan</strong>.
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                          paymentSplitMode === "SINGLE_COMBINED"
+                            ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="batchSplitMode"
+                          checked={paymentSplitMode === "SINGLE_COMBINED"}
+                          onChange={() => setPaymentSplitMode("SINGLE_COMBINED")}
+                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="font-bold">Gabung 1 Transaksi per Karyawan</div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Mencatat 1 transaksi Take Home Pay utuh per staf ke <strong>Gaji & Upah Karyawan</strong> beserta rincian itemnya.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Gunakan Pos Kas / Rekening Pembayaran:
+                    </label>
+                    <select
+                      name="accountId"
+                      required
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-base sm:text-xs font-semibold bg-white"
+                    >
+                      <option value="">-- Pilih Pos Kas Pembayaran --</option>
+                      {cashAccounts.map((a: any) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setBulkPayModalOpen(false)}
+                      className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Cairkan {approvedSlips.length} Slip Sekarang
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
