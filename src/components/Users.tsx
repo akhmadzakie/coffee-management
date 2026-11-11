@@ -29,12 +29,16 @@ const DEPARTMENTS = [
 ];
 
 export const UsersComponent = () => {
-  const { users, employees, addUser, updateUser, deleteUser, updateEmployee, currentUser, settings } =
+  const { users, employees, addUser, updateUser, deleteUser, updateEmployee, currentUser, settings, unsuspendUser } =
     useStore();
   const { t } = useTranslation(settings.language || "id");
   const [isEditing, setIsEditing] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const confirm = useConfirm();
+
+  const canUnsuspend =
+    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
+  const suspendedUsers = users.filter((u) => Boolean(u.isSuspended));
 
   // Controlled form states for real-time synchronization
   const [formName, setFormName] = useState("");
@@ -163,6 +167,10 @@ export const UsersComponent = () => {
       name: cleanName,
       role: formRole,
       employeeId: targetEmpId,
+      isSuspended: false,
+      failedPinAttempts: 0,
+      suspendedAt: null,
+      suspendedReason: null,
     };
     if (formRole === "LEADER") {
       userData.department = formDept;
@@ -172,6 +180,9 @@ export const UsersComponent = () => {
 
     if (editingUser) {
       updateUser({ ...userData, id: editingUser.id });
+      if (editingUser.isSuspended && canUnsuspend) {
+        unsuspendUser(editingUser.id);
+      }
     } else {
       addUser(userData);
     }
@@ -353,6 +364,39 @@ export const UsersComponent = () => {
         </div>
       </div>
 
+      {/* Banner Akun Ter-suspend (Salah PIN 3x) */}
+      {suspendedUsers.length > 0 && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-rose-600 text-white rounded-xl shrink-0 mt-0.5 md:mt-0">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-rose-900 text-sm">
+                🚨 {suspendedUsers.length} Akun Ter-suspend Otomatis (Salah Memasukkan PIN 3x)
+              </h4>
+              <p className="text-xs text-rose-700 mt-0.5">
+                Akun yang ter-suspend tidak dapat login sampai dibuka kembali (Unsuspend) oleh Manager atau Super Admin.
+              </p>
+            </div>
+          </div>
+          {canUnsuspend && (
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              {suspendedUsers.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => unsuspendUser(u.id)}
+                  className="text-xs font-bold px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <span>🔓 Buka Suspend: {u.name} (@{u.username})</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Banner Karyawan yang Belum Punya Akun */}
       {unlinkedEmployees.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
@@ -431,12 +475,35 @@ export const UsersComponent = () => {
                   >
                     <td className="p-4">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-700 font-bold flex items-center justify-center mr-3 shrink-0 border border-brand-200/80">
-                          {user.name.charAt(0).toUpperCase()}
+                        <div className={`w-8 h-8 rounded-full font-bold flex items-center justify-center mr-3 shrink-0 border ${
+                          user.isSuspended
+                            ? "bg-rose-600 text-white border-rose-600"
+                            : "bg-brand-50 text-brand-700 border-brand-200/80"
+                        }`}>
+                          {user.isSuspended ? "🔒" : user.name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="font-semibold text-slate-900">
-                          {user.name}
-                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-900">
+                              {user.name}
+                            </span>
+                            {user.isSuspended && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white">
+                                🔒 Ter-suspend (Salah PIN 3x)
+                              </span>
+                            )}
+                            {!user.isSuspended && Number(user.failedPinAttempts || 0) > 0 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                ⚠️ Gagal PIN {user.failedPinAttempts}/3
+                              </span>
+                            )}
+                          </div>
+                          {user.isSuspended && user.suspendedReason && (
+                            <p className="text-[11px] text-rose-600 mt-0.5">
+                              {user.suspendedReason}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="p-4 text-slate-600 font-medium">
@@ -473,38 +540,50 @@ export const UsersComponent = () => {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      {canEdit(user) ? (
-                        <button
-                          onClick={() => startEdit(user)}
-                          className="text-slate-400 hover:text-brand-600 p-2 transition-colors cursor-pointer"
-                          title="Edit pengguna"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <span
-                          className="p-2 text-slate-200 inline-block cursor-not-allowed"
-                          title={getEditDisabledReason(user) || "Tidak dapat mengedit role ini"}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </span>
-                      )}
-                      {canDelete(user) ? (
-                        <button
-                          onClick={() => handleDelete(user)}
-                          className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1 cursor-pointer"
-                          title="Hapus pengguna"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <span
-                          className="p-2 text-slate-200 inline-block cursor-not-allowed ml-1"
-                          title={getDeleteDisabledReason(user) || "Tidak dapat menghapus pengguna ini"}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </span>
-                      )}
+                      <div className="inline-flex items-center justify-end gap-1">
+                        {user.isSuspended && canUnsuspend && (
+                          <button
+                            type="button"
+                            onClick={() => unsuspendUser(user.id)}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors mr-1 cursor-pointer shadow-2xs"
+                            title="Buka Suspend Akun (Unsuspend)"
+                          >
+                            🔓 Buka Suspend
+                          </button>
+                        )}
+                        {canEdit(user) ? (
+                          <button
+                            onClick={() => startEdit(user)}
+                            className="text-slate-400 hover:text-brand-600 p-2 transition-colors cursor-pointer"
+                            title="Edit pengguna"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <span
+                            className="p-2 text-slate-200 inline-block cursor-not-allowed"
+                            title={getEditDisabledReason(user) || "Tidak dapat mengedit role ini"}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </span>
+                        )}
+                        {canDelete(user) ? (
+                          <button
+                            onClick={() => handleDelete(user)}
+                            className="text-slate-400 hover:text-rose-600 p-2 transition-colors ml-1 cursor-pointer"
+                            title="Hapus pengguna"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <span
+                            className="p-2 text-slate-200 inline-block cursor-not-allowed ml-1"
+                            title={getDeleteDisabledReason(user) || "Tidak dapat menghapus pengguna ini"}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -531,11 +610,22 @@ export const UsersComponent = () => {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 font-bold flex items-center justify-center text-sm border border-brand-200/80 shrink-0">
-                      {user.name.charAt(0).toUpperCase()}
+                    <div className={`w-10 h-10 rounded-xl font-bold flex items-center justify-center text-sm border shrink-0 ${
+                      user.isSuspended
+                        ? "bg-rose-600 text-white border-rose-600"
+                        : "bg-brand-50 text-brand-700 border-brand-200/80"
+                    }`}>
+                      {user.isSuspended ? "🔒" : user.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 text-sm leading-tight">{user.name}</h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-slate-900 text-sm leading-tight">{user.name}</h4>
+                        {user.isSuspended && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white">
+                            Ter-suspend
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500 font-mono">@{user.username}</p>
                     </div>
                   </div>
@@ -567,6 +657,15 @@ export const UsersComponent = () => {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  {user.isSuspended && canUnsuspend && (
+                    <button
+                      type="button"
+                      onClick={() => unsuspendUser(user.id)}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <span>🔓 Buka Suspend</span>
+                    </button>
+                  )}
                   {canEdit(user) && (
                     <button
                       onClick={() => startEdit(user)}

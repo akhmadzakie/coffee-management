@@ -489,6 +489,10 @@ async function ensureTables() {
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS location TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE NOT NULL`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_pin_attempts INTEGER DEFAULT 0 NOT NULL`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_reason TEXT`,
     `ALTER TABLE employees RENAME COLUMN nik TO username`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_bar_tasks JSONB`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_kitchen_tasks JSONB`,
@@ -1102,17 +1106,29 @@ async function startServer() {
       name: String(u.name || ""),
       role,
       department: u.department ? String(u.department) : null,
+      isSuspended: Boolean(u.isSuspended ?? u.is_suspended ?? false),
+      failedPinAttempts: Number(u.failedPinAttempts ?? u.failed_pin_attempts ?? 0) || 0,
+      suspendedAt: u.suspendedAt || u.suspended_at || null,
+      suspendedReason: u.suspendedReason || u.suspended_reason || null,
     };
   };
 
-  const sanitizeUserForInsert = (u: any, existingPin?: string) => {
+  const sanitizeUserForInsert = (u: any, existingPin?: string, existingUser?: any) => {
     let role = String(u.role || "MANAGER");
     if (["ADMIN_OPERASIONAL", "HRD", "MARKETING", "PURCHASING"].includes(role)) role = "MANAGER";
     if (["BARISTA", "WAITER"].includes(role)) role = "KASIR";
-    let finalPin = u.pin ? String(u.pin) : (existingPin || "123456");
+    let finalPin = u.pin ? String(u.pin) : (existingPin || existingUser?.pin || "123456");
     if (finalPin.length !== 64) {
       finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
     }
+
+    const isSuspended =
+      u.isSuspended !== undefined
+        ? Boolean(u.isSuspended)
+        : Boolean(existingUser?.isSuspended ?? existingUser?.is_suspended ?? false);
+    const failedPinAttempts = isSuspended
+      ? Number(u.failedPinAttempts ?? existingUser?.failedPinAttempts ?? 3) || 3
+      : Number(u.failedPinAttempts ?? 0) || 0;
 
     return {
       id: String(u.id || crypto.randomUUID()),
@@ -1121,6 +1137,18 @@ async function startServer() {
       name: String(u.name || ""),
       role,
       department: u.department ? String(u.department) : null,
+      isSuspended,
+      failedPinAttempts,
+      suspendedAt: isSuspended
+        ? String(u.suspendedAt || existingUser?.suspendedAt || new Date().toISOString())
+        : null,
+      suspendedReason: isSuspended
+        ? String(
+            u.suspendedReason ||
+              existingUser?.suspendedReason ||
+              "Salah memasukkan PIN sebanyak 3 kali berturut-turut"
+          )
+        : null,
     };
   };
 
@@ -1978,12 +2006,13 @@ async function startServer() {
   app.post("/api/login", async (req, res) => {
     try {
       const { username, pin } = req.body;
+      const cleanUsername = String(username || "").trim().toLowerCase();
       let finalPin = String(pin || "");
       if (finalPin.length !== 64) {
         finalPin = crypto.createHash("sha256").update(finalPin).digest("hex");
       }
 
-      let currentUsers;
+      let currentUsers: any[];
       try {
         currentUsers = await db.select().from(schema.users);
       } catch (dbErr) {
@@ -1995,19 +2024,149 @@ async function startServer() {
         }
       }
 
-      const user = currentUsers.find(u => {
-        if (u.username !== username) return false;
-        if (u.pin === finalPin || u.pin === pin) return true;
-        // Izinkan login dengan PIN default 123456 jika data user di DB masih memakai PIN default lama 1234
-        if (pin === "123456" && (u.pin === "1234" || u.pin === "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4")) {
-          return true;
-        }
-        return false;
-      });
+      const targetUser = currentUsers.find(
+        (u: any) => String(u.username || "").trim().toLowerCase() === cleanUsername
+      );
 
-      if (!user) {
-        return res.status(401).json({ error: "Username atau PIN salah" });
+      if (!targetUser) {
+        return res.status(401).json({ error: "Username operator tidak ditemukan." });
       }
+
+      // 1. Cek apakah akun sedang berstatus Ter-suspend
+      if (targetUser.isSuspended) {
+        return res.status(403).json({
+          error:
+            "🔒 Akun ini sedang DITANGGUHKAN (Ter-suspend) karena salah memasukkan PIN 3x berturut-turut. Silakan hubungi Manager atau Super Admin untuk membuka suspend akun Anda.",
+          isSuspended: true,
+          failedAttempts: targetUser.failedPinAttempts || 3,
+          remainingAttempts: 0,
+          user: sanitizeUser(targetUser),
+        });
+      }
+
+      // 2. Verifikasi kecocokan PIN
+      const isPinValid =
+        targetUser.pin === finalPin ||
+        targetUser.pin === pin ||
+        (pin === "123456" &&
+          (targetUser.pin === "1234" ||
+            targetUser.pin === "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"));
+
+      if (!isPinValid) {
+        const nextAttempts = (Number(targetUser.failedPinAttempts) || 0) + 1;
+
+        // Cegah deadlock jika akun ini adalah satu-satunya Super Admin/Manager yang masih aktif
+        const otherActiveAdminsOrManagers = currentUsers.filter(
+          (u: any) =>
+            u.id !== targetUser.id &&
+            !u.isSuspended &&
+            (u.role === "SUPER_ADMIN" || u.role === "MANAGER")
+        );
+        const canSuspendAccount =
+          targetUser.role !== "SUPER_ADMIN" || otherActiveAdminsOrManagers.length > 0;
+
+        const shouldSuspend = nextAttempts >= 3 && canSuspendAccount;
+        const nowIso = new Date().toISOString();
+        const suspendReason = "Salah memasukkan PIN sebanyak 3 kali berturut-turut";
+
+        const updatedFields = {
+          failedPinAttempts: nextAttempts,
+          isSuspended: shouldSuspend,
+          suspendedAt: shouldSuspend ? nowIso : null,
+          suspendedReason: shouldSuspend ? suspendReason : null,
+        };
+
+        if (isDbConnected) {
+          try {
+            await db
+              .update(schema.users)
+              .set(updatedFields)
+              .where(eq(schema.users.id, targetUser.id));
+
+            if (shouldSuspend) {
+              await db
+                .update(schema.deviceSessions)
+                .set({ status: "REVOKED" })
+                .where(eq(schema.deviceSessions.userId, targetUser.id));
+
+              await db.insert(schema.auditLogs).values({
+                id: `audit-suspend-${Date.now()}`,
+                userId: targetUser.id,
+                action: "SUSPEND_PIN_3X",
+                tableName: "users",
+                recordId: targetUser.id,
+                timestamp: nowIso,
+              });
+            }
+          } catch (updateErr) {
+            console.warn("Gagal memperbarui percobaan PIN di DB:", updateErr);
+          }
+        }
+
+        if (offlineState && Array.isArray(offlineState.users)) {
+          offlineState.users = offlineState.users.map((u: any) =>
+            u.id === targetUser.id ? { ...u, ...updatedFields } : u
+          );
+          if (shouldSuspend) {
+            offlineState.audit_logs = offlineState.audit_logs || [];
+            offlineState.audit_logs.unshift({
+              id: `audit-suspend-${Date.now()}`,
+              userId: targetUser.id,
+              action: "SUSPEND_PIN_3X",
+              tableName: "users",
+              recordId: targetUser.id,
+              timestamp: nowIso,
+            });
+          }
+        }
+
+        bumpDataVersion();
+
+        const updatedUserObj = sanitizeUser({ ...targetUser, ...updatedFields });
+
+        if (shouldSuspend) {
+          return res.status(403).json({
+            error:
+              "🚨 Akun Anda telah DITANGGUHKAN (Ter-suspend) karena salah memasukkan PIN sebanyak 3 kali! Notifikasi telah dikirim ke Manager & Super Admin untuk membuka kembali akun Anda.",
+            isSuspended: true,
+            failedAttempts: nextAttempts,
+            remainingAttempts: 0,
+            user: updatedUserObj,
+          });
+        }
+
+        const remaining = Math.max(0, 3 - nextAttempts);
+        return res.status(401).json({
+          error: canSuspendAccount
+            ? `PIN otorisasi salah! Percobaan gagal ke-${nextAttempts} dari 3. Sisa kesempatan: ${remaining}x lagi sebelum akun ter-suspend otomatis.`
+            : "PIN otorisasi tidak sesuai. Silakan coba lagi.",
+          isSuspended: false,
+          failedAttempts: nextAttempts,
+          remainingAttempts: remaining,
+          user: updatedUserObj,
+        });
+      }
+
+      // 3. Jika PIN benar dan sebelumnya sempat gagal (1x atau 2x), reset kembali counter ke 0
+      if ((Number(targetUser.failedPinAttempts) || 0) > 0) {
+        if (isDbConnected) {
+          try {
+            await db
+              .update(schema.users)
+              .set({ failedPinAttempts: 0 })
+              .where(eq(schema.users.id, targetUser.id));
+          } catch {}
+        }
+        if (offlineState && Array.isArray(offlineState.users)) {
+          offlineState.users = offlineState.users.map((u: any) =>
+            u.id === targetUser.id ? { ...u, failedPinAttempts: 0 } : u
+          );
+        }
+        targetUser.failedPinAttempts = 0;
+        bumpDataVersion();
+      }
+
+      const user = targetUser;
 
       const sessionId = crypto.randomUUID();
       const newSession = {
@@ -2036,11 +2195,72 @@ async function startServer() {
         offlineState.device_sessions.push(newSession);
       }
 
-      const { pin: _, ...userWithoutPin } = user;
-      res.json({ success: true, token: sessionId, user: userWithoutPin });
+      res.json({ success: true, token: sessionId, user: sanitizeUser(user) });
     } catch (e) {
       console.error("Login error:", e);
       res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  // Endpoint khusus bagi Manager atau Super Admin untuk membuka suspend akun (Unsuspend)
+  app.post("/api/users/:id/unsuspend", async (req, res) => {
+    try {
+      const authUser = await resolveAuthUser(req);
+      if (!authUser || (authUser.role !== "MANAGER" && authUser.role !== "SUPER_ADMIN")) {
+        return res.status(403).json({
+          error: "Hanya Manager atau Super Admin yang memiliki wewenang membuka suspend akun.",
+        });
+      }
+
+      const targetId = String(req.params.id || "").trim();
+      if (!targetId) {
+        return res.status(400).json({ error: "ID pengguna tidak valid." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const resetFields = {
+        isSuspended: false,
+        failedPinAttempts: 0,
+        suspendedAt: null,
+        suspendedReason: null,
+      };
+
+      if (isDbConnected) {
+        await db
+          .update(schema.users)
+          .set(resetFields)
+          .where(eq(schema.users.id, targetId));
+
+        await db.insert(schema.auditLogs).values({
+          id: `audit-unsuspend-${Date.now()}`,
+          userId: authUser.id,
+          action: "UNSUSPEND_USER",
+          tableName: "users",
+          recordId: targetId,
+          timestamp: nowIso,
+        });
+      }
+
+      if (offlineState && Array.isArray(offlineState.users)) {
+        offlineState.users = offlineState.users.map((u: any) =>
+          u.id === targetId ? { ...u, ...resetFields } : u
+        );
+        offlineState.audit_logs = offlineState.audit_logs || [];
+        offlineState.audit_logs.unshift({
+          id: `audit-unsuspend-${Date.now()}`,
+          userId: authUser.id,
+          action: "UNSUSPEND_USER",
+          tableName: "users",
+          recordId: targetId,
+          timestamp: nowIso,
+        });
+      }
+
+      bumpDataVersion();
+      return res.json({ success: true, targetId });
+    } catch (err: any) {
+      console.error("Unsuspend user error:", err);
+      return res.status(500).json({ error: err?.message || "Gagal membuka suspend akun" });
     }
   });
 
@@ -2197,9 +2417,10 @@ async function startServer() {
         if (shifts !== undefined) offlineState.shifts = shifts;
         if (users !== undefined && Array.isArray(users)) {
           const existingOfflineUsers = offlineState.users || initialUsers;
-          offlineState.users = users.map((u: any) =>
-            sanitizeUserForInsert(u, existingOfflineUsers.find((cu: any) => String(cu.id) === String(u.id))?.pin)
-          );
+          offlineState.users = users.map((u: any) => {
+            const ex = existingOfflineUsers.find((cu: any) => String(cu.id) === String(u.id));
+            return sanitizeUserForInsert(u, ex?.pin, ex);
+          });
         }
         if (settings !== undefined && settings !== null) {
           const rawExisting = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
@@ -2394,7 +2615,12 @@ async function startServer() {
         }
         if (users !== undefined) {
           if (Array.isArray(users) && users.length > 0) {
-            await tx.insert(schema.users).values(users.map((u: any) => sanitizeUserForInsert(u, currentUsersDB.find((cu) => cu.id === String(u.id))?.pin)));
+            await tx.insert(schema.users).values(
+              users.map((u: any) => {
+                const ex = currentUsersDB.find((cu) => cu.id === String(u.id));
+                return sanitizeUserForInsert(u, ex?.pin, ex);
+              })
+            );
           }
         }
         if (expense_categories !== undefined) {

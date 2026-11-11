@@ -533,6 +533,8 @@ interface StoreContextType {
   // Actions
   updateSettings: (settings: Settings) => void;
   login: (username: string, pin: string) => Promise<boolean>;
+  lastLoginError: string;
+  unsuspendUser: (userId: string) => Promise<boolean>;
   logout: () => void;
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (user: User) => void;
@@ -997,6 +999,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [wasForceLoggedOut, setWasForceLoggedOut] = useState<boolean>(false);
+  const [lastLoginError, setLastLoginError] = useState<string>("");
 
   // Initialize auth
   useEffect(() => {
@@ -1649,6 +1652,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const login = async (username: string, pin: string) => {
+    setLastLoginError("");
     try {
       const res = await fetch("/api/login", {
         method: "POST",
@@ -1656,9 +1660,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         body: JSON.stringify({ username, pin })
       });
       if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (errData?.user?.id) {
+          setUsers((prev) =>
+            prev.map((u) => (u.id === errData.user.id ? { ...u, ...errData.user } : u))
+          );
+        }
+        setLastLoginError(
+          errData?.error || "PIN otorisasi tidak sesuai. Silakan coba lagi."
+        );
         return false;
       }
       const data = await res.json();
+      setLastLoginError("");
       const { userKey, sessionKey } = getAuthStorageKeys();
       setCurrentUser(data.user);
       localStorage.setItem(userKey, JSON.stringify(data.user));
@@ -1676,8 +1690,48 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return true;
     } catch (e) {
       console.error("Login failed", e);
+      setLastLoginError("Gagal menghubungi server otentikasi.");
       return false;
     }
+  };
+
+  const unsuspendUser = async (userId: string): Promise<boolean> => {
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              isSuspended: false,
+              failedPinAttempts: 0,
+              suspendedAt: null,
+              suspendedReason: null,
+            }
+          : u
+      )
+    );
+    writeAuditLog("UPDATE", "users", userId);
+    markChanged("users");
+
+    try {
+      const { sessionKey } = getAuthStorageKeys();
+      const token =
+        localStorage.getItem(sessionKey) || deviceRef.current?.sessionId || "";
+      const res = await fetch(`/api/users/${encodeURIComponent(userId)}/unsuspend`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        dirtyTablesRef.current.delete("users");
+        hasLocalChanges.current = dirtyTablesRef.current.size > 0;
+        return true;
+      }
+    } catch (err) {
+      console.warn("Unsuspend API fallback to sync:", err);
+    }
+    return true;
   };
 
   const logout = () => {
@@ -2820,6 +2874,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         deleteKpiBonusRule,
         updateSettings,
         login,
+        lastLoginError,
+        unsuspendUser,
         logout,
         addUser,
         updateUser,

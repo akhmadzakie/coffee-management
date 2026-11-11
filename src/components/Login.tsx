@@ -23,7 +23,7 @@ import {
 import { motion } from "motion/react";
 
 export const Login = () => {
-  const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert } = useStore();
+  const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert, lastLoginError } = useStore();
   const { t } = useTranslation(settings.language || "id");
   const isIndo = (settings.language || "id") === "id";
 
@@ -35,6 +35,13 @@ export const Login = () => {
   const [isManualInput, setIsManualInput] = useState(false);
   const [showDemoDrawer, setShowDemoDrawer] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Sync server login error (including remaining PIN attempts / suspension alert)
+  useEffect(() => {
+    if (lastLoginError) {
+      setError(lastLoginError);
+    }
+  }, [lastLoginError]);
 
   // Realtime clock ticker
   useEffect(() => {
@@ -300,36 +307,56 @@ export const Login = () => {
                     users.map((u) => {
                       const isSelected = u.username === username;
                       const badge = getRoleBadge(u.role);
+                      const isSuspended = Boolean(u.isSuspended);
+                      const failedCount = Number(u.failedPinAttempts || 0);
                       return (
                         <button
                           key={u.id}
                           type="button"
                           onClick={() => handleSelectQuickUser(u.username)}
                           className={`w-full p-3 rounded-2xl flex items-center justify-between transition-all text-left border ${
-                            isSelected
+                            isSuspended
+                              ? isSelected
+                                ? "bg-rose-50 border-rose-500 shadow-xs ring-1 ring-rose-500"
+                                : "bg-rose-50/40 border-rose-200 hover:border-rose-300"
+                              : isSelected
                               ? "bg-brand-50 border-brand-500 shadow-xs ring-1 ring-brand-500"
                               : "bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/70"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
                             <div
-                              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs uppercase ${
-                                isSelected
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 ${
+                                isSuspended
+                                  ? "bg-rose-600 text-white font-black"
+                                  : isSelected
                                   ? "bg-brand-600 text-white font-black"
                                   : "bg-slate-100 text-slate-700 border border-slate-200"
                               }`}
                             >
-                              {u.name ? u.name.slice(0, 2) : u.username.slice(0, 2)}
+                              {isSuspended ? "🔒" : u.name ? u.name.slice(0, 2) : u.username.slice(0, 2)}
                             </div>
-                            <div>
-                              <p className={`text-xs font-bold ${isSelected ? "text-brand-950" : "text-slate-800"}`}>
+                            <div className="min-w-0">
+                              <p className={`text-xs font-bold truncate ${isSuspended ? "text-rose-900" : isSelected ? "text-brand-950" : "text-slate-800"}`}>
                                 {u.name || u.username}
                               </p>
-                              <p className="text-[11px] text-slate-400 font-mono">@{u.username}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-[11px] text-slate-400 font-mono">@{u.username}</p>
+                                {isSuspended && (
+                                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-600 text-white">
+                                    TER-SUSPEND
+                                  </span>
+                                )}
+                                {!isSuspended && failedCount > 0 && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                    Gagal PIN {failedCount}/3
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${badge.color}`}>
                             {badge.label}
                           </span>
                         </button>
@@ -412,6 +439,26 @@ export const Login = () => {
                     >
                       {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Suspended Account Banner */}
+              {selectedUserObj?.isSuspended && (
+                <div className="w-full mb-5 p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs shadow-xs animate-in fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-extrabold text-rose-900 text-sm">
+                        🔒 Akun Ter-suspend Otomatis
+                      </p>
+                      <p className="text-rose-700 mt-1 leading-relaxed">
+                        {selectedUserObj.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}
+                      </p>
+                      <p className="text-rose-800 font-bold mt-2 bg-white/80 px-2.5 py-1.5 rounded-lg border border-rose-200">
+                        Hubungi Manager atau Super Admin untuk membuka suspend akun ini.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

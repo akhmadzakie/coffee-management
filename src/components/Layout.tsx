@@ -85,6 +85,7 @@ export const Layout: React.FC<LayoutProps> = ({
   >("sales");
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const [isManagerApprovalOpen, setIsManagerApprovalOpen] = useState(false);
+  const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [aiInitialTab, setAiInitialTab] = useState<
     "quick-input" | "receipt" | "consultant" | "insights"
@@ -184,8 +185,16 @@ export const Layout: React.FC<LayoutProps> = ({
     addCashTransaction,
     addStockMovement,
     employees,
+    users,
+    unsuspendUser,
   } = useStore();
   const { t } = useTranslation(settings.language || "id");
+
+  const canManageSuspend =
+    currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN";
+  const suspendedUsers = canManageSuspend
+    ? (users || []).filter((u) => Boolean(u.isSuspended))
+    : [];
 
   // ─── Polling Remote Approvals untuk Manager & Super Admin ───
   useEffect(() => {
@@ -607,6 +616,129 @@ export const Layout: React.FC<LayoutProps> = ({
         />
       )}
 
+      {/* ─── Suspended Accounts Notification Modal (Manager & Super Admin) ─── */}
+      <AnimatePresence>
+        {isSuspendedModalOpen && canManageSuspend && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="bg-white rounded-3xl shadow-2xl border border-rose-200 w-full max-w-lg overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                    <ShieldAlert className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold tracking-tight">
+                      Notifikasi Keamanan: Akun Ter-suspend
+                    </h3>
+                    <p className="text-xs text-rose-100">
+                      Otorisasi Manager / Super Admin untuk membuka kunci akun
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSuspendedModalOpen(false)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-3 max-h-[65vh] overflow-y-auto">
+                {suspendedUsers.length === 0 ? (
+                  <div className="text-center py-8 space-y-2">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                    <p className="text-sm font-bold text-slate-800">
+                      Semua Akun Sudah Aktif Normal
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Tidak ada akun staf yang sedang ter-suspend saat ini.
+                    </p>
+                  </div>
+                ) : (
+                  suspendedUsers.map((u) => (
+                    <div
+                      key={u.id}
+                      className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-extrabold text-sm text-rose-950">
+                            🔒 {u.name}
+                          </span>
+                          <span className="text-xs font-mono text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md">
+                            @{u.username}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-rose-200 text-rose-800 uppercase">
+                            {u.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-rose-700">
+                          {u.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut"}
+                        </p>
+                        {u.suspendedAt && (
+                          <p className="text-[11px] text-rose-500 font-mono">
+                            Waktu kejadian: {new Date(u.suspendedAt).toLocaleString("id-ID")}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await unsuspendUser(u.id);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all shrink-0 cursor-pointer active:scale-95"
+                      >
+                        🔓 Buka Suspend
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSuspendedModalOpen(false);
+                    onViewChange("users");
+                  }}
+                  className="text-xs font-bold text-brand-700 hover:text-brand-800 cursor-pointer"
+                >
+                  Ke Manajemen Pengguna →
+                </button>
+                <div className="flex items-center gap-2">
+                  {suspendedUsers.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        for (const u of suspendedUsers) {
+                          await unsuspendUser(u.id);
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer"
+                    >
+                      🔓 Buka Semua ({suspendedUsers.length})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsSuspendedModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ─── SIDEBAR (DESKTOP) ─── */}
       <aside
         className={`hidden md:flex flex-col bg-white border-r border-slate-200/90 text-slate-800 transition-all duration-300 select-none z-40 ${
@@ -903,6 +1035,23 @@ export const Layout: React.FC<LayoutProps> = ({
 
           {/* Right Header: AI, Export, Clock, Profile Capsule */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Security Notification Badge for Suspended Users (Manager & Super Admin) */}
+            {canManageSuspend && suspendedUsers.length > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setIsSuspendedModalOpen(true)}
+                title="Peringatan Keamanan: Ada akun staf yang ter-suspend karena salah PIN 3x"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white shadow-sm ring-2 ring-rose-300 animate-pulse cursor-pointer"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-white shrink-0" />
+                <span className="hidden sm:inline">Akun Suspend</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-white text-rose-700 text-[10px] font-black">
+                  {suspendedUsers.length}
+                </span>
+              </motion.button>
+            )}
+
             {/* Live Clock Pill (Desktop Only) */}
             <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1360,6 +1509,47 @@ export const Layout: React.FC<LayoutProps> = ({
 
         {/* ─── PAGE BODY CONTAINER ─── */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
+          {/* Global Notification Banner for Suspended Accounts (Manager & Super Admin) */}
+          {canManageSuspend && suspendedUsers.length > 0 && (
+            <div className="mb-4 max-w-7xl mx-auto p-3.5 sm:px-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-950 text-xs shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-extrabold text-rose-900">
+                    🚨 Notifikasi Keamanan: {suspendedUsers.length} Akun Ter-suspend (Salah PIN 3x)
+                  </p>
+                  <p className="text-rose-700 mt-0.5">
+                    Akun terkunci:{" "}
+                    <strong>
+                      {suspendedUsers.map((u) => `${u.name} (@${u.username})`).join(", ")}
+                    </strong>
+                    . Hanya Manager atau Super Admin yang dapat membuka suspend.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {suspendedUsers.length === 1 && (
+                  <button
+                    type="button"
+                    onClick={() => unsuspendUser(suspendedUsers[0].id)}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                  >
+                    🔓 Buka Suspend {suspendedUsers[0].name.split(" ")[0]}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSuspendedModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Kelola Suspend ({suspendedUsers.length})
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* View-Only Alert for Owner */}
           {currentUser?.role === "OWNER" && (
             <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-brand-50/80 border border-brand-200 rounded-2xl text-brand-900 text-xs shadow-2xs">

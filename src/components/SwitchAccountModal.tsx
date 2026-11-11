@@ -23,11 +23,25 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { users, currentUser, login } = useStore();
+  const { users, currentUser, login, lastLoginError, unsuspendUser } = useStore();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (lastLoginError && isOpen) {
+      setError(lastLoginError);
+    }
+  }, [lastLoginError, isOpen]);
+
+  // Keep selectedUser fresh if users list updates (e.g., after failed attempt or unsuspend)
+  useEffect(() => {
+    if (selectedUser) {
+      const updated = users.find((u) => u.id === selectedUser.id);
+      if (updated) setSelectedUser(updated);
+    }
+  }, [users]);
 
   const targetPinLength = selectedUser?.pin?.length === 4 ? 4 : 6;
 
@@ -269,6 +283,8 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
                 const isSelected = selectedUser?.id === u.id;
                 const isCurrent = currentUser?.id === u.id;
                 const badge = getRoleBadge(u.role);
+                const isSuspended = Boolean(u.isSuspended);
+                const failedCount = Number(u.failedPinAttempts || 0);
 
                 return (
                   <button
@@ -276,29 +292,45 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
                     type="button"
                     onClick={() => handleSelectUser(u)}
                     className={`flex items-center gap-2.5 p-2.5 rounded-2xl border text-left transition-all ${
-                      isSelected
+                      isSuspended
+                        ? isSelected
+                          ? "border-rose-500 bg-rose-50 shadow-xs ring-1 ring-rose-500"
+                          : "border-rose-200 bg-rose-50/40 hover:bg-rose-50"
+                        : isSelected
                         ? "border-brand-600 bg-brand-50 shadow-xs ring-1 ring-brand-500"
                         : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300"
                     }`}
                   >
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 ${
-                        isSelected
+                        isSuspended
+                          ? "bg-rose-600 text-white font-black"
+                          : isSelected
                           ? "bg-brand-600 text-white font-black"
                           : "bg-slate-100 text-slate-700 border border-slate-200"
                       }`}
                     >
-                      {u.name?.charAt(0).toUpperCase() || "U"}
+                      {isSuspended ? "🔒" : u.name?.charAt(0).toUpperCase() || "U"}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-bold truncate ${isSelected ? "text-brand-950" : "text-slate-800"}`}>
+                      <p className={`text-xs font-bold truncate ${isSuspended ? "text-rose-900" : isSelected ? "text-brand-950" : "text-slate-800"}`}>
                         {u.name}
                       </p>
-                      <div className="flex items-center gap-1 mt-0.5">
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${badge.color}`}>
                           {badge.label}
                         </span>
+                        {isSuspended && (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-600 text-white">
+                            Suspend
+                          </span>
+                        )}
+                        {!isSuspended && failedCount > 0 && (
+                          <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-800">
+                            {failedCount}/3
+                          </span>
+                        )}
                         {isCurrent && (
                           <span className="text-[9px] text-slate-400 font-medium">(Aktif)</span>
                         )}
@@ -322,6 +354,32 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
                 </span>
               )}
             </div>
+
+            {selectedUser?.isSuspended && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl space-y-2 animate-in fade-in">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-rose-900">🔒 Akun {selectedUser.name} Ter-suspend</p>
+                    <p className="text-[11px] text-rose-700 mt-0.5">
+                      {selectedUser.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}
+                    </p>
+                  </div>
+                </div>
+                {(currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await unsuspendUser(selectedUser.id);
+                      if (ok) setError("");
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    🔓 Buka Suspend Akun {selectedUser.name} Sekarang
+                  </button>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl text-center flex items-center justify-center gap-1.5 animate-in fade-in">

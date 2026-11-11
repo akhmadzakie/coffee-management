@@ -135,6 +135,10 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: varchar("role", { length: 50 }).notNull(),
   department: varchar("department", { length: 50 }),
+  isSuspended: boolean("is_suspended").default(false).notNull(),
+  failedPinAttempts: integer("failed_pin_attempts").default(0).notNull(),
+  suspendedAt: text("suspended_at"),
+  suspendedReason: text("suspended_reason"),
 });
 
 export const settings = pgTable("settings", {

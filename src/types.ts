@@ -19,6 +19,10 @@ export interface User {
   role: Role;
   department?: LocationType | null;
   employeeId?: string | null;
+  isSuspended?: boolean;
+  failedPinAttempts?: number;
+  suspendedAt?: string | null;
+  suspendedReason?: string | null;
 }
 
 export type ViewState =
