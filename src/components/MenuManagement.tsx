@@ -66,6 +66,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   const [activeTab, setActiveTab] = useState<ProductDivision | "BATCH_PREP">("BAR");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+  const [onlyHighFoodCost, setOnlyHighFoodCost] = useState<boolean>(false);
 
   // Modals state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -107,9 +108,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
         p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchCategory = selectedCategory === "ALL" || p.category === selectedCategory;
-      return matchSearch && matchCategory;
+      const matchFoodCost =
+        !onlyHighFoodCost ||
+        (p.variants || []).some(
+          (v) =>
+            v.price > 0 &&
+            (v.estimatedHpp || 0) > 0 &&
+            ((v.estimatedHpp || 0) / v.price) * 100 > 35
+        );
+      return matchSearch && matchCategory && matchFoodCost;
     });
-  }, [currentDivisionProducts, searchTerm, selectedCategory]);
+  }, [currentDivisionProducts, searchTerm, selectedCategory, onlyHighFoodCost]);
 
   const filteredBatchPreparations = useMemo(() => {
     return batchPreparations.filter((bp) => {
@@ -140,11 +149,16 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
           validVariants.length
         : 0;
 
+    const highFoodCostCount = validVariants.filter(
+      (v) => ((v.estimatedHpp || 0) / v.price) * 100 > 35
+    ).length;
+
     return {
       totalProducts: currentDivisionProducts.length,
       totalVariants: allVariants.length,
       avgMargin: Math.round(avgMargin * 10) / 10,
       avgFoodCost: Math.round(avgFoodCost * 10) / 10,
+      highFoodCostCount,
     };
   }, [currentDivisionProducts]);
 
@@ -568,6 +582,19 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </div>
 
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+              {(metrics.highFoodCostCount > 0 || onlyHighFoodCost) && (
+                <button
+                  onClick={() => setOnlyHighFoodCost((prev) => !prev)}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 active:scale-95 ${
+                    onlyHighFoodCost
+                      ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                      : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Food Cost &gt;35% ({metrics.highFoodCostCount})</span>
+                </button>
+              )}
               <button
                 onClick={() => setSelectedCategory("ALL")}
                 className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
@@ -661,19 +688,37 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                       const hpp = variant.estimatedHpp || 0;
                       const profit = Math.max(0, variant.price - hpp);
                       const marginPct = variant.price > 0 ? (profit / variant.price) * 100 : 0;
+                      const foodCostPct = variant.price > 0 && hpp > 0 ? (hpp / variant.price) * 100 : 0;
+                      const isHighFoodCost = foodCostPct > 35;
+                      const idealPrice = hpp > 0 ? Math.ceil(hpp / 0.32 / 500) * 500 : variant.price;
 
                       return (
                         <div
                           key={variant.id}
-                          className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/70 space-y-2 text-xs hover:border-slate-300 transition-colors"
+                          className={`p-3 rounded-2xl border space-y-2 text-xs transition-colors ${
+                            isHighFoodCost
+                              ? "bg-rose-50/40 border-rose-200 hover:border-rose-300"
+                              : "bg-slate-50/80 border-slate-200/70 hover:border-slate-300"
+                          }`}
                         >
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <div className="font-bold text-slate-900 flex items-center gap-2">
+                              <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                                 <span>{variant.name}</span>
                                 {variant.sku && (
                                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200 text-slate-700">
                                     {variant.sku}
+                                  </span>
+                                )}
+                                {foodCostPct > 0 && (
+                                  <span
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border font-mono ${
+                                      isHighFoodCost
+                                        ? "bg-rose-100 text-rose-800 border-rose-200"
+                                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    }`}
+                                  >
+                                    Food Cost {foodCostPct.toFixed(1)}%
                                   </span>
                                 )}
                               </div>
@@ -682,13 +727,23 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                                   Kemasan: {variant.packagingNotes} (Rp {variant.packagingCost || 0})
                                 </span>
                               )}
+                              {isHighFoodCost && (
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-0.5 mt-1 inline-flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                                  <span>Margin terkikis! Saran harga ≥ {formatCurrency(idealPrice)}</span>
+                                </span>
+                              )}
                             </div>
 
                             <div className="text-right shrink-0">
                               <span className="font-black text-sm text-slate-900 font-mono">
                                 {formatCurrency(variant.price)}
                               </span>
-                              <div className="text-[10px] font-bold text-emerald-700">
+                              <div
+                                className={`text-[10px] font-bold ${
+                                  isHighFoodCost ? "text-rose-700" : "text-emerald-700"
+                                }`}
+                              >
                                 Margin: {marginPct.toFixed(0)}% (+{formatCurrency(profit)})
                               </div>
                             </div>

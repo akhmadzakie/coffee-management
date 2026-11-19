@@ -769,3 +769,108 @@ export function calculateCashFlowHppSync(params: {
     affectedVariantPreviews,
   };
 }
+
+export interface PackagingChoice {
+  key: string;
+  mode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  unit: string;
+  factor: number;
+  label: string;
+}
+
+export function getIngredientPackagingChoices(ing: Ingredient): PackagingChoice[] {
+  const choices: PackagingChoice[] = [];
+  const baseUnit = ing.unit || "pcs";
+  const baseLower = baseUnit.trim().toLowerCase();
+  const masterUnit = (ing.purchaseUnit || "").trim();
+  const masterFactor = Number(ing.conversionFactor) || 0;
+  const hasMaster = Boolean(masterUnit && masterFactor > 0);
+
+  if (hasMaster) {
+    choices.push({
+      key: "PURCHASE",
+      mode: "PURCHASE",
+      unit: masterUnit,
+      factor: masterFactor,
+      label: `${masterUnit} (Master • 1 = ${masterFactor.toLocaleString("id-ID")} ${baseUnit})`,
+    });
+  }
+
+  choices.push({
+    key: "BASE",
+    mode: "BASE",
+    unit: baseUnit,
+    factor: 1,
+    label: `${baseUnit} (Satuan Resep)`,
+  });
+
+  const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
+  const isWeight = ["gr", "g", "gram"].includes(baseLower);
+
+  const presets: { unit: string; factor: number; label: string }[] = isVolume
+    ? [
+        { unit: "Liter", factor: 1000, label: `Liter (1.000 ${baseUnit})` },
+        { unit: "Botol (700ml)", factor: 700, label: `Botol (700 ${baseUnit})` },
+        { unit: "Jerigen (5L)", factor: 5000, label: `Jerigen 5L (5.000 ${baseUnit})` },
+        { unit: "Karton (12L)", factor: 12000, label: `Karton 12L (12.000 ${baseUnit})` },
+        { unit: "Galon (19L)", factor: 19000, label: `Galon 19L (19.000 ${baseUnit})` },
+      ]
+    : isWeight
+      ? [
+          { unit: "Kg", factor: 1000, label: `Kg (1.000 ${baseUnit})` },
+          { unit: "Pack (250g)", factor: 250, label: `Pack 250g (250 ${baseUnit})` },
+          { unit: "Pack (500g)", factor: 500, label: `Pack 500g (500 ${baseUnit})` },
+          { unit: "Dus (5Kg)", factor: 5000, label: `Dus 5Kg (5.000 ${baseUnit})` },
+          { unit: "Dus (10Kg)", factor: 10000, label: `Dus 10Kg (10.000 ${baseUnit})` },
+          { unit: "Karung (25Kg)", factor: 25000, label: `Karung 25Kg (25.000 ${baseUnit})` },
+        ]
+      : [
+          { unit: `Lusin (12${baseUnit})`, factor: 12, label: `Lusin (12 ${baseUnit})` },
+          { unit: `Pack (50${baseUnit})`, factor: 50, label: `Pack (50 ${baseUnit})` },
+          { unit: `Pack (100${baseUnit})`, factor: 100, label: `Pack (100 ${baseUnit})` },
+          { unit: `Dus (500${baseUnit})`, factor: 500, label: `Dus (500 ${baseUnit})` },
+          { unit: `Karton (1000${baseUnit})`, factor: 1000, label: `Karton (1.000 ${baseUnit})` },
+        ];
+
+  const masterLower = masterUnit.toLowerCase();
+  presets.forEach((p) => {
+    const pLower = p.unit.toLowerCase();
+    if (pLower === masterLower || pLower === baseLower) return;
+    choices.push({
+      key: `PRESET:${p.unit}`,
+      mode: "PRESET",
+      unit: p.unit,
+      factor: p.factor,
+      label: p.label,
+    });
+  });
+
+  choices.push({
+    key: "CUSTOM",
+    mode: "CUSTOM",
+    unit: "Karton",
+    factor: hasMaster ? masterFactor : 1,
+    label: "Kemasan Lain / Kustom (Karton, Dus, Pack...)",
+  });
+
+  return choices;
+}
+
+export function getPackagingSelectValue(
+  row: { unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM"; unit?: string },
+  choices: PackagingChoice[]
+): string {
+  if (row.unitMode === "CUSTOM") return "CUSTOM";
+  if (row.unitMode === "BASE") return "BASE";
+  if (row.unitMode === "PURCHASE" && choices.some((c) => c.key === "PURCHASE")) {
+    return "PURCHASE";
+  }
+  if (row.unitMode === "PRESET") {
+    const rowUnitLower = String(row.unit || "").toLowerCase();
+    const matchedPreset = choices.find(
+      (c) => c.mode === "PRESET" && c.unit.toLowerCase() === rowUnitLower
+    );
+    if (matchedPreset) return matchedPreset.key;
+  }
+  return "CUSTOM";
+}

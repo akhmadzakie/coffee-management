@@ -1007,6 +1007,17 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             totalHpp,
             targetSellingPrice,
             foodCostPercent,
+            grossProfit,
+            grossMarginPercent,
+            packagingCost,
+            wastagePercent,
+            items: items.map((it) => ({
+              name: it.name,
+              quantity: it.quantity,
+              unit: it.unit,
+              costPerUnit: it.costPerUnit,
+              subtotal: Math.round(it.quantity * it.costPerUnit),
+            })),
           },
         }),
       });

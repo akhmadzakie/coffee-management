@@ -30,22 +30,47 @@ import {
   Package,
   Layers,
   Wallet,
+  RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import { calculateCashFlowHppSync, type CashFlowHppSyncResult } from "../utils/posDomainLogic";
 import {
   compressImageFile,
   formatFileSize,
   CompressionResult,
 } from "../utils/imageCompressor";
 
+export interface ParsedTransactionDraft {
+  type: "CASH_OUT" | "CASH_IN";
+  amount: number;
+  category: string;
+  description: string;
+  accountId?: string;
+  accountName?: string;
+  vendorName?: string | null;
+  receiptNo?: string | null;
+  ingredientId?: string | null;
+  ingredientName?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM" | null;
+  conversionFactor?: number | null;
+}
+
 export interface AIAssistantModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyTransactions?: (
-    transactions: any[],
-    options?: { updateStock?: boolean }
+    transactions: ParsedTransactionDraft[],
+    options?: {
+      updateStock?: boolean;
+      syncHpp?: boolean;
+      priceSyncMethod?: "LAST_PRICE" | "WEIGHTED_AVERAGE";
+    }
   ) => void;
+  onOpenInCashFlowModal?: (transactions: ParsedTransactionDraft[]) => void;
   initialTab?: "quick-input" | "receipt" | "consultant" | "insights";
   initialPrompt?: string;
 }
@@ -58,23 +83,11 @@ interface ChatMessage {
   source?: "gemini" | "local-expert";
 }
 
-interface ParsedTransactionDraft {
-  type: "CASH_OUT" | "CASH_IN";
-  amount: number;
-  category: string;
-  description: string;
-  accountId?: string;
-  accountName?: string;
-  ingredientId?: string | null;
-  ingredientName?: string | null;
-  quantity?: number | null;
-  unit?: string | null;
-}
-
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   isOpen,
   onClose,
   onApplyTransactions,
+  onOpenInCashFlowModal,
   initialTab = "quick-input",
   initialPrompt = "",
 }) => {
@@ -86,6 +99,10 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     ingredients,
     cashAccounts,
     expenseCategories,
+    products,
+    recipes,
+    batchPreparations,
+    purchaseOrders,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -128,16 +145,134 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [draftTransactions, setDraftTransactions] = useState<
     ParsedTransactionDraft[]
   >([]);
-  const [autoUpdateStock, setAutoUpdateStock] = useState(true);
+  const [autoUpdateStock, setAutoUpdateStock] = useState(false);
+  const [syncHppFromAi, setSyncHppFromAi] = useState(true);
+  const [aiPriceSyncMethod, setAiPriceSyncMethod] = useState<
+    "LAST_PRICE" | "WEIGHTED_AVERAGE"
+  >("LAST_PRICE");
+
+  const aiStoreContextPayload = useMemo(
+    () => ({
+      cashAccounts: cashAccounts.map((a) => ({ id: a.id, name: a.name })),
+      categories: expenseCategories.map((c: any) => ({ id: c.id, name: c.name })),
+      ingredients: ingredients.map((i) => ({
+        id: i.id,
+        name: i.name,
+        unit: i.unit,
+        purchaseUnit: i.purchaseUnit,
+        conversionFactor: i.conversionFactor,
+        currentStock: i.currentStock,
+        costPerUnit: i.costPerUnit,
+      })),
+    }),
+    [cashAccounts, expenseCategories, ingredients]
+  );
+
+  const mapRawAiTransactions = (rawTxs: any[]): ParsedTransactionDraft[] => {
+    const defaultAcc = cashAccounts[0]?.id || "acc-main";
+    return (rawTxs || []).map((tx: any) => {
+      let matchedAccId = defaultAcc;
+      if (tx.accountName) {
+        const foundAcc = cashAccounts.find(
+          (a) =>
+            a.name.toLowerCase().includes(String(tx.accountName).toLowerCase()) ||
+            String(tx.accountName).toLowerCase().includes(a.name.toLowerCase())
+        );
+        if (foundAcc) matchedAccId = foundAcc.id;
+      }
+
+      let matchedCat = tx.category || "Operasional";
+      const foundCat = expenseCategories.find(
+        (c: any) =>
+          c.name.toLowerCase().includes(matchedCat.toLowerCase()) ||
+          matchedCat.toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (foundCat) {
+        matchedCat = foundCat.name;
+      } else if (tx.type === "CASH_OUT") {
+        const expCat = expenseCategories.find(
+          (c: any) => !/pendapatan|income|omset/i.test(c.name)
+        );
+        if (expCat) matchedCat = expCat.name;
+      }
+
+      const matchedIng = tx.ingredientId
+        ? ingredients.find((i) => i.id === tx.ingredientId)
+        : undefined;
+
+      return {
+        ...tx,
+        accountId: matchedAccId,
+        category: matchedCat,
+        vendorName: tx.vendorName || null,
+        receiptNo: tx.receiptNo || null,
+        ingredientId: matchedIng?.id || tx.ingredientId || null,
+        ingredientName: matchedIng?.name || tx.ingredientName || null,
+        quantity: tx.quantity ? Number(tx.quantity) : null,
+        unit: tx.unit || matchedIng?.purchaseUnit || matchedIng?.unit || null,
+        unitMode: tx.unitMode || (matchedIng?.purchaseUnit ? "PURCHASE" : "BASE"),
+        conversionFactor:
+          Number(tx.conversionFactor) > 0
+            ? Number(tx.conversionFactor)
+            : matchedIng?.conversionFactor && Number(matchedIng.conversionFactor) > 0
+              ? Number(matchedIng.conversionFactor)
+              : 1,
+      };
+    });
+  };
+
+  const computeAiHppPreview = (txList: ParsedTransactionDraft[]): CashFlowHppSyncResult => {
+    const validCashOutIngRows = txList
+      .filter(
+        (tx) =>
+          tx.type === "CASH_OUT" &&
+          Boolean(tx.ingredientId) &&
+          Number(tx.amount) > 0
+      )
+      .map((tx) => ({
+        ingredientId: tx.ingredientId!,
+        unitMode: (tx.unitMode || "PURCHASE") as
+          | "PURCHASE"
+          | "BASE"
+          | "PRESET"
+          | "CUSTOM",
+        conversionFactor: tx.conversionFactor || 1,
+        qty: Number(tx.quantity) > 0 ? Number(tx.quantity) : 1,
+        totalPrice: Number(tx.amount),
+      }));
+
+    if (validCashOutIngRows.length === 0) {
+      return {
+        directUpdates: [],
+        batchPrepUpdates: [],
+        productsToUpdate: [],
+        affectedVariantPreviews: [],
+      };
+    }
+
+    return calculateCashFlowHppSync({
+      itemRows: validCashOutIngRows,
+      ingredients,
+      batchPreparations,
+      products,
+      recipes,
+      priceSyncMethod: aiPriceSyncMethod,
+    });
+  };
+
+  const draftHppPreview = useMemo(
+    () => computeAiHppPreview(draftTransactions),
+    [draftTransactions, ingredients, batchPreparations, products, recipes, aiPriceSyncMethod]
+  );
 
   // Quick preset chips for rapid coffee shop entry
   const quickExpenseChips = [
     { label: "Susu UHT (6L)", text: "Beli susu Fresh Milk Greenfields 6 liter 111rb kas laci" },
+    { label: "Susu Grosir (2 Karton)", text: "Beli susu Fresh Milk 2 karton 420rb transfer BCA" },
     { label: "Es Kristal (2 Bal)", text: "Beli es batu kristal 2 bal 30rb kas laci" },
     { label: "Biji Kopi Espresso", text: "Beli biji kopi House Blend Espresso 2kg 360rb kas utama" },
-    { label: "Air Galon RO", text: "Beli air galon RO 3 pcs 28.500 kas laci" },
+    { label: "Air Galon RO", text: "Beli air galon RO 3 galon 28.500 kas laci" },
     { label: "Cup & Kemasan", text: "Beli paper cup hot 8oz 2 dus 180rb transfer BCA" },
-    { label: "Sabun & Plastik", text: "Beli sabun cuci piring sunlight dan plastik sampah 45rb kasir" },
   ];
 
   const handleParseNatural = async (textToParse?: string) => {
@@ -148,23 +283,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     setNaturalSummary(null);
 
     try {
-      const storeContext = {
-        cashAccounts: cashAccounts.map((a) => ({ id: a.id, name: a.name })),
-        categories: expenseCategories.map((c: any) => ({ id: c.id, name: c.name })),
-        ingredients: ingredients.map((i) => ({
-          id: i.id,
-          name: i.name,
-          unit: i.unit,
-          currentStock: i.currentStock,
-        })),
-      };
-
       const res = await fetch("/api/ai/parse-natural-entry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: textInput,
-          storeContext,
+          storeContext: aiStoreContextPayload,
         }),
       });
 
@@ -174,41 +298,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       setNaturalSummary(data.summary || null);
 
       if (Array.isArray(data.transactions) && data.transactions.length > 0) {
-        // Map suggested accounts to actual account IDs
-        const defaultAcc = cashAccounts[0]?.id || "acc-main";
-        const mapped = data.transactions.map((tx: any) => {
-          let matchedAccId = defaultAcc;
-          if (tx.accountName) {
-            const foundAcc = cashAccounts.find(
-              (a) =>
-                a.name.toLowerCase().includes(tx.accountName.toLowerCase()) ||
-                tx.accountName.toLowerCase().includes(a.name.toLowerCase())
-            );
-            if (foundAcc) matchedAccId = foundAcc.id;
-          }
-
-          // Match category if possible
-          let matchedCat = tx.category || "Operasional";
-          const foundCat = expenseCategories.find(
-            (c: any) =>
-              c.name.toLowerCase().includes(matchedCat.toLowerCase()) ||
-              matchedCat.toLowerCase().includes(c.name.toLowerCase())
-          );
-          if (foundCat) {
-            matchedCat = foundCat.name;
-          } else if (tx.type === "CASH_OUT") {
-            const expCat = expenseCategories.find((c: any) => !/pendapatan|income|omset/i.test(c.name));
-            if (expCat) matchedCat = expCat.name;
-          }
-
-          return {
-            ...tx,
-            accountId: matchedAccId,
-            category: matchedCat,
-          };
-        });
-
-        setDraftTransactions(mapped);
+        setDraftTransactions(mapRawAiTransactions(data.transactions));
       }
     } catch (err: any) {
       alert("Kendala memproses input cerdas: " + (err.message || "Gagal"));
@@ -217,25 +307,49 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
   };
 
-  const handleSaveDraftsToCashFlow = () => {
-    if (draftTransactions.length === 0) return;
-    if (onApplyTransactions) {
-      onApplyTransactions(draftTransactions, { updateStock: autoUpdateStock });
-      setDraftTransactions([]);
-      setNaturalText("");
-      setNaturalSummary(null);
-      onClose();
-    }
+  const resetNaturalState = () => {
+    setDraftTransactions([]);
+    setNaturalText("");
+    setNaturalSummary(null);
   };
 
-  const updateDraftItem = (index: number, updates: Partial<ParsedTransactionDraft>) => {
-    setDraftTransactions((prev) =>
+  const resetScanState = () => {
+    setScanDrafts([]);
+    setScanResult(null);
+    setReceiptText("");
+    setReceiptFile(null);
+    setPreviewUrl(null);
+  };
+
+  const updateDraftInList = (
+    setter: React.Dispatch<React.SetStateAction<ParsedTransactionDraft[]>>,
+    index: number,
+    updates: Partial<ParsedTransactionDraft>
+  ) => {
+    setter((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, ...updates } : item))
     );
   };
 
-  const removeDraftItem = (index: number) => {
-    setDraftTransactions((prev) => prev.filter((_, idx) => idx !== index));
+  const removeDraftFromList = (
+    setter: React.Dispatch<React.SetStateAction<ParsedTransactionDraft[]>>,
+    index: number
+  ) => {
+    setter((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const saveDraftListToCashFlow = (
+    txList: ParsedTransactionDraft[],
+    onAfterSave: () => void
+  ) => {
+    if (txList.length === 0 || !onApplyTransactions) return;
+    onApplyTransactions(txList, {
+      updateStock: autoUpdateStock,
+      syncHpp: syncHppFromAi,
+      priceSyncMethod: aiPriceSyncMethod,
+    });
+    onAfterSave();
+    onClose();
   };
 
   // ─── TAB 2: RECEIPT OCR STATE ─────────────────────────────────────────────
@@ -247,8 +361,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionResult, setCompressionResult] = useState<CompressionResult | null>(null);
   const [scanResult, setScanResult] = useState<any | null>(null);
+  const [scanDrafts, setScanDrafts] = useState<ParsedTransactionDraft[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const scanHppPreview = useMemo(
+    () => computeAiHppPreview(scanDrafts),
+    [scanDrafts, ingredients, batchPreparations, products, recipes, aiPriceSyncMethod]
+  );
 
   const processSelectedFile = async (selectedFile: File) => {
     setScanError(null);
@@ -302,6 +422,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     setIsScanning(true);
     setScanError(null);
     setScanResult(null);
+    setScanDrafts([]);
 
     try {
       let imageBase64 = null;
@@ -336,6 +457,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           imageBase64,
           mimeType,
           fileName: receiptFile?.name,
+          storeContext: aiStoreContextPayload,
         }),
       });
 
@@ -343,6 +465,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       if (!response.ok) throw new Error(data.error || "Gagal memproses data nota");
 
       setScanResult(data);
+      if (Array.isArray(data.transactions)) {
+        setScanDrafts(mapRawAiTransactions(data.transactions));
+      }
     } catch (err: any) {
       setScanError(err.message || "Terjadi kesalahan saat memproses berkas dengan AI");
     } finally {
@@ -388,6 +513,132 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     { label: "Cegah Waste Susu & Kopi", query: "Bagaimana SOP mencegah susu basi dan meminimalkan waste biji kopi di bar?" },
   ];
 
+  // Computed Live Store Metrics (shared across Konsultan & Executive Insights)
+  const liveMetrics = useMemo(() => {
+    const isInternalTransfer = (c: any) =>
+      c.type === "TRANSFER" ||
+      String(c.referenceId || "").startsWith("TRANSFER:") ||
+      String(c.category || "").toLowerCase() === "transfer antar kas";
+    const normCashType = (t: any): "CASH_IN" | "CASH_OUT" | "TRANSFER" => {
+      if (t === "TRANSFER") return "TRANSFER";
+      if (t === "OUT" || t === "EXPENSE" || t === "CASH_OUT") return "CASH_OUT";
+      return "CASH_IN";
+    };
+
+    const balanceMap = new Map<string, number>();
+    cashAccounts.forEach((acc) => balanceMap.set(acc.id, 0));
+
+    let totalCashIn = 0;
+    let totalExp = 0;
+    cashTransactions.forEach((c) => {
+      const amt = Number(c.amount || 0);
+      const nt = normCashType(c.type);
+      const internal = isInternalTransfer(c);
+      if (nt === "CASH_IN") {
+        balanceMap.set(c.accountId, (balanceMap.get(c.accountId) || 0) + amt);
+        if (!internal) totalCashIn += amt;
+      } else if (nt === "CASH_OUT") {
+        balanceMap.set(c.accountId, (balanceMap.get(c.accountId) || 0) - amt);
+        if (!internal) totalExp += amt;
+      }
+    });
+
+    const cashBalances = cashAccounts.map((acc) => ({
+      id: acc.id,
+      name: acc.name,
+      type: acc.type,
+      balance: Math.round(balanceMap.get(acc.id) || 0),
+    }));
+    const totalCashLiquidity = cashBalances.reduce((sum, a) => sum + a.balance, 0);
+
+    const salesRev = salesTransactions.reduce(
+      (acc, s) => acc + Number(s.totalPrice || 0),
+      0
+    );
+    const totalRev = salesRev > 0 ? salesRev : totalCashIn;
+    const netProfit = totalRev - totalExp;
+    const marginPercent = totalRev > 0 ? Math.round((netProfit / totalRev) * 100) : 0;
+
+    const lowStock = ingredients.filter((i) => i.currentStock <= i.minStock);
+
+    // Star Products from SalesTransaction (uses menuName, quantitySold, totalPrice)
+    const itemMap = new Map<string, { name: string; qty: number; rev: number }>();
+    salesTransactions.forEach((s) => {
+      const name = (s.menuName || "Menu").trim();
+      const cur = itemMap.get(name) || { name, qty: 0, rev: 0 };
+      cur.qty += Number(s.quantitySold || 1);
+      cur.rev += Number(s.totalPrice || 0);
+      itemMap.set(name, cur);
+    });
+    const topStarProducts = Array.from(itemMap.values())
+      .sort((a, b) => b.rev - a.rev)
+      .slice(0, 5);
+
+    // Unpaid PO liability
+    const unpaidPos = purchaseOrders.filter((po) => po.status !== "PAID");
+    const unpaidPoTotal = unpaidPos.reduce(
+      (sum, po) => sum + Math.max(0, Number(po.totalAmount || 0) - Number(po.amountPaid || 0)),
+      0
+    );
+
+    // Real Menu HPP & Food Cost Audit
+    const ingMap = new Map<string, (typeof ingredients)[number]>();
+    ingredients.forEach((i) => ingMap.set(i.id, i));
+    const recipeMap = new Map<string, (typeof recipes)[number]>();
+    recipes.forEach((r) => recipeMap.set(r.id, r));
+    const menuAudit = products
+      .filter((p) => p.isActive !== false)
+      .flatMap((p) =>
+        (p.variants || [])
+          .filter((v) => v.isAvailable !== false && Number(v.price) > 0)
+          .map((v) => {
+            const recipeItems =
+              v.recipe && v.recipe.length > 0
+                ? v.recipe
+                : v.recipeId
+                  ? recipeMap.get(v.recipeId)?.ingredients || []
+                  : [];
+            const rawRecipeCost = recipeItems.reduce((sum, ri) => {
+              const ing = ingMap.get(ri.ingredientId);
+              return sum + Number(ri.quantity || 0) * Number(ing?.costPerUnit || 0);
+            }, 0);
+            const hpp =
+              recipeItems.length > 0
+                ? Math.round(rawRecipeCost + Number(v.packagingCost || 0))
+                : Math.round(Number(v.estimatedHpp || 0));
+            const price = Math.round(Number(v.price || 0));
+            const foodCostPct =
+              price > 0 && hpp > 0 ? Math.round((hpp / price) * 1000) / 10 : 0;
+            const marginPct =
+              price > 0 ? Math.round(((price - hpp) / price) * 1000) / 10 : 0;
+            return {
+              name: p.variants.length > 1 ? `${p.name} (${v.name})` : p.name,
+              category: p.category,
+              price,
+              hpp,
+              foodCostPct,
+              marginPct,
+            };
+          })
+      )
+      .filter((m) => m.price > 0 && m.hpp > 0)
+      .sort((a, b) => b.foodCostPct - a.foodCostPct);
+
+    return {
+      totalRevenue: Math.round(totalRev),
+      totalExpense: Math.round(totalExp),
+      netProfit: Math.round(netProfit),
+      marginPercent,
+      cashBalances,
+      totalCashLiquidity,
+      unpaidPoTotal: Math.round(unpaidPoTotal),
+      unpaidPoCount: unpaidPos.length,
+      lowStockItems: lowStock,
+      topStarProducts,
+      menuAudit,
+    };
+  }, [salesTransactions, cashTransactions, cashAccounts, ingredients, purchaseOrders, products, recipes]);
+
   const handleSendChat = async (questionText?: string) => {
     const textToSend = questionText || inputQuestion;
     if (!textToSend.trim() || isAsking) return;
@@ -409,7 +660,19 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         brand: settings.brandName,
         totalSalesCount: salesTransactions?.length || 0,
         ingredientCount: ingredients?.length || 0,
-        lowStockItems: ingredients.filter((i) => i.currentStock <= i.minStock).map((i) => i.name),
+        totalRevenue: liveMetrics.totalRevenue,
+        totalExpense: liveMetrics.totalExpense,
+        netProfit: liveMetrics.netProfit,
+        marginPercent: liveMetrics.marginPercent,
+        totalCashLiquidity: liveMetrics.totalCashLiquidity,
+        cashBalances: liveMetrics.cashBalances,
+        unpaidPoTotal: liveMetrics.unpaidPoTotal,
+        unpaidPoCount: liveMetrics.unpaidPoCount,
+        lowStockItems: liveMetrics.lowStockItems.map(
+          (i) => `${i.name} (Sisa ${i.currentStock} ${i.unit}, Min ${i.minStock} ${i.unit})`
+        ),
+        topProducts: liveMetrics.topStarProducts,
+        menuAudit: liveMetrics.menuAudit.slice(0, 25),
       };
 
       const historyPayload = messages.slice(-6).map((m) => ({
@@ -462,41 +725,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [executiveBriefing, setExecutiveBriefing] = useState<string | null>(null);
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
 
-  // Computed Live Store Metrics
-  const liveMetrics = useMemo(() => {
-    const totalRev = salesTransactions.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
-    const totalExp = cashTransactions
-      .filter((c) => c.type === "OUT" || c.type === "CASH_OUT")
-      .reduce((acc, c) => acc + (c.amount || 0), 0);
-    const netProfit = Math.max(0, totalRev - totalExp);
-    const marginPercent = totalRev > 0 ? Math.round((netProfit / totalRev) * 100) : 0;
-
-    const lowStock = ingredients.filter((i) => i.currentStock <= i.minStock);
-
-    // Star Products
-    const itemMap = new Map<string, { name: string; qty: number; rev: number }>();
-    salesTransactions.forEach((s) => {
-      s.items?.forEach((item) => {
-        const cur = itemMap.get(item.name) || { name: item.name, qty: 0, rev: 0 };
-        cur.qty += item.quantity || 1;
-        cur.rev += (item.quantity || 1) * (item.price || 0);
-        itemMap.set(item.name, cur);
-      });
-    });
-    const topStarProducts = Array.from(itemMap.values())
-      .sort((a, b) => b.rev - a.rev)
-      .slice(0, 4);
-
-    return {
-      totalRevenue: totalRev,
-      totalExpense: totalExp,
-      netProfit,
-      marginPercent,
-      lowStockItems: lowStock,
-      topStarProducts,
-    };
-  }, [salesTransactions, cashTransactions, ingredients]);
-
   const handleGenerateExecutiveBriefing = async () => {
     setIsLoadingBriefing(true);
     try {
@@ -505,6 +733,10 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         totalExpense: liveMetrics.totalExpense,
         netProfit: liveMetrics.netProfit,
         marginPercent: liveMetrics.marginPercent,
+        totalCashLiquidity: liveMetrics.totalCashLiquidity,
+        cashBalances: liveMetrics.cashBalances,
+        unpaidPoTotal: liveMetrics.unpaidPoTotal,
+        unpaidPoCount: liveMetrics.unpaidPoCount,
         lowStockItems: liveMetrics.lowStockItems.map((i) => ({
           name: i.name,
           currentStock: i.currentStock,
@@ -512,6 +744,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           unit: i.unit,
         })),
         topProducts: liveMetrics.topStarProducts,
+        menuAudit: liveMetrics.menuAudit.slice(0, 25),
       };
 
       const res = await fetch("/api/ai/executive-insights", {
@@ -529,6 +762,353 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     } finally {
       setIsLoadingBriefing(false);
     }
+  };
+
+  const renderEditableDraftCards = (
+    txList: ParsedTransactionDraft[],
+    setter: React.Dispatch<React.SetStateAction<ParsedTransactionDraft[]>>
+  ) => (
+    <div className="space-y-2.5">
+      {txList.map((tx, idx) => {
+        const matchedIng = tx.ingredientId
+          ? ingredients.find((i) => i.id === tx.ingredientId)
+          : undefined;
+        const qtyVal = Number(tx.quantity) > 0 ? Number(tx.quantity) : 1;
+        const factor =
+          Number(tx.conversionFactor) > 0 ? Number(tx.conversionFactor) : 1;
+        const unitLabel =
+          tx.unit || matchedIng?.purchaseUnit || matchedIng?.unit || "unit";
+
+        return (
+          <div
+            key={idx}
+            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+          >
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                    tx.type === "CASH_OUT"
+                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  }`}
+                >
+                  {tx.type === "CASH_OUT" ? "KAS KELUAR" : "KAS MASUK"}
+                </span>
+
+                <input
+                  type="text"
+                  value={tx.description}
+                  onChange={(e) =>
+                    updateDraftInList(setter, idx, { description: e.target.value })
+                  }
+                  className="font-bold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-brand-600 focus:outline-none px-1 py-0.5 rounded flex-1 min-w-[160px]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                {/* Account Picker */}
+                <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                  <Wallet className="w-3 h-3 text-slate-400" />
+                  <select
+                    value={tx.accountId || cashAccounts[0]?.id}
+                    onChange={(e) =>
+                      updateDraftInList(setter, idx, { accountId: e.target.value })
+                    }
+                    className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    {cashAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Category Picker */}
+                <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                  <Layers className="w-3 h-3 text-slate-400" />
+                  <select
+                    value={tx.category}
+                    onChange={(e) =>
+                      updateDraftInList(setter, idx, { category: e.target.value })
+                    }
+                    className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    {tx.category &&
+                      !expenseCategories.some((c: any) => c.name === tx.category) && (
+                        <option value={tx.category}>{tx.category}</option>
+                      )}
+                    {expenseCategories.map((c: any) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Linked Master Ingredient Picker + Packaging Info */}
+                {tx.type === "CASH_OUT" && (
+                  <div className="flex items-center gap-1.5 text-[11px] bg-indigo-50 text-indigo-800 px-2 py-1 rounded-lg border border-indigo-200 max-w-full">
+                    <Package className="w-3 h-3 text-indigo-600 shrink-0" />
+                    <select
+                      value={tx.ingredientId || ""}
+                      onChange={(e) => {
+                        const ingId = e.target.value;
+                        if (!ingId) {
+                          updateDraftInList(setter, idx, {
+                            ingredientId: null,
+                            ingredientName: null,
+                            conversionFactor: 1,
+                            unitMode: null,
+                          });
+                          return;
+                        }
+                        const ing = ingredients.find((i) => i.id === ingId);
+                        if (!ing) return;
+                        const nextFactor =
+                          ing.conversionFactor && Number(ing.conversionFactor) > 0
+                            ? Number(ing.conversionFactor)
+                            : 1;
+                        const bahanCat = expenseCategories.find((c: any) =>
+                          /bahan baku/i.test(c.name)
+                        );
+                        updateDraftInList(setter, idx, {
+                          ingredientId: ing.id,
+                          ingredientName: ing.name,
+                          unit: ing.purchaseUnit || ing.unit,
+                          unitMode: ing.purchaseUnit ? "PURCHASE" : "BASE",
+                          conversionFactor: nextFactor,
+                          category: bahanCat ? bahanCat.name : tx.category,
+                        });
+                      }}
+                      className="bg-transparent border-none text-[11px] font-semibold text-indigo-900 focus:outline-none cursor-pointer max-w-[160px] truncate"
+                    >
+                      <option value="">-- Kaitkan Bahan Baku --</option>
+                      {ingredients.map((ing) => (
+                        <option key={ing.id} value={ing.id}>
+                          {ing.name} ({ing.purchaseUnit || ing.unit})
+                        </option>
+                      ))}
+                    </select>
+                    {matchedIng && (
+                      <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap pl-1.5 border-l border-indigo-200">
+                        +{qtyVal} {unitLabel}
+                        {factor > 1
+                          ? ` = ${(qtyVal * factor).toLocaleString("id-ID")} ${matchedIng.unit}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {tx.vendorName && (
+                  <span className="inline-flex items-center text-[10px] font-semibold px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                    Supplier: {tx.vendorName}
+                  </span>
+                )}
+
+                {tx.receiptNo && (
+                  <span className="inline-flex items-center text-[10px] font-mono font-semibold px-2 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                    Nota: {tx.receiptNo}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Amount & Actions */}
+            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block font-medium">
+                  Nominal (Rp)
+                </span>
+                <input
+                  type="number"
+                  value={tx.amount}
+                  onChange={(e) =>
+                    updateDraftInList(setter, idx, { amount: Number(e.target.value) })
+                  }
+                  className={`font-bold font-mono text-sm sm:text-base text-right w-28 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 focus:outline-none focus:border-brand-600 ${
+                    tx.type === "CASH_OUT" ? "text-rose-600" : "text-emerald-600"
+                  }`}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => removeDraftFromList(setter, idx)}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                title="Hapus baris ini"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderAiDraftFooter = (
+    txList: ParsedTransactionDraft[],
+    hppPreview: CashFlowHppSyncResult,
+    onAfterSave: () => void
+  ) => {
+    const hasLinkedIngredient = txList.some(
+      (tx) => tx.type === "CASH_OUT" && Boolean(tx.ingredientId) && Number(tx.amount) > 0
+    );
+    const hasPreviewItems =
+      hppPreview.directUpdates.length > 0 ||
+      hppPreview.batchPrepUpdates.length > 0 ||
+      hppPreview.affectedVariantPreviews.length > 0;
+
+    return (
+      <div className="space-y-3 pt-1">
+        {hasLinkedIngredient && (
+          <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="flex items-center gap-2 font-semibold text-indigo-950 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncHppFromAi}
+                  onChange={(e) => setSyncHppFromAi(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                />
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Update Harga Modal Bahan & Sinkronkan HPP Menu</span>
+              </label>
+
+              {syncHppFromAi && (
+                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-indigo-200 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setAiPriceSyncMethod("LAST_PRICE")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer ${
+                      aiPriceSyncMethod === "LAST_PRICE"
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    Harga Terakhir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiPriceSyncMethod("WEIGHTED_AVERAGE")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer ${
+                      aiPriceSyncMethod === "WEIGHTED_AVERAGE"
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    Rata-Rata Tertimbang
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <label className="flex items-start gap-2 text-[11px] text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoUpdateStock}
+                onChange={(e) => setAutoUpdateStock(e.target.checked)}
+                className="rounded text-brand-600 focus:ring-brand-500 w-3.5 h-3.5 mt-0.5"
+              />
+              <span>
+                <strong className="text-slate-900">
+                  + Tambah stok masuk ke Gudang/Bar (konversi satuan dasar)
+                </strong>
+                <span className="block text-[10px] text-slate-500">
+                  Biarkan tidak dicentang jika barang diterima melalui menu Purchase Order agar stok tidak ganda.
+                </span>
+              </span>
+            </label>
+
+            {syncHppFromAi && hasPreviewItems && (
+              <div className="bg-white/90 rounded-xl p-2.5 border border-indigo-200/70 space-y-1.5 text-[11px]">
+                {hppPreview.directUpdates.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="font-bold text-[10px] uppercase tracking-wider text-indigo-700">
+                      Dampak Harga Modal Bahan:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {hppPreview.directUpdates.map((upd) => (
+                        <span
+                          key={upd.ingredient.id}
+                          className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 border border-indigo-100 font-mono text-[10px]"
+                        >
+                          {upd.ingredient.name}: {formatCurrency(Math.round(upd.oldCostPerUnit))} {"->"}{" "}
+                          <strong>{formatCurrency(Math.round(upd.newCostPerUnit))}</strong>/{upd.ingredient.unit}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {hppPreview.batchPrepUpdates.length > 0 && (
+                  <p className="text-[10px] text-slate-600">
+                    <strong>Batch Olahan Terdampak:</strong>{" "}
+                    {hppPreview.batchPrepUpdates.map((b) => b.batchPrepName).join(", ")}
+                  </p>
+                )}
+
+                {hppPreview.affectedVariantPreviews.length > 0 && (
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-[10px] uppercase tracking-wider text-emerald-700">
+                      Estimasi HPP Menu Diperbarui ({hppPreview.affectedVariantPreviews.length} varian):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {hppPreview.affectedVariantPreviews.slice(0, 4).map((v) => (
+                        <span
+                          key={`${v.productId}-${v.variantName}`}
+                          className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono text-[10px]"
+                        >
+                          {v.productName} ({v.variantName}): {formatCurrency(v.oldHpp)} {"->"}{" "}
+                          <strong>{formatCurrency(v.newHpp)}</strong>
+                        </span>
+                      ))}
+                      {hppPreview.affectedVariantPreviews.length > 4 && (
+                        <span className="text-[10px] text-slate-500 self-center">
+                          +{hppPreview.affectedVariantPreviews.length - 4} menu lainnya
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          {onOpenInCashFlowModal && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenInCashFlowModal(txList);
+                onClose();
+              }}
+              className="sm:w-auto px-4 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-2xs cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4 text-brand-600" />
+              <span>Buka & Edit di Form Arus Kas</span>
+            </button>
+          )}
+
+          {onApplyTransactions && (
+            <button
+              type="button"
+              onClick={() => saveDraftListToCashFlow(txList, onAfterSave)}
+              className="flex-1 py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+            >
+              <Check className="w-4 h-4 stroke-[2.5]" />
+              <span>
+                Simpan Seluruh Transaksi ({txList.length}) ke Buku Kas Toko
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (!isOpen) return null;
@@ -750,141 +1330,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Draf Transaksi Terstruktur ({draftTransactions.length})</span>
                   </h4>
-
-                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={autoUpdateStock}
-                      onChange={(e) => setAutoUpdateStock(e.target.checked)}
-                      className="rounded text-brand-600 focus:ring-brand-500 w-3.5 h-3.5"
-                    />
-                    <span>Perbarui stok masuk di Gudang/Bar secara otomatis</span>
-                  </label>
                 </div>
 
-                <div className="space-y-2.5">
-                  {draftTransactions.map((tx, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="flex-1 space-y-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono ${
-                              tx.type === "CASH_OUT"
-                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            }`}
-                          >
-                            {tx.type === "CASH_OUT" ? "KAS KELUAR" : "KAS MASUK"}
-                          </span>
+                {renderEditableDraftCards(draftTransactions, setDraftTransactions)}
 
-                          <input
-                            type="text"
-                            value={tx.description}
-                            onChange={(e) =>
-                              updateDraftItem(idx, { description: e.target.value })
-                            }
-                            className="font-bold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-brand-600 focus:outline-none px-1 py-0.5 rounded flex-1 min-w-[180px]"
-                          />
-                        </div>
-
-                        {/* Modifiers & Account Selectors */}
-                        <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                          {/* Account Picker */}
-                          <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                            <Wallet className="w-3 h-3 text-slate-400" />
-                            <select
-                              value={tx.accountId || cashAccounts[0]?.id}
-                              onChange={(e) =>
-                                updateDraftItem(idx, { accountId: e.target.value })
-                              }
-                              className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                            >
-                              {cashAccounts.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Category Picker */}
-                          <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                            <Layers className="w-3 h-3 text-slate-400" />
-                            <select
-                              value={tx.category}
-                              onChange={(e) =>
-                                updateDraftItem(idx, { category: e.target.value })
-                              }
-                              className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                            >
-                              {tx.category && !expenseCategories.some((c: any) => c.name === tx.category) && (
-                                <option value={tx.category}>{tx.category}</option>
-                              )}
-                              {expenseCategories.map((c: any) => (
-                                <option key={c.id} value={c.name}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Ingredient Matched Badge */}
-                          {tx.ingredientName && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              <Package className="w-3 h-3 text-indigo-500" />
-                              <span>
-                                Bahan: {tx.ingredientName} (+{tx.quantity || 1} {tx.unit || "unit"})
-                              </span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Amount & Actions */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block font-medium">
-                            Nominal (Rp)
-                          </span>
-                          <input
-                            type="number"
-                            value={tx.amount}
-                            onChange={(e) =>
-                              updateDraftItem(idx, { amount: Number(e.target.value) })
-                            }
-                            className={`font-bold font-mono text-sm sm:text-base text-right w-28 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 focus:outline-none focus:border-brand-600 ${
-                              tx.type === "CASH_OUT" ? "text-rose-600" : "text-emerald-600"
-                            }`}
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => removeDraftItem(idx)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Hapus baris ini"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Submit All to Cash Flow */}
-                <button
-                  type="button"
-                  onClick={handleSaveDraftsToCashFlow}
-                  className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-                >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>
-                    Simpan Seluruh Transaksi ({draftTransactions.length}) ke Buku Kas Toko
-                  </span>
-                </button>
+                {renderAiDraftFooter(draftTransactions, draftHppPreview, resetNaturalState)}
               </div>
             )}
           </div>
@@ -1139,51 +1589,18 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               </button>
 
               {/* Draft Results */}
-              {scanResult && scanResult.transactions && (
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3 animate-in fade-in">
+              {scanResult && scanDrafts.length > 0 && (
+                <div className="p-4 rounded-2xl bg-[#F8F9FA] border border-slate-200 shadow-xs space-y-3 animate-in fade-in">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Draf Transaksi Terdeteksi ({scanResult.transactions.length})</span>
+                      <span>Draf Transaksi Terdeteksi ({scanDrafts.length})</span>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {scanResult.transactions.map((tx: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-800">{tx.description}</p>
-                          <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-md bg-white border border-slate-200 mt-1 inline-block font-medium">
-                            {tx.category || "Operasional"}
-                          </span>
-                        </div>
-                        <div
-                          className={`font-bold font-mono text-sm ${
-                            tx.type === "CASH_OUT" ? "text-rose-600" : "text-emerald-600"
-                          }`}
-                        >
-                          {tx.type === "CASH_OUT" ? "-" : "+"} Rp{" "}
-                          {Number(tx.amount || 0).toLocaleString("id-ID")}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {renderEditableDraftCards(scanDrafts, setScanDrafts)}
 
-                  {onApplyTransactions && (
-                    <button
-                      onClick={() => {
-                        onApplyTransactions(scanResult.transactions);
-                        onClose();
-                      }}
-                      className="w-full mt-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Terapkan Semua ke Buku Kas Toko</span>
-                    </button>
-                  )}
+                  {renderAiDraftFooter(scanDrafts, scanHppPreview, resetScanState)}
                 </div>
               )}
             </div>
@@ -1385,12 +1802,35 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       </div>
                       <button
                         onClick={() => {
+                          const factor =
+                            item.purchaseUnit && Number(item.conversionFactor) > 1
+                              ? Number(item.conversionFactor)
+                              : 1;
+                          const deficitBase = Math.max(
+                            Number(item.minStock || 0) - Number(item.currentStock || 0),
+                            factor
+                          );
+                          const buyQty =
+                            factor > 1
+                              ? Math.max(1, Math.ceil(deficitBase / factor))
+                              : Math.max(1, Math.ceil(deficitBase));
+                          const buyUnit =
+                            factor > 1 && item.purchaseUnit ? item.purchaseUnit : item.unit;
+                          const unitPrice =
+                            factor > 1
+                              ? Number(item.purchasePrice) > 0
+                                ? Number(item.purchasePrice)
+                                : Math.round(Number(item.costPerUnit || 0) * factor)
+                              : Math.round(Number(item.costPerUnit || 0));
+                          const estTotal = Math.round(buyQty * unitPrice);
                           setActiveTab("quick-input");
                           setNaturalText(
-                            `Beli ${item.name} ${item.minStock} ${item.unit} kas laci`
+                            estTotal > 0
+                              ? `Beli ${item.name} ${buyQty} ${buyUnit} Rp ${estTotal.toLocaleString("id-ID")} kas laci`
+                              : `Beli ${item.name} ${buyQty} ${buyUnit} kas laci`
                           );
                         }}
-                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer"
+                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer shrink-0"
                       >
                         + Catat Belanja
                       </button>

@@ -13,6 +13,7 @@ import {
   Settings,
   CashAccount,
   CashTransaction,
+  CashTransactionItem,
   Ingredient,
   StockMovement,
   SalesTransaction,
@@ -49,6 +50,7 @@ import {
   Promotion,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
+import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
 import { get, set, del } from "idb-keyval";
 
 const generateId = () => {
@@ -2373,42 +2375,144 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged("suppliers");
   };
 
+  const resolvePoItemFactor = (item: PurchaseOrderItem, ing?: Ingredient): number => {
+    if (Number(item.conversionFactor) > 0) return Number(item.conversionFactor);
+    if (item.unitMode === "PURCHASE" && Number(ing?.conversionFactor) > 0) {
+      return Number(ing!.conversionFactor);
+    }
+    return 1;
+  };
+
+  const buildPoCashItems = (poItems: PurchaseOrderItem[]): CashTransactionItem[] =>
+    poItems.map((item) => {
+      const ing = ingredients.find((i) => i.id === item.productId);
+      const factor = resolvePoItemFactor(item, ing);
+      return {
+        ingredientId: item.productId,
+        unitMode: item.unitMode || (factor > 1 ? "CUSTOM" : "BASE"),
+        conversionFactor: factor,
+        name: ing?.name || "Bahan Baku",
+        qty: Number(item.quantity || 1),
+        unit: item.unit || ing?.unit || "pcs",
+        unitPrice: Math.round(Number(item.unitPrice || 0)),
+        totalPrice: Math.round(Number(item.subtotal || 0)),
+      };
+    });
+
+  const applyPoItemsToInventoryAndHpp = (
+    poItems: PurchaseOrderItem[],
+    notePrefix: string,
+    dateIso: string,
+    creatorName: string
+  ): boolean => {
+    if (!Array.isArray(poItems) || poItems.length === 0) return false;
+
+    const stockAddsByIngredientId = new Map<string, number>();
+    const newMovements: StockMovement[] = [];
+
+    poItems.forEach((item) => {
+      const ing = ingredients.find((i) => i.id === item.productId);
+      const factor = resolvePoItemFactor(item, ing);
+      const baseQty = Number(item.quantity || 0) * factor;
+      if (baseQty <= 0) return;
+
+      stockAddsByIngredientId.set(
+        item.productId,
+        (stockAddsByIngredientId.get(item.productId) || 0) + baseQty
+      );
+
+      const mvId = generateId();
+      const totalCost = Math.round(
+        Number(item.subtotal) > 0
+          ? Number(item.subtotal)
+          : Number(item.quantity || 0) * Number(item.unitPrice || 0)
+      );
+      newMovements.push({
+        id: mvId,
+        ingredientId: item.productId,
+        type: "IN",
+        quantity: baseQty,
+        unitCost: baseQty > 0 ? Math.round((totalCost / baseQty) * 100) / 100 : 0,
+        totalCost,
+        date: dateIso,
+        note: `${notePrefix}${
+          factor > 1
+            ? ` (${item.quantity} ${item.unit || "kemasan"} = ${baseQty} ${ing?.unit || "unit"})`
+            : ""
+        }`,
+        createdBy: creatorName,
+      });
+      writeAuditLog("CREATE", "stock_movements", mvId);
+    });
+
+    if (newMovements.length > 0) {
+      setStockMovements((prev) => [...prev, ...newMovements]);
+    }
+
+    const hppSync = calculateCashFlowHppSync({
+      itemRows: poItems.map((item) => {
+        const ing = ingredients.find((i) => i.id === item.productId);
+        const factor = resolvePoItemFactor(item, ing);
+        return {
+          ingredientId: item.productId,
+          unitMode: item.unitMode || (factor > 1 ? "CUSTOM" : "BASE"),
+          conversionFactor: factor,
+          qty: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.subtotal,
+        };
+      }),
+      ingredients,
+      batchPreparations,
+      products,
+      recipes,
+      priceSyncMethod: "WEIGHTED_AVERAGE",
+    });
+
+    const syncedIngMap = new Map<string, Ingredient>();
+    hppSync.directUpdates.forEach((upd) => syncedIngMap.set(upd.ingredient.id, upd.ingredient));
+    hppSync.batchPrepUpdates.forEach((bUpd) => syncedIngMap.set(bUpd.ingredient.id, bUpd.ingredient));
+
+    setIngredients((prev) =>
+      prev.map((ing) => {
+        const updatedIng = syncedIngMap.get(ing.id);
+        const addedStock = stockAddsByIngredientId.get(ing.id) || 0;
+        if (!updatedIng && addedStock === 0) return ing;
+        const baseObj = updatedIng || ing;
+        return {
+          ...baseObj,
+          currentStock: ing.currentStock + addedStock,
+        };
+      })
+    );
+
+    if (hppSync.productsToUpdate.length > 0) {
+      const updatedProdMap = new Map<string, Product>(
+        hppSync.productsToUpdate.map((p) => [p.id, p])
+      );
+      setProducts((prev) => prev.map((p) => updatedProdMap.get(p.id) || p));
+      return true;
+    }
+
+    return false;
+  };
+
   const addPurchaseOrder = (po: Omit<PurchaseOrder, "id">) => {
     const id = generateId();
     const newPO: PurchaseOrder = { ...po, id };
+    const poDate = newPO.date || new Date().toISOString();
     setPurchaseOrders((prev) => [...prev, newPO]);
     writeAuditLog("CREATE", "purchase_orders", id);
 
-    // Auto tambah stok jika deliveryStatus === "RECEIVED"
+    let productsChanged = false;
+    // Auto tambah stok (terkonversi ke satuan dasar) & sinkron HPP jika deliveryStatus === "RECEIVED"
     if (newPO.deliveryStatus === "RECEIVED") {
-      newPO.items.forEach((item) => {
-        const mvId = generateId();
-        setStockMovements((prev) => [
-          ...prev,
-          {
-            id: mvId,
-            ingredientId: item.productId,
-            type: "IN",
-            quantity: item.quantity,
-            date: newPO.date || new Date().toISOString(),
-            note: `PO Masuk Stok: ${newPO.poNumber}`,
-            createdBy: currentUser?.name || "System",
-          },
-        ]);
-        setIngredients((prev) =>
-          prev.map((ing) => {
-            if (ing.id === item.productId) {
-              return {
-                ...ing,
-                currentStock: ing.currentStock + item.quantity,
-                costPerUnit: item.unitPrice > 0 ? item.unitPrice : ing.costPerUnit,
-              };
-            }
-            return ing;
-          }),
-        );
-        writeAuditLog("CREATE", "stock_movements", mvId);
-      });
+      productsChanged = applyPoItemsToInventoryAndHpp(
+        newPO.items,
+        `PO Masuk Stok: ${newPO.poNumber}`,
+        poDate,
+        currentUser?.name || "System"
+      );
     }
 
     // Auto potong kas jika status PAID dan ada cashAccountId
@@ -2422,19 +2526,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         {
           id: cashTrxId,
           accountId: newPO.cashAccountId!,
-          date: newPO.date || new Date().toISOString(),
+          date: poDate,
           type: "CASH_OUT",
           amount: newPO.totalAmount,
           category: bahanBakuCat?.name || "Pembelian Bahan",
           categoryId: bahanBakuCat?.id || "cat-bahan-baku",
           description: `Pembelian PO: ${newPO.poNumber} (${newPO.supplierName || "Supplier"})`,
+          vendorName: newPO.supplierName || null,
+          receiptNo: newPO.poNumber,
+          items: buildPoCashItems(newPO.items),
           referenceId: newPO.id,
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
     }
 
-    markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
+    if (productsChanged) {
+      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions", "products");
+    } else {
+      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
+    }
   };
 
   const addDirectMarketPurchase = (data: {
@@ -2468,36 +2579,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setPurchaseOrders((prev) => [...prev, newPO]);
     writeAuditLog("CREATE", "purchase_orders", id);
 
-    // Auto tambahkan mutasi stok IN dan perbarui stok bahan
-    data.items.forEach((item) => {
-      const mvId = generateId();
-      setStockMovements((prev) => [
-        ...prev,
-        {
-          id: mvId,
-          ingredientId: item.productId,
-          type: "IN",
-          quantity: item.quantity,
-          date: nowISO,
-          note: `Belanja Pasar: ${poNumber} (${data.marketName || "Eceran"})`,
-          createdBy: currentUser?.name || "Kasir/Barista",
-        },
-      ]);
-
-      setIngredients((prev) =>
-        prev.map((ing) => {
-          if (ing.id === item.productId) {
-            return {
-              ...ing,
-              currentStock: ing.currentStock + item.quantity,
-              costPerUnit: item.unitPrice > 0 ? item.unitPrice : ing.costPerUnit,
-            };
-          }
-          return ing;
-        }),
-      );
-      writeAuditLog("CREATE", "stock_movements", mvId);
-    });
+    // Auto tambahkan mutasi stok IN (konversi ke satuan dasar) & sinkron HPP
+    const productsChanged = applyPoItemsToInventoryAndHpp(
+      data.items,
+      `Belanja Pasar: ${poNumber} (${data.marketName || "Eceran"})`,
+      nowISO,
+      currentUser?.name || "Kasir/Barista"
+    );
 
     // Auto catat kas keluar pada akun kas yang dipilih
     if (data.cashAccountId && data.totalAmount > 0) {
@@ -2516,13 +2604,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           category: bahanBakuCat?.name || "Pembelian Bahan",
           categoryId: bahanBakuCat?.id || "cat-bahan-baku",
           description: `Belanja Pasar (${data.marketName || "Eceran"}): ${data.items.length} item bahan [${poNumber}]`,
+          vendorName: newPO.supplierName || null,
+          receiptNo: poNumber,
+          items: buildPoCashItems(data.items),
           referenceId: id,
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
     }
 
-    markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
+    if (productsChanged) {
+      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions", "products");
+    } else {
+      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
+    }
     return newPO;
   };
 
@@ -2572,6 +2667,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       category: bahanBakuCat?.name || "Pembelian Bahan",
       categoryId: bahanBakuCat?.id || "cat-bahan-baku",
       description: `Pelunasan Hutang PO ${po.poNumber} (${po.supplierName || "Supplier"})${notes ? ` - ${notes}` : ""}`,
+      vendorName: po.supplierName || null,
+      receiptNo: po.poNumber,
+      items: buildPoCashItems(po.items),
       referenceId: po.id,
     });
 
@@ -2581,41 +2679,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const markPOAsReceived = (id: string) => {
     const po = purchaseOrders.find((p) => p.id === id);
-    if (!po) return;
+    if (!po || po.deliveryStatus === "RECEIVED") return;
 
     setPurchaseOrders((prev) =>
       prev.map((p) => (p.id === id ? { ...p, deliveryStatus: "RECEIVED" } : p)),
     );
     writeAuditLog("UPDATE", "purchase_orders", id);
 
-    // Auto add stock movements & update ingredient stock for each PO item
-    po.items.forEach((item) => {
-      const mvId = generateId();
-      setStockMovements((prev) => [
-        ...prev,
-        {
-          id: mvId,
-          ingredientId: item.productId,
-          type: "IN",
-          quantity: item.quantity,
-          date: new Date().toISOString(),
-          note: `PO Diterima: ${po.poNumber}`,
-          createdBy: currentUser?.name || "System",
-        },
-      ]);
-      // Update ingredient stock directly
-      setIngredients((prev) =>
-        prev.map((ing) => {
-          if (ing.id === item.productId) {
-            return { ...ing, currentStock: ing.currentStock + item.quantity };
-          }
-          return ing;
-        }),
-      );
-      writeAuditLog("CREATE", "stock_movements", mvId);
-    });
+    // Auto add converted stock movements & sinkronkan harga modal + HPP menu saat barang PO tiba
+    const productsChanged = applyPoItemsToInventoryAndHpp(
+      po.items,
+      `PO Diterima: ${po.poNumber}`,
+      new Date().toISOString(),
+      currentUser?.name || "System"
+    );
 
-    markChanged("purchase_orders", "ingredients", "stock_movements");
+    if (productsChanged) {
+      markChanged("purchase_orders", "ingredients", "stock_movements", "products");
+    } else {
+      markChanged("purchase_orders", "ingredients", "stock_movements");
+    }
   };
 
   const deletePurchaseOrder = (id: string) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import {
@@ -29,6 +29,11 @@ import {
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
 import { exportToCSV } from "../utils/export";
+import {
+  calculateCashFlowHppSync,
+  getIngredientPackagingChoices,
+  getPackagingSelectValue,
+} from "../utils/posDomainLogic";
 import { motion, AnimatePresence } from "motion/react";
 
 export const Purchases = () => {
@@ -40,6 +45,9 @@ export const Purchases = () => {
     addDirectMarketPurchase,
     payPurchaseOrder,
     cashAccounts,
+    products,
+    recipes,
+    batchPreparations,
     updatePOStatus,
     markPOAsReceived,
     deletePurchaseOrder,
@@ -246,16 +254,89 @@ export const Purchases = () => {
         )
       );
     } else {
+      const hasMaster = Boolean(
+        product.purchaseUnit && Number(product.conversionFactor) > 0
+      );
+      const factor = hasMaster ? Number(product.conversionFactor) : 1;
+      const unit = hasMaster ? product.purchaseUnit! : product.unit;
+      const unitMode = hasMaster ? ("PURCHASE" as const) : ("BASE" as const);
+      const defaultPrice = hasMaster
+        ? Math.round(
+            Number(product.purchasePrice) > 0
+              ? Number(product.purchasePrice)
+              : Number(product.costPerUnit || 0) * factor
+          )
+        : Math.round(Number(product.costPerUnit || 0));
+
       setCart([
         ...cart,
         {
           productId,
           quantity: 1,
-          unitPrice: Number(product.costPerUnit || 0),
-          subtotal: Number(product.costPerUnit || 0),
+          unitPrice: defaultPrice,
+          subtotal: defaultPrice,
+          unit,
+          unitMode,
+          conversionFactor: factor,
         },
       ]);
     }
+  };
+
+  const handleCartPackagingChange = (productId: string, choiceKey: string) => {
+    const ing = ingredients.find((i) => i.id === productId);
+    if (!ing) return;
+    const choices = getIngredientPackagingChoices(ing);
+    const chosen = choices.find((c) => c.key === choiceKey);
+    if (!chosen) return;
+
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.productId !== productId) return item;
+        let nextUnit = chosen.unit;
+        let factor = chosen.factor;
+        let defaultPrice = 0;
+
+        if (chosen.mode === "CUSTOM") {
+          nextUnit =
+            item.unitMode === "CUSTOM" && item.unit?.trim() ? item.unit : "Karton";
+          const curFactor = Number(item.conversionFactor || 0);
+          factor =
+            item.unitMode === "CUSTOM" && curFactor > 0
+              ? curFactor
+              : Number(ing.conversionFactor) > 0
+                ? Number(ing.conversionFactor)
+                : 1;
+          defaultPrice =
+            Number(ing.costPerUnit || 0) > 0
+              ? Math.round(Number(ing.costPerUnit) * factor)
+              : item.unitPrice;
+        } else if (chosen.mode === "PURCHASE") {
+          defaultPrice = Math.round(
+            Number(ing.purchasePrice) > 0
+              ? Number(ing.purchasePrice)
+              : Number(ing.costPerUnit || 0) * factor
+          );
+        } else if (chosen.mode === "BASE") {
+          defaultPrice = Math.round(Number(ing.costPerUnit || 0));
+        } else {
+          defaultPrice =
+            Number(ing.costPerUnit || 0) > 0
+              ? Math.round(Number(ing.costPerUnit) * factor)
+              : item.unitPrice;
+        }
+
+        const qty = Math.max(1, item.quantity);
+        return {
+          ...item,
+          unitMode: chosen.mode,
+          unit: nextUnit,
+          conversionFactor: factor,
+          unitPrice: defaultPrice,
+          subtotal: qty * defaultPrice,
+        };
+      })
+    );
   };
 
   const updateCartItem = (
@@ -280,6 +361,35 @@ export const Purchases = () => {
   };
 
   const totalAmount = cart.reduce((sum, item) => sum + item.subtotal, 0);
+
+  const poHppPreview = useMemo(() => {
+    const validRows = cart
+      .filter((it) => it.productId && it.subtotal > 0)
+      .map((it) => ({
+        ingredientId: it.productId,
+        unitMode: it.unitMode || "BASE",
+        conversionFactor: it.conversionFactor || 1,
+        qty: it.quantity,
+        unitPrice: it.unitPrice,
+        totalPrice: it.subtotal,
+      }));
+    if (validRows.length === 0) {
+      return {
+        directUpdates: [],
+        batchPrepUpdates: [],
+        productsToUpdate: [],
+        affectedVariantPreviews: [],
+      };
+    }
+    return calculateCashFlowHppSync({
+      itemRows: validRows,
+      ingredients,
+      batchPreparations,
+      products,
+      recipes,
+      priceSyncMethod: "WEIGHTED_AVERAGE",
+    });
+  }, [cart, ingredients, batchPreparations, products, recipes]);
 
   const handleCheckout = (status: "PAID" | "UNPAID") => {
     if (cart.length === 0) return;
@@ -645,8 +755,30 @@ export const Purchases = () => {
                       <h4 className="font-bold text-slate-900 text-sm leading-snug mb-1 group-hover:text-brand-600 transition-colors line-clamp-2">
                         {product.name}
                       </h4>
-                      <p className="text-[11px] text-slate-400">
-                        Biaya Master: {formatCurrency(Number(product.costPerUnit || 0))} / {product.unit}
+                      <p className="text-[11px] text-slate-500">
+                        {product.purchaseUnit && Number(product.conversionFactor) > 0 ? (
+                          <>
+                            Beli:{" "}
+                            <strong className="text-slate-700">
+                              {formatCurrency(
+                                Number(product.purchasePrice) > 0
+                                  ? Number(product.purchasePrice)
+                                  : Math.round(
+                                      Number(product.costPerUnit || 0) *
+                                        Number(product.conversionFactor)
+                                    )
+                              )}
+                            </strong>{" "}
+                            / {product.purchaseUnit}
+                            <span className="block text-[10px] text-slate-400">
+                              Modal resep: {formatCurrency(Number(product.costPerUnit || 0))} / {product.unit}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            Biaya Master: {formatCurrency(Number(product.costPerUnit || 0))} / {product.unit}
+                          </>
+                        )}
                       </p>
                     </div>
 
@@ -987,11 +1119,17 @@ export const Purchases = () => {
                 cart.map((item) => {
                   const product = ingredients.find((p) => p.id === item.productId);
                   const currentStock = product?.currentStock || 0;
+                  const pkgChoices = product ? getIngredientPackagingChoices(product) : [];
+                  const selectValue = getPackagingSelectValue(item, pkgChoices);
+                  const factor =
+                    Number(item.conversionFactor) > 0 ? Number(item.conversionFactor) : 1;
+                  const baseQty = item.quantity * factor;
+                  const costPerBase = baseQty > 0 ? item.subtotal / baseQty : 0;
 
                   return (
                     <div
                       key={item.productId}
-                      className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-2xs space-y-2"
+                      className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-2xs space-y-2.5"
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div>
@@ -999,7 +1137,7 @@ export const Purchases = () => {
                             {product?.name}
                           </h4>
                           <p className="text-[10px] text-slate-400">
-                            Stok saat ini: {currentStock} {product?.unit}
+                            Stok saat ini: {currentStock.toLocaleString("id-ID")} {product?.unit}
                           </p>
                         </div>
                         <button
@@ -1011,11 +1149,62 @@ export const Purchases = () => {
                         </button>
                       </div>
 
+                      {product && (
+                        <div className="space-y-1.5">
+                          <select
+                            value={selectValue}
+                            onChange={(e) =>
+                              handleCartPackagingChange(item.productId, e.target.value)
+                            }
+                            className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-950 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                          >
+                            {pkgChoices.map((choice) => (
+                              <option key={choice.key} value={choice.key}>
+                                Satuan Beli: {choice.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          {item.unitMode === "CUSTOM" && (
+                            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                              <input
+                                type="text"
+                                value={item.unit || ""}
+                                onChange={(e) =>
+                                  updateCartItem(item.productId, { unit: e.target.value })
+                                }
+                                placeholder="Nama kemasan (Karton/Dus)"
+                                className="border border-slate-200 rounded-xl px-2 py-1 text-[11px] bg-slate-50 focus:bg-white outline-none font-medium"
+                              />
+                              <div className="flex items-center gap-1 border border-slate-200 rounded-xl px-2 py-1 bg-slate-50 focus-within:bg-white">
+                                <span className="text-[10px] text-slate-400 shrink-0">Isi:</span>
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  step="any"
+                                  value={item.conversionFactor || ""}
+                                  onChange={(e) =>
+                                    updateCartItem(item.productId, {
+                                      conversionFactor: Math.max(0.01, Number(e.target.value)),
+                                    })
+                                  }
+                                  className="w-full text-right font-mono text-[11px] font-bold bg-transparent outline-none"
+                                />
+                                <span className="text-[10px] text-slate-500 shrink-0">
+                                  {product.unit}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-xs gap-2 pt-2 border-t border-slate-100">
                         <div className="flex items-center gap-1.5">
                           <input
                             type="number"
                             min="1"
+                            step="any"
                             value={item.quantity}
                             onChange={(e) =>
                               updateCartItem(item.productId, {
@@ -1024,6 +1213,9 @@ export const Purchases = () => {
                             }
                             className="w-14 border border-slate-200 rounded-xl px-2 py-1 text-center font-bold text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
                           />
+                          <span className="text-slate-500 text-[11px] font-semibold max-w-[64px] truncate">
+                            {item.unit || product?.unit}
+                          </span>
                           <span className="text-slate-400 text-xs">× Rp</span>
                           <input
                             type="number"
@@ -1041,6 +1233,19 @@ export const Purchases = () => {
                           {formatCurrency(item.subtotal)}
                         </span>
                       </div>
+
+                      {product && (
+                        <div className="text-[10px] text-emerald-700 bg-emerald-50/70 border border-emerald-200/70 rounded-lg px-2 py-1 flex items-center justify-between font-mono">
+                          <span>
+                            Masuk stok: +{baseQty.toLocaleString("id-ID")} {product.unit}
+                          </span>
+                          <span>
+                            Modal baru: Rp{" "}
+                            {costPerBase.toLocaleString("id-ID", { maximumFractionDigits: 2 })}/
+                            {product.unit}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -1049,6 +1254,37 @@ export const Purchases = () => {
 
             {/* Footer Checkout Controls */}
             <div className="p-4 bg-white border-t border-slate-100 space-y-3">
+              {cart.length > 0 &&
+                (purchaseMode === "MARKET" || deliveryOption === "RECEIVED") &&
+                (poHppPreview.directUpdates.length > 0 ||
+                  poHppPreview.affectedVariantPreviews.length > 0) && (
+                  <div className="p-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-1 text-[11px]">
+                    <div className="font-bold text-indigo-950 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Sinkron HPP Otomatis (Weighted Avg):</span>
+                    </div>
+                    <p className="text-[10px] text-indigo-800 leading-snug">
+                      {poHppPreview.directUpdates.length} bahan modal diperbarui
+                      {poHppPreview.batchPrepUpdates.length > 0
+                        ? ` • ${poHppPreview.batchPrepUpdates.length} batch olahan`
+                        : ""}
+                      {poHppPreview.affectedVariantPreviews.length > 0
+                        ? ` • ${poHppPreview.affectedVariantPreviews.length} varian menu ikut disesuaikan`
+                        : ""}
+                      .
+                    </p>
+                  </div>
+                )}
+
+              {cart.length > 0 &&
+                purchaseMode === "DISTRIBUTOR" &&
+                deliveryOption === "PENDING" && (
+                  <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 leading-snug">
+                    Stok masuk & pembaruan HPP menu akan otomatis dijalankan saat barang diklik{" "}
+                    <strong>Terima Barang</strong> di tab Riwayat.
+                  </p>
+                )}
+
               <div className="flex justify-between items-center">
                 <span className="text-xs font-semibold text-slate-500">
                   {isIndo ? "Total Pembelian:" : "Total Amount:"}
@@ -1906,7 +2142,15 @@ export const Purchases = () => {
                           {product?.name || "Unknown Product"}
                         </td>
                         <td className="py-3 px-3 text-slate-600 text-center font-mono">
-                          {item.quantity} {product?.unit}
+                          <span>
+                            {item.quantity} {item.unit || product?.unit}
+                          </span>
+                          {Number(item.conversionFactor || 1) > 1 && (
+                            <span className="block text-[10px] text-slate-400">
+                              (= {(item.quantity * Number(item.conversionFactor)).toLocaleString("id-ID")}{" "}
+                              {product?.unit})
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-slate-600 text-right font-mono">
                           {formatCurrency(item.unitPrice)}

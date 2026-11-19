@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ViewState } from "../types";
+import { ViewState, CashTransactionItem } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { useStore } from "../store/StoreContext";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
-import { AIAssistantModal } from "./AIAssistantModal";
+import { AIAssistantModal, type ParsedTransactionDraft } from "./AIAssistantModal";
 import { ManagerApprovalModal } from "./ManagerApprovalModal";
 import { FEATURES } from "../config/features";
+import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -184,6 +185,12 @@ export const Layout: React.FC<LayoutProps> = ({
     expenseCategories,
     addCashTransaction,
     addStockMovement,
+    ingredients,
+    updateIngredient,
+    products,
+    updateProduct,
+    recipes,
+    batchPreparations,
     employees,
     users,
     unsuspendUser,
@@ -546,49 +553,164 @@ export const Layout: React.FC<LayoutProps> = ({
         onClose={() => setIsAIAssistantOpen(false)}
         initialTab={aiInitialTab}
         initialPrompt={aiInitialPrompt}
+        onOpenInCashFlowModal={(drafts: ParsedTransactionDraft[]) => {
+          setIsAIAssistantOpen(false);
+          onViewChange("cash_flow");
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("open-cashflow-with-ai-draft", { detail: { drafts } })
+            );
+          }, 80);
+        }}
         onApplyTransactions={(txs, options) => {
           if (Array.isArray(txs) && txs.length > 0) {
             const defaultAccountId = cashAccounts?.[0]?.id || "acc-main";
             const nowIso = new Date().toISOString();
+            const stockAddsByIngredientId = new Map<string, number>();
+            const hppInputRows: Array<{
+              ingredientId?: string;
+              unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+              conversionFactor?: number;
+              qty: number;
+              totalPrice: number;
+            }> = [];
+
             txs.forEach((tx) => {
               const targetAccountId = tx.accountId || defaultAccountId;
-              const isIncome = tx.type === "CASH_IN" || tx.type === "IN";
+              const isIncome = tx.type === "CASH_IN" || (tx.type as string) === "IN";
               const targetType: "CASH_IN" | "CASH_OUT" = isIncome ? "CASH_IN" : "CASH_OUT";
               const matchedCatObj = expenseCategories?.find(
                 (c: any) => c.name.toLowerCase() === (tx.category || "").toLowerCase()
               );
               const targetCatId = tx.categoryId || matchedCatObj?.id || null;
+              const qty = Number(tx.quantity) > 0 ? Number(tx.quantity) : 1;
+              const factor =
+                Number(tx.conversionFactor) > 0 ? Number(tx.conversionFactor) : 1;
+              const totalAmount = Math.round(Number(tx.amount || 0));
+
+              const matchedIng = tx.ingredientId
+                ? ingredients.find((i) => i.id === tx.ingredientId)
+                : undefined;
+
+              let itemsPayload: CashTransactionItem[] | undefined = undefined;
+              if (tx.ingredientId || (tx.quantity && Number(tx.quantity) > 0)) {
+                itemsPayload = [
+                  {
+                    ingredientId: tx.ingredientId || undefined,
+                    unitMode:
+                      tx.unitMode || (matchedIng?.purchaseUnit ? "PURCHASE" : "BASE"),
+                    conversionFactor: factor,
+                    name:
+                      tx.ingredientName ||
+                      matchedIng?.name ||
+                      tx.description ||
+                      "Item Belanja",
+                    qty,
+                    unit:
+                      tx.unit ||
+                      matchedIng?.purchaseUnit ||
+                      matchedIng?.unit ||
+                      "pcs",
+                    unitPrice: qty > 0 ? Math.round(totalAmount / qty) : totalAmount,
+                    totalPrice: totalAmount,
+                  },
+                ];
+              }
 
               addCashTransaction({
                 accountId: targetAccountId,
                 type: targetType,
-                amount: Number(tx.amount || 0),
+                amount: totalAmount,
                 category: tx.category || (isIncome ? "Penjualan" : "Operasional"),
                 categoryId: targetCatId,
                 description: tx.description || "Draft AI",
                 date: nowIso,
+                vendorName: tx.vendorName || null,
+                receiptNo: tx.receiptNo || null,
+                items: itemsPayload,
                 createdBy: currentUser?.name || "Julia AI Copilot",
               });
 
-              // If automatic stock update was checked and item is linked to an ingredient
-              if (options?.updateStock && tx.ingredientId && Number(tx.quantity || 0) > 0) {
+              if (!isIncome && tx.ingredientId && totalAmount > 0) {
+                hppInputRows.push({
+                  ingredientId: tx.ingredientId,
+                  unitMode: tx.unitMode || "PURCHASE",
+                  conversionFactor: factor,
+                  qty,
+                  totalPrice: totalAmount,
+                });
+              }
+
+              // Stock addition converted to base recipe unit; only when explicitly checked
+              if (options?.updateStock && !isIncome && tx.ingredientId && qty > 0) {
+                const baseQty = qty * factor;
+                stockAddsByIngredientId.set(
+                  tx.ingredientId,
+                  (stockAddsByIngredientId.get(tx.ingredientId) || 0) + baseQty
+                );
                 addStockMovement({
                   ingredientId: tx.ingredientId,
                   type: "IN",
-                  quantity: Number(tx.quantity),
-                  unitCost: Number(tx.quantity) > 0 ? Math.round(Number(tx.amount) / Number(tx.quantity)) : 0,
-                  totalCost: Number(tx.amount || 0),
+                  quantity: baseQty,
+                  unitCost: baseQty > 0 ? Math.round(totalAmount / baseQty) : 0,
+                  totalCost: totalAmount,
                   date: nowIso,
                   note: `Input Cepat AI: ${tx.description}`,
                   createdBy: currentUser?.name || "Julia AI Copilot",
                 });
               }
             });
+
+            let hppSync: ReturnType<typeof calculateCashFlowHppSync> | null = null;
+            if (options?.syncHpp !== false && hppInputRows.length > 0) {
+              hppSync = calculateCashFlowHppSync({
+                itemRows: hppInputRows,
+                ingredients,
+                batchPreparations,
+                products,
+                recipes,
+                priceSyncMethod: options?.priceSyncMethod || "LAST_PRICE",
+              });
+
+              hppSync.directUpdates.forEach((upd) => {
+                updateIngredient({
+                  ...upd.ingredient,
+                  currentStock:
+                    upd.ingredient.currentStock +
+                    (stockAddsByIngredientId.get(upd.ingredient.id) || 0),
+                });
+              });
+
+              hppSync.batchPrepUpdates.forEach((bUpd) => {
+                updateIngredient({
+                  ...bUpd.ingredient,
+                  currentStock:
+                    bUpd.ingredient.currentStock +
+                    (stockAddsByIngredientId.get(bUpd.ingredient.id) || 0),
+                });
+              });
+
+              hppSync.productsToUpdate.forEach((prod) => {
+                updateProduct(prod);
+              });
+            }
+
+            const notes: string[] = [];
+            if (options?.updateStock && stockAddsByIngredientId.size > 0) {
+              notes.push("stok bahan masuk ditambahkan ke gudang");
+            }
+            if ((hppSync?.directUpdates.length || 0) > 0) {
+              notes.push(`${hppSync!.directUpdates.length} harga modal bahan diperbarui`);
+            }
+            if ((hppSync?.affectedVariantPreviews.length || 0) > 0) {
+              notes.push(
+                `${hppSync!.affectedVariantPreviews.length} HPP varian menu ikut disinkronkan`
+              );
+            }
+
             alert(
               `Berhasil menyimpan ${txs.length} transaksi dari AI ke Buku Kas!${
-                options?.updateStock
-                  ? " Stok bahan masuk juga telah diperbarui di gudang."
-                  : ""
+                notes.length > 0 ? `\n(${notes.join(" • ")})` : ""
               }`
             );
           }

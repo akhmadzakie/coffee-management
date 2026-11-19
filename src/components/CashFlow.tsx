@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
@@ -37,7 +37,11 @@ import {
   Info,
 } from "lucide-react";
 import { CashAccount, CashTransaction, CashTransactionItem, Ingredient } from "../types";
-import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
+import {
+  calculateCashFlowHppSync,
+  getIngredientPackagingChoices,
+  getPackagingSelectValue,
+} from "../utils/posDomainLogic";
 import { CsvImportExport } from "./common/CsvImportExport";
 
 interface CashFlowProps {
@@ -56,110 +60,6 @@ interface DraftItemRow {
   totalPrice: string;
   lastEdited: "unit" | "total";
 }
-
-interface PackagingChoice {
-  key: string;
-  mode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
-  unit: string;
-  factor: number;
-  label: string;
-}
-
-const getIngredientPackagingChoices = (ing: Ingredient): PackagingChoice[] => {
-  const choices: PackagingChoice[] = [];
-  const baseUnit = ing.unit || "pcs";
-  const baseLower = baseUnit.trim().toLowerCase();
-  const masterUnit = (ing.purchaseUnit || "").trim();
-  const masterFactor = Number(ing.conversionFactor) || 0;
-  const hasMaster = Boolean(masterUnit && masterFactor > 0);
-
-  if (hasMaster) {
-    choices.push({
-      key: "PURCHASE",
-      mode: "PURCHASE",
-      unit: masterUnit,
-      factor: masterFactor,
-      label: `${masterUnit} (Master • 1 = ${masterFactor.toLocaleString("id-ID")} ${baseUnit})`,
-    });
-  }
-
-  choices.push({
-    key: "BASE",
-    mode: "BASE",
-    unit: baseUnit,
-    factor: 1,
-    label: `${baseUnit} (Satuan Resep)`,
-  });
-
-  const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
-  const isWeight = ["gr", "g", "gram"].includes(baseLower);
-
-  const presets: { unit: string; factor: number; label: string }[] = isVolume
-    ? [
-        { unit: "Liter", factor: 1000, label: `Liter (1.000 ${baseUnit})` },
-        { unit: "Botol (700ml)", factor: 700, label: `Botol (700 ${baseUnit})` },
-        { unit: "Jerigen (5L)", factor: 5000, label: `Jerigen 5L (5.000 ${baseUnit})` },
-        { unit: "Karton (12L)", factor: 12000, label: `Karton 12L (12.000 ${baseUnit})` },
-        { unit: "Galon (19L)", factor: 19000, label: `Galon 19L (19.000 ${baseUnit})` },
-      ]
-    : isWeight
-      ? [
-          { unit: "Kg", factor: 1000, label: `Kg (1.000 ${baseUnit})` },
-          { unit: "Pack (250g)", factor: 250, label: `Pack 250g (250 ${baseUnit})` },
-          { unit: "Pack (500g)", factor: 500, label: `Pack 500g (500 ${baseUnit})` },
-          { unit: "Dus (5Kg)", factor: 5000, label: `Dus 5Kg (5.000 ${baseUnit})` },
-          { unit: "Dus (10Kg)", factor: 10000, label: `Dus 10Kg (10.000 ${baseUnit})` },
-          { unit: "Karung (25Kg)", factor: 25000, label: `Karung 25Kg (25.000 ${baseUnit})` },
-        ]
-      : [
-          { unit: `Lusin (12${baseUnit})`, factor: 12, label: `Lusin (12 ${baseUnit})` },
-          { unit: `Pack (50${baseUnit})`, factor: 50, label: `Pack (50 ${baseUnit})` },
-          { unit: `Pack (100${baseUnit})`, factor: 100, label: `Pack (100 ${baseUnit})` },
-          { unit: `Dus (500${baseUnit})`, factor: 500, label: `Dus (500 ${baseUnit})` },
-          { unit: `Karton (1000${baseUnit})`, factor: 1000, label: `Karton (1.000 ${baseUnit})` },
-        ];
-
-  const masterLower = masterUnit.toLowerCase();
-  presets.forEach((p) => {
-    const pLower = p.unit.toLowerCase();
-    if (pLower === masterLower || pLower === baseLower) return;
-    choices.push({
-      key: `PRESET:${p.unit}`,
-      mode: "PRESET",
-      unit: p.unit,
-      factor: p.factor,
-      label: p.label,
-    });
-  });
-
-  choices.push({
-    key: "CUSTOM",
-    mode: "CUSTOM",
-    unit: "Karton",
-    factor: hasMaster ? masterFactor : 1,
-    label: "Kemasan Lain / Kustom (Karton, Dus, Pack...)",
-  });
-
-  return choices;
-};
-
-const getPackagingSelectValue = (
-  row: DraftItemRow,
-  choices: PackagingChoice[]
-): string => {
-  if (row.unitMode === "CUSTOM") return "CUSTOM";
-  if (row.unitMode === "BASE") return "BASE";
-  if (row.unitMode === "PURCHASE" && choices.some((c) => c.key === "PURCHASE")) {
-    return "PURCHASE";
-  }
-  if (row.unitMode === "PRESET") {
-    const matchedPreset = choices.find(
-      (c) => c.mode === "PRESET" && c.unit.toLowerCase() === row.unit.toLowerCase()
-    );
-    if (matchedPreset) return matchedPreset.key;
-  }
-  return "CUSTOM";
-};
 
 const UNIT_OPTIONS = [
   "pcs",
@@ -868,6 +768,154 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     setPriceSyncMethod("LAST_PRICE");
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    const handleAiDraftEvent = (e: Event) => {
+      const drafts = (e as CustomEvent)?.detail?.drafts;
+      if (!Array.isArray(drafts) || drafts.length === 0) return;
+
+      const first = drafts[0];
+      const effectiveType: "CASH_IN" | "CASH_OUT" =
+        first.type === "CASH_IN" ? "CASH_IN" : "CASH_OUT";
+
+      setEditingTrx(null);
+      setTrxType(effectiveType);
+
+      const matchedAcc = cashAccounts.find(
+        (a) =>
+          a.id === first.accountId ||
+          (first.accountName &&
+            a.name.toLowerCase().includes(String(first.accountName).toLowerCase()))
+      );
+      setFormAccountId(
+        matchedAcc?.id ||
+          (selectedAccountId !== "all" ? selectedAccountId : cashAccounts[0]?.id || "")
+      );
+      setFormToAccountId("");
+      setFormDate(getLocalDateString());
+
+      const totalAmount = drafts.reduce(
+        (sum: number, d: any) => sum + Math.round(Number(d.amount || 0)),
+        0
+      );
+      setFormAmount(totalAmount > 0 ? String(totalAmount) : "");
+
+      const hasIngredientLink = drafts.some((d: any) => Boolean(d.ingredientId));
+      const matchedCat =
+        effectiveType === "CASH_OUT" && hasIngredientLink
+          ? expenseCategories.find(
+              (c: any) =>
+                !c.parentId &&
+                (c.id === "cat-bahan-baku" ||
+                  c.type === "BAHAN_BAKU" ||
+                  /bahan baku/i.test(c.name))
+            ) ||
+            expenseCategories.find(
+              (c: any) =>
+                c.id === "cat-bahan-baku" ||
+                c.type === "BAHAN_BAKU" ||
+                /bahan baku/i.test(c.name)
+            )
+          : expenseCategories.find((c: any) => c.id === first.categoryId) ||
+            expenseCategories.find(
+              (c: any) =>
+                c.name.toLowerCase() === String(first.category || "").toLowerCase() ||
+                c.id === first.category
+            );
+
+      if (matchedCat) {
+        if (matchedCat.parentId) {
+          setFormParentCategoryId(matchedCat.parentId);
+          setFormCategoryId(matchedCat.id);
+        } else {
+          setFormParentCategoryId(matchedCat.id);
+          setFormCategoryId(matchedCat.id);
+        }
+        setFormCustomCategory("");
+      } else {
+        const defaultRoot = expenseCategories
+          .filter((c: any) => !c.parentId && c.isActive !== false)
+          .find((c: any) =>
+            effectiveType === "CASH_IN" ? c.type === "PENDAPATAN" : c.type !== "PENDAPATAN"
+          );
+        setFormParentCategoryId(defaultRoot?.id || "");
+        setFormCategoryId("");
+        setFormCustomCategory(first.category || "");
+      }
+
+      const firstVendor = drafts.find((d: any) => d.vendorName)?.vendorName || "";
+      const firstReceipt = drafts.find((d: any) => d.receiptNo)?.receiptNo || "";
+      const combinedDesc = drafts
+        .map((d: any) => d.description)
+        .filter(Boolean)
+        .join("; ");
+
+      setFormVendorName(firstVendor);
+      setFormReceiptNo(firstReceipt);
+      setFormDescription(combinedDesc);
+      setFormPaymentMethod(
+        matchedAcc?.type === "BANK" || matchedAcc?.type === "E_WALLET"
+          ? "Transfer"
+          : "Tunai"
+      );
+
+      setUseItemBreakdown(true);
+      setItemRows(
+        drafts.map((d: any, idx: number) => {
+          const matchedIng =
+            (d.ingredientId
+              ? ingredients.find((i) => i.id === d.ingredientId)
+              : undefined) ||
+            ingredients.find(
+              (i) =>
+                d.ingredientName &&
+                i.name.trim().toLowerCase() === String(d.ingredientName).trim().toLowerCase()
+            );
+          const qty = Number(d.quantity) > 0 ? Number(d.quantity) : 1;
+          const rowTotal = Math.round(Number(d.amount || 0));
+          const unitPrice = qty > 0 ? Math.round(rowTotal / qty) : rowTotal;
+          const inferredMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM" = d.unitMode
+            ? d.unitMode
+            : matchedIng?.purchaseUnit &&
+                String(d.unit || "").toLowerCase() === matchedIng.purchaseUnit.toLowerCase()
+              ? "PURCHASE"
+              : matchedIng
+                ? "BASE"
+                : "PURCHASE";
+          const factor =
+            Number(d.conversionFactor) > 0
+              ? Number(d.conversionFactor)
+              : inferredMode === "BASE"
+                ? 1
+                : matchedIng?.conversionFactor && Number(matchedIng.conversionFactor) > 0
+                  ? Number(matchedIng.conversionFactor)
+                  : 1;
+
+          return {
+            id: `ai-${idx}-${Date.now()}`,
+            ingredientId: d.ingredientId || matchedIng?.id || "",
+            unitMode: inferredMode,
+            conversionFactor: String(factor),
+            name: d.ingredientName || matchedIng?.name || d.description || "",
+            qty: String(qty),
+            unit: d.unit || matchedIng?.purchaseUnit || matchedIng?.unit || "pcs",
+            unitPrice: unitPrice > 0 ? String(unitPrice) : "",
+            totalPrice: rowTotal > 0 ? String(rowTotal) : "",
+            lastEdited: "total" as const,
+          };
+        })
+      );
+
+      setSyncIngredientPrices(true);
+      setPriceSyncMethod("LAST_PRICE");
+      setIsModalOpen(true);
+    };
+
+    window.addEventListener("open-cashflow-with-ai-draft", handleAiDraftEvent);
+    return () => {
+      window.removeEventListener("open-cashflow-with-ai-draft", handleAiDraftEvent);
+    };
+  }, [cashAccounts, expenseCategories, ingredients, selectedAccountId]);
 
   // ─── Submit Create / Edit / Transfer ────────────────────────────────────────
   const handleTrxSubmit = (e: React.FormEvent<HTMLFormElement>) => {

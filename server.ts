@@ -3396,9 +3396,179 @@ async function startServer() {
   }
   const GEMINI_MODEL = GEMINI_CANDIDATE_MODELS[0] || "gemini-2.5-flash";
 
+  const resolveIngredientPackagingFromText = (
+    ing: any,
+    rawUnit?: string | null,
+    rawText?: string | null
+  ): {
+    unit: string;
+    unitMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+    conversionFactor: number;
+  } => {
+    const baseUnit = String(ing?.unit || "pcs");
+    const baseLower = baseUnit.trim().toLowerCase();
+    const masterUnit = String(ing?.purchaseUnit || "").trim();
+    const masterFactor = Number(ing?.conversionFactor) || 0;
+    const unitLower = String(rawUnit || "").trim().toLowerCase();
+    const textLower = String(rawText || "").trim().toLowerCase();
+    const combined = `${unitLower} ${textLower}`;
+
+    const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
+    const isWeight = ["gr", "g", "gram"].includes(baseLower);
+
+    if (
+      unitLower === baseLower ||
+      (isWeight && ["g", "gr", "gram"].includes(unitLower)) ||
+      (isVolume && ["ml", "cc"].includes(unitLower))
+    ) {
+      return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
+    }
+
+    if (masterUnit && masterFactor > 0) {
+      const masterFirstWord = masterUnit.toLowerCase().split(/[\s(]/)[0];
+      if (
+        unitLower &&
+        (masterUnit.toLowerCase() === unitLower ||
+          masterUnit.toLowerCase().includes(unitLower) ||
+          (masterFirstWord && unitLower.includes(masterFirstWord)))
+      ) {
+        return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+      }
+    }
+
+    if (isVolume) {
+      if (/\b(karton|crt)\b/.test(combined)) {
+        return { unit: "Karton (12L)", unitMode: "PRESET", conversionFactor: 12000 };
+      }
+      if (/\bgalon\b/.test(combined)) {
+        return { unit: "Galon (19L)", unitMode: "PRESET", conversionFactor: 19000 };
+      }
+      if (/\b(jerigen|dirigen|jerrycan)\b/.test(combined)) {
+        return { unit: "Jerigen (5L)", unitMode: "PRESET", conversionFactor: 5000 };
+      }
+      if (/\b(botol|btl)\b/.test(combined)) {
+        return { unit: "Botol (700ml)", unitMode: "PRESET", conversionFactor: 700 };
+      }
+      if (
+        /\b(liter|ltr|l|kotak)\b/.test(unitLower) ||
+        /\b\d+(?:[.,]\d+)?\s*(liter|ltr|l)\b/i.test(textLower)
+      ) {
+        return { unit: "Liter", unitMode: "PRESET", conversionFactor: 1000 };
+      }
+    } else if (isWeight) {
+      if (/\bkarung\b/.test(combined)) {
+        return { unit: "Karung (25Kg)", unitMode: "PRESET", conversionFactor: 25000 };
+      }
+      if (/\b(bal)\b/.test(combined)) {
+        return { unit: "Plastik (10Kg)", unitMode: "PRESET", conversionFactor: 10000 };
+      }
+      if (/\b(dus|karton|box)\b/.test(combined)) {
+        return { unit: "Dus (10Kg)", unitMode: "PRESET", conversionFactor: 10000 };
+      }
+      if (/500\s*g/.test(combined)) {
+        return { unit: "Pack (500g)", unitMode: "PRESET", conversionFactor: 500 };
+      }
+      if (/250\s*g/.test(combined)) {
+        return { unit: "Pack (250g)", unitMode: "PRESET", conversionFactor: 250 };
+      }
+      if (/\b(kg|kilo|kilogram)\b/.test(combined)) {
+        return { unit: "Kg", unitMode: "PRESET", conversionFactor: 1000 };
+      }
+    } else {
+      if (/\blusin\b/.test(combined)) {
+        return { unit: `Lusin (12${baseUnit})`, unitMode: "PRESET", conversionFactor: 12 };
+      }
+      if (/\b(dus|box)\b/.test(combined)) {
+        return { unit: `Dus (500${baseUnit})`, unitMode: "PRESET", conversionFactor: 500 };
+      }
+      if (/\bkarton\b/.test(combined)) {
+        return { unit: `Karton (1000${baseUnit})`, unitMode: "PRESET", conversionFactor: 1000 };
+      }
+      if (/\bpack\b/.test(combined)) {
+        return { unit: `Pack (100${baseUnit})`, unitMode: "PRESET", conversionFactor: 100 };
+      }
+    }
+
+    if (masterUnit && masterFactor > 0) {
+      return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+    }
+    return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
+  };
+
+  const matchIngredientFromStore = (ingredientsList: any[], text: string) => {
+    if (!Array.isArray(ingredientsList) || ingredientsList.length === 0) return null;
+    const textLower = String(text || "").toLowerCase();
+    return (
+      ingredientsList.find((ing: any) => {
+        const nameLower = String(ing?.name || "").toLowerCase();
+        if (!nameLower) return false;
+        return (
+          textLower.includes(nameLower) ||
+          (nameLower.includes("susu") && /\b(susu|milk|uht|greenfields|diamond)\b/.test(textLower)) ||
+          (nameLower.includes("beans") && /\b(kopi|bean|beans|espresso)\b/.test(textLower)) ||
+          (nameLower.includes("es batu") && /\b(es batu|es kristal|ice)\b/.test(textLower)) ||
+          (nameLower.includes("aren") && /\b(aren)\b/.test(textLower)) ||
+          (nameLower.includes("galon") && /\b(galon|air)\b/.test(textLower)) ||
+          (nameLower.includes("gula pasir") && /\bgula pasir\b/.test(textLower)) ||
+          (nameLower.includes("beras") && /\bberas\b/.test(textLower)) ||
+          (nameLower.includes("ayam") && /\bayam\b/.test(textLower)) ||
+          (nameLower.includes("butter") && /\b(butter|mentega)\b/.test(textLower)) ||
+          (nameLower.includes("croissant") && /\b(croissant|dough)\b/.test(textLower)) ||
+          (nameLower.includes("minyak goreng") && /\bminyak goreng\b/.test(textLower))
+        );
+      }) || null
+    );
+  };
+
+  const enrichParsedTransactionWithStore = (tx: any, storeContext: any, fallbackText?: string) => {
+    const ingredientsList = Array.isArray(storeContext?.ingredients) ? storeContext.ingredients : [];
+    const matchedIng =
+      (tx.ingredientId ? ingredientsList.find((i: any) => i.id === tx.ingredientId) : null) ||
+      matchIngredientFromStore(ingredientsList, `${tx.ingredientName || ""} ${tx.description || ""} ${fallbackText || ""}`);
+
+    if (!matchedIng) {
+      return {
+        ...tx,
+        ingredientId: null,
+        ingredientName: null,
+        quantity: tx.quantity ? Number(tx.quantity) : null,
+        unit: tx.unit || null,
+        unitMode: null,
+        conversionFactor: null,
+      };
+    }
+
+    const qty = Number(tx.quantity) > 0 ? Number(tx.quantity) : 1;
+    const resolvedPack = resolveIngredientPackagingFromText(
+      matchedIng,
+      tx.unit,
+      `${tx.description || ""} ${fallbackText || ""}`
+    );
+    const providedFactor = Number(tx.conversionFactor);
+    const effectiveFactor = providedFactor > 0 ? providedFactor : resolvedPack.conversionFactor;
+    const effectiveMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM" =
+      effectiveFactor === 1
+        ? "BASE"
+        : matchedIng.purchaseUnit &&
+            Number(matchedIng.conversionFactor) === effectiveFactor &&
+            resolvedPack.unitMode === "PURCHASE"
+          ? "PURCHASE"
+          : resolvedPack.unitMode;
+
+    return {
+      ...tx,
+      ingredientId: matchedIng.id,
+      ingredientName: matchedIng.name,
+      quantity: qty,
+      unit: tx.unit && providedFactor > 0 ? tx.unit : resolvedPack.unit,
+      unitMode: effectiveMode,
+      conversionFactor: effectiveFactor,
+    };
+  };
+
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
-      const { text, imageBase64, mimeType, fileName } = req.body;
+      const { text, imageBase64, mimeType, fileName, storeContext } = req.body;
       let apiKey = process.env.GEMINI_API_KEY || null;
       try {
         const settings = await db.select().from(schema.settings).limit(1);
@@ -3437,10 +3607,12 @@ async function startServer() {
         const fallbackTransactions: any[] = [];
 
         for (const line of lines) {
-          const matchNumber = line.match(/(\d+(?:\.\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
+          const sanitizedLine = line.replace(/\b\d+\s*[*xX]\s*\d+\b/g, " ");
+          const rpMatch = sanitizedLine.match(/(?:rp|rp\.?|seharga|total|harga|biaya)\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
+          const matchNumber = rpMatch || sanitizedLine.match(/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i);
           let amount = 0;
           if (matchNumber) {
-            let num = parseFloat(matchNumber[1]);
+            let num = parseFloat(matchNumber[1].replace(",", "."));
             const unit = (matchNumber[2] || "").toLowerCase();
             if (unit === "rb" || unit === "ribu" || unit === "k") num *= 1000;
             else if (unit === "jt" || unit === "juta") num *= 1000000;
@@ -3451,34 +3623,67 @@ async function startServer() {
           }
 
           const isIncome = /pendapatan|omset|masuk|setor|terima|income/i.test(line);
-          const isIngredient = /susu|biji|kopi|syrup|sirup|bean|powder|cup|sedotan|creamer|gula|teh/i.test(line);
+          const isIngredient = /susu|biji|kopi|syrup|sirup|bean|powder|cup|sedotan|creamer|gula|teh|aren|es|galon|beras|ayam|butter|minyak/i.test(line);
           const category = isIngredient ? "Bahan Baku" : (isIncome ? "Penjualan" : "Operasional");
+          const qtyMatch = line.match(/(\d+(?:[.,]\d+)?)\s*(liter|ltr|l|kg|gr|gram|pcs|pack|karung|karton|dus|bal|botol|galon|jerigen|kotak)/i);
+          const qty = qtyMatch ? parseFloat(qtyMatch[1].replace(",", ".")) : 1;
+          const rawUnit = qtyMatch ? qtyMatch[2] : null;
+          const matchedIng = matchIngredientFromStore(storeContext?.ingredients || [], line);
 
-          fallbackTransactions.push({
-            type: isIncome ? "CASH_IN" : "CASH_OUT",
-            amount,
-            category,
-            description: line.replace(/(\d+(?:\.\d+)?)\s*(rb|ribu|k|jt|juta)?/gi, "").trim() || line
-          });
+          fallbackTransactions.push(
+            enrichParsedTransactionWithStore(
+              {
+                type: isIncome ? "CASH_IN" : "CASH_OUT",
+                amount,
+                category,
+                description: line.replace(/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/gi, "").trim() || line,
+                ingredientId: matchedIng?.id || null,
+                ingredientName: matchedIng?.name || null,
+                quantity: qty,
+                unit: rawUnit,
+              },
+              storeContext,
+              line
+            )
+          );
         }
 
         // If no lines parsed from text, but user uploaded a file
         if (fallbackTransactions.length === 0) {
           const nameLower = (fileName || "").toLowerCase();
+          const matchedFromFile = matchIngredientFromStore(storeContext?.ingredients || [], nameLower);
           if (nameLower.includes("susu") || nameLower.includes("milk")) {
-            fallbackTransactions.push({
-              type: "CASH_OUT",
-              amount: 95000,
-              category: "Bahan Baku",
-              description: `Pengadaan Susu Segar (${fileName || "Invoice"})`
-            });
+            fallbackTransactions.push(
+              enrichParsedTransactionWithStore(
+                {
+                  type: "CASH_OUT",
+                  amount: 95000,
+                  category: "Bahan Baku",
+                  description: `Pengadaan Susu Segar (${fileName || "Invoice"})`,
+                  ingredientId: matchedFromFile?.id || null,
+                  quantity: 5,
+                  unit: "liter",
+                },
+                storeContext,
+                nameLower
+              )
+            );
           } else if (nameLower.includes("kopi") || nameLower.includes("bean") || nameLower.includes("roast")) {
-            fallbackTransactions.push({
-              type: "CASH_OUT",
-              amount: 185000,
-              category: "Bahan Baku",
-              description: `Biji Kopi Espresso Blend 1kg (${fileName || "Invoice"})`
-            });
+            fallbackTransactions.push(
+              enrichParsedTransactionWithStore(
+                {
+                  type: "CASH_OUT",
+                  amount: 185000,
+                  category: "Bahan Baku",
+                  description: `Biji Kopi Espresso Blend 1kg (${fileName || "Invoice"})`,
+                  ingredientId: matchedFromFile?.id || null,
+                  quantity: 1,
+                  unit: "kg",
+                },
+                storeContext,
+                nameLower
+              )
+            );
           } else if (nameLower.includes("cup") || nameLower.includes("kemasan")) {
             fallbackTransactions.push({
               type: "CASH_OUT",
@@ -3512,19 +3717,36 @@ async function startServer() {
       const ai = new GoogleGenAI({ apiKey });
       const contents: any[] = [];
 
-      let promptText = "You are an AI assistant for a Coffee Shop management system. ";
+      let promptText = `Anda adalah asisten data entry akuntansi untuk Coffee Shop "Julia's Specialty Room".
+Konteks Akun Kas: ${JSON.stringify(storeContext?.cashAccounts?.map((a: any) => a.name) || ["Laci Kasir", "Kas Utama", "Bank BCA"])}
+Kategori Tersedia: ${JSON.stringify(storeContext?.categories?.map((c: any) => c.name) || ["Bahan Baku", "Operasional", "Kebersihan & Sanitasi", "Utilitas", "Pendapatan"])}
+Master Bahan Baku Toko (cocokkan jika item adalah bahan baku): ${JSON.stringify(
+        storeContext?.ingredients?.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          baseUnit: i.unit,
+          purchaseUnit: i.purchaseUnit,
+          conversionFactor: i.conversionFactor,
+        })) || []
+      )}
+
+Instruksi Ekstraksi:
+- Pecah tiap baris barang pada nota menjadi transaksi terpisah atau per item jelas jika tertera harganya, pastikan total amount sesuai harga barang di nota.
+- Jika item cocok dengan Master Bahan Baku Toko, isi ingredientId, ingredientName, quantity (angka beli), unit (kemasan beli mis. "Liter", "Kg", "Karton (12L)", "Dus", "Pack", "gr", "ml"), dan conversionFactor (berapa isi baseUnit dalam 1 unit beli tersebut, mis. 1 Liter = 1000 ml, 1 Karton 12L = 12000 ml, 1 Kg = 1000 gr).
+- Jika tertera di nota, ekstrak juga vendorName (nama toko/supplier) dan receiptNo (nomor struk/invoice).
+`;
 
       if (imageBase64) {
         const isPdf = mimeType === "application/pdf" || fileName?.toLowerCase().endsWith(".pdf");
         const isImage = mimeType?.startsWith("image/") || fileName?.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif|heic)$/);
 
         if (isPdf) {
-          promptText += "Analyze this PDF invoice/receipt document. Identify all items purchased, prices, quantities, and the total. Also categorize each (e.g., 'Operasional', 'Bahan Baku', etc). ";
+          promptText += "Analisis dokumen faktur/nota PDF terlampir secara teliti. ";
           contents.push({
             inlineData: { data: imageBase64, mimeType: "application/pdf" }
           });
         } else if (isImage) {
-          promptText += "Analyze this receipt image. Identify the items bought, prices, and the total. Also categorize it (e.g., 'Operasional', 'Bahan Baku', etc). ";
+          promptText += "Analisis foto struk/nota belanja terlampir secara teliti. ";
           contents.push({
             inlineData: { data: imageBase64, mimeType: mimeType || "image/jpeg" }
           });
@@ -3532,11 +3754,10 @@ async function startServer() {
       }
 
       if (effectiveText) {
-        promptText += "The user input / document text is: '" + effectiveText + "'. ";
-        promptText += "Parse this text and extract any expenses, incomes, or stock updates. ";
+        promptText += `\nTeks/Catatan tambahan pengguna: "${effectiveText}"\n`;
       }
 
-      promptText += "Return the result strictly as a JSON object matching this schema: { transactions: [{ type: 'CASH_OUT' | 'CASH_IN', amount: number, category: string, description: string }] }";
+      promptText += "Kembalikan hasil HANYA dalam format JSON sesuai schema.";
 
       contents.push({ text: promptText });
 
@@ -3556,7 +3777,15 @@ async function startServer() {
                     type: { type: Type.STRING, enum: ["CASH_OUT", "CASH_IN"] },
                     amount: { type: Type.NUMBER },
                     category: { type: Type.STRING },
-                    description: { type: Type.STRING }
+                    description: { type: Type.STRING },
+                    accountName: { type: Type.STRING },
+                    vendorName: { type: Type.STRING },
+                    receiptNo: { type: Type.STRING },
+                    ingredientId: { type: Type.STRING },
+                    ingredientName: { type: Type.STRING },
+                    quantity: { type: Type.NUMBER },
+                    unit: { type: Type.STRING },
+                    conversionFactor: { type: Type.NUMBER },
                   },
                   required: ["type", "amount", "category", "description"]
                 }
@@ -3572,7 +3801,10 @@ async function startServer() {
       }
 
       const result = JSON.parse(jsonStr);
-      res.json(result);
+      const enrichedTransactions = Array.isArray(result?.transactions)
+        ? result.transactions.map((tx: any) => enrichParsedTransactionWithStore(tx, storeContext, effectiveText))
+        : [];
+      res.json({ ...result, transactions: enrichedTransactions });
     } catch (e: any) {
       console.error("AI parse error:", e);
       res.status(500).json({ error: e?.message || "Failed to parse with AI" });
@@ -3623,11 +3855,11 @@ async function startServer() {
 
           // Detect category
           let category = "Operasional";
-          if (/susu|milk|kopi|bean|espresso|syrup|sirup|teh|tea|matcha|aren|creamer|oat|butter|mentega|croissant|daging|ayam|beras|saus/i.test(sentence)) {
+          if (/susu|milk|kopi|bean|espresso|syrup|sirup|teh|tea|matcha|aren|creamer|oat|butter|mentega|croissant|daging|ayam|beras|saus|es|galon|air/i.test(sentence)) {
             category = "Bahan Baku";
-          } else if (/es|ice|galon|air|cup|lid|sedotan|straw|paper|seal|plastik/i.test(sentence)) {
-            category = "Operasional Bar";
-          } else if (/sabun|sunlight|sampah|tissue|tisu|pel|sapu|lap|kebersihan|kantong|plastik/i.test(sentence)) {
+          } else if (/cup|lid|sedotan|straw|paper|seal|plastik/i.test(sentence)) {
+            category = "Packaging & Kemasan";
+          } else if (/sabun|sunlight|sampah|tissue|tisu|pel|sapu|lap|kebersihan|kantong/i.test(sentence)) {
             category = "Kebersihan & Sanitasi";
           } else if (/listrik|pln|wifi|indihome|pdam|gas|lpg/i.test(sentence)) {
             category = "Utilitas";
@@ -3643,38 +3875,37 @@ async function startServer() {
             accountName = "Kas Utama";
           }
 
-          // Attempt to match with known ingredients in storeContext
-          let matchedIngredient: any = null;
+          // Detect vendor ("di Indogrosir", "dari Supplier X")
+          const vendorMatch = sentence.match(/\b(?:di|dari|toko)\s+([A-Z][A-Za-z0-9\s.&'-]{2,25})/);
+          const vendorName = vendorMatch ? vendorMatch[1].trim() : null;
+
+          // Match with known ingredients in storeContext
           let quantity = 1;
-          const qtyMatch = sentence.match(/(\d+(?:[.,]\d+)?)\s*(liter|l|kg|gr|gram|pcs|pack|karung|karton|dus|bal|botol|galon)/i);
+          const qtyMatch = sentence.match(/(\d+(?:[.,]\d+)?)\s*(liter|ltr|l|kg|gr|gram|pcs|pack|karung|karton|dus|bal|botol|galon|jerigen|kotak)/i);
           if (qtyMatch) {
             quantity = parseFloat(qtyMatch[1].replace(",", "."));
           }
+          const rawUnit = qtyMatch ? qtyMatch[2] : null;
+          const matchedIngredient = matchIngredientFromStore(storeContext?.ingredients || [], sentence);
 
-          if (Array.isArray(storeContext?.ingredients)) {
-            const sentenceLower = sentence.toLowerCase();
-            matchedIngredient = storeContext.ingredients.find((ing: any) => {
-              const nameLower = (ing.name || "").toLowerCase();
-              return sentenceLower.includes(nameLower) ||
-                (nameLower.includes("susu") && sentenceLower.includes("susu")) ||
-                (nameLower.includes("beans") && sentenceLower.includes("kopi")) ||
-                (nameLower.includes("es batu") && (sentenceLower.includes("es") || sentenceLower.includes("kristal"))) ||
-                (nameLower.includes("aren") && sentenceLower.includes("aren")) ||
-                (nameLower.includes("galon") && (sentenceLower.includes("galon") || sentenceLower.includes("air")));
-            });
-          }
-
-          transactions.push({
-            type,
-            amount,
-            category,
-            description: sentence.trim(),
-            accountName,
-            ingredientId: matchedIngredient?.id || null,
-            ingredientName: matchedIngredient?.name || null,
-            quantity: matchedIngredient ? quantity : null,
-            unit: matchedIngredient?.unit || (qtyMatch ? qtyMatch[2] : null),
-          });
+          transactions.push(
+            enrichParsedTransactionWithStore(
+              {
+                type,
+                amount,
+                category,
+                description: sentence.trim(),
+                accountName,
+                vendorName,
+                ingredientId: matchedIngredient?.id || null,
+                ingredientName: matchedIngredient?.name || null,
+                quantity,
+                unit: rawUnit,
+              },
+              storeContext,
+              sentence
+            )
+          );
         }
 
         return {
@@ -3691,8 +3922,16 @@ async function startServer() {
 Tugas Anda: mengekstrak catatan kasir/staf dalam bahasa Indonesia santai menjadi transaksi kas terstruktur.
 
 Konteks Akun Kas: ${JSON.stringify(storeContext?.cashAccounts?.map((a: any) => a.name) || ["Laci Kasir", "Kas Utama", "Bank BCA"])}
-Kategori Tersedia: ${JSON.stringify(storeContext?.categories?.map((c: any) => c.name) || ["Bahan Baku", "Operasional Bar", "Kebersihan & Sanitasi", "Utilitas", "Pendapatan Lain"])}
-Daftar Bahan Baku di Gudang/Bar: ${JSON.stringify(storeContext?.ingredients?.map((i: any) => ({ id: i.id, name: i.name, unit: i.unit })) || [])}
+Kategori Tersedia: ${JSON.stringify(storeContext?.categories?.map((c: any) => c.name) || ["Bahan Baku", "Packaging & Kemasan", "Kebersihan & Sanitasi", "Utilitas", "Pendapatan Lain"])}
+Daftar Bahan Baku di Gudang/Bar: ${JSON.stringify(
+            storeContext?.ingredients?.map((i: any) => ({
+              id: i.id,
+              name: i.name,
+              baseUnit: i.unit,
+              purchaseUnit: i.purchaseUnit,
+              conversionFactor: i.conversionFactor,
+            })) || []
+          )}
 
 Teks Catatan: "${text}"
 
@@ -3701,10 +3940,10 @@ Aturan Pemrosesan:
 2. Abaikan format dimensi ukuran (misal 80x100, 30x40). Jangan jadikan ukuran sebagai nominal harga!
 3. Prioritaskan angka dengan awalan 'Rp', 'harga', atau 'total' sebagai nominal transaksi.
 4. Tentukan type: "CASH_OUT" untuk belanja/beli/bayar/keluar, "CASH_IN" untuk pemasukan/terima/omset.
-5. Untuk CASH_OUT (misal plastik sampah, sabun, kantong), jangan pernah gunakan kategori Pendapatan, gunakan kategori biaya operasional/kebersihan.
-3. Cocokkan accountName jika pengguna menyebut "laci/kasir", "bank/bca", atau "kas utama".
-4. Jika nama bahan disebutkan (susu, beans, es, gula aren, galon, dsb), cocokkan ingredientId & ingredientName dari daftar bahan baku, sertakan quantity dan unitnya.
-5. Buat summary bahasa Indonesia yang ringkas dan ramah.`;
+5. Untuk CASH_OUT (misal plastik sampah, sabun, kantong), jangan pernah gunakan kategori Pendapatan; untuk bahan baku gunakan kategori "Bahan Baku" atau sub-kategori yang paling relevan.
+6. Cocokkan accountName jika pengguna menyebut "laci/kasir", "bank/bca", atau "kas utama". Ekstrak vendorName jika menyebut nama toko/supplier.
+7. Jika nama bahan disebutkan (susu, beans, es, gula aren, galon, dsb), cocokkan ingredientId & ingredientName dari daftar bahan baku, sertakan quantity, unit kemasan beli (misal "Liter", "Kg", "Karton (12L)", "Plastik (10Kg)", "Galon (19L)"), dan conversionFactor (berapa baseUnit per 1 unit beli tersebut, misal 1 Liter = 1000 ml, 1 Karton 12L = 12000 ml).
+8. Buat summary bahasa Indonesia yang ringkas dan ramah.`;
 
           const { response } = await generateContentWithFallback(ai, {
             model: GEMINI_MODEL,
@@ -3725,10 +3964,12 @@ Aturan Pemrosesan:
                         category: { type: Type.STRING },
                         description: { type: Type.STRING },
                         accountName: { type: Type.STRING },
+                        vendorName: { type: Type.STRING },
                         ingredientId: { type: Type.STRING },
                         ingredientName: { type: Type.STRING },
                         quantity: { type: Type.NUMBER },
                         unit: { type: Type.STRING },
+                        conversionFactor: { type: Type.NUMBER },
                       },
                       required: ["type", "amount", "category", "description"],
                     },
@@ -3742,7 +3983,10 @@ Aturan Pemrosesan:
           const jsonStr = response.text;
           if (jsonStr) {
             const parsed = JSON.parse(jsonStr);
-            return res.json({ ...parsed, source: "gemini" });
+            const enrichedTransactions = Array.isArray(parsed?.transactions)
+              ? parsed.transactions.map((tx: any) => enrichParsedTransactionWithStore(tx, storeContext, text))
+              : [];
+            return res.json({ ...parsed, transactions: enrichedTransactions, source: "gemini" });
           }
         } catch (genErr: any) {
           console.warn("Gemini natural parser failed, falling back to local NLP:", genErr?.message);
@@ -3770,16 +4014,16 @@ Aturan Pemrosesan:
       } catch { }
 
       const prompt = `Anda adalah "Julia Coffee AI Copilot" — penasihat bisnis eksekutif untuk "Julia's Specialty Room • Coffee • Eatery".
-Berdasarkan data performa toko berikut:
+Berdasarkan DATA AKTUAL toko berikut:
 ${JSON.stringify(metrics || {})}
 
-Berikan ringkasan eksekutif manajemen yang padat, berbobot, dan actionable dalam format Markdown dengan 4 bagian:
-1. 🩺 **Evaluasi Kesehatan Finansial & Profitabilitas**: Analisis margin, arus kas, dan run-rate omzet.
-2. 🚨 **Audit Stok Kritis & Tindakan Segera**: Soroti bahan baku yang menipis/habis dan urutan prioritas belanja harian.
-3. ☕ **Optimalisasi Menu & Food Cost**: Rekomendasi upselling menu margin tinggi (espresso based, specialty) dan strategi untuk menu lambat (slow-moving).
-4. ⚡ **Taktik Operasional & Jam Sibuk**: Rekomendasi alokasi barista dan promo jam sepi (14:00 - 17:00).
+Berikan ringkasan eksekutif manajemen yang padat, berbasis angka nyata di atas, dan actionable dalam format Markdown dengan 4 bagian:
+1. 🩺 **Evaluasi Kesehatan Finansial, Kas & Hutang PO**: Analisis omzet aktual, pengeluaran, margin bersih, likuiditas pos kas, serta kewajiban PO jatuh tempo.
+2. 🚨 **Audit Stok Kritis & Tindakan Segera**: Sebutkan nama bahan baku yang menipis beserta estimasi biaya restock-nya.
+3. ☕ **Audit HPP & Optimalisasi Margin Menu**: Soroti menu nyata dari data \`menuAudit\` (terutama yang foodCostPct > 35% atau produk terlaris \`topProducts\`) dan beri saran penyesuaian harga/resep.
+4. ⚡ **Taktik Operasional & Jam Sibuk**: Rekomendasi alokasi barista dan promo terukur.
 
-Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas dan angka bold. Jangan bertele-tele.`;
+Gunakan bahasa Indonesia yang profesional, hangat, sebutkan nama menu/bahan & angka Rupiah aktual dari data (jangan mengarang angka jika tersedia di data).`;
 
       if (apiKey) {
         try {
@@ -3787,7 +4031,7 @@ Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas d
           const { response } = await generateContentWithFallback(ai, {
             model: GEMINI_MODEL,
             contents: [{ text: prompt }],
-            config: { temperature: 0.6 },
+            config: { temperature: 0.5 },
           });
 
           if (response.text) {
@@ -3801,39 +4045,69 @@ Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas d
         }
       }
 
-      // Smart local executive briefing generator
-      const rev = metrics?.totalRevenue || 0;
-      const exp = metrics?.totalExpense || 0;
-      const profit = Math.max(0, rev - exp);
+      // Data-driven local executive briefing generator
+      const rev = Number(metrics?.totalRevenue || 0);
+      const exp = Number(metrics?.totalExpense || 0);
+      const profit = rev - exp;
       const margin = rev > 0 ? Math.round((profit / rev) * 100) : 0;
-      const lowStockCount = Array.isArray(metrics?.lowStockItems) ? metrics.lowStockItems.length : 0;
-      const lowStockNames = Array.isArray(metrics?.lowStockItems)
-        ? metrics.lowStockItems.slice(0, 3).map((i: any) => `${i.name} (Sisa: ${i.currentStock} ${i.unit})`).join(", ")
-        : "Tidak ada stok kritis";
+      const totalLiquidity = Number(metrics?.totalCashLiquidity || 0);
+      const unpaidPoTotal = Number(metrics?.unpaidPoTotal || 0);
+      const lowStockList = Array.isArray(metrics?.lowStockItems) ? metrics.lowStockItems : [];
+      const lowStockCount = lowStockList.length;
+      const lowStockNames = lowStockCount > 0
+        ? lowStockList.slice(0, 4).map((i: any) => `${i.name} (Sisa: ${i.currentStock} ${i.unit}, Min: ${i.minStock} ${i.unit})`).join("; ")
+        : "Tidak ada bahan di bawah stok minimum";
 
-      const localBriefing = `### 🩺 1. Evaluasi Kesehatan Finansial & Profitabilitas
-- **Omzet Tercatat:** Rp ${Number(rev).toLocaleString("id-ID")} dengan Pengeluaran Rp ${Number(exp).toLocaleString("id-ID")}.
-- **Estimasi Laba Bersih Operasional:** Rp ${Number(profit).toLocaleString("id-ID")} (Margin **${margin}%**).
-- **Rekomendasi:** Rasio biaya ideal specialty coffee adalah food cost 28-32% dan operasional maksimal 20%. Posisi keuangan toko saat ini dalam koridor **${margin >= 25 ? "Sangat Sehat & Produktif" : "Perlu Pengetatan Pengeluaran Kas Kecil"}**.
+      const menuAuditList = Array.isArray(metrics?.menuAudit) ? metrics.menuAudit : [];
+      const highFoodCostMenus = menuAuditList
+        .filter((m: any) => Number(m.foodCostPct) > 35)
+        .sort((a: any, b: any) => b.foodCostPct - a.foodCostPct)
+        .slice(0, 3);
+      const topProducts = Array.isArray(metrics?.topProducts) ? metrics.topProducts.slice(0, 3) : [];
+
+      const localBriefing = `### 🩺 1. Evaluasi Kesehatan Finansial, Kas & Hutang PO
+- **Omzet Tercatat:** Rp ${rev.toLocaleString("id-ID")} | **Pengeluaran:** Rp ${exp.toLocaleString("id-ID")}.
+- **Net Cash / Estimasi Laba:** Rp ${profit.toLocaleString("id-ID")} (Margin **${margin}%**).
+- **Total Saldo Kas & Bank:** Rp ${totalLiquidity.toLocaleString("id-ID")} | **Hutang PO Belum Lunas:** Rp ${unpaidPoTotal.toLocaleString("id-ID")}.
+- **Rekomendasi:** ${
+        unpaidPoTotal > totalLiquidity
+          ? "⚠️ Hutang PO melebihi saldo kas likuid saat ini; prioritaskan pelunasan bertahap & kontrol belanja harian."
+          : "Posisi likuiditas aman untuk menutup kewajiban supplier. Jaga rasio food cost ideal di kisaran 28–32%."
+      }
 
 ---
 
 ### 🚨 2. Audit Stok Kritis & Tindakan Segera
 - Terdeteksi **${lowStockCount} bahan baku** berada di bawah batas stok minimum (*safety stock*).
 - **Prioritas Belanja:** ${lowStockNames}.
-- **Tindakan:** Segera lakukan pemesanan ke supplier atau belanja pasar harian sebelum jam sibuk esok hari agar alur pesanan kasir tidak tertunda.
+- **Tindakan:** Gunakan tab **Input Pintar AI** atau **Arus Kas** untuk mencatat belanja restock dan menyinkronkan harga modal terbaru ke HPP menu.
 
 ---
 
-### ☕ 3. Optimalisasi Menu & Food Cost
-- **Cash Cow Produk:** Kopi susu gula aren dan espresso-based beverage memiliki kontribusi margin tertinggi (>65%).
-- **Saran Menu Engineering:** Pasang paket pairing kopi filter/espresso dengan pastry/croissant untuk mendongkrak rata-rata belanja (*basket size*) dari Rp 28.000 menjadi Rp 45.000 per struk.
+### ☕ 3. Audit HPP & Optimalisasi Margin Menu
+${
+  highFoodCostMenus.length > 0
+    ? `- **Menu Perlu Evaluasi Food Cost (>35%):**\n${highFoodCostMenus
+        .map(
+          (m: any) =>
+            `  - **${m.name}**: Jual Rp ${Number(m.price).toLocaleString("id-ID")} | HPP Rp ${Number(m.hpp).toLocaleString("id-ID")} (Food Cost **${m.foodCostPct}%**)`
+        )
+        .join("\n")}`
+    : "- Seluruh varian menu yang memiliki data HPP tercatat berada dalam koridor food cost sehat (≤ 35%)."
+}
+${
+  topProducts.length > 0
+    ? `- **Produk Terlaris:** ${topProducts
+        .map((p: any) => `${p.name} (${p.qty} terjual • Rp ${Number(p.rev).toLocaleString("id-ID")})`)
+        .join(", ")}.`
+    : "- Belum ada transaksi item penjualan terinci untuk pemeringkatan produk terlaris."
+}
 
 ---
 
 ### ⚡ 4. Taktik Operasional & Jam Sibuk
-- **Rush Hour (11:00 - 13:00 & 19:00 - 21:00):** Terapkan pembagian barista tetap (1 fokus dial-in espresso & steaming susu, 1 floater kasir & packaging).
-- **Slow Hours (14:00 - 17:00):** Luncurkan promo *Afternoon Working Space* dengan voucher potongan pastry untuk menarik pelanggan komunitas remote work.`;
+- **Rush Hour (11:00 - 13:00 & 19:00 - 21:00):** Pisahkan peran Barista Espresso/Milk dengan Floater Kasir & Packaging agar antrean tidak menumpuk.
+- **Slow Hours (14:00 - 17:00):** Dorong paket bundling minuman margin tinggi (>65%) dengan pastry untuk meningkatkan rata-rata nilai transaksi (*basket size*).`;
 
       return res.json({
         briefing: localBriefing,
@@ -3861,10 +4135,10 @@ Gunakan bahasa Indonesia yang profesional, hangat, menggunakan poin-poin tegas d
 
       const systemInstruction = `Anda adalah "Julia Coffee AI Copilot" — konsultan bisnis eksekutif dan pakar operasional specialty coffee shop Indonesia.
 Tugas Anda:
-1. Memberikan rekomendasi bisnis, HPP, strategi promo, menu engineering, dan efisiensi barista secara praktis, terukur, dan profesional.
-2. Menggunakan gaya bahasa bahasa Indonesia yang ramah, sopan, ringkas, dan terstruktur (gunakan bullet points, bolding untuk angka dan poin kunci).
-3. Memberikan perhitungan matematis yang jelas jika ditanya tentang margin, HPP kopi susu, food cost target (28%-32%), atau target omset.
-4. Konteks toko saat ini (jika ada): ${storeContext ? JSON.stringify(storeContext) : "Coffee Shop aktif"}.
+1. SELALU prioritaskan menganalisis angka aktual dari konteks toko di bawah ini (omzet, saldo kas, daftar menu beserta harga jual & HPP/foodCostPct, bahan kritis, hutang PO, dan produk terlaris) sebelum memberi saran umum.
+2. Sebutkan nama menu, bahan baku, atau akun kas yang spesifik dari toko pengguna beserta angka Rupiahnya bila relevan dengan pertanyaan.
+3. Menggunakan gaya bahasa Indonesia yang ramah, ringkas, dan terstruktur (bullet points, bold angka kunci).
+4. Data Aktual Toko Saat Ini: ${storeContext ? JSON.stringify(storeContext) : "Coffee Shop aktif"}.
 Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable insights).`;
 
       if (apiKey) {
@@ -3894,7 +4168,7 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
               systemInstruction: {
                 parts: [{ text: systemInstruction }]
               },
-              temperature: 0.7,
+              temperature: 0.6,
             }
           });
 
@@ -3907,57 +4181,116 @@ Jawab dengan padat, berbobot, dan langsung memberikan langkah aksi (actionable i
         }
       }
 
-      // Intelligent Local Coffee Consultant Fallback
+      // Data-Driven Local Coffee Consultant Fallback
       const lower = message.toLowerCase();
       let fallbackReply = "";
+      const ctxMenuAudit = Array.isArray(storeContext?.menuAudit) ? storeContext.menuAudit : [];
+      const ctxLowStock = Array.isArray(storeContext?.lowStockItems) ? storeContext.lowStockItems : [];
+      const ctxRev = Number(storeContext?.totalRevenue || 0);
+      const ctxExp = Number(storeContext?.totalExpense || 0);
+      const ctxCash = Number(storeContext?.totalCashLiquidity || 0);
+      const ctxUnpaidPo = Number(storeContext?.unpaidPoTotal || 0);
 
-      if (lower.includes("hpp") || lower.includes("margin") || lower.includes("harga")) {
-        fallbackReply = `### ☕ Rekomendasi Kalkulasi HPP & Margin Kopi
-1. **Target Food Cost Ideal:** Untuk specialty coffee shop, rasio HPP ideal adalah **28% - 32%** dari harga jual nett.
-2. **Contoh Kopi Susu Gula Aren (Cup 12oz):**
-   - Espresso 20g (Beans Rp 250rb/kg): **Rp 5.000**
-   - Susu Fresh Milk 120ml (Rp 18rb/liter): **Rp 2.160**
-   - Sirup Gula Aren 20ml: **Rp 800**
-   - Cup, Lid, Straw, Seal: **Rp 1.200**
-   - **Total HPP Pokok:** **Rp 9.160**
-3. **Harga Jual Rekomendasi:** Rp 24.000 - Rp 28.000 (Gross Margin mencapai **62% - 67%**).
-4. **Tips Profit:** Bundling dengan pastry/croissant dengan margin minimal 50% untuk menaikkan Average Basket Size pelanggan.`;
+      if (storeContext?.feature === "HPP_CALCULATOR") {
+        const simName = storeContext.menuName || "Menu Simulasi";
+        const simHpp = Math.round(Number(storeContext.totalHpp || 0));
+        const simPrice = Math.round(Number(storeContext.targetSellingPrice || 0));
+        const simFoodCost = Number(storeContext.foodCostPercent || 0);
+        const simMargin = Number(
+          storeContext.grossMarginPercent ??
+            (simPrice > 0 ? ((simPrice - simHpp) / simPrice) * 100 : 0)
+        );
+        const simItems = Array.isArray(storeContext.items) ? storeContext.items : [];
+        const highestIng = [...simItems].sort(
+          (a: any, b: any) =>
+            Number(b.subtotal || b.quantity * b.costPerUnit || 0) -
+            Number(a.subtotal || a.quantity * a.costPerUnit || 0)
+        )[0];
+        const idealPrice30 =
+          simHpp > 0 ? Math.ceil(simHpp / 0.3 / 500) * 500 : simPrice;
+        fallbackReply = `### ☕ Analisis Simulator HPP: ${simName}
+1. **Evaluasi Profitabilitas:** Total HPP **Rp ${simHpp.toLocaleString("id-ID")}** vs Harga Jual **Rp ${simPrice.toLocaleString("id-ID")}** (Food Cost **${simFoodCost.toFixed(1)}%**, Margin **${simMargin.toFixed(1)}%**). ${
+          simFoodCost <= 32
+            ? "Proporsi ini sudah sangat sehat dan masuk koridor ideal specialty coffee shop (28–32%)."
+            : simFoodCost <= 38
+              ? `Food Cost sedikit di atas target ideal 32%. Pertimbangkan menaikkan harga ke **Rp ${idealPrice30.toLocaleString("id-ID")}** agar food cost ~30%.`
+              : `⚠️ Food Cost terlalu tinggi (>38%), margin rawan tergerus jika harga bahan naik. Harga jual ideal disarankan minimal **Rp ${idealPrice30.toLocaleString("id-ID")}** atau evaluasi gramasi bahan utama.`
+        }
+${
+  highestIng
+    ? `2. **Komponen Biaya Tertinggi:** **${highestIng.name}** menyumbang **Rp ${Math.round(Number(highestIng.subtotal || highestIng.quantity * highestIng.costPerUnit || 0)).toLocaleString("id-ID")}**. Beli via PO kemasan grosir/karton dari supplier untuk menekan biaya modal per ${highestIng.unit || "unit"}.`
+    : "2. **Struktur Biaya:** Pastikan biaya kemasan/cup dan buffer penyusutan 3–5% tetap diperhitungkan."
+}
+3. **Strategi Upselling:** Tawarkan *Extra Shot* atau opsi ganti ke *Oat Milk* untuk menaikkan basket size tanpa menambah biaya cup baru.`;
+      } else if (lower.includes("hpp") || lower.includes("margin") || lower.includes("harga") || lower.includes("menu")) {
+        const sortedByFoodCost = [...ctxMenuAudit].sort((a: any, b: any) => b.foodCostPct - a.foodCostPct);
+        const topMarginMenus = [...ctxMenuAudit].sort((a: any, b: any) => a.foodCostPct - b.foodCostPct).slice(0, 3);
+        fallbackReply = `### ☕ Audit HPP & Margin Katalog Menu Anda
+- **Target Food Cost Ideal:** **28% - 32%** dari harga jual nett.
+${
+  sortedByFoodCost.length > 0
+    ? `- **Menu dengan Food Cost Tertinggi Saat Ini:**\n${sortedByFoodCost
+        .slice(0, 4)
+        .map(
+          (m: any) =>
+            `  - **${m.name}**: Jual **Rp ${Number(m.price).toLocaleString("id-ID")}** | HPP **Rp ${Number(m.hpp).toLocaleString("id-ID")}** (Food Cost **${m.foodCostPct}%** • Margin ${m.marginPct}%)`
+        )
+        .join("\n")}
+- **Menu Margin Terbaik untuk Dipromosikan:** ${topMarginMenus
+        .map((m: any) => `${m.name} (Margin ${m.marginPct}%)`)
+        .join(", ")}.`
+    : `- **Contoh Referensi HPP Kopi Susu Gula Aren (Cup 12oz):** Espresso 20g (Rp 5.000) + Fresh Milk 120ml (Rp 2.160) + Gula Aren 20ml (Rp 800) + Kemasan (Rp 1.200) = **Rp 9.160** (Harga jual ideal Rp 24.000 - Rp 28.000).`
+}
+- **Aksi:** Gunakan dropdown bahan baku di **Arus Kas** setiap kali harga beli naik agar estimasi HPP menu di atas otomatis ikut terkoreksi.`;
       } else if (lower.includes("rush hour") || lower.includes("antrean") || lower.includes("ramai") || lower.includes("workflow")) {
         fallbackReply = `### ⚡ Tips Optimalisasi Workflow Barista Saat Rush Hour
 1. **Zonasi & Spesialisasi Barista:**
    - **Barista 1 (Dial-in & Milk Station):** Fokus dosing, tamping, pulling shot, dan steaming susu. Jangan sentuh kasir atau cup sealing.
    - **Barista 2 (Floater & Kasir):** Terima pesanan di POS, handle pembayaran QRIS/Cash, pasang lid/sedotan, dan serahkan ke pelanggan.
 2. **Pre-batching & Mise en Place:**
-   - Siapkan cup bertuliskan pesanan sebelumnya.
-   - Gunakan pitcher susu bergaris takaran agar tidak ada susu terbuang (mengurangi waste).
-3. **Prioritas Minuman:** Kelompokkan pesanan minuman dingin berbasis sirup terlebih dahulu, lalu espresso-based milk hot untuk menjaga suhu optimal.`;
+   - Siapkan kondimen olahan (Saus Gula Aren / Simple Syrup / Cold Brew) lewat fitur **Batch Prep** sebelum jam ramai agar tidak meracik dari nol saat order menumpuk.`;
+      } else if (lower.includes("kas") || lower.includes("uang") || lower.includes("hutang") || lower.includes("po") || lower.includes("keuangan") || lower.includes("laba")) {
+        fallbackReply = `### 💰 Ringkasan Kondisi Kas & Kewajiban Toko
+- **Omzet Tercatat:** Rp ${ctxRev.toLocaleString("id-ID")} | **Pengeluaran:** Rp ${ctxExp.toLocaleString("id-ID")}
+- **Saldo Likuiditas Kas & Bank:** Rp ${ctxCash.toLocaleString("id-ID")}
+- **Hutang PO Supplier Belum Lunas:** Rp ${ctxUnpaidPo.toLocaleString("id-ID")}
+- **Rekomendasi:** ${
+          ctxUnpaidPo > ctxCash
+            ? "Saldo kas saat ini lebih kecil dari total hutang PO; jadwalkan pelunasan prioritas untuk PO yang paling mendekati jatuh tempo."
+            : "Saldo kas mencukupi untuk menutup hutang PO berjalan. Pastikan seluruh belanja bahan harian dicatat melalui kategori Bahan Baku agar perhitungan HPP dan P&L tetap akurat."
+        }`;
       } else if (lower.includes("promo") || lower.includes("sepi") || lower.includes("omset") || lower.includes("penjualan")) {
         fallbackReply = `### 📈 Strategi Dongkrak Omset di Jam Sepi (14:00 - 17:00)
-1. **Happy Hour "Coffee & Bite" Bundling:** Diskon 15-20% hanya untuk pembelian kopi + camilan pada pukul 14.00-17.00. Ini mengundang pekerja remote / mahasiswa untuk nongkrong.
-2. **Loyalty Stamp Digital:** Program "Beli 5 Kopi Gratis 1" dengan mencatat nomor HP pelanggan di POS kasir untuk meningkatkan repeat order hingga 35%.
-3. **Upselling Kasir Cerdas:** Ajarkan kasir menawarkan: *"Mau nambah extra shot espresso cuma Rp 5.000 kak?"* atau *"Mau ganti ke Oat Milk cuma nambah Rp 8.000?"* — meningkatkan tiket rata-rata tanpa modal besar.`;
+1. **Happy Hour "Coffee & Bite" Bundling:** Diskon 15-20% khusus pembelian kopi + pastry di pukul 14.00-17.00${
+          ctxMenuAudit.length > 0
+            ? ` (prioritaskan bundling dengan ${[...ctxMenuAudit].sort((a: any, b: any) => a.foodCostPct - b.foodCostPct)[0]?.name || "menu margin tertinggi"})`
+            : ""
+        }.
+2. **Upselling Kasir Cerdas:** Tawarkan *Extra Shot Espresso* atau ganti ke *Oat Milk* untuk menaikkan nilai struk rata-rata tanpa menambah biaya akuisisi pelanggan.`;
       } else if (lower.includes("stok") || lower.includes("bahan") || lower.includes("waste") || lower.includes("opname")) {
-        fallbackReply = `### 📦 Manajemen Stok & Pencegahan Kerugian (Waste)
-1. **Prinsip FIFO Ketat (First In First Out):** Susu dan sirup yang datang lebih awal wajib digunakan terlebih dahulu dengan penandaan tanggal buka (*opening date tag*).
-2. **Safety Stock Biji Kopi:** Tetapkan titik pesan ulang (*Reorder Point*) minimal 3 hari sebelum stok habis dengan memperhitungkan waktu restock sangrai/roastery.
-3. **Audit Opname Rutin:** Lakukan stok opname susu dan biji kopi di setiap pergantian shift untuk melacak selisih pemakaian vs resep tertera di sistem.`;
+        fallbackReply = `### 📦 Audit Stok Bahan Baku & Pencegahan Waste
+${
+  ctxLowStock.length > 0
+    ? `- **Bahan Baku Kritis Saat Ini (${ctxLowStock.length} item):** ${ctxLowStock.slice(0, 6).join(", ")}.\n`
+    : "- Saat ini tidak ada bahan yang berada di bawah batas minimum.\n"
+}1. **Prinsip FIFO Ketat (First In First Out):** Susu dan sirup yang datang lebih awal wajib dipakai lebih dulu dengan tanggal buka (*opening date tag*).
+2. **Audit Opname Rutin:** Lakukan stok opname susu dan biji kopi berkala untuk memantau selisih pemakaian vs resep di sistem.`;
       } else {
-        fallbackReply = `### 💡 Panduan Manajemen Julia Coffee AI
-Halo! Saya siap membantu mengembangkan coffee shop Anda menjadi lebih efisien dan menguntungkan.
+        fallbackReply = `### 💡 Ringkasan Cepat Julia Coffee AI
+- **Omzet Tercatat:** Rp ${ctxRev.toLocaleString("id-ID")} | **Saldo Kas:** Rp ${ctxCash.toLocaleString("id-ID")}
+- **Bahan Stok Kritis:** ${ctxLowStock.length > 0 ? ctxLowStock.slice(0, 4).join(", ") : "Aman"}
+- **Katalog Menu Terpantau:** ${ctxMenuAudit.length} varian
 
-**Topik yang sering dikonsultasikan:**
-- **Analisis HPP & Margin:** Cara menghitung harga jual optimal agar margin di atas 65%.
-- **SOP & Efisiensi Barista:** Cara mengatur kecepatan sajian di jam rush hour.
-- **Strategi Promo:** Ide promo jam sepi (*slow hours*) dan paket bundling terlaris.
-- **Audit Stok & Waste:** Menghilangkan kebocoran bahan baku susu dan biji kopi.
-
-*Tips: Pasang Gemini API Key Anda di menu Pengaturan > Integrasi AI untuk analisis bebas tanpa batas menggunakan kecerdasan Gemini 2.5 Flash!*`;
+**Anda dapat menanyakan:**
+- *"Menu mana yang food cost-nya paling tinggi saat ini?"*
+- *"Apakah saldo kas cukup untuk menutup hutang PO?"*
+- *"Bahan apa saja yang harus segera dibeli hari ini?"*`;
       }
 
       return res.json({
         reply: fallbackReply,
         source: "local-expert",
-        note: !apiKey ? "Kunci API Gemini belum diatur di Pengaturan. Menampilkan modul kecerdasan coffee shop internal." : undefined
+        note: !apiKey ? "Kunci API Gemini belum diatur di Pengaturan. Menampilkan analisis data internal toko." : undefined
       });
     } catch (e: any) {
       console.error("AI Advisor error:", e);

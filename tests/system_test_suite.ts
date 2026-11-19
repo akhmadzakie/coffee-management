@@ -15,6 +15,8 @@ import {
   resolvePaymentAccountId,
   isAutoPosSaleCashIn,
   calculateCashFlowHppSync,
+  getIngredientPackagingChoices,
+  getPackagingSelectValue,
 } from "../src/utils/posDomainLogic";
 import {
   buildEscPosReceipt,
@@ -1191,6 +1193,29 @@ test("Kemasan Kustom dengan Konversi Fleksibel per Transaksi (mis. Dus 24x200ml 
   assert.strictEqual(result.directUpdates[0].newPurchasePrice, 15000);
   // HPP: 18*250 + 120*15 + 25*38 + 120*2 + 1000 = 8490
   assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 8490);
+});
+
+test("Helper Multi-Kemasan (getIngredientPackagingChoices & getPackagingSelectValue) Konsisten untuk Arus Kas & PO", () => {
+  const milkIng = sampleIngredients.find((i) => i.id === "ing-fresh-milk")!;
+  const choices = getIngredientPackagingChoices(milkIng);
+
+  assert.ok(choices.some((c) => c.key === "PURCHASE" && c.factor === 1000 && c.unit === "Liter"));
+  assert.ok(choices.some((c) => c.key === "BASE" && c.factor === 1 && c.unit === "ml"));
+  assert.ok(choices.some((c) => c.key === "PRESET:Karton (12L)" && c.factor === 12000));
+  assert.ok(choices.some((c) => c.key === "CUSTOM"));
+  assert.strictEqual(
+    choices.some((c) => c.key === "PRESET:Liter"),
+    false,
+    "Preset duplikat dengan satuan beli master harus disaring otomatis"
+  );
+
+  assert.strictEqual(getPackagingSelectValue({ unitMode: "PURCHASE", unit: "Liter" }, choices), "PURCHASE");
+  assert.strictEqual(getPackagingSelectValue({ unitMode: "BASE", unit: "ml" }, choices), "BASE");
+  assert.strictEqual(
+    getPackagingSelectValue({ unitMode: "PRESET", unit: "Karton (12L)" }, choices),
+    "PRESET:Karton (12L)"
+  );
+  assert.strictEqual(getPackagingSelectValue({ unitMode: "CUSTOM", unit: "Dus" }, choices), "CUSTOM");
 });
 
 // -------------------------------------------------------------

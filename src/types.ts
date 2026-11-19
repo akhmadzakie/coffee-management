@@ -629,6 +629,9 @@ export interface PurchaseOrderItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  unit?: string;
+  unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  conversionFactor?: number;
 }
 
 export interface PurchaseOrder {
