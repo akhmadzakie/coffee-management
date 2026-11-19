@@ -1,3 +1,5 @@
+import type { BatchPreparation, Ingredient, Product, Recipe } from "../types";
+
 export interface RecipeIngredientRef {
   ingredientId: string;
   quantity: number;
@@ -473,4 +475,286 @@ export function resolvePaymentAccountId(
   // Jika toko belum membuat akun BANK sama sekali, kembalikan null agar uang non-tunai
   // TIDAK masuk ke saldo fisik Laci Kasir (server dapat mengarahkannya ke rekening non-tunai default)
   return nonCashAcc?.id || null;
+}
+
+export interface CashFlowSyncItemInput {
+  ingredientId?: string;
+  unitMode?: "PURCHASE" | "BASE";
+  qty: number | string;
+  unitPrice?: number | string;
+  totalPrice?: number | string;
+}
+
+export interface CashFlowDirectIngredientUpdate {
+  ingredient: Ingredient;
+  oldCostPerUnit: number;
+  newCostPerUnit: number;
+  oldPurchasePrice: number;
+  newPurchasePrice: number;
+  totalBaseQty: number;
+  totalSpent: number;
+}
+
+export interface CashFlowBatchPrepUpdate {
+  batchPrepName: string;
+  ingredient: Ingredient;
+  oldCostPerUnit: number;
+  newCostPerUnit: number;
+  newPurchasePrice: number;
+}
+
+export interface CashFlowVariantHppPreview {
+  productId: string;
+  productName: string;
+  variantName: string;
+  oldHpp: number;
+  newHpp: number;
+}
+
+export interface CashFlowHppSyncResult {
+  directUpdates: CashFlowDirectIngredientUpdate[];
+  batchPrepUpdates: CashFlowBatchPrepUpdate[];
+  productsToUpdate: Product[];
+  affectedVariantPreviews: CashFlowVariantHppPreview[];
+}
+
+/**
+ * Menghitung pembaruan harga modal bahan baku, efek berantai ke kondimen olahan
+ * (BatchPreparation), serta estimasi HPP varian menu (Product) dari rincian belanja
+ * Arus Kas tanpa mengubah jumlah stok fisik (`currentStock`) di inventori.
+ */
+export function calculateCashFlowHppSync(params: {
+  itemRows: CashFlowSyncItemInput[];
+  ingredients: Ingredient[];
+  batchPreparations: BatchPreparation[];
+  products: Product[];
+  recipes: Recipe[];
+  priceSyncMethod: "LAST_PRICE" | "WEIGHTED_AVERAGE";
+}): CashFlowHppSyncResult {
+  const {
+    itemRows,
+    ingredients,
+    batchPreparations,
+    products,
+    recipes,
+    priceSyncMethod,
+  } = params;
+
+  const empty: CashFlowHppSyncResult = {
+    directUpdates: [],
+    batchPrepUpdates: [],
+    productsToUpdate: [],
+    affectedVariantPreviews: [],
+  };
+
+  const aggregatedByIng = new Map<
+    string,
+    { ingredient: Ingredient; totalBaseQty: number; totalSpent: number }
+  >();
+
+  for (const row of itemRows) {
+    if (!row.ingredientId) continue;
+    const ing = ingredients.find((i) => i.id === row.ingredientId);
+    if (!ing) continue;
+
+    const qtyNum = typeof row.qty === "number" ? row.qty : parseFloat(String(row.qty));
+    if (isNaN(qtyNum) || qtyNum <= 0) continue;
+
+    let effectiveTotal =
+      typeof row.totalPrice === "number"
+        ? row.totalPrice
+        : parseFloat(String(row.totalPrice ?? ""));
+    if (isNaN(effectiveTotal) || effectiveTotal <= 0) {
+      const unitNum =
+        typeof row.unitPrice === "number"
+          ? row.unitPrice
+          : parseFloat(String(row.unitPrice ?? ""));
+      if (!isNaN(unitNum) && unitNum > 0) {
+        effectiveTotal = qtyNum * unitNum;
+      }
+    }
+    if (isNaN(effectiveTotal) || effectiveTotal <= 0) continue;
+
+    const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
+    const factor =
+      row.unitMode === "PURCHASE" && hasPurchaseUnit ? Number(ing.conversionFactor) : 1;
+    const baseQty = qtyNum * factor;
+
+    const existing = aggregatedByIng.get(ing.id);
+    if (existing) {
+      existing.totalBaseQty += baseQty;
+      existing.totalSpent += effectiveTotal;
+    } else {
+      aggregatedByIng.set(ing.id, {
+        ingredient: ing,
+        totalBaseQty: baseQty,
+        totalSpent: effectiveTotal,
+      });
+    }
+  }
+
+  if (aggregatedByIng.size === 0) return empty;
+
+  const effectiveCostMap = new Map<string, number>();
+  ingredients.forEach((ing) => {
+    effectiveCostMap.set(ing.id, Number(ing.costPerUnit) || 0);
+  });
+
+  const directIngredientIds = new Set<string>();
+  const changedIngredientIds = new Set<string>();
+  const directUpdates: CashFlowDirectIngredientUpdate[] = [];
+
+  aggregatedByIng.forEach(({ ingredient, totalBaseQty, totalSpent }) => {
+    const oldCostPerUnit = Number(ingredient.costPerUnit) || 0;
+    const hasPurchaseUnit = Boolean(
+      ingredient.purchaseUnit && Number(ingredient.conversionFactor) > 0
+    );
+    const factor = hasPurchaseUnit ? Number(ingredient.conversionFactor) : 1;
+    const oldPurchasePrice = hasPurchaseUnit
+      ? Math.round(
+          Number(ingredient.purchasePrice) > 0
+            ? Number(ingredient.purchasePrice)
+            : oldCostPerUnit * factor
+        )
+      : Math.round(oldCostPerUnit);
+
+    let newCostPerUnit: number;
+    if (priceSyncMethod === "LAST_PRICE" || ingredient.currentStock <= 0) {
+      newCostPerUnit = Math.round((totalSpent / totalBaseQty) * 100) / 100;
+    } else {
+      const existingVal = ingredient.currentStock * oldCostPerUnit;
+      newCostPerUnit =
+        Math.round(
+          ((existingVal + totalSpent) / (ingredient.currentStock + totalBaseQty)) * 100
+        ) / 100;
+    }
+
+    const newPurchasePrice = hasPurchaseUnit
+      ? Math.round(newCostPerUnit * factor)
+      : Math.round(newCostPerUnit);
+
+    directIngredientIds.add(ingredient.id);
+    changedIngredientIds.add(ingredient.id);
+    effectiveCostMap.set(ingredient.id, newCostPerUnit);
+
+    directUpdates.push({
+      ingredient,
+      oldCostPerUnit,
+      newCostPerUnit,
+      oldPurchasePrice,
+      newPurchasePrice,
+      totalBaseQty,
+      totalSpent,
+    });
+  });
+
+  // Efek berantai ke Kondimen Olahan (BatchPreparation)
+  const batchPrepUpdates: CashFlowBatchPrepUpdate[] = [];
+  const seenBatchTargetIds = new Set<string>();
+
+  batchPreparations.forEach((bp) => {
+    if (!bp.targetIngredientId || bp.yieldQuantity <= 0) return;
+    if (directIngredientIds.has(bp.targetIngredientId)) return;
+    if (seenBatchTargetIds.has(bp.targetIngredientId)) return;
+    // Hindari batch prep yang menimpa bahan baku inputnya sendiri
+    if (bp.ingredients.some((ri) => ri.ingredientId === bp.targetIngredientId)) return;
+
+    const usesChangedRaw = bp.ingredients.some((ri) =>
+      changedIngredientIds.has(ri.ingredientId)
+    );
+    if (!usesChangedRaw) return;
+
+    const targetIng = ingredients.find((i) => i.id === bp.targetIngredientId);
+    if (!targetIng) return;
+
+    const totalBatchCost = bp.ingredients.reduce(
+      (sum, ri) => sum + ri.quantity * (effectiveCostMap.get(ri.ingredientId) ?? 0),
+      0
+    );
+    const newBatchUnitCost = Math.round((totalBatchCost / bp.yieldQuantity) * 100) / 100;
+    const oldCostPerUnit = Number(targetIng.costPerUnit) || 0;
+    const hasPurchaseUnit = Boolean(
+      targetIng.purchaseUnit && Number(targetIng.conversionFactor) > 0
+    );
+    const newPurchasePrice = hasPurchaseUnit
+      ? Math.round(newBatchUnitCost * Number(targetIng.conversionFactor))
+      : Math.round(newBatchUnitCost);
+
+    seenBatchTargetIds.add(targetIng.id);
+    effectiveCostMap.set(targetIng.id, newBatchUnitCost);
+    changedIngredientIds.add(targetIng.id);
+
+    batchPrepUpdates.push({
+      batchPrepName: bp.name,
+      ingredient: targetIng,
+      oldCostPerUnit,
+      newCostPerUnit: newBatchUnitCost,
+      newPurchasePrice,
+    });
+  });
+
+  // Efek berantai ke Varian Produk / Menu
+  const productsToUpdate: Product[] = [];
+  const affectedVariantPreviews: CashFlowVariantHppPreview[] = [];
+
+  products.forEach((p) => {
+    let isProductChanged = false;
+    const updatedVariants = (p.variants || []).map((v) => {
+      let effectiveRecipe = v.recipe;
+      if (!effectiveRecipe || effectiveRecipe.length === 0) {
+        const rec = recipes.find(
+          (r) => r.menuName.trim().toLowerCase() === p.name.trim().toLowerCase()
+        );
+        if (rec) effectiveRecipe = rec.ingredients;
+      }
+      if (!effectiveRecipe || effectiveRecipe.length === 0) return v;
+
+      const usesChanged = effectiveRecipe.some((ri) =>
+        changedIngredientIds.has(ri.ingredientId)
+      );
+      if (!usesChanged) return v;
+
+      const rawCost = effectiveRecipe.reduce(
+        (sum, ri) => sum + ri.quantity * (effectiveCostMap.get(ri.ingredientId) ?? 0),
+        0
+      );
+      const newEstimatedHpp = Math.round(rawCost + Number(v.packagingCost || 0));
+      const oldHpp = Math.round(Number(v.estimatedHpp || 0));
+
+      affectedVariantPreviews.push({
+        productId: p.id,
+        productName: p.name,
+        variantName: v.name,
+        oldHpp,
+        newHpp: newEstimatedHpp,
+      });
+
+      if (
+        newEstimatedHpp !== v.estimatedHpp ||
+        (!v.recipe?.length && effectiveRecipe.length > 0)
+      ) {
+        isProductChanged = true;
+        return {
+          ...v,
+          recipe: v.recipe?.length ? v.recipe : effectiveRecipe,
+          estimatedHpp: newEstimatedHpp,
+        };
+      }
+      return v;
+    });
+
+    if (isProductChanged) {
+      productsToUpdate.push({
+        ...p,
+        variants: updatedVariants,
+      });
+    }
+  });
+
+  return {
+    directUpdates,
+    batchPrepUpdates,
+    productsToUpdate,
+    affectedVariantPreviews,
+  };
 }

@@ -409,6 +409,8 @@ export interface CashAccount {
 }
 
 export interface CashTransactionItem {
+  ingredientId?: string;
+  unitMode?: "PURCHASE" | "BASE";
   name: string;
   qty: number;
   unit: string;

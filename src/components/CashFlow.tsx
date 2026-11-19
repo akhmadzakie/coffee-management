@@ -31,8 +31,12 @@ import {
   Calculator,
   RotateCcw,
   ChevronRight,
+  RefreshCw,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { CashAccount, CashTransaction, CashTransactionItem } from "../types";
+import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
 import { CsvImportExport } from "./common/CsvImportExport";
 
 interface CashFlowProps {
@@ -41,6 +45,8 @@ interface CashFlowProps {
 
 interface DraftItemRow {
   id: string;
+  ingredientId?: string;
+  unitMode?: "PURCHASE" | "BASE";
   name: string;
   qty: string;
   unit: string;
@@ -68,6 +74,8 @@ const UNIT_OPTIONS = [
 
 const createEmptyItemRow = (): DraftItemRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  ingredientId: "",
+  unitMode: "PURCHASE",
   name: "",
   qty: "1",
   unit: "pcs",
@@ -75,6 +83,14 @@ const createEmptyItemRow = (): DraftItemRow => ({
   totalPrice: "",
   lastEdited: "unit",
 });
+
+const formatUnitCost = (value: number): string => {
+  const num = Number(value) || 0;
+  return `Rp ${num.toLocaleString("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
 
 export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const {
@@ -92,6 +108,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     salesTransactions,
     salesImportLogs,
     closedPeriods,
+    ingredients,
+    updateIngredient,
+    products,
+    updateProduct,
+    recipes,
+    batchPreparations,
   } = useStore();
 
   // ─── Filter States ──────────────────────────────────────────────────────────
@@ -125,6 +147,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const [formPaymentMethod, setFormPaymentMethod] = useState<string>("Tunai");
   const [useItemBreakdown, setUseItemBreakdown] = useState<boolean>(true);
   const [itemRows, setItemRows] = useState<DraftItemRow[]>([createEmptyItemRow()]);
+  const [syncIngredientPrices, setSyncIngredientPrices] = useState<boolean>(true);
+  const [priceSyncMethod, setPriceSyncMethod] = useState<"LAST_PRICE" | "WEIGHTED_AVERAGE">("LAST_PRICE");
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   // Account Modal States (Add / Edit Pos Kas)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -369,12 +394,115 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     return Array.from(set).sort();
   }, [cashTransactions, expenseCategories]);
 
+  const sortedIngredients = useMemo(() => {
+    return [...ingredients].sort((a, b) => a.name.localeCompare(b.name, "id"));
+  }, [ingredients]);
+
+  const isBahanBakuCategory = useMemo(() => {
+    if (trxType !== "CASH_OUT") return false;
+    const parentCat = expenseCategories.find((c: any) => c.id === formParentCategoryId);
+    const subCat = expenseCategories.find((c: any) => c.id === formCategoryId);
+    const catsToCheck = [subCat, parentCat].filter(Boolean);
+    return catsToCheck.some(
+      (c: any) =>
+        c.type === "BAHAN_BAKU" ||
+        c.id === "cat-bahan-baku" ||
+        c.parentId === "cat-bahan-baku" ||
+        String(c.name || "").toLowerCase().includes("bahan baku")
+    );
+  }, [trxType, expenseCategories, formParentCategoryId, formCategoryId]);
+
   // ─── Two-Way Item Calculation Handlers ─────────────────────────────────────
   const recalculateTotalFromItems = (rows: DraftItemRow[]) => {
     const sum = rows.reduce((acc, r) => acc + (Number(r.totalPrice) || 0), 0);
     if (sum > 0) {
       setFormAmount(String(Math.round(sum)));
     }
+  };
+
+  const handleSelectRowIngredient = (rowId: string, selectedIngId: string) => {
+    setItemRows((prev) => {
+      const next = prev.map((row) => {
+        if (row.id !== rowId) return row;
+        if (!selectedIngId) {
+          return {
+            ...row,
+            ingredientId: "",
+            unitMode: "PURCHASE" as const,
+            name: "",
+            unit: "pcs",
+          };
+        }
+        const ing = ingredients.find((i) => i.id === selectedIngId);
+        if (!ing) return row;
+
+        const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
+        const unitMode: "PURCHASE" | "BASE" = hasPurchaseUnit ? "PURCHASE" : "BASE";
+        const nextUnit = hasPurchaseUnit ? ing.purchaseUnit! : ing.unit;
+        const defaultPrice = hasPurchaseUnit
+          ? Math.round(
+              Number(ing.purchasePrice) > 0
+                ? Number(ing.purchasePrice)
+                : Number(ing.costPerUnit || 0) * Number(ing.conversionFactor || 1)
+            )
+          : Number(ing.costPerUnit || 0);
+
+        const qtyNum = parseFloat(row.qty);
+        const validQty = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : 1;
+
+        return {
+          ...row,
+          ingredientId: ing.id,
+          unitMode,
+          name: ing.name,
+          qty: !isNaN(qtyNum) && qtyNum > 0 ? row.qty : "1",
+          unit: nextUnit,
+          unitPrice: defaultPrice > 0 ? String(defaultPrice) : "",
+          totalPrice: defaultPrice > 0 ? String(Math.round(validQty * defaultPrice)) : "",
+          lastEdited: "unit" as const,
+        };
+      });
+
+      recalculateTotalFromItems(next);
+      return next;
+    });
+  };
+
+  const handleRowUnitModeChange = (rowId: string, mode: "PURCHASE" | "BASE") => {
+    setItemRows((prev) => {
+      const next = prev.map((row) => {
+        if (row.id !== rowId || !row.ingredientId) return row;
+        const ing = ingredients.find((i) => i.id === row.ingredientId);
+        if (!ing) return row;
+
+        const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
+        const effectiveMode: "PURCHASE" | "BASE" = mode === "PURCHASE" && hasPurchaseUnit ? "PURCHASE" : "BASE";
+        const nextUnit = effectiveMode === "PURCHASE" ? ing.purchaseUnit! : ing.unit;
+        const defaultPrice =
+          effectiveMode === "PURCHASE"
+            ? Math.round(
+                Number(ing.purchasePrice) > 0
+                  ? Number(ing.purchasePrice)
+                  : Number(ing.costPerUnit || 0) * Number(ing.conversionFactor || 1)
+              )
+            : Number(ing.costPerUnit || 0);
+
+        const qtyNum = parseFloat(row.qty);
+        const validQty = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : 1;
+
+        return {
+          ...row,
+          unitMode: effectiveMode,
+          unit: nextUnit,
+          unitPrice: defaultPrice > 0 ? String(defaultPrice) : "",
+          totalPrice: defaultPrice > 0 ? String(Math.round(validQty * defaultPrice)) : "",
+          lastEdited: "unit" as const,
+        };
+      });
+
+      recalculateTotalFromItems(next);
+      return next;
+    });
   };
 
   const handleItemRowChange = (
@@ -442,6 +570,36 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     });
   };
 
+  // ─── Preview Kalkulasi Harga Bahan Baku, Kondimen Olahan & HPP Menu ────────
+  const hppSyncPreview = useMemo(() => {
+    if (trxType !== "CASH_OUT" || !useItemBreakdown) {
+      return {
+        directUpdates: [],
+        batchPrepUpdates: [],
+        productsToUpdate: [],
+        affectedVariantPreviews: [],
+      };
+    }
+
+    return calculateCashFlowHppSync({
+      itemRows,
+      ingredients,
+      batchPreparations,
+      products,
+      recipes,
+      priceSyncMethod,
+    });
+  }, [
+    trxType,
+    useItemBreakdown,
+    itemRows,
+    ingredients,
+    priceSyncMethod,
+    batchPreparations,
+    products,
+    recipes,
+  ]);
+
   // ─── Open Transaction Modal (Create vs Edit) ────────────────────────────────
   const openCreateModal = (initialType: "CASH_IN" | "CASH_OUT" | "TRANSFER" = "CASH_OUT") => {
     setEditingTrx(null);
@@ -468,6 +626,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     setFormPaymentMethod("Tunai");
     setUseItemBreakdown(initialType === "CASH_OUT");
     setItemRows([createEmptyItemRow()]);
+    setSyncIngredientPrices(true);
+    setPriceSyncMethod("LAST_PRICE");
     setIsModalOpen(true);
   };
 
@@ -518,20 +678,40 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     if (Array.isArray(trx.items) && trx.items.length > 0) {
       setUseItemBreakdown(true);
       setItemRows(
-        trx.items.map((it, idx) => ({
-          id: `${idx}-${Date.now()}`,
-          name: it.name || "",
-          qty: String(it.qty ?? 1),
-          unit: it.unit || "pcs",
-          unitPrice: String(Math.round(Number(it.unitPrice || 0))),
-          totalPrice: String(Math.round(Number(it.totalPrice || 0))),
-          lastEdited: "unit",
-        }))
+        trx.items.map((it, idx) => {
+          const matchedIng =
+            (it.ingredientId ? ingredients.find((i) => i.id === it.ingredientId) : undefined) ||
+            ingredients.find(
+              (i) => i.name.trim().toLowerCase() === String(it.name || "").trim().toLowerCase()
+            );
+          const inferredUnitMode: "PURCHASE" | "BASE" = it.unitMode
+            ? it.unitMode
+            : matchedIng?.purchaseUnit &&
+                String(it.unit || "").toLowerCase() === matchedIng.purchaseUnit.toLowerCase()
+              ? "PURCHASE"
+              : matchedIng
+                ? "BASE"
+                : "PURCHASE";
+
+          return {
+            id: `${idx}-${Date.now()}`,
+            ingredientId: it.ingredientId || matchedIng?.id || "",
+            unitMode: inferredUnitMode,
+            name: it.name || "",
+            qty: String(it.qty ?? 1),
+            unit: it.unit || "pcs",
+            unitPrice: String(Math.round(Number(it.unitPrice || 0))),
+            totalPrice: String(Math.round(Number(it.totalPrice || 0))),
+            lastEdited: "unit",
+          };
+        })
       );
     } else {
       setUseItemBreakdown(false);
       setItemRows([createEmptyItemRow()]);
     }
+    setSyncIngredientPrices(false);
+    setPriceSyncMethod("LAST_PRICE");
     setIsModalOpen(true);
   };
 
@@ -617,13 +797,23 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       ? itemRows
           .map((r) => {
             const qty = parseFloat(r.qty) || 1;
-            const unitPrice = Math.round(parseFloat(r.unitPrice) || 0);
-            const totalPrice = Math.round(parseFloat(r.totalPrice) || qty * unitPrice);
+            const rawUnitPrice = parseFloat(r.unitPrice) || 0;
+            const rawTotalPrice = parseFloat(r.totalPrice) || qty * rawUnitPrice;
+            const totalPrice = Math.round(rawTotalPrice);
+            const unitPrice =
+              rawUnitPrice > 0
+                ? Math.round(rawUnitPrice)
+                : qty > 0
+                  ? Math.round(totalPrice / qty)
+                  : 0;
             return {
+              ...(r.ingredientId
+                ? { ingredientId: r.ingredientId, unitMode: r.unitMode || "PURCHASE" }
+                : {}),
               name: r.name.trim(),
               qty,
               unit: r.unit || "pcs",
-              unitPrice: unitPrice > 0 ? unitPrice : qty > 0 ? Math.round(totalPrice / qty) : 0,
+              unitPrice,
               totalPrice,
             };
           })
@@ -693,6 +883,48 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         paymentMethod: formPaymentMethod || null,
         items: normalizedItems.length > 0 ? normalizedItems : undefined,
       });
+    }
+
+    // 3. Sinkronisasi Harga Bahan Baku -> Kondimen Olahan -> HPP Menu (tanpa mengubah currentStock fisik)
+    if (
+      trxType === "CASH_OUT" &&
+      useItemBreakdown &&
+      (isBahanBakuCategory || hppSyncPreview.directUpdates.length > 0) &&
+      syncIngredientPrices &&
+      hppSyncPreview.directUpdates.length > 0
+    ) {
+      hppSyncPreview.directUpdates.forEach((upd) => {
+        updateIngredient({
+          ...upd.ingredient,
+          costPerUnit: upd.newCostPerUnit,
+          ...(upd.ingredient.purchaseUnit
+            ? { purchasePrice: upd.newPurchasePrice }
+            : {}),
+        });
+      });
+
+      hppSyncPreview.batchPrepUpdates.forEach((bpUpd) => {
+        updateIngredient({
+          ...bpUpd.ingredient,
+          costPerUnit: bpUpd.newCostPerUnit,
+          ...(bpUpd.ingredient.purchaseUnit
+            ? { purchasePrice: bpUpd.newPurchasePrice }
+            : {}),
+        });
+      });
+
+      hppSyncPreview.productsToUpdate.forEach((prod) => {
+        updateProduct(prod);
+      });
+
+      const ingCount = hppSyncPreview.directUpdates.length + hppSyncPreview.batchPrepUpdates.length;
+      const menuCount = hppSyncPreview.productsToUpdate.length;
+      setSyncToast(
+        `Transaksi tersimpan! Harga modal ${ingCount} bahan${
+          menuCount > 0 ? ` & HPP ${menuCount} menu` : ""
+        } berhasil disinkronkan.`
+      );
+      setTimeout(() => setSyncToast(null), 5000);
     }
 
     setIsModalOpen(false);
@@ -917,6 +1149,19 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   return (
     <>
+      {syncToast && (
+        <div className="fixed top-5 right-5 z-[60] px-4 py-3 rounded-2xl bg-slate-900 text-emerald-400 border border-emerald-500/30 shadow-xl flex items-center gap-2.5 text-xs font-bold animate-fade-in max-w-md">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{syncToast}</span>
+          <button
+            type="button"
+            onClick={() => setSyncToast(null)}
+            className="text-slate-400 hover:text-white ml-1 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
         {/* ─── Header & Quick Actions ────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
@@ -1648,6 +1893,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                   <span className="font-semibold text-slate-800">
                                     {it.name || trx.description}
                                   </span>
+                                  {it.ingredientId && (
+                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/70 text-[9px] font-bold uppercase tracking-wider shrink-0">
+                                      Stok Master
+                                    </span>
+                                  )}
                                   <span className="text-slate-500">
                                     ({it.qty} {it.unit} × {formatCurrency(it.unitPrice)}/{it.unit})
                                   </span>
@@ -1798,7 +2048,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           className="flex items-center justify-between text-[11px] text-slate-700"
                         >
                           <span className="truncate pr-2">
-                            • <strong>{it.name || trx.description}</strong> ({it.qty} {it.unit} ×{" "}
+                            •{" "}
+                            {it.ingredientId && (
+                              <span className="inline-block mr-1 px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase">
+                                Master
+                              </span>
+                            )}
+                            <strong>{it.name || trx.description}</strong> ({it.qty} {it.unit} ×{" "}
                             {formatCurrency(it.unitPrice)})
                           </span>
                           <span className="font-mono font-bold text-slate-900 shrink-0">
@@ -2075,196 +2331,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     </div>
                   ) : (
                     <>
-                      {/* ─── RINCIAN ITEM / QUANTITY & HARGA SATUAN ↔ TOTAL ────────── */}
-                      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-xl bg-brand-100/80 text-brand-700 flex items-center justify-center">
-                              <Calculator className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h3 className="text-xs font-extrabold text-slate-800">
-                                Rincian Barang / Kuantitas & Harga Item
-                              </h3>
-                              <p className="text-[11px] text-slate-500">
-                                Isi <strong>Qty + Harga Satuan</strong> atau <strong>Qty + Harga Total</strong> (otomatis menghitung dua arah)
-                              </p>
-                            </div>
-                          </div>
-
-                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={useItemBreakdown}
-                              onChange={(e) => setUseItemBreakdown(e.target.checked)}
-                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                            />
-                            <span>Gunakan Rincian Item</span>
-                          </label>
-                        </div>
-
-                        {useItemBreakdown && (
-                          <div className="space-y-2.5 pt-1">
-                            {itemRows.map((row, idx) => (
-                              <div
-                                key={row.id}
-                                className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                    Item #{idx + 1}
-                                  </span>
-                                  {itemRows.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveItemRow(row.id)}
-                                      className="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                      Hapus Baris
-                                    </button>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                  {/* Nama Item */}
-                                  <div className="sm:col-span-4">
-                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                                      Nama Barang / Item {itemRows.length === 1 ? "(Opsional)" : ""}
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={row.name}
-                                      onChange={(e) =>
-                                        handleItemRowChange(row.id, "name", e.target.value)
-                                      }
-                                      placeholder="Mis: Susu Diamond / Cup 16oz"
-                                      className="w-full px-2.5 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                    />
-                                  </div>
-
-                                  {/* Qty */}
-                                  <div className="grid grid-cols-2 sm:col-span-3 gap-1.5">
-                                    <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                                        Qty
-                                      </label>
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0.01"
-                                        value={row.qty}
-                                        onChange={(e) =>
-                                          handleItemRowChange(row.id, "qty", e.target.value)
-                                        }
-                                        placeholder="1"
-                                        className="w-full px-2.5 py-2 text-xs font-extrabold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 text-center"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                                        Satuan
-                                      </label>
-                                      <select
-                                        value={row.unit}
-                                        onChange={(e) =>
-                                          handleItemRowChange(row.id, "unit", e.target.value)
-                                        }
-                                        className="w-full px-2 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                                      >
-                                        {UNIT_OPTIONS.map((u) => (
-                                          <option key={u} value={u}>
-                                            {u}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  </div>
-
-                                  {/* Harga per Item / Satuan */}
-                                  <div className="sm:col-span-2">
-                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                                      Harga / {row.unit} (Rp)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={row.unitPrice}
-                                      onChange={(e) =>
-                                        handleItemRowChange(row.id, "unitPrice", e.target.value)
-                                      }
-                                      placeholder="0"
-                                      className="w-full px-2.5 py-2 text-xs font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                    />
-                                  </div>
-
-                                  {/* Harga Total Item */}
-                                  <div className="sm:col-span-3">
-                                    <label className="block text-[10px] font-bold text-brand-700 mb-1">
-                                      Harga Total Item (Rp)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={row.totalPrice}
-                                      onChange={(e) =>
-                                        handleItemRowChange(row.id, "totalPrice", e.target.value)
-                                      }
-                                      placeholder="0"
-                                      className="w-full px-2.5 py-2 text-xs font-extrabold font-mono border border-brand-300 bg-brand-50/40 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-
-                            <div className="flex items-center justify-between pt-1">
-                              <button
-                                type="button"
-                                onClick={handleAddItemRow}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-brand-700 border border-slate-200/90 text-xs font-bold shadow-2xs transition-all cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Tambah Baris Barang</span>
-                              </button>
-                              <span className="text-[11px] text-slate-500">
-                                Total dari {itemRows.length} baris:{" "}
-                                <strong className="text-slate-900 font-mono">
-                                  {formatCurrency(
-                                    itemRows.reduce(
-                                      (acc, r) => acc + (Number(r.totalPrice) || 0),
-                                      0
-                                    )
-                                  )}
-                                </strong>
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Row 2: Total Nominal */}
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                          Total Nominal Transaksi (Rp)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
-                            Rp
-                          </span>
-                          <input
-                            type="number"
-                            value={formAmount}
-                            onChange={(e) => setFormAmount(e.target.value)}
-                            required
-                            min="1"
-                            placeholder="0"
-                            className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Row 2B: Pilihan Kategori Bertingkat (1. Kategori Utama -> 2. Sub-Kategori) */}
+                      {/* Row 2A: Pilihan Kategori Bertingkat (1. Kategori Utama -> 2. Sub-Kategori) */}
                       <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5">
@@ -2391,36 +2458,588 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
                         {/* Preview Breadcrumb Kategori Terpilih */}
                         {(formParentCategoryId || formCategoryId || formCustomCategory) && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200/80">
-                            <span className="text-slate-400 font-semibold">Pos Terpilih:</span>
-                            {(() => {
-                              const parentObj = expenseCategories.find(
-                                (c: any) => c.id === formParentCategoryId
-                              );
-                              const subObj = expenseCategories.find(
-                                (c: any) => c.id === formCategoryId && c.id !== formParentCategoryId
-                              );
-                              if (parentObj && subObj) {
-                                return (
-                                  <span className="inline-flex items-center gap-1 font-bold text-slate-800">
-                                    <span>{parentObj.name}</span>
-                                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                                    <span className="text-brand-700">{subObj.name}</span>
-                                  </span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200/80">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 font-semibold">Pos Terpilih:</span>
+                              {(() => {
+                                const parentObj = expenseCategories.find(
+                                  (c: any) => c.id === formParentCategoryId
                                 );
-                              }
-                              if (parentObj) {
-                                return (
-                                  <span className="font-bold text-slate-800">
-                                    {parentObj.name}{" "}
-                                    <span className="text-slate-400 font-normal">(Pos Utama)</span>
-                                  </span>
+                                const subObj = expenseCategories.find(
+                                  (c: any) => c.id === formCategoryId && c.id !== formParentCategoryId
                                 );
-                              }
-                              return <span className="font-bold text-slate-800">{formCustomCategory}</span>;
-                            })()}
+                                if (parentObj && subObj) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+                                      <span>{parentObj.name}</span>
+                                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                                      <span className="text-brand-700">{subObj.name}</span>
+                                    </span>
+                                  );
+                                }
+                                if (parentObj) {
+                                  return (
+                                    <span className="font-bold text-slate-800">
+                                      {parentObj.name}{" "}
+                                      <span className="text-slate-400 font-normal">(Pos Utama)</span>
+                                    </span>
+                                  );
+                                }
+                                return <span className="font-bold text-slate-800">{formCustomCategory}</span>;
+                              })()}
+                            </div>
+                            {isBahanBakuCategory && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-bold">
+                                <Package className="w-3 h-3 text-amber-600" />
+                                Terhubung Dropdown Stok Bahan Baku
+                              </span>
+                            )}
                           </div>
                         )}
+                      </div>
+
+                      {/* ─── RINCIAN ITEM / QUANTITY & HARGA SATUAN ↔ TOTAL ────────── */}
+                      <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-xl bg-brand-100/80 text-brand-700 flex items-center justify-center">
+                              <Calculator className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h3 className="text-xs font-extrabold text-slate-800">
+                                {isBahanBakuCategory
+                                  ? "Rincian Bahan Baku (Ambil dari Master Stok)"
+                                  : "Rincian Barang / Kuantitas & Harga Item"}
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                {isBahanBakuCategory
+                                  ? "Pilih bahan dari stok agar nama & satuan seragam, atau pilih Ketik Manual"
+                                  : <>Isi <strong>Qty + Harga Satuan</strong> atau <strong>Qty + Harga Total</strong> (otomatis menghitung dua arah)</>}
+                              </p>
+                            </div>
+                          </div>
+
+                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={useItemBreakdown}
+                              onChange={(e) => setUseItemBreakdown(e.target.checked)}
+                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            <span>Gunakan Rincian Item</span>
+                          </label>
+                        </div>
+
+                        {useItemBreakdown && (
+                          <div className="space-y-2.5 pt-1">
+                            {itemRows.map((row, idx) => {
+                              const selectedIng = row.ingredientId
+                                ? ingredients.find((i) => i.id === row.ingredientId)
+                                : undefined;
+                              const hasPurchaseUnit = Boolean(
+                                selectedIng?.purchaseUnit && Number(selectedIng?.conversionFactor) > 0
+                              );
+                              const showIngredientDropdown =
+                                isBahanBakuCategory || Boolean(row.ingredientId);
+
+                              return (
+                                <div
+                                  key={row.id}
+                                  className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                        Item #{idx + 1}
+                                      </span>
+                                      {selectedIng && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200/70 text-[10px] font-bold">
+                                          <Package className="w-2.5 h-2.5 text-amber-600" />
+                                          {selectedIng.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {itemRows.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveItemRow(row.id)}
+                                        className="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        Hapus Baris
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                    {/* Nama Item / Dropdown Stok Bahan Baku */}
+                                    <div className="sm:col-span-4">
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                                        {showIngredientDropdown
+                                          ? "Bahan Baku (Stok Master)"
+                                          : `Nama Barang / Item ${itemRows.length === 1 ? "(Opsional)" : ""}`}
+                                      </label>
+                                      {showIngredientDropdown ? (
+                                        <>
+                                          <select
+                                            value={row.ingredientId || ""}
+                                            onChange={(e) =>
+                                              handleSelectRowIngredient(row.id, e.target.value)
+                                            }
+                                            className="w-full px-2.5 py-2 text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                                          >
+                                            <option value="">-- Ketik Manual (Non-Stok) --</option>
+                                            {sortedIngredients.map((ing) => (
+                                              <option key={ing.id} value={ing.id}>
+                                                {ing.name} ({ing.purchaseUnit || ing.unit})
+                                              </option>
+                                            ))}
+                                          </select>
+                                          {!row.ingredientId && (
+                                            <input
+                                              type="text"
+                                              value={row.name}
+                                              onChange={(e) =>
+                                                handleItemRowChange(row.id, "name", e.target.value)
+                                              }
+                                              placeholder="Ketik nama barang non-stok..."
+                                              className="mt-1.5 w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                            />
+                                          )}
+                                        </>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.name}
+                                          onChange={(e) =>
+                                            handleItemRowChange(row.id, "name", e.target.value)
+                                          }
+                                          placeholder="Mis: Susu Diamond / Cup 16oz"
+                                          className="w-full px-2.5 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                        />
+                                      )}
+                                    </div>
+
+                                    {/* Qty & Satuan */}
+                                    <div className="grid grid-cols-2 sm:col-span-3 gap-1.5">
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                                          Qty
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0.01"
+                                          value={row.qty}
+                                          onChange={(e) =>
+                                            handleItemRowChange(row.id, "qty", e.target.value)
+                                          }
+                                          placeholder="1"
+                                          className="w-full px-2.5 py-2 text-xs font-extrabold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 text-center"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                                          Satuan
+                                        </label>
+                                        {selectedIng ? (
+                                          hasPurchaseUnit ? (
+                                            <select
+                                              value={row.unitMode || "PURCHASE"}
+                                              onChange={(e) =>
+                                                handleRowUnitModeChange(
+                                                  row.id,
+                                                  e.target.value as "PURCHASE" | "BASE"
+                                                )
+                                              }
+                                              className="w-full px-2 py-2 text-xs font-bold border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-brand-50/40 text-brand-900"
+                                            >
+                                              <option value="PURCHASE">
+                                                {selectedIng.purchaseUnit}
+                                              </option>
+                                              <option value="BASE">{selectedIng.unit}</option>
+                                            </select>
+                                          ) : (
+                                            <select
+                                              value={selectedIng.unit}
+                                              disabled
+                                              className="w-full px-2 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-100 text-slate-700"
+                                            >
+                                              <option value={selectedIng.unit}>
+                                                {selectedIng.unit}
+                                              </option>
+                                            </select>
+                                          )
+                                        ) : (
+                                          <select
+                                            value={row.unit}
+                                            onChange={(e) =>
+                                              handleItemRowChange(row.id, "unit", e.target.value)
+                                            }
+                                            className="w-full px-2 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                                          >
+                                            {UNIT_OPTIONS.map((u) => (
+                                              <option key={u} value={u}>
+                                                {u}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Harga per Item / Satuan */}
+                                    <div className="sm:col-span-2">
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                                        Harga / {row.unit} (Rp)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={row.unitPrice}
+                                        onChange={(e) =>
+                                          handleItemRowChange(row.id, "unitPrice", e.target.value)
+                                        }
+                                        placeholder="0"
+                                        className="w-full px-2.5 py-2 text-xs font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                      />
+                                    </div>
+
+                                    {/* Harga Total Item */}
+                                    <div className="sm:col-span-3">
+                                      <label className="block text-[10px] font-bold text-brand-700 mb-1">
+                                        Harga Total Item (Rp)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={row.totalPrice}
+                                        onChange={(e) =>
+                                          handleItemRowChange(row.id, "totalPrice", e.target.value)
+                                        }
+                                        placeholder="0"
+                                        className="w-full px-2.5 py-2 text-xs font-extrabold font-mono border border-brand-300 bg-brand-50/40 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {selectedIng && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50/70 border border-amber-200/60 text-[10px] text-amber-900">
+                                      <span>
+                                        {hasPurchaseUnit
+                                          ? `Konversi: 1 ${selectedIng.purchaseUnit} = ${Number(
+                                              selectedIng.conversionFactor
+                                            ).toLocaleString("id-ID")} ${selectedIng.unit} • `
+                                          : ""}
+                                        Stok saat ini:{" "}
+                                        <strong>
+                                          {selectedIng.currentStock.toLocaleString("id-ID")}{" "}
+                                          {selectedIng.unit}
+                                        </strong>
+                                      </span>
+                                      <span>
+                                        Modal saat ini:{" "}
+                                        <strong className="font-mono">
+                                          {formatUnitCost(selectedIng.costPerUnit)}/
+                                          {selectedIng.unit}
+                                        </strong>
+                                        {hasPurchaseUnit && (
+                                          <>
+                                            {" "}
+                                            (
+                                            {formatCurrency(
+                                              Math.round(
+                                                Number(selectedIng.purchasePrice) > 0
+                                                  ? Number(selectedIng.purchasePrice)
+                                                  : Number(selectedIng.costPerUnit || 0) *
+                                                      Number(selectedIng.conversionFactor || 1)
+                                              )
+                                            )}
+                                            /{selectedIng.purchaseUnit})
+                                          </>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            <div className="flex items-center justify-between pt-1">
+                              <button
+                                type="button"
+                                onClick={handleAddItemRow}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-brand-700 border border-slate-200/90 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Tambah Baris Barang</span>
+                              </button>
+                              <span className="text-[11px] text-slate-500">
+                                Total dari {itemRows.length} baris:{" "}
+                                <strong className="text-slate-900 font-mono">
+                                  {formatCurrency(
+                                    itemRows.reduce(
+                                      (acc, r) => acc + (Number(r.totalPrice) || 0),
+                                      0
+                                    )
+                                  )}
+                                </strong>
+                              </span>
+                            </div>
+
+                            {/* ─── PANEL SINKRONISASI HARGA BAHAN & HPP MENU ───────── */}
+                            {trxType === "CASH_OUT" &&
+                              (isBahanBakuCategory || hppSyncPreview.directUpdates.length > 0) && (
+                                <div className="mt-2 p-3.5 rounded-2xl bg-gradient-to-br from-brand-50/80 via-white to-amber-50/50 border border-brand-200/80 space-y-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <label className="inline-flex items-start gap-2.5 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={syncIngredientPrices}
+                                        onChange={(e) => setSyncIngredientPrices(e.target.checked)}
+                                        className="mt-0.5 rounded border-brand-300 text-brand-600 focus:ring-brand-500"
+                                      />
+                                      <div>
+                                        <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                                          <RefreshCw className="w-3.5 h-3.5 text-brand-600" />
+                                          Update Harga Modal Bahan Baku & Hitung Ulang HPP Menu
+                                        </span>
+                                        <span className="block text-[11px] text-slate-500 mt-0.5">
+                                          Memperbarui harga modal master bahan, kondimen olahan, dan estimasi HPP menu terkait.
+                                        </span>
+                                      </div>
+                                    </label>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
+                                      <Info className="w-3 h-3 text-slate-500" />
+                                      Stok fisik tetap (tidak diubah)
+                                    </span>
+                                  </div>
+
+                                  {syncIngredientPrices && (
+                                    <div className="space-y-3 pt-1 border-t border-brand-200/50">
+                                      {/* Metode Hitung Harga Modal */}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setPriceSyncMethod("LAST_PRICE")}
+                                          className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                            priceSyncMethod === "LAST_PRICE"
+                                              ? "bg-white border-brand-500 ring-2 ring-brand-500/20 shadow-2xs"
+                                              : "bg-white/60 border-slate-200 hover:bg-white"
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-extrabold text-slate-900">
+                                              Harga Beli Terakhir
+                                            </span>
+                                            <span
+                                              className={`w-2.5 h-2.5 rounded-full border ${
+                                                priceSyncMethod === "LAST_PRICE"
+                                                  ? "bg-brand-600 border-brand-600"
+                                                  : "border-slate-300"
+                                              }`}
+                                            />
+                                          </div>
+                                          <p className="text-[10px] text-slate-500 mt-0.5">
+                                            Langsung mengikuti harga nota terbaru
+                                          </p>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setPriceSyncMethod("WEIGHTED_AVERAGE")}
+                                          className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                            priceSyncMethod === "WEIGHTED_AVERAGE"
+                                              ? "bg-white border-brand-500 ring-2 ring-brand-500/20 shadow-2xs"
+                                              : "bg-white/60 border-slate-200 hover:bg-white"
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-extrabold text-slate-900">
+                                              Rata-rata Tertimbang
+                                            </span>
+                                            <span
+                                              className={`w-2.5 h-2.5 rounded-full border ${
+                                                priceSyncMethod === "WEIGHTED_AVERAGE"
+                                                  ? "bg-brand-600 border-brand-600"
+                                                  : "border-slate-300"
+                                              }`}
+                                            />
+                                          </div>
+                                          <p className="text-[10px] text-slate-500 mt-0.5">
+                                            Gabungkan nilai stok saat ini + pembelian baru
+                                          </p>
+                                        </button>
+                                      </div>
+
+                                      {/* Live Preview Dampak */}
+                                      {hppSyncPreview.directUpdates.length === 0 ? (
+                                        <p className="text-[11px] text-slate-500 italic bg-white/80 px-3 py-2 rounded-xl border border-slate-200/70">
+                                          Pilih bahan baku dari dropdown stok di atas dan isi Qty & Harga untuk melihat simulasi perubahan harga modal dan HPP menu.
+                                        </p>
+                                      ) : (
+                                        <div className="bg-white rounded-xl border border-slate-200/90 p-3 space-y-2.5 text-[11px]">
+                                          {/* 1. Perubahan Bahan Baku Langsung */}
+                                          <div>
+                                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+                                              Preview Harga Modal Bahan ({hppSyncPreview.directUpdates.length})
+                                            </p>
+                                            <div className="space-y-1">
+                                              {hppSyncPreview.directUpdates.map((upd) => {
+                                                const diffPct =
+                                                  upd.oldCostPerUnit > 0
+                                                    ? ((upd.newCostPerUnit - upd.oldCostPerUnit) /
+                                                        upd.oldCostPerUnit) *
+                                                      100
+                                                    : 0;
+                                                return (
+                                                  <div
+                                                    key={upd.ingredient.id}
+                                                    className="flex flex-wrap items-center justify-between gap-1.5 py-1 border-b border-slate-100 last:border-0"
+                                                  >
+                                                    <span className="font-bold text-slate-800">
+                                                      {upd.ingredient.name}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5 font-mono">
+                                                      <span className="text-slate-400 line-through">
+                                                        {formatUnitCost(upd.oldCostPerUnit)}/
+                                                        {upd.ingredient.unit}
+                                                      </span>
+                                                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                                                      <span className="font-extrabold text-slate-900">
+                                                        {formatUnitCost(upd.newCostPerUnit)}/
+                                                        {upd.ingredient.unit}
+                                                      </span>
+                                                      {Math.abs(diffPct) >= 0.1 && (
+                                                        <span
+                                                          className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold ${
+                                                            diffPct > 0
+                                                              ? "bg-rose-50 text-rose-700"
+                                                              : "bg-emerald-50 text-emerald-700"
+                                                          }`}
+                                                        >
+                                                          {diffPct > 0 ? "+" : ""}
+                                                          {diffPct.toFixed(1)}%
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+
+                                          {/* 2. Efek Berantai Kondimen Olahan */}
+                                          {hppSyncPreview.batchPrepUpdates.length > 0 && (
+                                            <div className="pt-1.5 border-t border-slate-100">
+                                              <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 mb-1.5">
+                                                Efek ke Kondimen Olahan / Batch Prep (
+                                                {hppSyncPreview.batchPrepUpdates.length})
+                                              </p>
+                                              <div className="space-y-1">
+                                                {hppSyncPreview.batchPrepUpdates.map((bp) => (
+                                                  <div
+                                                    key={bp.ingredient.id}
+                                                    className="flex flex-wrap items-center justify-between gap-1.5 py-0.5"
+                                                  >
+                                                    <span className="font-semibold text-slate-700">
+                                                      {bp.batchPrepName} ({bp.ingredient.name})
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5 font-mono">
+                                                      <span className="text-slate-400">
+                                                        {formatUnitCost(bp.oldCostPerUnit)}/
+                                                        {bp.ingredient.unit}
+                                                      </span>
+                                                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                                                      <span className="font-bold text-amber-800">
+                                                        {formatUnitCost(bp.newCostPerUnit)}/
+                                                        {bp.ingredient.unit}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* 3. Dampak ke HPP Menu */}
+                                          <div className="pt-1.5 border-t border-slate-100">
+                                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand-700 mb-1.5">
+                                              Dampak Estimasi HPP Menu (
+                                              {hppSyncPreview.affectedVariantPreviews.length} varian
+                                              terkait)
+                                            </p>
+                                            {hppSyncPreview.affectedVariantPreviews.length === 0 ? (
+                                              <p className="text-[10px] text-slate-400">
+                                                Belum ada resep menu yang menggunakan bahan baku ini.
+                                              </p>
+                                            ) : (
+                                              <div className="max-h-28 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                {hppSyncPreview.affectedVariantPreviews.map(
+                                                  (vp) => (
+                                                    <div
+                                                      key={`${vp.productId}-${vp.variantName}`}
+                                                      className="flex items-center justify-between gap-2 py-0.5"
+                                                    >
+                                                      <span className="text-slate-700 truncate">
+                                                        <strong className="text-slate-900">
+                                                          {vp.productName}
+                                                        </strong>{" "}
+                                                        — {vp.variantName}
+                                                      </span>
+                                                      <div className="flex items-center gap-1.5 font-mono shrink-0">
+                                                        <span className="text-slate-400">
+                                                          {formatCurrency(vp.oldHpp)}
+                                                        </span>
+                                                        <ArrowRight className="w-3 h-3 text-slate-400" />
+                                                        <span
+                                                          className={`font-extrabold ${
+                                                            vp.newHpp > vp.oldHpp
+                                                              ? "text-rose-600"
+                                                              : vp.newHpp < vp.oldHpp
+                                                                ? "text-emerald-600"
+                                                                : "text-slate-800"
+                                                          }`}
+                                                        >
+                                                          {formatCurrency(vp.newHpp)}
+                                                        </span>
+                                                      </div>
+                                                    </div>
+                                                  )
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Row 2: Total Nominal */}
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          Total Nominal Transaksi (Rp)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                            Rp
+                          </span>
+                          <input
+                            type="number"
+                            value={formAmount}
+                            onChange={(e) => setFormAmount(e.target.value)}
+                            required
+                            min="1"
+                            placeholder="0"
+                            className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                          />
+                        </div>
                       </div>
 
                       {/* Row 3: Nama Toko/Vendor, No. Nota, & Metode Bayar */}

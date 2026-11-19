@@ -14,6 +14,7 @@ import {
   calculateTodayOrderSummary,
   resolvePaymentAccountId,
   isAutoPosSaleCashIn,
+  calculateCashFlowHppSync,
 } from "../src/utils/posDomainLogic";
 import {
   buildEscPosReceipt,
@@ -30,6 +31,8 @@ import {
   CashAccount,
   Recipe,
   Ingredient,
+  BatchPreparation,
+  Product,
 } from "../src/types";
 
 console.log("=========================================================");
@@ -877,6 +880,260 @@ test("Pembuatan Dokumen Vektor PDF Slip Gaji Karyawan Lengkap", () => {
   assert.strictEqual(typeof doc.output, "function", "Objek harus memiliki method output jsPDF");
   const pdfBuffer = doc.output("arraybuffer");
   assert.ok(pdfBuffer.byteLength > 1000, "Ukuran file PDF harus valid dan berisi konten");
+});
+
+// -------------------------------------------------------------
+// 17. INTEGRASI DROPDOWN BAHAN BAKU & SINKRONISASI BERANTAI HPP ARUS KAS
+// -------------------------------------------------------------
+console.log("\n17. Pengujian Integrasi Dropdown Bahan Baku & Sinkronisasi Berantai HPP di Arus Kas:");
+
+const sampleIngredients: Ingredient[] = [
+  {
+    id: "ing-coffee-beans",
+    name: "House Blend Espresso Beans",
+    unit: "gr",
+    currentStock: 4500,
+    minStock: 1000,
+    category: "Coffee",
+    costPerUnit: 250,
+    purchaseUnit: "Kg",
+    conversionFactor: 1000,
+    purchasePrice: 250000,
+  },
+  {
+    id: "ing-fresh-milk",
+    name: "Fresh Milk UHT Greenfields",
+    unit: "ml",
+    currentStock: 5000,
+    minStock: 2000,
+    category: "Dairy",
+    costPerUnit: 18.5,
+    purchaseUnit: "Liter",
+    conversionFactor: 1000,
+    purchasePrice: 18500,
+  },
+  {
+    id: "ing-aren-padat",
+    name: "Gula Aren Batok Organik",
+    unit: "gr",
+    currentStock: 8000,
+    minStock: 2000,
+    category: "Pemanis",
+    costPerUnit: 35,
+    purchaseUnit: "Kg",
+    conversionFactor: 1000,
+    purchasePrice: 35000,
+  },
+  {
+    id: "ing-air",
+    name: "Air Bersih Galon RO",
+    unit: "ml",
+    currentStock: 50000,
+    minStock: 10000,
+    category: "Air & Es",
+    costPerUnit: 0.5,
+    purchaseUnit: "Galon (19L)",
+    conversionFactor: 19000,
+    purchasePrice: 9500,
+  },
+  {
+    id: "ing-aren-cair",
+    name: "Gula Aren Cair Racikan",
+    unit: "ml",
+    currentStock: 2400,
+    minStock: 800,
+    category: "Kondimen Olahan",
+    costPerUnit: 38,
+    purchaseUnit: "Liter",
+    conversionFactor: 1000,
+    purchasePrice: 38000,
+  },
+  {
+    id: "ing-ice-cube",
+    name: "Es Batu Kristal Tube",
+    unit: "gr",
+    currentStock: 25000,
+    minStock: 5000,
+    category: "Air & Es",
+    costPerUnit: 2,
+    purchaseUnit: "Plastik (10Kg)",
+    conversionFactor: 10000,
+    purchasePrice: 20000,
+  },
+];
+
+const sampleBatchPreps: BatchPreparation[] = [
+  {
+    id: "bp-gula-aren",
+    name: "Saus Gula Aren Racikan",
+    division: "BAR",
+    targetIngredientId: "ing-aren-cair",
+    targetIngredientName: "Gula Aren Cair Racikan",
+    yieldQuantity: 1200,
+    yieldUnit: "ml",
+    ingredients: [
+      { ingredientId: "ing-aren-padat", quantity: 1000 },
+      { ingredientId: "ing-air", quantity: 600 },
+    ],
+  },
+  {
+    id: "bp-cold-brew",
+    name: "Cold Brew Concentrate",
+    division: "BAR",
+    targetIngredientId: "ing-coffee-beans",
+    targetIngredientName: "Cold Brew Concentrate",
+    yieldQuantity: 1200,
+    yieldUnit: "ml",
+    ingredients: [
+      { ingredientId: "ing-coffee-beans", quantity: 250 },
+      { ingredientId: "ing-air", quantity: 1500 },
+    ],
+  },
+];
+
+const sampleProducts: Product[] = [
+  {
+    id: "prod-kopsu-aren",
+    name: "Kopi Susu Gula Aren",
+    category: "COFFEE",
+    division: "BAR",
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    variants: [
+      {
+        id: "var-kopsu-iced",
+        productId: "prod-kopsu-aren",
+        name: "Iced 16oz",
+        price: 22000,
+        packagingCost: 1000,
+        estimatedHpp: 8910,
+        isAvailable: true,
+        recipe: [
+          { ingredientId: "ing-coffee-beans", quantity: 18 },
+          { ingredientId: "ing-fresh-milk", quantity: 120 },
+          { ingredientId: "ing-aren-cair", quantity: 25 },
+          { ingredientId: "ing-ice-cube", quantity: 120 },
+        ],
+      },
+    ],
+  },
+];
+
+test("Konversi Satuan Beli & Metode Harga Beli Terakhir (LAST_PRICE) Tanpa Mengubah Stok Fisik", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-fresh-milk",
+        unitMode: "PURCHASE",
+        qty: "2",
+        unitPrice: "20000",
+        totalPrice: "40000",
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  assert.strictEqual(result.directUpdates.length, 1);
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 20, "40.000 / (2 * 1000 ml) = Rp 20/ml");
+  assert.strictEqual(result.directUpdates[0].newPurchasePrice, 20000, "Harga satuan beli = Rp 20.000/Liter");
+  assert.strictEqual(result.directUpdates[0].ingredient.currentStock, 5000, "Stok fisik gudang tidak boleh berubah");
+  assert.strictEqual(result.productsToUpdate.length, 1);
+  assert.strictEqual(
+    result.productsToUpdate[0].variants[0].estimatedHpp,
+    9090,
+    "Kenaikan susu Rp 18,5 -> Rp 20 (+Rp 1,5 * 120ml = +Rp 180) menaikkan HPP 8.910 -> 9.090"
+  );
+});
+
+test("Metode Rata-rata Tertimbang (WEIGHTED_AVERAGE) Menghitung Gabungan Nilai Stok Lama & Baru", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-fresh-milk",
+        unitMode: "PURCHASE",
+        qty: "5",
+        unitPrice: "20500",
+        totalPrice: "102500",
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "WEIGHTED_AVERAGE",
+  });
+
+  // Nilai stok lama: 5000 ml * 18.5 = 92.500; Beli baru: 5000 ml total 102.500
+  // Rata-rata: (92.500 + 102.500) / (5000 + 5000) = 195.000 / 10.000 = 19.5
+  assert.strictEqual(result.directUpdates.length, 1);
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 19.5);
+  assert.strictEqual(result.directUpdates[0].newPurchasePrice, 19500);
+  assert.strictEqual(result.directUpdates[0].ingredient.currentStock, 5000);
+});
+
+test("Efek Berantai Bahan Mentah -> Kondimen Olahan (BatchPreparation) -> HPP Varian Menu", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-aren-padat",
+        unitMode: "PURCHASE",
+        qty: "2",
+        unitPrice: "47000",
+        totalPrice: "94000",
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  // 1. Gula Aren Batok naik dari Rp 35/gr -> Rp 47/gr
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 47);
+
+  // 2. Kondimen Olahan Saus Gula Aren (1000 gr * 47 + 600 ml * 0.5) / 1200 ml = 47.300 / 1200 = 39.42
+  assert.strictEqual(result.batchPrepUpdates.length, 1);
+  assert.strictEqual(result.batchPrepUpdates[0].ingredient.id, "ing-aren-cair");
+  assert.strictEqual(result.batchPrepUpdates[0].newCostPerUnit, 39.42);
+  assert.strictEqual(result.batchPrepUpdates[0].newPurchasePrice, 39420);
+
+  // 3. HPP Kopi Susu Gula Aren (18*250 + 120*18.5 + 25*39.42 + 120*2 + 1000) = 8945.5 -> 8946
+  assert.strictEqual(result.productsToUpdate.length, 1);
+  assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 8946);
+});
+
+test("Proteksi Self-Referential Batch Prep Tidak Menimpa Harga Bahan Input", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-coffee-beans",
+        unitMode: "PURCHASE",
+        qty: "1",
+        unitPrice: "300000",
+        totalPrice: "300000",
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  assert.strictEqual(result.directUpdates.length, 1);
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 300);
+  assert.strictEqual(
+    result.batchPrepUpdates.length,
+    0,
+    "bp-cold-brew yang targetIngredientId-nya sama dengan input tidak boleh menimpa ing-coffee-beans"
+  );
+  // HPP Kopi Susu Gula Aren: 18*300 + 120*18.5 + 25*38 + 120*2 + 1000 = 5400 + 2220 + 950 + 240 + 1000 = 9810
+  assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 9810);
 });
 
 // -------------------------------------------------------------
