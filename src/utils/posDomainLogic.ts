@@ -479,7 +479,8 @@ export function resolvePaymentAccountId(
 
 export interface CashFlowSyncItemInput {
   ingredientId?: string;
-  unitMode?: "PURCHASE" | "BASE";
+  unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  conversionFactor?: number | string;
   qty: number | string;
   unitPrice?: number | string;
   totalPrice?: number | string;
@@ -575,9 +576,19 @@ export function calculateCashFlowHppSync(params: {
     }
     if (isNaN(effectiveTotal) || effectiveTotal <= 0) continue;
 
+    const parsedRowFactor =
+      row.conversionFactor !== undefined && row.conversionFactor !== ""
+        ? Number(row.conversionFactor)
+        : NaN;
     const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
-    const factor =
-      row.unitMode === "PURCHASE" && hasPurchaseUnit ? Number(ing.conversionFactor) : 1;
+    let factor = 1;
+    if (row.unitMode === "BASE") {
+      factor = 1;
+    } else if (!isNaN(parsedRowFactor) && parsedRowFactor > 0) {
+      factor = parsedRowFactor;
+    } else if (hasPurchaseUnit) {
+      factor = Number(ing.conversionFactor);
+    }
     const baseQty = qtyNum * factor;
 
     const existing = aggregatedByIng.get(ing.id);

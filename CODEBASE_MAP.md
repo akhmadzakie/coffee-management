@@ -163,11 +163,11 @@
 - Manual Payroll Entry (`L713 - L1115`)
 - Tab `list` (`L1166 - L1760`) & Tab `generate` (`L1761 - L2889`)
 
-### [`src/components/CashFlow.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/CashFlow.tsx) (3.408 Baris)
-- Multi-item Row Handlers & HPP Sync Preview (`L414 - L716`)
-- Submit & Delete Cash Transaction (`L718 - L955`)
-- Cash Account CRUD & CSV Import (`L957 - L1122`)
-- Render Tabel Arus Kas & Modal Form (`L1150 - L3408`)
+### [`src/components/CashFlow.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/CashFlow.tsx) (3.647 Baris)
+- Multi-item Row Handlers & HPP Sync Preview (`L515 - L861`)
+- Submit & Delete Cash Transaction (`L862 - L1102`)
+- Cash Account CRUD & CSV Import (`L1104 - L1270`)
+- Render Tabel Arus Kas & Modal Form (`L1300 - L3647`)
 
 ### [`src/components/LeaderChecklist.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/LeaderChecklist.tsx) (2.601 Baris)
 - Default Categories (BAR/KITCHEN/BAKER) & Helpers (`L18 - L258`)
@@ -239,7 +239,7 @@
 ## 7. Utilities (`src/utils/`)
 - [`src/utils/export.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/export.ts) (1.188 baris) — PDF & CSV export
 - [`src/utils/exportXlsx.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/exportXlsx.ts) (925 baris) — Excel `.xlsx` generator
-- [`src/utils/posDomainLogic.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posDomainLogic.ts) (760 baris) — Kalkulasi diskon, pajak, service charge, HPP resep, sinkronisasi HPP arus kas (`calculateCashFlowHppSync`), dan validasi POS
+- [`src/utils/posDomainLogic.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posDomainLogic.ts) (771 baris) — Kalkulasi diskon, pajak, service charge, HPP resep, sinkronisasi HPP arus kas (`calculateCashFlowHppSync`), dan validasi POS
 - [`src/utils/escpos.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/escpos.ts) (289 baris) — Thermal printer ESC/POS formatter
 - [`src/utils/excelTemplate.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/excelTemplate.ts) (199 baris) — Template import Excel
 - [`src/utils/salesImportMapper.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/salesImportMapper.ts) (157 baris) — Mapper import data penjualan eksternal

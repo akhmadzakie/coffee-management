@@ -1508,7 +1508,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </AnimatePresence>
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative z-10 custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
           {/* Global Notification Banner for Suspended Accounts (Manager & Super Admin) */}
           {canManageSuspend && suspendedUsers.length > 0 && (
             <div className="mb-4 max-w-7xl mx-auto p-3.5 sm:px-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-950 text-xs shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
@@ -1575,9 +1575,9 @@ export const Layout: React.FC<LayoutProps> = ({
           <AnimatePresence mode="wait">
             <motion.main
               key={currentView}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="max-w-7xl mx-auto h-full"
             >

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
@@ -35,7 +36,7 @@ import {
   ArrowRight,
   Info,
 } from "lucide-react";
-import { CashAccount, CashTransaction, CashTransactionItem } from "../types";
+import { CashAccount, CashTransaction, CashTransactionItem, Ingredient } from "../types";
 import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
 import { CsvImportExport } from "./common/CsvImportExport";
 
@@ -46,7 +47,8 @@ interface CashFlowProps {
 interface DraftItemRow {
   id: string;
   ingredientId?: string;
-  unitMode?: "PURCHASE" | "BASE";
+  unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  conversionFactor?: string;
   name: string;
   qty: string;
   unit: string;
@@ -54,6 +56,110 @@ interface DraftItemRow {
   totalPrice: string;
   lastEdited: "unit" | "total";
 }
+
+interface PackagingChoice {
+  key: string;
+  mode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  unit: string;
+  factor: number;
+  label: string;
+}
+
+const getIngredientPackagingChoices = (ing: Ingredient): PackagingChoice[] => {
+  const choices: PackagingChoice[] = [];
+  const baseUnit = ing.unit || "pcs";
+  const baseLower = baseUnit.trim().toLowerCase();
+  const masterUnit = (ing.purchaseUnit || "").trim();
+  const masterFactor = Number(ing.conversionFactor) || 0;
+  const hasMaster = Boolean(masterUnit && masterFactor > 0);
+
+  if (hasMaster) {
+    choices.push({
+      key: "PURCHASE",
+      mode: "PURCHASE",
+      unit: masterUnit,
+      factor: masterFactor,
+      label: `${masterUnit} (Master • 1 = ${masterFactor.toLocaleString("id-ID")} ${baseUnit})`,
+    });
+  }
+
+  choices.push({
+    key: "BASE",
+    mode: "BASE",
+    unit: baseUnit,
+    factor: 1,
+    label: `${baseUnit} (Satuan Resep)`,
+  });
+
+  const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
+  const isWeight = ["gr", "g", "gram"].includes(baseLower);
+
+  const presets: { unit: string; factor: number; label: string }[] = isVolume
+    ? [
+        { unit: "Liter", factor: 1000, label: `Liter (1.000 ${baseUnit})` },
+        { unit: "Botol (700ml)", factor: 700, label: `Botol (700 ${baseUnit})` },
+        { unit: "Jerigen (5L)", factor: 5000, label: `Jerigen 5L (5.000 ${baseUnit})` },
+        { unit: "Karton (12L)", factor: 12000, label: `Karton 12L (12.000 ${baseUnit})` },
+        { unit: "Galon (19L)", factor: 19000, label: `Galon 19L (19.000 ${baseUnit})` },
+      ]
+    : isWeight
+      ? [
+          { unit: "Kg", factor: 1000, label: `Kg (1.000 ${baseUnit})` },
+          { unit: "Pack (250g)", factor: 250, label: `Pack 250g (250 ${baseUnit})` },
+          { unit: "Pack (500g)", factor: 500, label: `Pack 500g (500 ${baseUnit})` },
+          { unit: "Dus (5Kg)", factor: 5000, label: `Dus 5Kg (5.000 ${baseUnit})` },
+          { unit: "Dus (10Kg)", factor: 10000, label: `Dus 10Kg (10.000 ${baseUnit})` },
+          { unit: "Karung (25Kg)", factor: 25000, label: `Karung 25Kg (25.000 ${baseUnit})` },
+        ]
+      : [
+          { unit: `Lusin (12${baseUnit})`, factor: 12, label: `Lusin (12 ${baseUnit})` },
+          { unit: `Pack (50${baseUnit})`, factor: 50, label: `Pack (50 ${baseUnit})` },
+          { unit: `Pack (100${baseUnit})`, factor: 100, label: `Pack (100 ${baseUnit})` },
+          { unit: `Dus (500${baseUnit})`, factor: 500, label: `Dus (500 ${baseUnit})` },
+          { unit: `Karton (1000${baseUnit})`, factor: 1000, label: `Karton (1.000 ${baseUnit})` },
+        ];
+
+  const masterLower = masterUnit.toLowerCase();
+  presets.forEach((p) => {
+    const pLower = p.unit.toLowerCase();
+    if (pLower === masterLower || pLower === baseLower) return;
+    choices.push({
+      key: `PRESET:${p.unit}`,
+      mode: "PRESET",
+      unit: p.unit,
+      factor: p.factor,
+      label: p.label,
+    });
+  });
+
+  choices.push({
+    key: "CUSTOM",
+    mode: "CUSTOM",
+    unit: "Karton",
+    factor: hasMaster ? masterFactor : 1,
+    label: "Kemasan Lain / Kustom (Karton, Dus, Pack...)",
+  });
+
+  return choices;
+};
+
+const getPackagingSelectValue = (
+  row: DraftItemRow,
+  choices: PackagingChoice[]
+): string => {
+  if (row.unitMode === "CUSTOM") return "CUSTOM";
+  if (row.unitMode === "BASE") return "BASE";
+  if (row.unitMode === "PURCHASE" && choices.some((c) => c.key === "PURCHASE")) {
+    return "PURCHASE";
+  }
+  if (row.unitMode === "PRESET") {
+    const matchedPreset = choices.find(
+      (c) => c.mode === "PRESET" && c.unit.toLowerCase() === row.unit.toLowerCase()
+    );
+    if (matchedPreset) return matchedPreset.key;
+  }
+  return "CUSTOM";
+};
 
 const UNIT_OPTIONS = [
   "pcs",
@@ -76,6 +182,7 @@ const createEmptyItemRow = (): DraftItemRow => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   ingredientId: "",
   unitMode: "PURCHASE",
+  conversionFactor: "1",
   name: "",
   qty: "1",
   unit: "pcs",
@@ -429,6 +536,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             ...row,
             ingredientId: "",
             unitMode: "PURCHASE" as const,
+            conversionFactor: "1",
             name: "",
             unit: "pcs",
           };
@@ -438,12 +546,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
         const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
         const unitMode: "PURCHASE" | "BASE" = hasPurchaseUnit ? "PURCHASE" : "BASE";
+        const factor = hasPurchaseUnit ? Number(ing.conversionFactor) : 1;
         const nextUnit = hasPurchaseUnit ? ing.purchaseUnit! : ing.unit;
         const defaultPrice = hasPurchaseUnit
           ? Math.round(
               Number(ing.purchasePrice) > 0
                 ? Number(ing.purchasePrice)
-                : Number(ing.costPerUnit || 0) * Number(ing.conversionFactor || 1)
+                : Number(ing.costPerUnit || 0) * factor
             )
           : Number(ing.costPerUnit || 0);
 
@@ -454,6 +563,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
           ...row,
           ingredientId: ing.id,
           unitMode,
+          conversionFactor: String(factor),
           name: ing.name,
           qty: !isNaN(qtyNum) && qtyNum > 0 ? row.qty : "1",
           unit: nextUnit,
@@ -468,31 +578,57 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     });
   };
 
-  const handleRowUnitModeChange = (rowId: string, mode: "PURCHASE" | "BASE") => {
+  const handleRowPackagingChoiceChange = (rowId: string, choiceKey: string) => {
     setItemRows((prev) => {
       const next = prev.map((row) => {
         if (row.id !== rowId || !row.ingredientId) return row;
         const ing = ingredients.find((i) => i.id === row.ingredientId);
         if (!ing) return row;
 
-        const hasPurchaseUnit = Boolean(ing.purchaseUnit && Number(ing.conversionFactor) > 0);
-        const effectiveMode: "PURCHASE" | "BASE" = mode === "PURCHASE" && hasPurchaseUnit ? "PURCHASE" : "BASE";
-        const nextUnit = effectiveMode === "PURCHASE" ? ing.purchaseUnit! : ing.unit;
-        const defaultPrice =
-          effectiveMode === "PURCHASE"
-            ? Math.round(
-                Number(ing.purchasePrice) > 0
-                  ? Number(ing.purchasePrice)
-                  : Number(ing.costPerUnit || 0) * Number(ing.conversionFactor || 1)
-              )
-            : Number(ing.costPerUnit || 0);
+        const choices = getIngredientPackagingChoices(ing);
+        const chosen = choices.find((c) => c.key === choiceKey);
+        if (!chosen) return row;
+
+        let nextUnit = chosen.unit;
+        let factor = chosen.factor;
+        let defaultPrice = 0;
+
+        if (chosen.mode === "CUSTOM") {
+          nextUnit = row.unitMode === "CUSTOM" && row.unit.trim() ? row.unit : "Karton";
+          const curFactor = parseFloat(row.conversionFactor || "");
+          factor =
+            row.unitMode === "CUSTOM" && !isNaN(curFactor) && curFactor > 0
+              ? curFactor
+              : Number(ing.conversionFactor) > 0
+                ? Number(ing.conversionFactor)
+                : 1;
+          defaultPrice =
+            Number(ing.costPerUnit || 0) > 0
+              ? Math.round(Number(ing.costPerUnit) * factor)
+              : 0;
+        } else if (chosen.mode === "PURCHASE") {
+          defaultPrice = Math.round(
+            Number(ing.purchasePrice) > 0
+              ? Number(ing.purchasePrice)
+              : Number(ing.costPerUnit || 0) * factor
+          );
+        } else if (chosen.mode === "BASE") {
+          defaultPrice = Number(ing.costPerUnit || 0);
+        } else {
+          // PRESET
+          defaultPrice =
+            Number(ing.costPerUnit || 0) > 0
+              ? Math.round(Number(ing.costPerUnit) * factor)
+              : 0;
+        }
 
         const qtyNum = parseFloat(row.qty);
         const validQty = !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : 1;
 
         return {
           ...row,
-          unitMode: effectiveMode,
+          unitMode: chosen.mode,
+          conversionFactor: String(factor),
           unit: nextUnit,
           unitPrice: defaultPrice > 0 ? String(defaultPrice) : "",
           totalPrice: defaultPrice > 0 ? String(Math.round(validQty * defaultPrice)) : "",
@@ -503,6 +639,14 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       recalculateTotalFromItems(next);
       return next;
     });
+  };
+
+  const handleRowConversionFactorChange = (rowId: string, nextFactorStr: string) => {
+    setItemRows((prev) =>
+      prev.map((row) =>
+        row.id === rowId ? { ...row, conversionFactor: nextFactorStr } : row
+      )
+    );
   };
 
   const handleItemRowChange = (
@@ -684,7 +828,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             ingredients.find(
               (i) => i.name.trim().toLowerCase() === String(it.name || "").trim().toLowerCase()
             );
-          const inferredUnitMode: "PURCHASE" | "BASE" = it.unitMode
+          const inferredUnitMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM" = it.unitMode
             ? it.unitMode
             : matchedIng?.purchaseUnit &&
                 String(it.unit || "").toLowerCase() === matchedIng.purchaseUnit.toLowerCase()
@@ -693,10 +837,20 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 ? "BASE"
                 : "PURCHASE";
 
+          const inferredFactor =
+            it.conversionFactor && Number(it.conversionFactor) > 0
+              ? Number(it.conversionFactor)
+              : inferredUnitMode === "BASE"
+                ? 1
+                : matchedIng?.conversionFactor && Number(matchedIng.conversionFactor) > 0
+                  ? Number(matchedIng.conversionFactor)
+                  : 1;
+
           return {
             id: `${idx}-${Date.now()}`,
             ingredientId: it.ingredientId || matchedIng?.id || "",
             unitMode: inferredUnitMode,
+            conversionFactor: String(inferredFactor),
             name: it.name || "",
             qty: String(it.qty ?? 1),
             unit: it.unit || "pcs",
@@ -808,7 +962,14 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   : 0;
             return {
               ...(r.ingredientId
-                ? { ingredientId: r.ingredientId, unitMode: r.unitMode || "PURCHASE" }
+                ? {
+                    ingredientId: r.ingredientId,
+                    unitMode: r.unitMode || "PURCHASE",
+                    conversionFactor:
+                      r.unitMode === "BASE"
+                        ? 1
+                        : Math.max(0.001, parseFloat(String(r.conversionFactor || "1")) || 1),
+                  }
                 : {}),
               name: r.name.trim(),
               qty,
@@ -1149,19 +1310,25 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   return (
     <>
-      {syncToast && (
-        <div className="fixed top-5 right-5 z-[60] px-4 py-3 rounded-2xl bg-slate-900 text-emerald-400 border border-emerald-500/30 shadow-xl flex items-center gap-2.5 text-xs font-bold animate-fade-in max-w-md">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{syncToast}</span>
-          <button
-            type="button"
-            onClick={() => setSyncToast(null)}
-            className="text-slate-400 hover:text-white ml-1 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+      {syncToast &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed top-4 left-4 right-4 sm:left-auto sm:top-5 sm:right-5 z-[110] px-4 py-3 rounded-2xl bg-slate-900 text-emerald-400 border border-emerald-500/30 shadow-xl flex items-center justify-between gap-2.5 text-xs font-bold animate-fade-in sm:max-w-md">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="leading-snug">{syncToast}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSyncToast(null)}
+              className="text-slate-400 hover:text-white ml-1 cursor-pointer shrink-0 p-1"
+              aria-label="Tutup notifikasi"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>,
+          document.body
+        )}
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
         {/* ─── Header & Quick Actions ────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs">
@@ -2127,58 +2294,61 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         </div>
 
         {/* ─── CREATE / EDIT / TRANSFER TRANSACTION MODAL ────────────────────── */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center z-50 animate-fade-in">
-            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[90vh]">
-              {/* Modal Header */}
-              <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-2xs ${
-                      trxType === "CASH_IN"
-                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200/60"
-                        : trxType === "TRANSFER"
-                          ? "bg-indigo-50 text-indigo-600 border border-indigo-200/60"
-                          : "bg-rose-50 text-rose-600 border border-rose-200/60"
-                    }`}
+        {isModalOpen &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-2.5 sm:p-6 flex justify-center items-center z-[100] animate-fade-in overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
+                {/* Modal Header */}
+                <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-2xs shrink-0 ${
+                        trxType === "CASH_IN"
+                          ? "bg-emerald-50 text-emerald-600 border border-emerald-200/60"
+                          : trxType === "TRANSFER"
+                            ? "bg-indigo-50 text-indigo-600 border border-indigo-200/60"
+                            : "bg-rose-50 text-rose-600 border border-rose-200/60"
+                      }`}
+                    >
+                      {trxType === "CASH_IN" ? (
+                        <TrendingUp className="w-5 h-5 stroke-[2.2]" />
+                      ) : trxType === "TRANSFER" ? (
+                        <ArrowLeftRight className="w-5 h-5 stroke-[2.2]" />
+                      ) : (
+                        <TrendingDown className="w-5 h-5 stroke-[2.2]" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
+                        {editingTrx
+                          ? "Edit Transaksi Buku Kas"
+                          : trxType === "TRANSFER"
+                            ? "Transfer / Pindah Dana Antar Pos Kas"
+                            : "Catat Transaksi Buku Kas"}
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                        {trxType === "TRANSFER"
+                          ? "Mutasi keluar & masuk antar rekening dibuat otomatis secara berpasangan"
+                          : "Dilengkapi kalkulator otomatis Qty × Harga Satuan ↔ Harga Total"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingTrx(null);
+                    }}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                    aria-label="Tutup modal"
                   >
-                    {trxType === "CASH_IN" ? (
-                      <TrendingUp className="w-5 h-5 stroke-[2.2]" />
-                    ) : trxType === "TRANSFER" ? (
-                      <ArrowLeftRight className="w-5 h-5 stroke-[2.2]" />
-                    ) : (
-                      <TrendingDown className="w-5 h-5 stroke-[2.2]" />
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
-                      {editingTrx
-                        ? "Edit Transaksi Buku Kas"
-                        : trxType === "TRANSFER"
-                          ? "Transfer / Pindah Dana Antar Pos Kas"
-                          : "Catat Transaksi Buku Kas"}
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      {trxType === "TRANSFER"
-                        ? "Mutasi keluar & masuk antar rekening dibuat otomatis secara berpasangan"
-                        : "Dilengkapi kalkulator otomatis Qty × Harga Satuan ↔ Harga Total"}
-                    </p>
-                  </div>
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditingTrx(null);
-                  }}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              <form onSubmit={handleTrxSubmit} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                <form onSubmit={handleTrxSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 min-h-0 overscroll-contain">
                   {/* Type Toggle Sliding Pill */}
                   <div className="flex gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/70">
                     <button
@@ -2571,22 +2741,22 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                     )}
                                   </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                    {/* Nama Item / Dropdown Stok Bahan Baku */}
-                                    <div className="sm:col-span-4">
+                                  <div className="space-y-2.5">
+                                    {/* Tier 1: Nama Item / Dropdown Stok Bahan Baku (Full Width) */}
+                                    <div>
                                       <label className="block text-[10px] font-bold text-slate-500 mb-1">
                                         {showIngredientDropdown
                                           ? "Bahan Baku (Stok Master)"
                                           : `Nama Barang / Item ${itemRows.length === 1 ? "(Opsional)" : ""}`}
                                       </label>
                                       {showIngredientDropdown ? (
-                                        <>
+                                        <div className="space-y-1.5">
                                           <select
                                             value={row.ingredientId || ""}
                                             onChange={(e) =>
                                               handleSelectRowIngredient(row.id, e.target.value)
                                             }
-                                            className="w-full px-2.5 py-2 text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                                            className="w-full px-3 py-2 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                                           >
                                             <option value="">-- Ketik Manual (Non-Stok) --</option>
                                             {sortedIngredients.map((ing) => (
@@ -2603,10 +2773,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                                 handleItemRowChange(row.id, "name", e.target.value)
                                               }
                                               placeholder="Ketik nama barang non-stok..."
-                                              className="mt-1.5 w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                              className="w-full px-3 py-2 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
                                             />
                                           )}
-                                        </>
+                                        </div>
                                       ) : (
                                         <input
                                           type="text"
@@ -2615,15 +2785,15 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                             handleItemRowChange(row.id, "name", e.target.value)
                                           }
                                           placeholder="Mis: Susu Diamond / Cup 16oz"
-                                          className="w-full px-2.5 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                          className="w-full px-3 py-2 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
                                         />
                                       )}
                                     </div>
 
-                                    {/* Qty & Satuan */}
-                                    <div className="grid grid-cols-2 sm:col-span-3 gap-1.5">
-                                      <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                                    {/* Tier 2: Qty, Satuan, Harga Satuan & Harga Total Item */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-12 gap-2.5 items-end">
+                                      <div className="col-span-1 sm:col-span-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1 truncate">
                                           Qty
                                         </label>
                                         <input
@@ -2635,48 +2805,48 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                             handleItemRowChange(row.id, "qty", e.target.value)
                                           }
                                           placeholder="1"
-                                          className="w-full px-2.5 py-2 text-xs font-extrabold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 text-center"
+                                          className="w-full px-2.5 py-2 text-sm sm:text-xs font-extrabold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 text-center"
                                         />
                                       </div>
-                                      <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 mb-1">
+
+                                      <div className="col-span-1 sm:col-span-3">
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-1 truncate">
                                           Satuan
                                         </label>
                                         {selectedIng ? (
-                                          hasPurchaseUnit ? (
-                                            <select
-                                              value={row.unitMode || "PURCHASE"}
-                                              onChange={(e) =>
-                                                handleRowUnitModeChange(
-                                                  row.id,
-                                                  e.target.value as "PURCHASE" | "BASE"
-                                                )
-                                              }
-                                              className="w-full px-2 py-2 text-xs font-bold border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-brand-50/40 text-brand-900"
-                                            >
-                                              <option value="PURCHASE">
-                                                {selectedIng.purchaseUnit}
-                                              </option>
-                                              <option value="BASE">{selectedIng.unit}</option>
-                                            </select>
-                                          ) : (
-                                            <select
-                                              value={selectedIng.unit}
-                                              disabled
-                                              className="w-full px-2 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-100 text-slate-700"
-                                            >
-                                              <option value={selectedIng.unit}>
-                                                {selectedIng.unit}
-                                              </option>
-                                            </select>
-                                          )
+                                          (() => {
+                                            const packagingChoices =
+                                              getIngredientPackagingChoices(selectedIng);
+                                            const currentSelectVal = getPackagingSelectValue(
+                                              row,
+                                              packagingChoices
+                                            );
+                                            return (
+                                              <select
+                                                value={currentSelectVal}
+                                                onChange={(e) =>
+                                                  handleRowPackagingChoiceChange(
+                                                    row.id,
+                                                    e.target.value
+                                                  )
+                                                }
+                                                className="w-full px-2.5 py-2 text-sm sm:text-xs font-bold border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-brand-50/40 text-brand-900"
+                                              >
+                                                {packagingChoices.map((ch) => (
+                                                  <option key={ch.key} value={ch.key}>
+                                                    {ch.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            );
+                                          })()
                                         ) : (
                                           <select
                                             value={row.unit}
                                             onChange={(e) =>
                                               handleItemRowChange(row.id, "unit", e.target.value)
                                             }
-                                            className="w-full px-2 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                                            className="w-full px-2.5 py-2 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                                           >
                                             {UNIT_OPTIONS.map((u) => (
                                               <option key={u} value={u}>
@@ -2686,43 +2856,98 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                           </select>
                                         )}
                                       </div>
-                                    </div>
 
-                                    {/* Harga per Item / Satuan */}
-                                    <div className="sm:col-span-2">
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                                        Harga / {row.unit} (Rp)
-                                      </label>
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={row.unitPrice}
-                                        onChange={(e) =>
-                                          handleItemRowChange(row.id, "unitPrice", e.target.value)
-                                        }
-                                        placeholder="0"
-                                        className="w-full px-2.5 py-2 text-xs font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                      />
-                                    </div>
+                                      {/* Harga per Item / Satuan */}
+                                      <div className="col-span-1 sm:col-span-3">
+                                        <label
+                                          className="block text-[10px] font-bold text-slate-500 mb-1 truncate"
+                                          title={`Harga / ${row.unit} (Rp)`}
+                                        >
+                                          Harga / {row.unit} (Rp)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          value={row.unitPrice}
+                                          onChange={(e) =>
+                                            handleItemRowChange(row.id, "unitPrice", e.target.value)
+                                          }
+                                          placeholder="0"
+                                          className="w-full px-2.5 py-2 text-sm sm:text-xs font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                        />
+                                      </div>
 
-                                    {/* Harga Total Item */}
-                                    <div className="sm:col-span-3">
-                                      <label className="block text-[10px] font-bold text-brand-700 mb-1">
-                                        Harga Total Item (Rp)
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={row.totalPrice}
-                                        onChange={(e) =>
-                                          handleItemRowChange(row.id, "totalPrice", e.target.value)
-                                        }
-                                        placeholder="0"
-                                        className="w-full px-2.5 py-2 text-xs font-extrabold font-mono border border-brand-300 bg-brand-50/40 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                      />
+                                      {/* Harga Total Item */}
+                                      <div className="col-span-1 sm:col-span-4">
+                                        <label className="block text-[10px] font-bold text-brand-700 mb-1 truncate">
+                                          Harga Total Item (Rp)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={row.totalPrice}
+                                          onChange={(e) =>
+                                            handleItemRowChange(row.id, "totalPrice", e.target.value)
+                                          }
+                                          placeholder="0"
+                                          className="w-full px-2.5 py-2 text-sm sm:text-xs font-extrabold font-mono border border-brand-300 bg-brand-50/40 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                        />
+                                      </div>
                                     </div>
                                   </div>
+
+                                  {selectedIng && row.unitMode !== "BASE" && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-700">
+                                      {row.unitMode === "CUSTOM" && (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-semibold text-slate-500 whitespace-nowrap">
+                                            Nama Kemasan:
+                                          </span>
+                                          <input
+                                            type="text"
+                                            value={row.unit}
+                                            onChange={(e) =>
+                                              handleItemRowChange(row.id, "unit", e.target.value)
+                                            }
+                                            placeholder="Mis: Karton / Dus"
+                                            className="w-28 px-2 py-1 text-xs font-bold border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                          />
+                                        </div>
+                                      )}
+
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="font-semibold text-slate-500">
+                                          Isi per 1 {row.unit || "kemasan"} =
+                                        </span>
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0.001"
+                                          value={row.conversionFactor || ""}
+                                          onChange={(e) =>
+                                            handleRowConversionFactorChange(
+                                              row.id,
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-20 px-2 py-1 text-xs font-extrabold font-mono text-center border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                        />
+                                        <span className="font-bold text-slate-700">
+                                          {selectedIng.unit}
+                                        </span>
+                                      </div>
+
+                                      <span className="px-2 py-0.5 rounded-md bg-brand-50 text-brand-800 border border-brand-200/70 font-bold text-[10px] font-mono">
+                                        Total Takaran:{" "}
+                                        {(
+                                          (parseFloat(row.qty) || 0) *
+                                          (parseFloat(row.conversionFactor || "1") || 0)
+                                        ).toLocaleString("id-ID")}{" "}
+                                        {selectedIng.unit}
+                                      </span>
+                                    </div>
+                                  )}
 
                                   {selectedIng && (
                                     <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50/70 border border-amber-200/60 text-[10px] text-amber-900">
@@ -2899,7 +3124,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                                     className="flex flex-wrap items-center justify-between gap-1.5 py-1 border-b border-slate-100 last:border-0"
                                                   >
                                                     <span className="font-bold text-slate-800">
-                                                      {upd.ingredient.name}
+                                                      {upd.ingredient.name}{" "}
+                                                      <span className="text-[10px] font-medium text-slate-400">
+                                                        (Beli{" "}
+                                                        {upd.totalBaseQty.toLocaleString("id-ID")}{" "}
+                                                        {upd.ingredient.unit})
+                                                      </span>
                                                     </span>
                                                     <div className="flex items-center gap-1.5 font-mono">
                                                       <span className="text-slate-400 line-through">
@@ -3113,20 +3343,156 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* Modal Footer */}
-                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-2.5 shrink-0">
-                  <div className="text-xs text-slate-500">
-                    Total Dicatat:{" "}
-                    <strong className="text-sm font-extrabold text-slate-900 font-mono">
-                      {formatCurrency(Number(formAmount) || 0)}
-                    </strong>
+                  {/* Modal Footer */}
+                  <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+                    <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-slate-500">
+                      <span>Total Dicatat:</span>
+                      <strong className="text-sm sm:text-base font-extrabold text-slate-900 font-mono">
+                        {formatCurrency(Number(formAmount) || 0)}
+                      </strong>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsModalOpen(false);
+                          setEditingTrx(null);
+                        }}
+                        className="flex-1 sm:flex-initial px-4 py-2.5 text-slate-600 bg-white sm:bg-transparent border border-slate-200 sm:border-0 hover:bg-slate-100 active:scale-95 rounded-2xl text-xs font-bold transition-all cursor-pointer text-center"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-[2] sm:flex-initial px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer text-center"
+                      >
+                        {editingTrx
+                          ? "Simpan Perubahan"
+                          : trxType === "TRANSFER"
+                            ? "Proses Transfer Kas"
+                            : "Simpan Transaksi"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                </form>
+              </div>
+            </div>,
+            document.body
+          )}
+
+        {/* ─── ADD / EDIT POS KAS MODAL ───────────────────────────────────── */}
+        {isAccountModalOpen &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-center z-[100] animate-fade-in overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[90dvh] sm:max-h-[85vh]">
+                <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+                      <Landmark className="w-5 h-5 stroke-[2.2]" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
+                        {editingAccount ? "Edit Pos Kas / Rekening" : "Tambah Pos Kas Baru"}
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                        Rekening bank, kas tunai operasional, atau dompet digital
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAccountModalOpen(false);
+                      setEditingAccount(null);
+                    }}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                    aria-label="Tutup modal"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleAccountSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 min-h-0 overscroll-contain">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                        Nama Pos Kas / Rekening
+                      </label>
+                      <input
+                        type="text"
+                        value={accName}
+                        onChange={(e) => setAccName(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2.5 text-base sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                        placeholder="Contoh: Kas Tunai Toko, Rekening BCA, Kas Kecil (Petty Cash)"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                        Jenis Pos Kas
+                      </label>
+                      <select
+                        value={accType}
+                        onChange={(e) => setAccType(e.target.value as any)}
+                        required
+                        className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                      >
+                        <option value="CASH">Tunai (Kas Operasional / Petty Cash)</option>
+                        <option value="BANK">Rekening Bank (BCA / Mandiri / BRI / BNI)</option>
+                        <option value="E_WALLET">Dompet Digital (QRIS / GoPay / OVO / Dana)</option>
+                        <option value="SAVINGS">Tabungan / Dana Cadangan Toko</option>
+                      </select>
+                    </div>
+
+                    {!editingAccount && (
+                      <div className="pt-2 border-t border-slate-100 space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                            Saldo Awal Saat Ini (Opsional)
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
+                              Rp
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={accOpeningBalance}
+                              onChange={(e) => setAccOpeningBalance(e.target.value)}
+                              placeholder="0 (Kosongkan jika mulai dari Rp 0)"
+                              className="w-full pl-9 pr-3.5 py-2.5 text-sm sm:text-xs font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white"
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Jika diisi, otomatis tercatat sebagai mutasi Saldo Awal tanpa memengaruhi laporan Laba Rugi.
+                          </p>
+                        </div>
+
+                        {Number(accOpeningBalance) > 0 && (
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                              Tanggal Saldo Awal
+                            </label>
+                            <input
+                              type="date"
+                              value={accOpeningDate}
+                              onChange={(e) => setAccOpeningDate(e.target.value)}
+                              className="w-full px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
-                        setIsModalOpen(false);
-                        setEditingTrx(null);
+                        setIsAccountModalOpen(false);
+                        setEditingAccount(null);
                       }}
                       className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 active:scale-95 rounded-2xl text-xs font-bold transition-all cursor-pointer"
                     >
@@ -3134,275 +3500,148 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
                     >
-                      {editingTrx
-                        ? "Simpan Perubahan"
-                        : trxType === "TRANSFER"
-                          ? "Proses Transfer Kas"
-                          : "Simpan Transaksi"}
+                      {editingAccount ? "Simpan Perubahan" : "Buat Pos Kas"}
                     </button>
                   </div>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+                </form>
+              </div>
+            </div>,
+            document.body
+          )}
+      </div>
 
-        {/* ─── ADD / EDIT POS KAS MODAL ───────────────────────────────────── */}
-        {isAccountModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center z-50 animate-fade-in">
-            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[85vh]">
-              <div className="flex justify-between items-center p-5 sm:p-6 border-b border-slate-100 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs">
-                    <Landmark className="w-5 h-5 stroke-[2.2]" />
+      {/* ─── SALES VERIFICATION MODAL ──────────────────────────────────── */}
+      {isVerificationModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] p-3 sm:p-6 flex justify-center items-center animate-fade-in overflow-hidden">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col border border-slate-200/80 overflow-hidden animate-scale-up">
+              <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
+                    <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
                   </div>
-                  <div>
-                    <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
-                      {editingAccount ? "Edit Pos Kas / Rekening" : "Tambah Pos Kas Baru"}
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
+                      Verifikasi Penjualan ({unverifiedSalesLogs.length})
                     </h2>
-                    <p className="text-xs text-slate-400">
-                      Rekening bank, kas tunai operasional, atau dompet digital
+                    <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                      Sinkronisasi data impor penjualan ke buku kas besar
                     </p>
                   </div>
                 </div>
                 <button
-                  type="button"
-                  onClick={() => {
-                    setIsAccountModalOpen(false);
-                    setEditingAccount(null);
-                  }}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                  aria-label="Tutup modal"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleAccountSubmit} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                      Nama Pos Kas / Rekening
-                    </label>
-                    <input
-                      type="text"
-                      value={accName}
-                      onChange={(e) => setAccName(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 text-base sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                      placeholder="Contoh: Kas Tunai Toko, Rekening BCA, Kas Kecil (Petty Cash)"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                      Jenis Pos Kas
-                    </label>
-                    <select
-                      value={accType}
-                      onChange={(e) => setAccType(e.target.value as any)}
-                      required
-                      className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                    >
-                      <option value="CASH">Tunai (Kas Operasional / Petty Cash)</option>
-                      <option value="BANK">Rekening Bank (BCA / Mandiri / BRI / BNI)</option>
-                      <option value="E_WALLET">Dompet Digital (QRIS / GoPay / OVO / Dana)</option>
-                      <option value="SAVINGS">Tabungan / Dana Cadangan Toko</option>
-                    </select>
-                  </div>
-
-                  {!editingAccount && (
-                    <div className="pt-2 border-t border-slate-100 space-y-3">
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                          Saldo Awal Saat Ini (Opsional)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
-                            Rp
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            value={accOpeningBalance}
-                            onChange={(e) => setAccOpeningBalance(e.target.value)}
-                            placeholder="0 (Kosongkan jika mulai dari Rp 0)"
-                            className="w-full pl-9 pr-3.5 py-2.5 text-sm sm:text-xs font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white"
-                          />
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Jika diisi, otomatis tercatat sebagai mutasi Saldo Awal tanpa memengaruhi laporan Laba Rugi.
-                        </p>
-                      </div>
-
-                      {Number(accOpeningBalance) > 0 && (
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                            Tanggal Saldo Awal
-                          </label>
-                          <input
-                            type="date"
-                            value={accOpeningDate}
-                            onChange={(e) => setAccOpeningDate(e.target.value)}
-                            className="w-full px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAccountModalOpen(false);
-                      setEditingAccount(null);
-                    }}
-                    className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 active:scale-95 rounded-2xl text-xs font-bold transition-all cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
-                  >
-                    {editingAccount ? "Simpan Perubahan" : "Buat Pos Kas"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ─── SALES VERIFICATION MODAL ──────────────────────────────────── */}
-      {isVerificationModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center animate-fade-in">
-          <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col border border-slate-200/80 overflow-hidden animate-scale-up">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs">
-                  <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
-                    Verifikasi Penjualan ({unverifiedSalesLogs.length})
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Sinkronisasi data impor penjualan ke buku kas besar
+              <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 overscroll-contain">
+                {unverifiedSalesLogs.length === 0 ? (
+                  <p className="text-slate-500 text-center py-8 text-xs font-medium">
+                    Semua data penjualan telah tervalidasi di buku arus kas.
                   </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsVerificationModalOpen(false)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+                ) : (
+                  <div className="space-y-4">
+                    {unverifiedSalesLogs.map((log) => {
+                      const totalSales = salesTransactions
+                        .filter((t) => t.importLogId === log.id)
+                        .reduce((sum, t) => sum + t.totalPrice, 0);
 
-            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-              {unverifiedSalesLogs.length === 0 ? (
-                <p className="text-slate-500 text-center py-8 text-xs font-medium">
-                  Semua data penjualan telah tervalidasi di buku arus kas.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {unverifiedSalesLogs.map((log) => {
-                    const totalSales = salesTransactions
-                      .filter((t) => t.importLogId === log.id)
-                      .reduce((sum, t) => sum + t.totalPrice, 0);
-
-                    return (
-                      <div
-                        key={log.id}
-                        className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 shadow-2xs"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-bold text-xs text-slate-900">
-                              Batch:{" "}
-                              {new Date(log.importDate).toLocaleDateString("id-ID", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              })}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {log.rowCount} baris transaksi penjualan
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-extrabold text-sm text-emerald-600">
-                              {formatCurrency(totalSales)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const formData = new FormData(e.currentTarget);
-                            const accountId = formData.get("accountId") as string;
-                            if (!accountId) return;
-
-                            addCashTransaction({
-                              accountId: accountId,
-                              type: "CASH_IN",
-                              amount: totalSales,
-                              date: new Date(log.importDate).toISOString(),
-                              description: `Pemasukan Penjualan (${log.rowCount} transaksi)`,
-                              category: "Penjualan Toko",
-                              categoryId: null,
-                              referenceId: log.id,
-                            });
-                          }}
-                          className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end"
+                      return (
+                        <div
+                          key={log.id}
+                          className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 shadow-2xs"
                         >
-                          <div className="flex-1">
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                              Simpan ke Pos Kas
-                            </label>
-                            <select
-                              name="accountId"
-                              required
-                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white"
-                            >
-                              <option value="">-- Pilih Pos Kas Tujuan --</option>
-                              {cashAccounts.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-bold text-xs text-slate-900">
+                                Batch:{" "}
+                                {new Date(log.importDate).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              <p className="text-[11px] text-slate-500">
+                                {log.rowCount} baris transaksi penjualan
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-extrabold text-sm text-emerald-600">
+                                {formatCurrency(totalSales)}
+                              </p>
+                            </div>
                           </div>
-                          <button
-                            type="submit"
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl transition-all text-xs font-bold shadow-xs cursor-pointer shrink-0"
-                          >
-                            Simpan ke Buku Kas
-                          </button>
-                        </form>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            <div className="p-4 px-6 border-t border-slate-100 flex justify-end shrink-0 bg-slate-50/70">
-              <button
-                onClick={() => setIsVerificationModalOpen(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-200 active:scale-95 rounded-xl font-bold text-xs transition-all cursor-pointer"
-              >
-                Tutup
-              </button>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const formData = new FormData(e.currentTarget);
+                              const accountId = formData.get("accountId") as string;
+                              if (!accountId) return;
+
+                              addCashTransaction({
+                                accountId: accountId,
+                                type: "CASH_IN",
+                                amount: totalSales,
+                                date: new Date(log.importDate).toISOString(),
+                                description: `Pemasukan Penjualan (${log.rowCount} transaksi)`,
+                                category: "Penjualan Toko",
+                                categoryId: null,
+                                referenceId: log.id,
+                              });
+                            }}
+                            className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end"
+                          >
+                            <div className="flex-1">
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                Simpan ke Pos Kas
+                              </label>
+                              <select
+                                name="accountId"
+                                required
+                                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white"
+                              >
+                                <option value="">-- Pilih Pos Kas Tujuan --</option>
+                                {cashAccounts.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              type="submit"
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl transition-all text-xs font-bold shadow-xs cursor-pointer shrink-0"
+                            >
+                              Simpan ke Buku Kas
+                            </button>
+                          </form>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 px-6 border-t border-slate-100 flex justify-end shrink-0 bg-slate-50/70">
+                <button
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-200 active:scale-95 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 };

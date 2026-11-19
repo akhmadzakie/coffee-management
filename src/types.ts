@@ -410,7 +410,8 @@ export interface CashAccount {
 
 export interface CashTransactionItem {
   ingredientId?: string;
-  unitMode?: "PURCHASE" | "BASE";
+  unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  conversionFactor?: number;
   name: string;
   qty: number;
   unit: string;

@@ -1136,6 +1136,63 @@ test("Proteksi Self-Referential Batch Prep Tidak Menimpa Harga Bahan Input", () 
   assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 9810);
 });
 
+test("Multi-Kemasan Preset (Karton 12L untuk Bahan Master Liter) Menghitung Cost & Purchase Price Master Secara Proporsional", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-fresh-milk",
+        unitMode: "PRESET",
+        conversionFactor: "12000",
+        qty: "2",
+        unitPrice: "210000",
+        totalPrice: "420000",
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  assert.strictEqual(result.directUpdates.length, 1);
+  assert.strictEqual(result.directUpdates[0].totalBaseQty, 24000);
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 17.5, "420.000 / 24.000 ml = Rp 17,5/ml");
+  assert.strictEqual(
+    result.directUpdates[0].newPurchasePrice,
+    17500,
+    "Harga beli master per Liter harus proporsional Rp 17.500 (bukan harga 1 karton)"
+  );
+  // HPP Kopi Susu Gula Aren turun 120 ml * Rp 1 = Rp 120 -> 8910 - 120 = 8790
+  assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 8790);
+});
+
+test("Kemasan Kustom dengan Konversi Fleksibel per Transaksi (mis. Dus 24x200ml = 4800ml)", () => {
+  const result = calculateCashFlowHppSync({
+    itemRows: [
+      {
+        ingredientId: "ing-fresh-milk",
+        unitMode: "CUSTOM",
+        conversionFactor: 4800,
+        qty: 3,
+        totalPrice: 216000,
+      },
+    ],
+    ingredients: sampleIngredients,
+    batchPreparations: sampleBatchPreps,
+    products: sampleProducts,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  assert.strictEqual(result.directUpdates.length, 1);
+  assert.strictEqual(result.directUpdates[0].totalBaseQty, 14400);
+  assert.strictEqual(result.directUpdates[0].newCostPerUnit, 15, "216.000 / 14.400 ml = Rp 15/ml");
+  assert.strictEqual(result.directUpdates[0].newPurchasePrice, 15000);
+  // HPP: 18*250 + 120*15 + 25*38 + 120*2 + 1000 = 8490
+  assert.strictEqual(result.productsToUpdate[0].variants[0].estimatedHpp, 8490);
+});
+
 // -------------------------------------------------------------
 // HASIL AKHIR
 // -------------------------------------------------------------
