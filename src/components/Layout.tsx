@@ -96,7 +96,7 @@ export const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     const handleOpenAi = (e: any) => {
       if (e.detail?.tab) setAiInitialTab(e.detail.tab);
-      if (e.detail?.prompt) setAiInitialPrompt(e.detail.prompt);
+      setAiInitialPrompt(e.detail?.prompt || "");
       setIsAIAssistantOpen(true);
     };
     window.addEventListener("open-ai-assistant", handleOpenAi);
@@ -443,12 +443,11 @@ export const Layout: React.FC<LayoutProps> = ({
       "kitchen_display",
     ],
 
-    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, presensi, rekap omzet
+    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, & presensi
     LEADER: [
       "dashboard_employee",
       "leader_checklist",
       "attendance_clock",
-      "import_sales",
       "inventory",
       "purchases",
       "suppliers",
@@ -1232,17 +1231,17 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
             )}
 
-            {/* AI Assistant Button (Desktop & Tablet) */}
-            {canAccessAIAssistant && (
+            {/* AI Assistant Button (Desktop & Tablet) - sembunyikan di Rekap Penjualan / Rekap Harian */}
+            {canAccessAIAssistant && currentView !== "import_sales" && (
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsAIAssistantOpen(true)}
                 title="Julia Coffee AI Copilot & Business Consultant"
-                className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-brand-600 stroke-[2.2]" />
-                <span className="hidden xl:inline">AI Copilot</span>
+                <span>AI Copilot</span>
               </motion.button>
             )}
 
@@ -1492,9 +1491,9 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
 
                 {/* Mobile Drawer Quick Tools (AI & Export) */}
-                {(canAccessAIAssistant || canAccessBusinessReports) && (
+                {((canAccessAIAssistant && currentView !== "import_sales") || canAccessBusinessReports) && (
                   <div className="px-3 py-2 grid grid-cols-2 gap-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
-                    {canAccessAIAssistant && (
+                    {canAccessAIAssistant && currentView !== "import_sales" && (
                       <button
                         onClick={() => {
                           setIsMobileMenuOpen(false);

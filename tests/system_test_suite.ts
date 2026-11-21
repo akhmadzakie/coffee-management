@@ -17,6 +17,7 @@ import {
   calculateCashFlowHppSync,
   getIngredientPackagingChoices,
   getPackagingSelectValue,
+  parseSmartCoffeeTextEntry,
 } from "../src/utils/posDomainLogic";
 import {
   buildEscPosReceipt,
@@ -1216,6 +1217,57 @@ test("Helper Multi-Kemasan (getIngredientPackagingChoices & getPackagingSelectVa
     "PRESET:Karton (12L)"
   );
   assert.strictEqual(getPackagingSelectValue({ unitMode: "CUSTOM", unit: "Dus" }, choices), "CUSTOM");
+});
+
+test("AI NLP Parser Anti-Salah-Baca Kuantitas sebagai Harga (contoh: 6 liter 111rb & 3 gln 28.500)", () => {
+  const res1 = parseSmartCoffeeTextEntry(
+    "Beli susu Fresh Milk Greenfields 6 liter 111rb kas laci",
+    { ingredients: sampleIngredients }
+  );
+  assert.strictEqual(res1.transactions.length, 1);
+  assert.strictEqual(res1.transactions[0].amount, 111000);
+  assert.strictEqual(res1.transactions[0].quantity, 6);
+  assert.strictEqual(res1.transactions[0].ingredientId, "ing-fresh-milk");
+  assert.strictEqual(res1.transactions[0].conversionFactor, 1000);
+  assert.strictEqual(res1.transactions[0].accountName, "Laci Kasir");
+
+  const res2 = parseSmartCoffeeTextEntry(
+    "Beli air galon RO 3 gln 28.500 kas laci",
+    { ingredients: sampleIngredients }
+  );
+  assert.strictEqual(res2.transactions.length, 1);
+  assert.strictEqual(res2.transactions[0].amount, 28500);
+  assert.strictEqual(res2.transactions[0].quantity, 3);
+  assert.strictEqual(res2.transactions[0].ingredientId, "ing-air");
+  assert.strictEqual(res2.transactions[0].conversionFactor, 19000);
+});
+
+test("AI NLP Parser Mengenali Typo, Singkatan Chat, Perkalian '@' & Koma Desimal", () => {
+  const res = parseSmartCoffeeTextEntry(
+    "tf bca beli ssu gf 2 krtn @210rb, kpi hb 2,5kg @ 180.000, sama token pln 500k",
+    { ingredients: sampleIngredients }
+  );
+
+  assert.strictEqual(res.transactions.length, 3);
+
+  // Item 1: 2 karton susu @ 210rb = 420.000 via Bank BCA
+  assert.strictEqual(res.transactions[0].ingredientId, "ing-fresh-milk");
+  assert.strictEqual(res.transactions[0].quantity, 2);
+  assert.strictEqual(res.transactions[0].conversionFactor, 12000);
+  assert.strictEqual(res.transactions[0].amount, 420000);
+  assert.strictEqual(res.transactions[0].accountName, "Bank BCA");
+
+  // Item 2: 2,5kg kopi @ 180.000 = 450.000 (koma desimal tidak terpotong & mewarisi Bank BCA)
+  assert.strictEqual(res.transactions[1].ingredientId, "ing-coffee-beans");
+  assert.strictEqual(res.transactions[1].quantity, 2.5);
+  assert.strictEqual(res.transactions[1].conversionFactor, 1000);
+  assert.strictEqual(res.transactions[1].amount, 450000);
+  assert.strictEqual(res.transactions[1].accountName, "Bank BCA");
+
+  // Item 3: token pln 500k -> Utilitas Rp 500.000
+  assert.strictEqual(res.transactions[2].category, "Utilitas");
+  assert.strictEqual(res.transactions[2].amount, 500000);
+  assert.strictEqual(res.transactions[2].ingredientId, null);
 });
 
 // -------------------------------------------------------------

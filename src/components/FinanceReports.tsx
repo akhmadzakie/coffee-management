@@ -443,7 +443,44 @@ const FinanceReports: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+          {!isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("open-ai-assistant", {
+                    detail: { tab: "quick-input" },
+                  })
+                );
+              }}
+              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+              title="Catat pemasukan atau pengeluaran kas secara cepat via AI"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Catat Cepat AI</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("open-ai-assistant", {
+                  detail: {
+                    tab: "consultant",
+                    prompt: `Analisa kondisi Laba Rugi (P&L) bulan ${period}, komposisi pengeluaran per kategori, food cost, serta tagihan PO belum lunas dan saran efisiensinya.`,
+                  },
+                })
+              );
+            }}
+            className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            title="Audit kinerja Laba Rugi & biaya operasional dengan AI"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>Audit AI P&amp;L</span>
+          </button>
+
           <CustomMonthPicker
             value={period}
             onChange={setPeriod}

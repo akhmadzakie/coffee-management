@@ -651,7 +651,7 @@ export const Sales = () => {
                   transition={{ type: "spring", stiffness: 450, damping: 32 }}
                 />
               )}
-              <Sparkles className="w-4 h-4 text-brand-600 relative z-10" />
+              <TrendingUp className="w-4 h-4 text-brand-600 relative z-10" />
               <span className="relative z-10">Dasbor & Audit Kasir</span>
             </button>
             )}

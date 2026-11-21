@@ -103,6 +103,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     recipes,
     batchPreparations,
     purchaseOrders,
+    suppliers,
+    stockMovements,
+    shifts,
+    employees,
+    dailyAttendances,
+    users,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -530,6 +536,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
     let totalCashIn = 0;
     let totalExp = 0;
+    const categoryExpMap = new Map<string, number>();
+
     cashTransactions.forEach((c) => {
       const amt = Number(c.amount || 0);
       const nt = normCashType(c.type);
@@ -539,9 +547,21 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         if (!internal) totalCashIn += amt;
       } else if (nt === "CASH_OUT") {
         balanceMap.set(c.accountId, (balanceMap.get(c.accountId) || 0) - amt);
-        if (!internal) totalExp += amt;
+        if (!internal) {
+          totalExp += amt;
+          const catName = (c.category || "Operasional").trim();
+          categoryExpMap.set(catName, (categoryExpMap.get(catName) || 0) + amt);
+        }
       }
     });
+
+    const expenseBreakdown = Array.from(categoryExpMap.entries())
+      .map(([category, total]) => ({
+        category,
+        total: Math.round(total),
+        pct: totalExp > 0 ? Math.round((total / totalExp) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
 
     const cashBalances = cashAccounts.map((acc) => ({
       id: acc.id,
@@ -574,16 +594,57 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       .sort((a, b) => b.rev - a.rev)
       .slice(0, 5);
 
-    // Unpaid PO liability
+    // Unpaid PO liability + detailed breakdown per supplier
     const unpaidPos = purchaseOrders.filter((po) => po.status !== "PAID");
-    const unpaidPoTotal = unpaidPos.reduce(
-      (sum, po) => sum + Math.max(0, Number(po.totalAmount || 0) - Number(po.amountPaid || 0)),
-      0
-    );
+    const unpaidPoList = unpaidPos
+      .map((po) => {
+        const sup = suppliers.find((s) => s.id === po.supplierId);
+        return {
+          poNumber: po.poNumber,
+          supplierName: sup?.name || po.supplierName || "Supplier",
+          remaining: Math.max(
+            0,
+            Math.round(Number(po.totalAmount || 0) - Number(po.amountPaid || 0))
+          ),
+          dueDate: po.dueDate || null,
+        };
+      })
+      .filter((p) => p.remaining > 0)
+      .sort((a, b) => {
+        if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+        if (a.dueDate) return -1;
+        if (b.dueDate) return 1;
+        return b.remaining - a.remaining;
+      });
+    const unpaidPoTotal = unpaidPoList.reduce((sum, po) => sum + po.remaining, 0);
 
-    // Real Menu HPP & Food Cost Audit
+    // Shift cash variances & waste losses
+    const shiftVariances = shifts
+      .filter((s) => s.status === "CLOSED" && Number(s.difference || 0) !== 0)
+      .map((s) => ({
+        picName:
+          s.picEmployeeName ||
+          users.find((u) => u.id === s.userId)?.name ||
+          "Kasir",
+        difference: Math.round(Number(s.difference || 0)),
+        endTime: s.endTime || s.startTime,
+      }))
+      .slice(0, 10);
+
+    // Real Menu HPP & Food Cost Audit + Menu Engineering Quadrant
     const ingMap = new Map<string, (typeof ingredients)[number]>();
     ingredients.forEach((i) => ingMap.set(i.id, i));
+
+    const wasteLossTotal = Math.round(
+      stockMovements
+        .filter((m) => m.type === "WASTE")
+        .reduce((sum, m) => {
+          if (Number(m.totalCost) > 0) return sum + Number(m.totalCost);
+          const ing = ingMap.get(m.ingredientId);
+          return sum + Number(m.quantity || 0) * Number(ing?.costPerUnit || 0);
+        }, 0)
+    );
+
     const recipeMap = new Map<string, (typeof recipes)[number]>();
     recipes.forEach((r) => recipeMap.set(r.id, r));
     const menuAudit = products
@@ -611,33 +672,77 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               price > 0 && hpp > 0 ? Math.round((hpp / price) * 1000) / 10 : 0;
             const marginPct =
               price > 0 ? Math.round(((price - hpp) / price) * 1000) / 10 : 0;
+            const fullName = p.variants.length > 1 ? `${p.name} (${v.name})` : p.name;
+            const salesQty =
+              itemMap.get(fullName)?.qty || itemMap.get(p.name)?.qty || 0;
             return {
-              name: p.variants.length > 1 ? `${p.name} (${v.name})` : p.name,
+              name: fullName,
               category: p.category,
               price,
               hpp,
               foodCostPct,
               marginPct,
+              qtySold: salesQty,
             };
           })
       )
       .filter((m) => m.price > 0 && m.hpp > 0)
       .sort((a, b) => b.foodCostPct - a.foodCostPct);
 
+    const menuEngineering = menuAudit.map((m) => ({
+      ...m,
+      quadrant:
+        m.qtySold > 0 && m.foodCostPct <= 35
+          ? "STAR"
+          : m.qtySold > 0 && m.foodCostPct > 35
+            ? "WORKHORSE"
+            : m.foodCostPct <= 32
+              ? "PUZZLE"
+              : "DOG",
+    }));
+
+    const hrSummary = {
+      activeEmployees: employees.filter((e) => e.status === "AKTIF").length,
+      lateCount: dailyAttendances.filter((a) => a.status === "TERLAMBAT").length,
+      pendingOvertimeCount: dailyAttendances.filter(
+        (a) => Number(a.overtimeHours || 0) > 0 && !a.overtimeApproved
+      ).length,
+    };
+
     return {
       totalRevenue: Math.round(totalRev),
       totalExpense: Math.round(totalExp),
       netProfit: Math.round(netProfit),
       marginPercent,
+      expenseBreakdown,
       cashBalances,
       totalCashLiquidity,
       unpaidPoTotal: Math.round(unpaidPoTotal),
-      unpaidPoCount: unpaidPos.length,
+      unpaidPoCount: unpaidPoList.length,
+      unpaidPoList,
+      shiftVariances,
+      wasteLossTotal,
       lowStockItems: lowStock,
       topStarProducts,
       menuAudit,
+      menuEngineering,
+      hrSummary,
     };
-  }, [salesTransactions, cashTransactions, cashAccounts, ingredients, purchaseOrders, products, recipes]);
+  }, [
+    salesTransactions,
+    cashTransactions,
+    cashAccounts,
+    ingredients,
+    purchaseOrders,
+    suppliers,
+    shifts,
+    stockMovements,
+    products,
+    recipes,
+    employees,
+    dailyAttendances,
+    users,
+  ]);
 
   const handleSendChat = async (questionText?: string) => {
     const textToSend = questionText || inputQuestion;
@@ -664,15 +769,21 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         totalExpense: liveMetrics.totalExpense,
         netProfit: liveMetrics.netProfit,
         marginPercent: liveMetrics.marginPercent,
+        expenseBreakdown: liveMetrics.expenseBreakdown.slice(0, 8),
         totalCashLiquidity: liveMetrics.totalCashLiquidity,
         cashBalances: liveMetrics.cashBalances,
         unpaidPoTotal: liveMetrics.unpaidPoTotal,
         unpaidPoCount: liveMetrics.unpaidPoCount,
+        unpaidPoList: liveMetrics.unpaidPoList.slice(0, 8),
+        shiftVariances: liveMetrics.shiftVariances.slice(0, 5),
+        wasteLossTotal: liveMetrics.wasteLossTotal,
         lowStockItems: liveMetrics.lowStockItems.map(
           (i) => `${i.name} (Sisa ${i.currentStock} ${i.unit}, Min ${i.minStock} ${i.unit})`
         ),
         topProducts: liveMetrics.topStarProducts,
         menuAudit: liveMetrics.menuAudit.slice(0, 25),
+        menuEngineering: liveMetrics.menuEngineering.slice(0, 20),
+        hrSummary: liveMetrics.hrSummary,
       };
 
       const historyPayload = messages.slice(-6).map((m) => ({
@@ -733,10 +844,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         totalExpense: liveMetrics.totalExpense,
         netProfit: liveMetrics.netProfit,
         marginPercent: liveMetrics.marginPercent,
+        expenseBreakdown: liveMetrics.expenseBreakdown.slice(0, 8),
         totalCashLiquidity: liveMetrics.totalCashLiquidity,
         cashBalances: liveMetrics.cashBalances,
         unpaidPoTotal: liveMetrics.unpaidPoTotal,
         unpaidPoCount: liveMetrics.unpaidPoCount,
+        unpaidPoList: liveMetrics.unpaidPoList.slice(0, 8),
+        shiftVariances: liveMetrics.shiftVariances.slice(0, 5),
+        wasteLossTotal: liveMetrics.wasteLossTotal,
         lowStockItems: liveMetrics.lowStockItems.map((i) => ({
           name: i.name,
           currentStock: i.currentStock,
@@ -745,6 +860,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         })),
         topProducts: liveMetrics.topStarProducts,
         menuAudit: liveMetrics.menuAudit.slice(0, 25),
+        menuEngineering: liveMetrics.menuEngineering.slice(0, 20),
+        hrSummary: liveMetrics.hrSummary,
       };
 
       const res = await fetch("/api/ai/executive-insights", {
@@ -764,6 +881,74 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
   };
 
+  // Helper bersama untuk menyusun draf restock bahan kritis sesuai satuan beli master
+  const buildRestockDraftFromIngredient = (
+    item: (typeof ingredients)[number]
+  ): ParsedTransactionDraft => {
+    const factor =
+      item.purchaseUnit && Number(item.conversionFactor) > 1
+        ? Number(item.conversionFactor)
+        : 1;
+    const deficitBase = Math.max(
+      Number(item.minStock || 0) - Number(item.currentStock || 0),
+      factor
+    );
+    const buyQty = Math.max(1, Math.ceil(deficitBase / factor));
+    const buyUnit =
+      factor > 1 && item.purchaseUnit ? item.purchaseUnit : item.unit;
+    const unitPrice =
+      factor > 1
+        ? Number(item.purchasePrice) > 0
+          ? Number(item.purchasePrice)
+          : Math.round(Number(item.costPerUnit || 0) * factor)
+        : Math.round(Number(item.costPerUnit || 0));
+    const estTotal = Math.max(0, Math.round(buyQty * unitPrice));
+    const bahanCat = expenseCategories.find((c: any) =>
+      /bahan baku/i.test(c.name)
+    );
+    const defaultAcc = cashAccounts[0];
+
+    return {
+      type: "CASH_OUT",
+      amount: estTotal > 0 ? estTotal : 50000,
+      category: bahanCat?.name || "Bahan Baku",
+      description: `Restock ${item.name} (${buyQty} ${buyUnit})`,
+      accountId: defaultAcc?.id,
+      accountName: defaultAcc?.name,
+      ingredientId: item.id,
+      ingredientName: item.name,
+      quantity: buyQty,
+      unit: buyUnit,
+      unitMode: factor > 1 ? "PURCHASE" : "BASE",
+      conversionFactor: factor,
+    };
+  };
+
+  // Auto-eksekusi 1-klik ketika Copilot dibuka dari dashboard Finance / Manager / Laba Rugi
+  const lastAutoTriggerKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (!isOpen) {
+      lastAutoTriggerKeyRef.current = "";
+      return;
+    }
+    const cleanPrompt = (initialPrompt || "").trim();
+    const triggerKey = `${initialTab}|${cleanPrompt}`;
+    if (lastAutoTriggerKeyRef.current === triggerKey) return;
+    lastAutoTriggerKeyRef.current = triggerKey;
+
+    if (cleanPrompt) {
+      if (initialTab === "quick-input") {
+        setNaturalText(cleanPrompt);
+        handleParseNatural(cleanPrompt);
+      } else if (initialTab === "consultant") {
+        setInputQuestion("");
+        handleSendChat(cleanPrompt);
+      }
+    } else if (initialTab === "insights" && !executiveBriefing && !isLoadingBriefing) {
+      handleGenerateExecutiveBriefing();
+    }
+  }, [isOpen, initialTab, initialPrompt]);
+
   const renderEditableDraftCards = (
     txList: ParsedTransactionDraft[],
     setter: React.Dispatch<React.SetStateAction<ParsedTransactionDraft[]>>
@@ -778,6 +963,78 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           Number(tx.conversionFactor) > 0 ? Number(tx.conversionFactor) : 1;
         const unitLabel =
           tx.unit || matchedIng?.purchaseUnit || matchedIng?.unit || "unit";
+
+        // Deteksi Potensi Transaksi Ganda (Anti-Double Entry 48 jam terakhir)
+        const recentCutoffMs = Date.now() - 48 * 3600 * 1000;
+        const txAmt = Math.round(Number(tx.amount || 0));
+        const txWords = String(tx.description || "")
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(
+            (w) =>
+              w.length >= 4 &&
+              !/^(beli|bayar|uang|kasir|laci|bank|transfer|utama)$/.test(w)
+          );
+
+        const matchedRecentCash =
+          tx.type === "CASH_OUT" && txAmt > 0
+            ? cashTransactions.find((c) => {
+                const isOut = c.type === "CASH_OUT" || (c.type as string) === "OUT";
+                if (!isOut) return false;
+                const cTime = new Date(c.date).getTime();
+                if (isNaN(cTime) || cTime < recentCutoffMs) return false;
+                if (Math.abs(Math.round(Number(c.amount || 0)) - txAmt) > 100) return false;
+                if (
+                  tx.ingredientId &&
+                  Array.isArray(c.items) &&
+                  c.items.some((it) => it.ingredientId === tx.ingredientId)
+                ) {
+                  return true;
+                }
+                const cDesc = String(c.description || "").toLowerCase();
+                if (matchedIng && cDesc.includes(matchedIng.name.toLowerCase())) {
+                  return true;
+                }
+                return txWords.some((w) => cDesc.includes(w));
+              })
+            : undefined;
+
+        const matchedRecentPo =
+          !matchedRecentCash && tx.type === "CASH_OUT" && txAmt > 0
+            ? purchaseOrders.find((po) => {
+                const poTime = new Date(po.date).getTime();
+                if (isNaN(poTime) || poTime < recentCutoffMs) return false;
+                if (Math.abs(Math.round(Number(po.totalAmount || 0)) - txAmt) > 100) {
+                  return false;
+                }
+                return Boolean(
+                  tx.ingredientId &&
+                    po.items?.some((it) => it.productId === tx.ingredientId)
+                );
+              })
+            : undefined;
+
+        // Deteksi Anomali Harga Beli (>15% menyimpang dari modal master bahan)
+        let priceAnomaly: {
+          pctDiff: number;
+          newBaseCost: number;
+          oldBaseCost: number;
+        } | null = null;
+        if (
+          tx.type === "CASH_OUT" &&
+          matchedIng &&
+          Number(tx.amount) > 0 &&
+          Number(matchedIng.costPerUnit) > 0
+        ) {
+          const baseQty = qtyVal * factor;
+          const newBaseCost = baseQty > 0 ? Number(tx.amount) / baseQty : 0;
+          const oldBaseCost = Number(matchedIng.costPerUnit);
+          const pctDiff =
+            oldBaseCost > 0 ? ((newBaseCost - oldBaseCost) / oldBaseCost) * 100 : 0;
+          if (Math.abs(pctDiff) >= 15 && newBaseCost > 0) {
+            priceAnomaly = { pctDiff, newBaseCost, oldBaseCost };
+          }
+        }
 
         return (
           <div
@@ -805,6 +1062,40 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   className="font-bold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-brand-600 focus:outline-none px-1 py-0.5 rounded flex-1 min-w-[160px]"
                 />
               </div>
+
+              {(matchedRecentCash || matchedRecentPo || priceAnomaly) && (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {(matchedRecentCash || matchedRecentPo) && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200">
+                      <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>
+                        Potensi Duplikat!{" "}
+                        {matchedRecentCash
+                          ? `Sudah ada di Kas (${new Date(matchedRecentCash.date).toLocaleDateString("id-ID")}: "${matchedRecentCash.description}")`
+                          : `Sudah ada di PO ${matchedRecentPo!.poNumber}`}
+                      </span>
+                    </span>
+                  )}
+
+                  {priceAnomaly && matchedIng && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-300">
+                      <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                      <span>
+                        Harga {priceAnomaly.pctDiff > 0 ? "naik" : "turun"}{" "}
+                        {Math.abs(priceAnomaly.pctDiff).toFixed(0)}% (Rp{" "}
+                        {priceAnomaly.newBaseCost.toLocaleString("id-ID", {
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        vs modal Rp{" "}
+                        {priceAnomaly.oldBaseCost.toLocaleString("id-ID", {
+                          maximumFractionDigits: 2,
+                        })}
+                        /{matchedIng.unit}) — cek salah ketik nol / harga supplier
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
                 {/* Account Picker */}
@@ -1776,23 +2067,36 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             {/* Low Stock Alert List */}
             {liveMetrics.lowStockItems.length > 0 && (
               <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-rose-600" />
                     <span className="text-xs font-bold text-rose-950">
-                      Peringatan Stok Menipis (Segera Belanja)
+                      Peringatan Stok Menipis ({liveMetrics.lowStockItems.length} Bahan)
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-                    Prioritas Restock
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allDrafts = liveMetrics.lowStockItems.map((ing) =>
+                        buildRestockDraftFromIngredient(ing)
+                      );
+                      setDraftTransactions(allDrafts);
+                      setNaturalSummary(
+                        `Berhasil menyusun draf belanja restock otomatis untuk ${allDrafts.length} bahan baku kritis sesuai satuan beli.`
+                      );
+                      setActiveTab("quick-input");
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-2xs self-start sm:self-auto"
+                  >
+                    + Susun Draf Belanja Semua Bahan Kritis ({liveMetrics.lowStockItems.length})
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {liveMetrics.lowStockItems.slice(0, 4).map((item) => (
                     <div
                       key={item.id}
-                      className="bg-white p-2.5 rounded-xl border border-rose-200/80 flex items-center justify-between text-xs"
+                      className="bg-white p-2.5 rounded-xl border border-rose-200/80 flex items-center justify-between text-xs gap-2"
                     >
                       <div>
                         <p className="font-bold text-slate-800">{item.name}</p>
@@ -1801,34 +2105,16 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                         </span>
                       </div>
                       <button
+                        type="button"
                         onClick={() => {
-                          const factor =
-                            item.purchaseUnit && Number(item.conversionFactor) > 1
-                              ? Number(item.conversionFactor)
-                              : 1;
-                          const deficitBase = Math.max(
-                            Number(item.minStock || 0) - Number(item.currentStock || 0),
-                            factor
+                          const draft = buildRestockDraftFromIngredient(item);
+                          const promptStr = `Beli ${item.name} ${draft.quantity} ${draft.unit} Rp ${draft.amount.toLocaleString("id-ID")} kas laci`;
+                          setDraftTransactions([draft]);
+                          setNaturalText(promptStr);
+                          setNaturalSummary(
+                            `Draf belanja ${item.name} (${draft.quantity} ${draft.unit}) siap ditinjau.`
                           );
-                          const buyQty =
-                            factor > 1
-                              ? Math.max(1, Math.ceil(deficitBase / factor))
-                              : Math.max(1, Math.ceil(deficitBase));
-                          const buyUnit =
-                            factor > 1 && item.purchaseUnit ? item.purchaseUnit : item.unit;
-                          const unitPrice =
-                            factor > 1
-                              ? Number(item.purchasePrice) > 0
-                                ? Number(item.purchasePrice)
-                                : Math.round(Number(item.costPerUnit || 0) * factor)
-                              : Math.round(Number(item.costPerUnit || 0));
-                          const estTotal = Math.round(buyQty * unitPrice);
                           setActiveTab("quick-input");
-                          setNaturalText(
-                            estTotal > 0
-                              ? `Beli ${item.name} ${buyQty} ${buyUnit} Rp ${estTotal.toLocaleString("id-ID")} kas laci`
-                              : `Beli ${item.name} ${buyQty} ${buyUnit} kas laci`
-                          );
                         }}
                         className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer shrink-0"
                       >

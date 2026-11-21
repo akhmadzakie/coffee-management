@@ -7,11 +7,11 @@
 ---
 
 ## 1. Arsitektur & File Utama
-- **Backend & API Monolith**: [`server.ts`](file:///c:/Users/User/Documents/coffee%20management/server.ts) (~7.322 baris) — Express server, auto-migrasi DDL (`ensureTables`), sanitizers, autentikasi sesi, endpoint REST API, AI Gemini, POS, & KDS.
+- **Backend & API Monolith**: [`server.ts`](file:///c:/Users/User/Documents/coffee%20management/server.ts) (~7.099 baris) — Express server, auto-migrasi DDL (`ensureTables`), sanitizers, autentikasi sesi, endpoint REST API, AI Gemini, POS, & KDS.
 - **Database Schema (Drizzle ORM)**: [`src/db/schema.ts`](file:///c:/Users/User/Documents/coffee%20management/src/db/schema.ts) (~512 baris) & [`src/db/db.ts`](file:///c:/Users/User/Documents/coffee%20management/src/db/db.ts) (~37 baris).
 - **Global Types & Interfaces**: [`src/types.ts`](file:///c:/Users/User/Documents/coffee%20management/src/types.ts) (~818 baris).
 - **Global State & Sync Engine**: [`src/store/StoreContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/store/StoreContext.tsx) (~3.089 baris) — Context provider, sync `/api/sync`, offline localStorage fallback, dan mutasi data.
-- **Root App & Routing View**: [`src/App.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/App.tsx) (~452 baris) & [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (~1.713 baris).
+- **Root App & Routing View**: [`src/App.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/App.tsx) (~452 baris) & [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (~1.712 baris).
 - **Feature Flags**: [`src/config/features.ts`](file:///c:/Users/User/Documents/coffee%20management/src/config/features.ts) (~25 baris).
 
 ---
@@ -51,7 +51,7 @@
 
 ---
 
-## 4. Backend Server (`server.ts` - 7.322 Baris)
+## 4. Backend Server (`server.ts` - 7.099 Baris)
 
 ### A. Seed Data, DB Init & Sanitizers (`L1 - L1588`)
 - `initialSettings` (`L25`), `initialUsers` (`L52`), `initialIngredients` (`L127`), `initialRecipes` (`L143`), `initialProducts` (`L190`), `defaultCategories` (`L263`)
@@ -176,7 +176,7 @@
 - Task Category & Subtask Config (`L917 - L1055`)
 - Tab `monitoring` (`L1091`), Tab `monthly` (`L1385`), Tab `settings` (`L1700+`)
 
-### [`src/components/Sales.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Sales.tsx) (2.534 Baris)
+### [`src/components/Sales.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Sales.tsx) (2.673 Baris)
 - Daily Recap Save/Delete (`L185 - L293`)
 - Sales Import & Export (`L480 - L640`)
 - **Tab Views**:
@@ -214,9 +214,9 @@
 
 ### Komponen Lainnya
 - [`src/components/OwnerDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/OwnerDashboard.tsx) (1.608 baris)
-- [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (1.713 baris)
-- [`src/components/FinanceReports.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/FinanceReports.tsx) (1.404 baris)
-- [`src/components/AIAssistantModal.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/AIAssistantModal.tsx) (1.915 baris)
+- [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (1.712 baris)
+- [`src/components/FinanceReports.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/FinanceReports.tsx) (1.524 baris)
+- [`src/components/AIAssistantModal.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/AIAssistantModal.tsx) (2.201 baris)
 - [`src/components/EmployeeDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/EmployeeDashboard.tsx) (1.253 baris)
 - [`src/components/ExpenseCategories.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ExpenseCategories.tsx) (1.057 baris)
 - [`src/components/FinanceDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/FinanceDashboard.tsx) (954 baris)
@@ -239,7 +239,7 @@
 ## 7. Utilities (`src/utils/`)
 - [`src/utils/export.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/export.ts) (1.188 baris) — PDF & CSV export
 - [`src/utils/exportXlsx.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/exportXlsx.ts) (925 baris) — Excel `.xlsx` generator
-- [`src/utils/posDomainLogic.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posDomainLogic.ts) (876 baris) — Kalkulasi diskon, pajak, service charge, HPP resep, sinkronisasi HPP arus kas & PO (`calculateCashFlowHppSync`, `getIngredientPackagingChoices`), dan validasi POS
+- [`src/utils/posDomainLogic.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posDomainLogic.ts) (1.391 baris) — Kalkulasi diskon, pajak, service charge, HPP resep, sinkronisasi HPP arus kas & PO (`calculateCashFlowHppSync`, `getIngredientPackagingChoices`), NLP Finance parser (`parseSmartCoffeeTextEntry`), dan validasi POS
 - [`src/utils/escpos.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/escpos.ts) (289 baris) — Thermal printer ESC/POS formatter
 - [`src/utils/excelTemplate.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/excelTemplate.ts) (199 baris) — Template import Excel
 - [`src/utils/salesImportMapper.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/salesImportMapper.ts) (157 baris) — Mapper import data penjualan eksternal

@@ -874,3 +874,518 @@ export function getPackagingSelectValue(
   }
   return "CUSTOM";
 }
+
+// ─── AI Smart NLP Entry, Typo/Abbreviation & Store Ingredient Matcher ────────
+
+const UNIT_REGEX_PART =
+  "(?:liter|ltr|lt|l|ml|cc|gln|galon|btl|botol|jrgn|jrg|jerigen|dirigen|krt|krtn|ctn|karton|kg|kilo|grm|gram|gr|g|krg|karung|sak|bal|ball|pak|pck|pack|pch|pouch|pcs|pc|bh|buah|lsn|lusin|dz|dus|dos|box|bks|bungkus|slop|slp|roll|iket|ikat)";
+
+export function resolveIngredientPackagingFromText(
+  ing: any,
+  rawUnit?: string | null,
+  rawText?: string | null
+): {
+  unit: string;
+  unitMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
+  conversionFactor: number;
+} {
+  const baseUnit = String(ing?.unit || "pcs");
+  const baseLower = baseUnit.trim().toLowerCase();
+  const masterUnit = String(ing?.purchaseUnit || "").trim();
+  const masterFactor = Number(ing?.conversionFactor) || 0;
+  const unitLower = String(rawUnit || "").trim().toLowerCase();
+  const textLower = String(rawText || "").trim().toLowerCase();
+  const combined = `${unitLower} ${textLower}`;
+
+  const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
+  const isWeight = ["gr", "g", "gram"].includes(baseLower);
+
+  if (
+    unitLower === baseLower ||
+    (isWeight && ["g", "gr", "grm", "gram"].includes(unitLower)) ||
+    (isVolume && ["ml", "cc"].includes(unitLower))
+  ) {
+    return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
+  }
+
+  if (masterUnit && masterFactor > 0) {
+    const masterFirstWord = masterUnit.toLowerCase().split(/[\s(]/)[0];
+    if (
+      unitLower &&
+      (masterUnit.toLowerCase() === unitLower ||
+        masterUnit.toLowerCase().includes(unitLower) ||
+        (masterFirstWord && unitLower.includes(masterFirstWord)))
+    ) {
+      return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+    }
+  }
+
+  if (isVolume) {
+    if (/\b(karton|krtn|krt|ctn)\b/.test(combined)) {
+      return { unit: "Karton (12L)", unitMode: "PRESET", conversionFactor: 12000 };
+    }
+    if (/\b(galon|gln)\b/.test(combined)) {
+      return { unit: "Galon (19L)", unitMode: "PRESET", conversionFactor: 19000 };
+    }
+    if (/\b(jerigen|dirigen|jerrycan|jrgn|jrg)\b/.test(combined)) {
+      return { unit: "Jerigen (5L)", unitMode: "PRESET", conversionFactor: 5000 };
+    }
+    if (/\b(botol|btl)\b/.test(combined)) {
+      return { unit: "Botol (700ml)", unitMode: "PRESET", conversionFactor: 700 };
+    }
+    if (
+      /\b(liter|ltr|lt|l|kotak)\b/.test(unitLower) ||
+      /\b\d+(?:[.,]\d+)?\s*(liter|ltr|lt|l)\b/i.test(textLower)
+    ) {
+      return { unit: "Liter", unitMode: "PRESET", conversionFactor: 1000 };
+    }
+  } else if (isWeight) {
+    if (/\b(karung|krg|sak)\b/.test(combined)) {
+      return { unit: "Karung (25Kg)", unitMode: "PRESET", conversionFactor: 25000 };
+    }
+    if (/\b(bal|ball)\b/.test(combined)) {
+      return { unit: "Plastik (10Kg)", unitMode: "PRESET", conversionFactor: 10000 };
+    }
+    if (/\b(dus|dos|karton|krtn|krt|ctn|box)\b/.test(combined)) {
+      return { unit: "Dus (10Kg)", unitMode: "PRESET", conversionFactor: 10000 };
+    }
+    if (/500\s*g/.test(combined)) {
+      return { unit: "Pack (500g)", unitMode: "PRESET", conversionFactor: 500 };
+    }
+    if (/250\s*g/.test(combined)) {
+      return { unit: "Pack (250g)", unitMode: "PRESET", conversionFactor: 250 };
+    }
+    if (/\b(kg|kilo|kilogram)\b/.test(combined)) {
+      return { unit: "Kg", unitMode: "PRESET", conversionFactor: 1000 };
+    }
+  } else {
+    if (/\b(lusin|lsn|dz)\b/.test(combined)) {
+      return { unit: `Lusin (12${baseUnit})`, unitMode: "PRESET", conversionFactor: 12 };
+    }
+    if (/\b(dus|dos|box)\b/.test(combined)) {
+      return { unit: `Dus (500${baseUnit})`, unitMode: "PRESET", conversionFactor: 500 };
+    }
+    if (/\b(karton|krtn|krt|ctn)\b/.test(combined)) {
+      return { unit: `Karton (1000${baseUnit})`, unitMode: "PRESET", conversionFactor: 1000 };
+    }
+    if (/\b(pack|pak|pck|slop|slp)\b/.test(combined)) {
+      return { unit: `Pack (100${baseUnit})`, unitMode: "PRESET", conversionFactor: 100 };
+    }
+  }
+
+  if (masterUnit && masterFactor > 0) {
+    return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+  }
+  return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
+}
+
+export function matchIngredientFromStore(ingredientsList: any[], text: string) {
+  if (!Array.isArray(ingredientsList) || ingredientsList.length === 0) return null;
+  const textLower = String(text || "").toLowerCase();
+
+  // Prioritaskan kecocokan nama persis terlebih dahulu
+  const exactMatch = ingredientsList.find((ing: any) => {
+    const nameLower = String(ing?.name || "").trim().toLowerCase();
+    return Boolean(nameLower && textLower.includes(nameLower));
+  });
+  if (exactMatch) return exactMatch;
+
+  // Prioritaskan jenis spesifik (Oat Milk vs Fresh Milk, Gula Aren vs Gula Pasir)
+  const isOatText = /\b(oat|oatmilk|oatside)\b/.test(textLower);
+  const isArenText = /\b(aren|ga|brownsugar|brown sugar)\b/.test(textLower);
+
+  return (
+    ingredientsList.find((ing: any) => {
+      const nameLower = String(ing?.name || "").toLowerCase();
+      if (!nameLower) return false;
+
+      if (nameLower.includes("oat") && isOatText) return true;
+      if (
+        (nameLower.includes("susu") || nameLower.includes("milk")) &&
+        !nameLower.includes("oat") &&
+        !isOatText &&
+        /\b(susu|ssu|milk|fm|freshmilk|uht|gf|greenfield|greenfields|dmd|diamond|brookfarm|cimory)\b/.test(
+          textLower
+        )
+      ) {
+        return true;
+      }
+      if (nameLower.includes("aren") && isArenText) return true;
+      if (
+        nameLower.includes("gula pasir") &&
+        !isArenText &&
+        /\b(gula pasir|gp|gla pasir|gla)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("beans") || nameLower.includes("kopi") || nameLower.includes("espresso")) &&
+        /\b(kopi|kpi|bean|beans|espresso|esp|hb|houseblend|house blend|arabika|arabica|robusta)\b/.test(
+          textLower
+        )
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("es batu") || nameLower.includes("es kristal")) &&
+        /\b(es batu|es kristal|esbatu|ice cube|ice)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("galon") || nameLower.includes("air bersih")) &&
+        /\b(galon|gln|air bers|air ro|ro|aqua)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("sirup") || nameLower.includes("syrup")) &&
+        /\b(sirup|srp|syrup|vnl|vanila|vanilla|crml|caramel|karamel|hzl|hazelnut)\b/.test(
+          textLower
+        )
+      ) {
+        return true;
+      }
+      if (
+        nameLower.includes("matcha") &&
+        /\b(matcha|mtcha|macha|greentea|green tea)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("coklat") || nameLower.includes("choco") || nameLower.includes("cocoa")) &&
+        /\b(coklat|cokelat|choco|cocoa|kakao)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("creamer") || nameLower.includes("krimer") || nameLower.includes("evap")) &&
+        /\b(creamer|krimer|evap|evaporasi|skm)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        nameLower.includes("beras") &&
+        /\b(beras|brs|rice)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        nameLower.includes("ayam") &&
+        /\b(ayam|aym|chicken|fillet)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("butter") || nameLower.includes("mentega")) &&
+        /\b(butter|btr|mentega|anchor)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        nameLower.includes("croissant") &&
+        /\b(croissant|crsnt|croisant|dough|pastry)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        nameLower.includes("minyak") &&
+        /\b(minyak|mnyk|bimoli)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("telur") || nameLower.includes("telor")) &&
+        /\b(telur|telor|tlr|egg)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      if (
+        (nameLower.includes("tepung") || nameLower.includes("terigu")) &&
+        /\b(tepung|tpg|terigu)\b/.test(textLower)
+      ) {
+        return true;
+      }
+      return false;
+    }) || null
+  );
+}
+
+export function enrichParsedTransactionWithStore(
+  tx: any,
+  storeContext: any,
+  fallbackText?: string
+) {
+  const ingredientsList = Array.isArray(storeContext?.ingredients)
+    ? storeContext.ingredients
+    : [];
+  const matchedIng =
+    (tx.ingredientId
+      ? ingredientsList.find((i: any) => i.id === tx.ingredientId)
+      : null) ||
+    matchIngredientFromStore(
+      ingredientsList,
+      `${tx.ingredientName || ""} ${tx.description || ""} ${fallbackText || ""}`
+    );
+
+  if (!matchedIng) {
+    return {
+      ...tx,
+      ingredientId: null,
+      ingredientName: null,
+      quantity: tx.quantity ? Number(tx.quantity) : null,
+      unit: tx.unit || null,
+      unitMode: null,
+      conversionFactor: null,
+    };
+  }
+
+  const qty = Number(tx.quantity) > 0 ? Number(tx.quantity) : 1;
+  const resolvedPack = resolveIngredientPackagingFromText(
+    matchedIng,
+    tx.unit,
+    `${tx.description || ""} ${fallbackText || ""}`
+  );
+  const providedFactor = Number(tx.conversionFactor);
+  const effectiveFactor =
+    providedFactor > 0 ? providedFactor : resolvedPack.conversionFactor;
+  const effectiveMode: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM" =
+    effectiveFactor === 1
+      ? "BASE"
+      : matchedIng.purchaseUnit &&
+          Number(matchedIng.conversionFactor) === effectiveFactor &&
+          resolvedPack.unitMode === "PURCHASE"
+        ? "PURCHASE"
+        : resolvedPack.unitMode;
+
+  return {
+    ...tx,
+    ingredientId: matchedIng.id,
+    ingredientName: matchedIng.name,
+    quantity: qty,
+    unit: tx.unit && providedFactor > 0 ? tx.unit : resolvedPack.unit,
+    unitMode: effectiveMode,
+    conversionFactor: effectiveFactor,
+  };
+}
+
+function parseIndonesianMoneyValue(rawNum: string, rawSuffix?: string): number {
+  const suffix = (rawSuffix || "").trim().toLowerCase();
+  const trimmed = rawNum.trim();
+  let val = 0;
+
+  if (/^\d{1,3}(?:\.\d{3})+$/.test(trimmed) && !suffix) {
+    val = parseFloat(trimmed.replace(/\./g, ""));
+  } else if (/^\d{1,3}(?:,\d{3})+$/.test(trimmed) && !suffix) {
+    val = parseFloat(trimmed.replace(/,/g, ""));
+  } else if (/^\d{1,3}(?:\.\d{3})+,\d+$/.test(trimmed)) {
+    val = parseFloat(trimmed.replace(/\./g, "").replace(",", "."));
+  } else {
+    val = parseFloat(trimmed.replace(",", "."));
+  }
+
+  if (isNaN(val) || val <= 0) return 0;
+
+  if (suffix === "rb" || suffix === "ribu" || suffix === "rbu" || suffix === "k") {
+    val *= 1000;
+  } else if (suffix === "jt" || suffix === "juta") {
+    val *= 1000000;
+  } else if (val < 1000 && !suffix) {
+    val *= 1000;
+  }
+
+  return Math.round(val);
+}
+
+/**
+ * Parser kalimat bebas Bahasa Indonesia (tahan typo, singkatan chat, satuan kemasan,
+ * perkalian harga satuan `@` / `per`, dan format ribuan bertitik) untuk Finance & Manager.
+ */
+export function parseSmartCoffeeTextEntry(text: string, storeContext?: any) {
+  const clean = String(text || "").trim();
+  if (!clean) {
+    return {
+      summary: "Catatan kosong.",
+      transactions: [],
+      source: "local-nlp" as const,
+    };
+  }
+
+  // Pecah klausa tanpa memotong angka desimal berkoma (mis. 1,5jt atau 2,5kg)
+  // Koma hanya dianggap desimal jika diapit angka di kiri DAN kanan (`\d,\d`).
+  const sentences = clean
+    .split(/(?<!\d),|,(?!\d)|;|\n|\b(?:lalu|dan kemudian|serta|sama beli|terus beli)\b/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const transactions: any[] = [];
+  let inheritedAccountName: string | null = null;
+  let inheritedVendorName: string | null = null;
+
+  const detectAccountFromSentence = (s: string): string | null => {
+    if (
+      /\b(bca|bank|tf|trf|transfer|rek|rekening|mandiri|mdr|bri|bni|bsi|debit|qris|edc)\b/i.test(
+        s
+      )
+    ) {
+      return "Bank BCA";
+    }
+    if (/\b(utama|brankas|owner|tabungan|kas besar)\b/i.test(s)) {
+      return "Kas Utama";
+    }
+    if (/\b(laci|kasir|drawer|petty|pc|tunai|cash)\b/i.test(s)) {
+      return "Laci Kasir";
+    }
+    return null;
+  };
+
+  for (const sentence of sentences) {
+    // 1. Bersihkan dimensi barang (80x100) & ukuran cup (12oz/16oz) agar tidak terbaca sebagai harga
+    let workStr = sentence
+      .replace(/\b\d+\s*[*xX]\s*\d+\b/g, " ")
+      .replace(/\b\d+\s*oz\b/gi, " ");
+
+    // 2. Ekstrak kuantitas + satuan kemasan LEBIH DULU dan hapus dari string kerja harga
+    let quantity = 1;
+    let rawUnit: string | null = null;
+    const qtyRegex = new RegExp(
+      `(?:^|[\\s,(])(\\d+(?:[.,]\\d+)?)\\s*(${UNIT_REGEX_PART})\\b`,
+      "i"
+    );
+    const qtyMatch = workStr.match(qtyRegex);
+    if (qtyMatch) {
+      const parsedQty = parseFloat(qtyMatch[1].replace(",", "."));
+      if (!isNaN(parsedQty) && parsedQty > 0) {
+        quantity = parsedQty;
+      }
+      rawUnit = qtyMatch[2];
+      // Hapus bagian angka+satuan agar "6" di "6 liter 111rb" tidak tertukar menjadi nominal uang!
+      workStr = workStr.replace(qtyMatch[0], " ");
+    }
+
+    // 3. Ekstrak nominal uang (prioritaskan `@` per unit, lalu prefix Rp/total, lalu suffix rb/k/jt, lalu ribuan bertitik)
+    let amount = 0;
+    const perUnitRegex =
+      /(?:@|per\s*(?:unit|pcs|buah|kg|gr|liter|ltr|lt|l|karton|krtn|dus|dos|pack|pak|gln|galon|btl|botol|karung|krg|sak|bal)?\s*:?)\s*(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(rb|ribu|rbu|k|jt|juta)?\b/i;
+    const perUnitMatch = workStr.match(perUnitRegex);
+
+    if (perUnitMatch) {
+      const unitMoney = parseIndonesianMoneyValue(perUnitMatch[1], perUnitMatch[2]);
+      if (unitMoney > 0) {
+        amount = Math.round(quantity * unitMoney);
+      }
+    } else {
+      const rpMatch = workStr.match(
+        /(?:rp\.?|seharga|total|harga|biaya|nilai|senilai|bayar)\s*(\d+(?:[.,]\d+)*)\s*(rb|ribu|rbu|k|jt|juta)?\b/i
+      );
+      const suffixMatch = workStr.match(
+        /\b(\d+(?:[.,]\d+)*)\s*(rb|ribu|rbu|k|jt|juta)\b/i
+      );
+      const formattedThousandsMatch = workStr.match(
+        /\b(\d{1,3}(?:\.\d{3})+)(?:,\d+)?\b/
+      );
+      const fallbackMatch = workStr.match(/\b(\d+(?:[.,]\d+)?)\b/);
+
+      const chosen =
+        rpMatch || suffixMatch || formattedThousandsMatch || fallbackMatch;
+      if (chosen) {
+        amount = parseIndonesianMoneyValue(chosen[1], chosen[2]);
+      }
+    }
+
+    if (amount <= 0) continue;
+
+    // 4. Deteksi tipe & kategori transaksi (termasuk typo/singkatan)
+    const isIncome =
+      /\b(terima|masuk|omset|omzet|pendapatan|setor|income|pelunasan|pemasukan)\b/i.test(
+        sentence
+      );
+    const type = isIncome ? "CASH_IN" : "CASH_OUT";
+
+    const matchedIngredient = matchIngredientFromStore(
+      storeContext?.ingredients || [],
+      sentence
+    );
+
+    let category = "Operasional";
+    if (
+      matchedIngredient ||
+      /\b(susu|ssu|fm|uht|gf|dmd|oat|oatside|kopi|kpi|bean|beans|espresso|hb|sirup|srp|syrup|teh|matcha|mtcha|aren|creamer|butter|btr|mentega|croissant|crsnt|daging|ayam|aym|beras|brs|minyak|mnyk|telur|tlr|tepung|tpg|keju|saus|esbatu|galon|gln|air|gula|gp)\b/i.test(
+        sentence
+      )
+    ) {
+      category = "Bahan Baku";
+    } else if (
+      /\b(cup|lid|sedotan|sdtn|straw|paper|paperbag|seal|plastik|kresek|kotak|box)\b/i.test(
+        sentence
+      )
+    ) {
+      category = "Packaging & Kemasan";
+    } else if (
+      /\b(sabun|sunlight|wipol|sampah|trashbag|tissue|tisu|pel|sapu|lap|kebersihan|kantong)\b/i.test(
+        sentence
+      )
+    ) {
+      category = "Kebersihan & Sanitasi";
+    } else if (
+      /\b(listrik|pln|token|wifi|inet|indihome|pdam|pam|gas|lpg|elpiji)\b/i.test(
+        sentence
+      )
+    ) {
+      category = "Utilitas";
+    } else if (
+      /\b(gaji|gj|upah|lembur|kasbon|thr|bonus|bpjs)\b/i.test(sentence)
+    ) {
+      category = "Gaji & SDM";
+    } else if (isIncome) {
+      category = "Pendapatan Lain";
+    }
+
+    const explicitAccount = detectAccountFromSentence(sentence);
+    if (explicitAccount) {
+      inheritedAccountName = explicitAccount;
+    }
+    const accountName = explicitAccount || inheritedAccountName || "Laci Kasir";
+
+    const vendorMatch = sentence.match(
+      /\b(?:di|dari|toko|supplier|sup)\s+([A-Z0-9][A-Za-z0-9\s.&'-]{2,25}?)(?=\s+(?:rp|\d|@|kas|laci|tf|bca|bank|mandiri|bri|bni)|$)/i
+    );
+    const rawVendor = vendorMatch ? vendorMatch[1].trim() : null;
+    const explicitVendor =
+      rawVendor && !/^(?:laci|kas|kasir|bank|bca|utama|mandiri|bri|bni|qris|edc)\b/i.test(rawVendor)
+        ? rawVendor
+        : null;
+    if (explicitVendor) {
+      inheritedVendorName = explicitVendor;
+    }
+    const vendorName = explicitVendor || inheritedVendorName || null;
+
+    transactions.push(
+      enrichParsedTransactionWithStore(
+        {
+          type,
+          amount,
+          category,
+          description: sentence.trim(),
+          accountName,
+          vendorName,
+          ingredientId: matchedIngredient?.id || null,
+          ingredientName: matchedIngredient?.name || null,
+          quantity,
+          unit: rawUnit,
+        },
+        storeContext,
+        sentence
+      )
+    );
+  }
+
+  return {
+    summary:
+      transactions.length > 0
+        ? `${transactions.length} transaksi berhasil diekstrak dari catatan narasi.`
+        : "Belum ada nominal transaksi yang terbaca dari catatan tersebut.",
+    transactions,
+    source: "local-nlp" as const,
+  };
+}

@@ -8,6 +8,7 @@ import {
   Sparkles,
   Clock,
   ShieldCheck,
+  ShieldAlert,
   AlertCircle,
   Store,
   Keyboard,
@@ -18,7 +19,7 @@ interface PosCashierLoginProps {
 }
 
 export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess }) => {
-  const { login, settings, users } = useStore();
+  const { login, settings, users, lastLoginError } = useStore();
 
   // Khusus staf terminal kasir (Role: KASIR)
   const onlyKasirUsers = (users || []).filter((u) => u.role === "KASIR");
@@ -40,6 +41,20 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (lastLoginError) {
+      setError(lastLoginError);
+    }
+  }, [lastLoginError]);
+
+  // Keep selectedUser synced with latest user list updates (e.g. failedPinAttempts / isSuspended)
+  useEffect(() => {
+    if (selectedUser) {
+      const updated = (users || []).find((u) => u.id === selectedUser.id);
+      if (updated) setSelectedUser(updated);
+    }
+  }, [users]);
+
   // Pre-select kasir pertama jika ada
   useEffect(() => {
     if (cashierUsers.length > 0 && !selectedUser) {
@@ -53,6 +68,12 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
     const user = selectedUserRef.current;
     if (!user) {
       setError("Silakan pilih kasir yang bertugas terlebih dahulu!");
+      return;
+    }
+    if (user.isSuspended) {
+      setError(
+        "🔒 Akun ini sedang DITANGGUHKAN (Ter-suspend) karena salah memasukkan PIN 3x berturut-turut. Silakan hubungi Manager atau Super Admin."
+      );
       return;
     }
     if (isSubmittingRef.current) return;
@@ -72,7 +93,10 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
           if (success) {
             onLoginSuccess?.();
           } else {
-            setError("PIN otorisasi tidak sesuai. Silakan coba lagi!");
+            setError(
+              (prev) =>
+                prev || "PIN otorisasi tidak sesuai. Silakan coba lagi!"
+            );
             pinRef.current = "";
             setPin("");
           }
@@ -198,6 +222,8 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
               {cashierUsers.map((u) => {
                 const isSelected = selectedUser?.id === u.id;
+                const isSuspended = Boolean(u.isSuspended);
+                const failedCount = Number(u.failedPinAttempts || 0);
                 return (
                   <button
                     key={u.id}
@@ -206,33 +232,71 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
                       setPin("");
                       setError("");
                     }}
-                    className={`w-full p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-                      isSelected
-                        ? "bg-brand-50 border-brand-500 shadow-xs ring-1 ring-brand-500/30"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80"
+                    className={`w-full p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                      isSuspended
+                        ? isSelected
+                          ? "bg-rose-50 border-rose-500 shadow-xs ring-1 ring-rose-500/30"
+                          : "bg-rose-50/70 border-rose-200 text-rose-900 hover:bg-rose-100/70"
+                        : isSelected
+                          ? "bg-brand-50 border-brand-500 shadow-xs ring-1 ring-brand-500/30"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-                          isSelected
-                            ? "bg-brand-600 text-white shadow-xs"
-                            : "bg-slate-200 text-slate-600"
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                          isSuspended
+                            ? "bg-rose-600 text-white shadow-xs"
+                            : isSelected
+                              ? "bg-brand-600 text-white shadow-xs"
+                              : "bg-slate-200 text-slate-600"
                         }`}
                       >
-                        {u.name?.charAt(0)?.toUpperCase() || "K"}
+                        {isSuspended ? "🔒" : u.name?.charAt(0)?.toUpperCase() || "K"}
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{u.name}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {u.department ? `${u.department} • ` : ""}
-                          <span className={isSelected ? "font-semibold text-brand-700" : "font-semibold text-slate-500"}>{u.role}</span>
+                      <div className="min-w-0">
+                        <p
+                          className={`text-xs font-bold truncate ${
+                            isSuspended ? "text-rose-950" : "text-slate-900"
+                          }`}
+                        >
+                          {u.name}
                         </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-[10px] text-slate-500">
+                            {u.department ? `${u.department} • ` : ""}
+                            <span
+                              className={
+                                isSuspended
+                                  ? "font-semibold text-rose-700"
+                                  : isSelected
+                                    ? "font-semibold text-brand-700"
+                                    : "font-semibold text-slate-500"
+                              }
+                            >
+                              {u.role}
+                            </span>
+                          </p>
+                          {isSuspended && (
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white uppercase tracking-wide">
+                              🔒 TER-SUSPEND
+                            </span>
+                          )}
+                          {!isSuspended && failedCount > 0 && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                              ⚠️ Gagal PIN {failedCount}/3
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {isSelected && (
-                      <span className="w-2.5 h-2.5 rounded-full bg-brand-600" />
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          isSuspended ? "bg-rose-600" : "bg-brand-600"
+                        }`}
+                      />
                     )}
                   </button>
                 );
@@ -258,6 +322,22 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             </p>
           </div>
 
+          {selectedUser?.isSuspended && (
+            <div className="w-full max-w-md mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-2xl flex items-start gap-2.5 animate-in fade-in">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold text-rose-950">
+                  🔒 Akun {selectedUser.name} Ter-suspend
+                </p>
+                <p className="text-[11px] text-rose-700 leading-snug">
+                  {selectedUser.suspendedReason ||
+                    "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}{" "}
+                  Silakan hubungi Manager atau Super Admin untuk membuka suspend akun Anda.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* PIN Indicator Dots (Support 6 digit default) */}
           <div className="flex flex-col items-center gap-1.5 mb-3">
             <div className="flex items-center gap-3 py-1">
@@ -279,7 +359,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
           </div>
 
           {error && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 font-medium mb-3">
+            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-medium mb-3 max-w-md text-center">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -291,30 +371,34 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
               <button
                 key={num}
                 type="button"
+                disabled={Boolean(selectedUser?.isSuspended)}
                 onClick={() => handleKeypadPress(num)}
-                className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
+                className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {num}
               </button>
             ))}
             <button
               type="button"
+              disabled={Boolean(selectedUser?.isSuspended)}
               onClick={handleClear}
-              className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-bold text-slate-600 border border-slate-200 transition flex items-center justify-center"
+              className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-bold text-slate-600 border border-slate-200 transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Hapus
             </button>
             <button
               type="button"
+              disabled={Boolean(selectedUser?.isSuspended)}
               onClick={() => handleKeypadPress("0")}
-              className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center"
+              className="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-brand-50 active:border-brand-300 active:scale-95 text-lg font-bold text-slate-900 border border-slate-200 shadow-xs transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               0
             </button>
             <button
               type="button"
+              disabled={Boolean(selectedUser?.isSuspended)}
               onClick={handleBackspace}
-              className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-200 transition flex items-center justify-center"
+              className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-200 transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <Delete className="w-5 h-5" />
             </button>
