@@ -1,5 +1,6 @@
 import React, { useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "motion/react";
 import {
   FileText,
   Printer,
@@ -186,8 +187,20 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-      <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: "spring", damping: 28, stiffness: 360 }}
+        className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200"
+      >
         {/* Top Action Bar */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 no-print">
           <div className="flex items-center gap-2">
@@ -672,7 +685,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
             Tutup
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Clean Print Stylesheet for Browser Printing */}
       <style>{`
@@ -700,7 +713,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
           }
         }
       `}</style>
-    </div>,
+    </motion.div>,
     document.body
   );
 };

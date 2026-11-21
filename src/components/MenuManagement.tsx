@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { CustomSelect } from "./common/CustomSelect";
 import { formatCurrency } from "../utils/format";
 import {
   ViewState,
@@ -1397,27 +1398,29 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Divisi Dapur/Bar</label>
-              <select
+              <CustomSelect
                 value={division}
-                onChange={(e) => setDivision(e.target.value as ProductDivision)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-              >
-                <option value="BAR">☕ Divisi Bar & Minuman</option>
-                <option value="KITCHEN">🍳 Divisi Kitchen & Makanan</option>
-                <option value="BAKER">🥐 Divisi Bakery & Pastry</option>
-              </select>
+                onChange={(val) => setDivision(val as ProductDivision)}
+                options={[
+                  { value: "BAR", label: "☕ Divisi Bar & Minuman" },
+                  { value: "KITCHEN", label: "🍳 Divisi Kitchen & Makanan" },
+                  { value: "BAKER", label: "🥐 Divisi Bakery & Pastry" },
+                ]}
+                buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 hover:bg-white"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Status Publikasi</label>
-              <select
+              <CustomSelect
                 value={isActive ? "true" : "false"}
-                onChange={(e) => setIsActive(e.target.value === "true")}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-              >
-                <option value="true">Aktif (Tampil di Katalog Menu)</option>
-                <option value="false">Nonaktif (Draft / Sembunyikan)</option>
-              </select>
+                onChange={(val) => setIsActive(val === "true")}
+                options={[
+                  { value: "true", label: "Aktif (Tampil di Katalog Menu)" },
+                  { value: "false", label: "Nonaktif (Draft / Sembunyikan)" },
+                ]}
+                buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 hover:bg-white"
+              />
             </div>
           </div>
 
@@ -1561,7 +1564,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
                         Tautkan Resep Master (Pengurangan Stok Otomatis):
                       </label>
-                      <select
+                      <CustomSelect
                         value={
                           recipes.find(
                             (r) =>
@@ -1569,8 +1572,8 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                               r.menuName.toLowerCase() === v.name.toLowerCase()
                           )?.id || ""
                         }
-                        onChange={(e) => {
-                          const picked = recipes.find((r) => r.id === e.target.value);
+                        onChange={(val) => {
+                          const picked = recipes.find((r) => r.id === val);
                           if (picked) {
                             let rawCost = 0;
                             let safeList = picked.ingredients;
@@ -1588,20 +1591,21 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             });
                           }
                         }}
-                        className="w-full text-base sm:text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white cursor-pointer"
-                      >
-                        <option value="">-- Pilih Resep Toko (Opsional) --</option>
-                        {recipes.map((r) => {
-                          const rIngCount = Array.isArray(r.ingredients)
-                            ? r.ingredients.length
-                            : (typeof r.ingredients === "string" ? (() => { try { return JSON.parse(r.ingredients).length; } catch { return 0; } })() : 0);
-                          return (
-                            <option key={r.id} value={r.id}>
-                              {r.menuName} ({rIngCount} bahan baku)
-                            </option>
-                          );
-                        })}
-                      </select>
+                        placeholder="-- Pilih Resep Toko (Opsional) --"
+                        options={[
+                          { value: "", label: "-- Pilih Resep Toko (Opsional) --" },
+                          ...recipes.map((r) => {
+                            const rIngCount = Array.isArray(r.ingredients)
+                              ? r.ingredients.length
+                              : (typeof r.ingredients === "string" ? (() => { try { return JSON.parse(r.ingredients).length; } catch { return 0; } })() : 0);
+                            return {
+                              value: r.id,
+                              label: `${r.menuName} (${rIngCount} bahan baku)`,
+                            };
+                          }),
+                        ]}
+                        buttonClassName="w-full text-base sm:text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 hover:bg-white"
+                      />
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto text-[11px] pt-1 sm:pt-0">
@@ -1802,25 +1806,26 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Target Bahan di Inventori
               </label>
-              <select
+              <CustomSelect
                 value={targetIngredientId}
-                onChange={(e) => {
-                  setTargetIngredientId(e.target.value);
-                  const sel = ingredients.find((i) => i.id === e.target.value);
+                onChange={(val) => {
+                  setTargetIngredientId(val);
+                  const sel = ingredients.find((i) => i.id === val);
                   if (sel) {
                     setTargetIngredientName(sel.name);
                     setYieldUnit(sel.unit);
                   }
                 }}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-              >
-                <option value="">-- Buat Bahan Jadi Baru --</option>
-                {ingredients.map((ing) => (
-                  <option key={ing.id} value={ing.id}>
-                    {ing.name} ({ing.unit}) - Stok: {ing.currentStock}
-                  </option>
-                ))}
-              </select>
+                placeholder="-- Buat Bahan Jadi Baru --"
+                options={[
+                  { value: "", label: "-- Buat Bahan Jadi Baru --" },
+                  ...ingredients.map((ing) => ({
+                    value: ing.id,
+                    label: `${ing.name} (${ing.unit}) - Stok: ${ing.currentStock}`,
+                  })),
+                ]}
+                buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 hover:bg-white"
+              />
             </div>
 
             <div>
@@ -1893,17 +1898,15 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
                     className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center gap-2 text-xs"
                   >
                     <div className="flex-1 w-full">
-                      <select
+                      <CustomSelect
                         value={item.ingredientId}
-                        onChange={(e) => handleUpdateIngredient(idx, { ingredientId: e.target.value })}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
-                      >
-                        {ingredients.map((ing) => (
-                          <option key={ing.id} value={ing.id}>
-                            {ing.name} ({ing.unit}) - Rp {ing.costPerUnit || 0}/{ing.unit}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(val) => handleUpdateIngredient(idx, { ingredientId: val })}
+                        options={ingredients.map((ing) => ({
+                          value: ing.id,
+                          label: `${ing.name} (${ing.unit}) - Rp ${ing.costPerUnit || 0}/${ing.unit}`,
+                        }))}
+                        buttonClassName="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-semibold text-slate-900"
+                      />
                     </div>
 
                     <div className="flex items-center gap-2 justify-between sm:justify-end">

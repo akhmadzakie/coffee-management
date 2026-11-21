@@ -3443,32 +3443,30 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Kategori</label>
-                  <select
+                  <CustomSelect
                     value={ingredientForm.category}
-                    onChange={(e) => setIngredientForm({ ...ingredientForm, category: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-                  >
-                    {PRESET_CATEGORIES.filter((c) => c.id !== "ALL").map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setIngredientForm({ ...ingredientForm, category: val })}
+                    options={PRESET_CATEGORIES.filter((c) => c.id !== "ALL").map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                    }))}
+                    buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800"
+                  />
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Lokasi Simpan</label>
-                  <select
+                  <CustomSelect
                     value={ingredientForm.storageLocation}
-                    onChange={(e) => setIngredientForm({ ...ingredientForm, storageLocation: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-                  >
-                    {PRESET_LOCATIONS.filter((l) => l.id !== "ALL").map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) =>
+                      setIngredientForm({ ...ingredientForm, storageLocation: val })
+                    }
+                    options={PRESET_LOCATIONS.filter((l) => l.id !== "ALL").map((l) => ({
+                      value: l.id,
+                      label: l.label,
+                    }))}
+                    buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800"
+                  />
                 </div>
               </div>
 
@@ -3850,11 +3848,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               {/* Select Ingredient */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Pilih Bahan Baku</label>
-                <select
+                <CustomSelect
                   required
                   value={selectedIngredientForMove}
-                  onChange={(e) => {
-                    const newId = e.target.value;
+                  onChange={(newId) => {
                     setSelectedIngredientForMove(newId);
                     const ing = ingredients.find((i) => i.id === newId);
                     const conv = ing ? getIngredientUnitConversion(ing) : null;
@@ -3862,14 +3859,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       setMovementUnitMode("PURCHASE");
                     }
                   }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-                >
-                  {accessibleIngredients.map((ing) => (
-                    <option key={ing.id} value={ing.id}>
-                      {ing.name} (Sisa: {ing.currentStock.toLocaleString("id-ID")} {ing.unit})
-                    </option>
-                  ))}
-                </select>
+                  options={accessibleIngredients.map((ing) => ({
+                    value: ing.id,
+                    label: `${ing.name} (Sisa: ${ing.currentStock.toLocaleString("id-ID")} ${ing.unit})`,
+                  }))}
+                  buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900"
+                />
               </div>
 
               {/* Destination Station (if TRANSFER) */}
@@ -3879,16 +3874,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     <label className="block font-bold text-brand-950 mb-1">
                       Stasiun Tujuan Pengeluaran
                     </label>
-                    <select
+                    <CustomSelect
                       value={movementTargetStation}
-                      onChange={(e) => setMovementTargetStation(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-brand-200 bg-white font-bold text-base sm:text-xs text-brand-950 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
-                    >
-                      <option value="BAR">Meja Bar (Barista & Minuman)</option>
-                      <option value="CHILLER">Kulkas / Chiller Bar</option>
-                      <option value="KITCHEN">Kitchen / Dapur Makanan</option>
-                      <option value="BAKERY">Bakery & Pastry Station</option>
-                    </select>
+                      onChange={setMovementTargetStation}
+                      options={[
+                        { value: "BAR", label: "Meja Bar (Barista & Minuman)" },
+                        { value: "CHILLER", label: "Kulkas / Chiller Bar" },
+                        { value: "KITCHEN", label: "Kitchen / Dapur Makanan" },
+                        { value: "BAKERY", label: "Bakery & Pastry Station" },
+                      ]}
+                      buttonClassName="w-full px-3 py-2 rounded-xl border border-brand-200 bg-white font-bold text-base sm:text-xs text-brand-950"
+                    />
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer pt-0.5">
                     <input
@@ -4304,21 +4300,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <label className="block font-bold text-slate-800 mb-1">
                   Pilih Bahan Baku <span className="text-rose-500">*</span>
                 </label>
-                <select
+                <CustomSelect
                   required
                   value={wasteIngredientId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setWasteIngredientId(id);
-                  }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
-                >
-                  {accessibleIngredients.map((ing) => (
-                    <option key={ing.id} value={ing.id}>
-                      {ing.name} (Stok: {ing.currentStock.toLocaleString("id-ID")} {ing.unit})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setWasteIngredientId}
+                  options={accessibleIngredients.map((ing) => ({
+                    value: ing.id,
+                    label: `${ing.name} (Stok: ${ing.currentStock.toLocaleString("id-ID")} ${ing.unit})`,
+                  }))}
+                  buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-900"
+                />
               </div>
 
               {/* Quantity & Unit Selection */}

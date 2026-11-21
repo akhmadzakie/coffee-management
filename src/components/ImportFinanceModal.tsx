@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
+import { CustomSelect } from "./common/CustomSelect";
 import {
   X,
   Upload,
@@ -133,11 +135,26 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
     setStep("done");
   };
 
-  if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh]">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="import-finance-modal-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh]"
+          >
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -241,18 +258,19 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
                   Masukkan ke Akun Kas
                 </label>
-                <select
+                <CustomSelect
                   value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Pilih Akun --</option>
-                  {cashAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.type}){a.isDefault ? " ★ Default" : ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedAccountId}
+                  placeholder="-- Pilih Akun --"
+                  options={[
+                    { value: "", label: "-- Pilih Akun --" },
+                    ...cashAccounts.map((a) => ({
+                      value: a.id,
+                      label: `${a.name} (${a.type})${a.isDefault ? " ★ Default" : ""}`,
+                    })),
+                  ]}
+                  buttonClassName="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+                />
               </div>
 
               {/* Summary */}
@@ -426,8 +444,10 @@ export const ImportFinanceModal: React.FC<ImportFinanceModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>,
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

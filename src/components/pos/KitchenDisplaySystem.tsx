@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { ThemeToggleButton } from "../../context/ThemeContext";
 import { KitchenStatus, PrintDestination } from "../../types";
 import { PosQuickWasteModal } from "./PosQuickWasteModal";
 import {
@@ -290,6 +292,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
+            <ThemeToggleButton compact />
           </div>
         </div>
 
@@ -365,6 +368,8 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
 
+            <ThemeToggleButton compact />
+
             {onNavigateBack ? (
               <button
                 onClick={onNavigateBack}
@@ -406,6 +411,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 items-start pb-6">
+            <AnimatePresence mode="popLayout">
             {tickets.map((ticket) => {
               const minutes = getElapsedMinutes(ticket.createdAt);
               // Pewarnaan indikator waktu tunggu
@@ -416,7 +422,12 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
               const isOrderPreparing = ticket.kitchenStatus === "PREPARING";
 
               return (
-                <div
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
                   key={ticket.id}
                   className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-sm transition select-none bg-white ${
                     isUrgent
@@ -590,21 +601,20 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                       </button>
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
         )}
       </div>
 
       {/* Modal Quick Waste & Calibration untuk Barista / Kitchen */}
-      {isQuickWasteOpen && (
-        <PosQuickWasteModal
-          isOpen={isQuickWasteOpen}
-          onClose={() => setIsQuickWasteOpen(false)}
-          defaultReason="KALIBRASI_PAGI"
-        />
-      )}
+      <PosQuickWasteModal
+        isOpen={isQuickWasteOpen}
+        onClose={() => setIsQuickWasteOpen(false)}
+        defaultReason="KALIBRASI_PAGI"
+      />
     </div>
   );
 };

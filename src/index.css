@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --color-brand-50: #eef2ff;
@@ -121,6 +122,7 @@
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Tabular numbers for clean currency and KPI alignment */
@@ -132,5 +134,272 @@
   *:focus-visible {
     outline: 2px solid rgba(74, 95, 240, 0.4);
     outline-offset: 2px;
+  }
+}
+
+/* ─── Anti-Clash Dark Mode Surface & Contrast Layer ─────────────────────────── */
+html.dark body {
+  background-color: #070b1e;
+  color: #f1f5f9;
+}
+
+html.dark .custom-scrollbar {
+  scrollbar-color: #334155 transparent;
+}
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #334155;
+}
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #475569;
+}
+
+html.dark .glass-card {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(51, 65, 85, 0.8);
+}
+
+html.dark .glass-header {
+  background: rgba(15, 23, 42, 0.88);
+  border-bottom-color: rgba(51, 65, 85, 0.8);
+}
+
+html.dark .shadow-coffee-sm {
+  box-shadow: 0 1px 3px rgba(2, 6, 23, 0.38), 0 0 0 1px rgba(51, 65, 85, 0.35);
+}
+html.dark .shadow-coffee {
+  box-shadow: 0 8px 24px -4px rgba(2, 6, 23, 0.5), 0 0 0 1px rgba(51, 65, 85, 0.4);
+}
+html.dark .shadow-coffee-lg {
+  box-shadow: 0 16px 40px -6px rgba(2, 6, 23, 0.65), 0 0 0 1px rgba(51, 65, 85, 0.45);
+}
+
+/* Layer 1 Canvas */
+html.dark .bg-\[\#f6f8ff\]:not([class*="dark:bg-"]),
+html.dark .bg-\[\#F8F9FA\]:not([class*="dark:bg-"]) {
+  background-color: #070b1e;
+}
+
+/* Layer 2 Cards & Modals (exclude thermal/printable receipts) */
+html.dark .bg-white:not([class*="dark:bg-"]):not(#thermal-receipt):not(#thermal-receipt *):not(#printable-payslip):not(#printable-payslip *):not(.printable-receipt):not(.printable-receipt *) {
+  background-color: #0f172a;
+}
+html.dark .bg-white\/95:not([class*="dark:bg-"]),
+html.dark .bg-white\/90:not([class*="dark:bg-"]),
+html.dark .bg-white\/80:not([class*="dark:bg-"]) {
+  background-color: rgba(15, 23, 42, 0.94);
+}
+
+/* Layer 3 Sub-panels & Inset Bars */
+html.dark .bg-slate-50:not([class*="dark:bg-"]):not(#thermal-receipt *):not(#printable-payslip *):not(.printable-receipt *),
+html.dark .bg-slate-50\/90:not([class*="dark:bg-"]),
+html.dark .bg-slate-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-slate-50\/70:not([class*="dark:bg-"]),
+html.dark .bg-slate-50\/60:not([class*="dark:bg-"]),
+html.dark .bg-slate-50\/50:not([class*="dark:bg-"]) {
+  background-color: #152036;
+}
+html.dark .bg-slate-100:not([class*="dark:bg-"]),
+html.dark .bg-slate-100\/90:not([class*="dark:bg-"]),
+html.dark .bg-slate-100\/80:not([class*="dark:bg-"]) {
+  background-color: #1e293b;
+}
+html.dark .bg-slate-200:not([class*="dark:bg-"]) {
+  background-color: #334155;
+}
+
+html.dark .hover\:bg-slate-50:not([class*="dark:hover\:bg-"]):hover,
+html.dark .hover\:bg-white:not([class*="dark:hover\:bg-"]):hover {
+  background-color: #1a2640;
+}
+html.dark .hover\:bg-slate-100:not([class*="dark:hover\:bg-"]):hover,
+html.dark .hover\:bg-slate-200:not([class*="dark:hover\:bg-"]):hover {
+  background-color: #27354f;
+}
+
+/* Borders & Dividers */
+html.dark .border-slate-100:not([class*="dark:border-"]),
+html.dark .border-slate-200:not([class*="dark:border-"]),
+html.dark .border-slate-200\/90:not([class*="dark:border-"]),
+html.dark .border-slate-200\/80:not([class*="dark:border-"]),
+html.dark .border-slate-200\/70:not([class*="dark:border-"]),
+html.dark .border-slate-200\/60:not([class*="dark:border-"]),
+html.dark .border-stone-200\/80:not([class*="dark:border-"]) {
+  border-color: rgba(51, 65, 85, 0.78);
+}
+html.dark .border-slate-300:not([class*="dark:border-"]) {
+  border-color: rgba(71, 85, 105, 0.85);
+}
+html.dark .divide-slate-100:not([class*="dark:divide-"]) > :not(:first-child),
+html.dark .divide-slate-200:not([class*="dark:divide-"]) > :not(:first-child) {
+  border-color: rgba(51, 65, 85, 0.55);
+}
+
+/* Neutral Typography Contrast >= 4.5:1 */
+html.dark .text-slate-950:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *),
+html.dark .text-slate-900:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *),
+html.dark .text-slate-800:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *),
+html.dark .text-stone-900:not([class*="dark:text-"]) {
+  color: #f1f5f9;
+}
+html.dark .text-slate-700:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *) {
+  color: #e2e8f0;
+}
+html.dark .text-slate-600:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *) {
+  color: #cbd5e1;
+}
+html.dark .text-slate-500:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *),
+html.dark .text-slate-400:not([class*="dark:text-"]):not(.bg-brand-gradient *):not(#thermal-receipt *):not(#printable-payslip *),
+html.dark .text-stone-500:not([class*="dark:text-"]) {
+  color: #94a3b8;
+}
+
+/* Brand Soft Surfaces & Luminous Text on Dark */
+html.dark .bg-brand-50:not([class*="dark:bg-"]),
+html.dark .bg-brand-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-brand-50\/70:not([class*="dark:bg-"]),
+html.dark .bg-brand-50\/60:not([class*="dark:bg-"]),
+html.dark .bg-brand-50\/40:not([class*="dark:bg-"]),
+html.dark .bg-brand-100:not([class*="dark:bg-"]),
+html.dark .bg-blue-50:not([class*="dark:bg-"]),
+html.dark .bg-blue-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-indigo-50:not([class*="dark:bg-"]) {
+  background-color: rgba(74, 95, 240, 0.16);
+}
+html.dark .border-brand-100:not([class*="dark:border-"]),
+html.dark .border-brand-200:not([class*="dark:border-"]),
+html.dark .border-brand-200\/80:not([class*="dark:border-"]),
+html.dark .border-brand-200\/70:not([class*="dark:border-"]),
+html.dark .border-brand-200\/60:not([class*="dark:border-"]),
+html.dark .border-brand-300:not([class*="dark:border-"]),
+html.dark .border-blue-200\/60:not([class*="dark:border-"]),
+html.dark .border-indigo-200:not([class*="dark:border-"]) {
+  border-color: rgba(129, 152, 255, 0.32);
+}
+html.dark .text-brand-600:not([class*="dark:text-"]),
+html.dark .text-brand-700:not([class*="dark:text-"]),
+html.dark .text-brand-800:not([class*="dark:text-"]),
+html.dark .text-brand-900:not([class*="dark:text-"]),
+html.dark .text-brand-950:not([class*="dark:text-"]),
+html.dark .text-blue-600:not([class*="dark:text-"]),
+html.dark .text-blue-700:not([class*="dark:text-"]),
+html.dark .text-blue-800:not([class*="dark:text-"]),
+html.dark .text-indigo-600:not([class*="dark:text-"]),
+html.dark .text-indigo-700:not([class*="dark:text-"]) {
+  color: #a8bcff;
+}
+
+/* Semantic Status Tints & Luminous Text on Dark */
+html.dark .bg-emerald-50:not([class*="dark:bg-"]),
+html.dark .bg-emerald-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-emerald-100:not([class*="dark:bg-"]) {
+  background-color: rgba(16, 185, 129, 0.16);
+}
+html.dark .border-emerald-100:not([class*="dark:border-"]),
+html.dark .border-emerald-200:not([class*="dark:border-"]),
+html.dark .border-emerald-200\/80:not([class*="dark:border-"]),
+html.dark .border-emerald-200\/60:not([class*="dark:border-"]) {
+  border-color: rgba(52, 211, 153, 0.32);
+}
+html.dark .text-emerald-600:not([class*="dark:text-"]),
+html.dark .text-emerald-700:not([class*="dark:text-"]),
+html.dark .text-emerald-800:not([class*="dark:text-"]),
+html.dark .text-emerald-900:not([class*="dark:text-"]) {
+  color: #34d399;
+}
+
+html.dark .bg-rose-50:not([class*="dark:bg-"]),
+html.dark .bg-rose-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-rose-100:not([class*="dark:bg-"]) {
+  background-color: rgba(244, 63, 94, 0.16);
+}
+html.dark .border-rose-100:not([class*="dark:border-"]),
+html.dark .border-rose-200:not([class*="dark:border-"]),
+html.dark .border-rose-200\/80:not([class*="dark:border-"]),
+html.dark .border-rose-200\/60:not([class*="dark:border-"]),
+html.dark .border-rose-300:not([class*="dark:border-"]) {
+  border-color: rgba(251, 113, 133, 0.32);
+}
+html.dark .text-rose-600:not([class*="dark:text-"]),
+html.dark .text-rose-700:not([class*="dark:text-"]),
+html.dark .text-rose-800:not([class*="dark:text-"]),
+html.dark .text-rose-900:not([class*="dark:text-"]),
+html.dark .text-rose-950:not([class*="dark:text-"]) {
+  color: #fb7185;
+}
+
+html.dark .bg-amber-50:not([class*="dark:bg-"]),
+html.dark .bg-amber-50\/80:not([class*="dark:bg-"]),
+html.dark .bg-amber-100:not([class*="dark:bg-"]),
+html.dark .bg-orange-50:not([class*="dark:bg-"]) {
+  background-color: rgba(245, 158, 11, 0.16);
+}
+html.dark .border-amber-100:not([class*="dark:border-"]),
+html.dark .border-amber-200:not([class*="dark:border-"]),
+html.dark .border-amber-200\/90:not([class*="dark:border-"]),
+html.dark .border-amber-200\/80:not([class*="dark:border-"]),
+html.dark .border-amber-200\/60:not([class*="dark:border-"]),
+html.dark .border-amber-300:not([class*="dark:border-"]),
+html.dark .border-orange-200\/60:not([class*="dark:border-"]) {
+  border-color: rgba(251, 191, 36, 0.32);
+}
+html.dark .text-amber-600:not([class*="dark:text-"]),
+html.dark .text-amber-700:not([class*="dark:text-"]),
+html.dark .text-amber-800:not([class*="dark:text-"]),
+html.dark .text-amber-900:not([class*="dark:text-"]),
+html.dark .text-amber-950:not([class*="dark:text-"]),
+html.dark .text-orange-600:not([class*="dark:text-"]) {
+  color: #fbbf24;
+}
+
+html.dark .bg-sky-50:not([class*="dark:bg-"]),
+html.dark .bg-sky-100:not([class*="dark:bg-"]) {
+  background-color: rgba(14, 165, 233, 0.16);
+}
+html.dark .border-sky-200:not([class*="dark:border-"]) {
+  border-color: rgba(56, 189, 248, 0.32);
+}
+html.dark .text-sky-600:not([class*="dark:text-"]),
+html.dark .text-sky-700:not([class*="dark:text-"]),
+html.dark .text-sky-800:not([class*="dark:text-"]) {
+  color: #38bdf8;
+}
+
+html.dark .bg-violet-50:not([class*="dark:bg-"]) {
+  background-color: rgba(139, 92, 246, 0.16);
+}
+html.dark .border-violet-200:not([class*="dark:border-"]) {
+  border-color: rgba(167, 139, 250, 0.32);
+}
+html.dark .text-violet-700:not([class*="dark:text-"]),
+html.dark .text-violet-800:not([class*="dark:text-"]) {
+  color: #c4b5fd;
+}
+
+/* Soft Gradient Endpoints Fallback on Dark Cards */
+html.dark .via-white:not([class*="dark:via-"]) {
+  --tw-gradient-via: #0f172a;
+}
+html.dark .to-white:not([class*="dark:to-"]) {
+  --tw-gradient-to: #0f172a;
+}
+
+/* Recharts Readability in Dark Mode */
+html.dark .recharts-cartesian-grid line {
+  stroke: rgba(148, 163, 184, 0.16);
+}
+html.dark .recharts-text {
+  fill: #94a3b8;
+}
+
+@media print {
+  html.dark body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  #thermal-receipt,
+  #printable-payslip,
+  .printable-receipt {
+    background-color: #ffffff !important;
+    color: #000000 !important;
   }
 }

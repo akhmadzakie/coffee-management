@@ -4,9 +4,11 @@
  */
 
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import { Trash2, Coffee, AlertTriangle, X, Check, Scale } from "lucide-react";
+import { CustomSelect } from "../common/CustomSelect";
 
 interface PosQuickWasteModalProps {
   isOpen: boolean;
@@ -33,8 +35,6 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
   const [reason, setReason] = useState<string>(defaultReason);
   const [notes, setNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  if (!isOpen) return null;
 
   const currentIng = ingredients.find((i) => i.id === selectedIngredientId);
   const qtyNum = Math.max(0, parseFloat(quantity) || 0);
@@ -81,8 +81,23 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="pos-quick-waste-modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          >
         {/* Header */}
         <div className="p-4 px-6 bg-gradient-to-r from-amber-600 to-rose-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -113,17 +128,15 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
               Pilih Bahan Baku
             </label>
-            <select
+            <CustomSelect
               value={selectedIngredientId}
-              onChange={(e) => setSelectedIngredientId(e.target.value)}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              {ingredients.map((ing) => (
-                <option key={ing.id} value={ing.id}>
-                  {ing.name} (Sisa: {ing.currentStock} {ing.unit} • HPP: {formatCurrency(ing.costPerUnit)}/{ing.unit})
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedIngredientId}
+              options={ingredients.map((ing) => ({
+                value: ing.id,
+                label: `${ing.name} (Sisa: ${ing.currentStock} ${ing.unit} • HPP: ${formatCurrency(ing.costPerUnit)}/${ing.unit})`,
+              }))}
+              buttonClassName="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-800 hover:bg-white"
+            />
           </div>
 
           {/* 2. Jumlah Terbuang */}
@@ -246,8 +259,10 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 

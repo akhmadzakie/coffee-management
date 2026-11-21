@@ -40,6 +40,9 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "../../context/ToastContext";
+import { ThemeToggleButton } from "../../context/ThemeContext";
+import { ConfirmModal } from "../common/ConfirmModal";
 import { PosPaymentModal } from "./PosPaymentModal";
 import { PosOpenBillsModal } from "./PosOpenBillsModal";
 import { PosManagerPinModal } from "./PosManagerPinModal";
@@ -137,6 +140,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isQuickWasteOpen, setIsQuickWasteOpen] = useState(false);
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+  const [isClearCartConfirmOpen, setIsClearCartConfirmOpen] = useState(false);
 
   // Terminal Lock & Exit Guard
   const [isTerminalLocked, setIsTerminalLocked] = useState(false);
@@ -364,7 +368,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     setIsSyncing(false);
 
     if (successCount > 0) {
-      alert(`Berhasil menyinkronkan ${successCount} pesanan offline ke server database!`);
+      toast.success(`Berhasil menyinkronkan ${successCount} pesanan offline ke server database!`);
       fetchActiveBillsCount();
       syncData?.();
     }
@@ -500,7 +504,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   // Handler tambah ke keranjang
   const handleAddToCart = (item: MenuItem) => {
     if (!item.isAvailable) {
-      alert(`Stok bahan baku untuk menu "${item.name}" saat ini habis.`);
+      toast.warning(`Stok bahan baku untuk menu "${item.name}" saat ini habis.`);
       return;
     }
 
@@ -584,17 +588,21 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   const handleClearCart = () => {
     if (cart.length === 0) return;
-    if (confirm("Kosongkan keranjang pesanan saat ini?")) {
-      setCart([]);
-      setTableNumber("");
-      setCustomerName("");
-      setDiscountValue(0);
-      setDiscountReason("");
-      setAppliedPromotionId(null);
-      setAppliedPromotionName(null);
-      setAppliedPromoMaxDiscount(undefined);
-      setCurrentEditingOrderId(null);
-    }
+    setIsClearCartConfirmOpen(true);
+  };
+
+  const confirmClearCart = () => {
+    setCart([]);
+    setTableNumber("");
+    setCustomerName("");
+    setDiscountValue(0);
+    setDiscountReason("");
+    setAppliedPromotionId(null);
+    setAppliedPromotionName(null);
+    setAppliedPromoMaxDiscount(undefined);
+    setCurrentEditingOrderId(null);
+    setIsClearCartConfirmOpen(false);
+    toast.info("Keranjang pesanan dikosongkan.");
   };
 
   // Verifikasi Plafon Diskon Kasir
@@ -617,16 +625,16 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   // Simpan Open Bill (Dine-in Tab)
   const handleSaveOpenBill = async () => {
     if (!activeShift) {
-      alert("⚠️ Shift Kasir belum dibuka! Silakan buka shift kasir dan masukkan Modal Awal terlebih dahulu.");
+      toast.warning("Shift Kasir belum dibuka! Silakan buka shift kasir dan masukkan Modal Awal terlebih dahulu.");
       setIsShiftModalOpen(true);
       return;
     }
     if (cart.length === 0) {
-      alert("Keranjang masih kosong.");
+      toast.warning("Keranjang masih kosong.");
       return;
     }
     if (orderType === "DINE_IN" && !tableNumber.trim()) {
-      alert("Silakan masukkan Nomor Meja untuk pesanan Dine-In (Open Bill).");
+      toast.warning("Silakan masukkan Nomor Meja untuk pesanan Dine-In (Open Bill).");
       return;
     }
 
@@ -673,7 +681,10 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         const updated = [...offlineQueue, offlineOrder];
         setOfflineQueue(updated);
         localStorage.setItem("coffee_pos_offline_orders", JSON.stringify(updated));
-        alert(`Mode Offline: Open Bill disimpan di memori tablet!\nNomor Pesanan: ${receiptNo} (${tableNumber || "Meja"})\nPesanan otomatis tersinkron saat internet online.`);
+        toast.info(
+          `Mode Offline: Open Bill disimpan di memori tablet!\nNomor Pesanan: ${receiptNo} (${tableNumber || "Meja"})\nPesanan otomatis tersinkron saat internet online.`,
+          5500
+        );
         setCart([]);
         setTableNumber("");
         setCustomerName("");
@@ -697,7 +708,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       }
 
       const result = await res.json();
-      alert(`Open Bill berhasil disimpan!\nNomor Pesanan: ${result.order.receiptNo} (${tableNumber || "Meja"})`);
+      toast.success(`Open Bill berhasil disimpan!\nNomor Pesanan: ${result.order.receiptNo} (${tableNumber || "Meja"})`);
 
       setCart([]);
       setTableNumber("");
@@ -710,7 +721,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       setCurrentEditingOrderId(null);
       fetchActiveBillsCount();
     } catch (e: any) {
-      alert(`Error: ${e.message}`);
+      toast.error(`Error: ${e.message}`);
     }
   };
 
@@ -1023,7 +1034,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             disabled={cart.length === 0}
             onClick={() => {
               if (!activeShift) {
-                alert("⚠️ Shift Kasir belum dibuka! Silakan masukkan Modal Awal Laci Kasir terlebih dahulu.");
+                toast.warning("Shift Kasir belum dibuka! Silakan masukkan Modal Awal Laci Kasir terlebih dahulu.");
                 setIsShiftModalOpen(true);
                 return;
               }
@@ -1209,6 +1220,8 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
+
+          <ThemeToggleButton compact />
 
           {/* Kunci Layar POS */}
           <button
@@ -1526,53 +1539,59 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         )}
       </AnimatePresence>
 
-      {isPinModalOpen && (
-        <PosManagerPinModal
-          title={pinActionType === "DISCOUNT" ? "Otorisasi Diskon Khusus" : "Otorisasi Void Transaksi"}
-          description={
-            pinActionType === "DISCOUNT"
-              ? `Diskon manual khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : `Rp ${pendingDiscountValue.toLocaleString("id-ID")}`}) memerlukan otorisasi PIN Manager/Owner.`
-              : "Pembatalan / VOID transaksi memerlukan otorisasi Manager."
-          }
-          onClose={() => setIsPinModalOpen(false)}
-          onSuccess={(manager) => {
-            setIsPinModalOpen(false);
-            if (pinActionType === "DISCOUNT") {
-              setDiscountType(pendingDiscountType);
-              setDiscountValue(pendingDiscountValue);
-              setDiscountReason(pendingDiscountReason || `Diskon Manual (${manager.name})`);
-              setAppliedPromotionId(null);
-              setAppliedPromotionName(`Diskon Manual (${manager.name})`);
-              setAppliedPromoMaxDiscount(undefined);
-              setIsDiscountModalOpen(false);
-              alert(`Diskon manual berhasil disetujui oleh: ${manager.name}`);
+      <AnimatePresence>
+        {isPinModalOpen && (
+          <PosManagerPinModal
+            title={pinActionType === "DISCOUNT" ? "Otorisasi Diskon Khusus" : "Otorisasi Void Transaksi"}
+            description={
+              pinActionType === "DISCOUNT"
+                ? `Diskon manual khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : `Rp ${pendingDiscountValue.toLocaleString("id-ID")}`}) memerlukan otorisasi PIN Manager/Owner.`
+                : "Pembatalan / VOID transaksi memerlukan otorisasi Manager."
             }
-          }}
-        />
-      )}
+            onClose={() => setIsPinModalOpen(false)}
+            onSuccess={(manager) => {
+              setIsPinModalOpen(false);
+              if (pinActionType === "DISCOUNT") {
+                setDiscountType(pendingDiscountType);
+                setDiscountValue(pendingDiscountValue);
+                setDiscountReason(pendingDiscountReason || `Diskon Manual (${manager.name})`);
+                setAppliedPromotionId(null);
+                setAppliedPromotionName(`Diskon Manual (${manager.name})`);
+                setAppliedPromoMaxDiscount(undefined);
+                setIsDiscountModalOpen(false);
+                toast.success(`Diskon manual berhasil disetujui oleh: ${manager.name}`);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
 
-      {isReceiptModalOpen && completedOrder && (
-        <PosReceiptModal
-          orderData={completedOrder}
-          onClose={() => setIsReceiptModalOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {isReceiptModalOpen && completedOrder && (
+          <PosReceiptModal
+            orderData={completedOrder}
+            onClose={() => setIsReceiptModalOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
-      {isQuickWasteOpen && (
-        <PosQuickWasteModal
-          isOpen={isQuickWasteOpen}
-          onClose={() => setIsQuickWasteOpen(false)}
-          defaultReason="KALIBRASI_PAGI"
-        />
-      )}
+      <PosQuickWasteModal
+        isOpen={isQuickWasteOpen}
+        onClose={() => setIsQuickWasteOpen(false)}
+        defaultReason="KALIBRASI_PAGI"
+      />
 
-      {isPrinterSettingsOpen && (
-        <PosPrinterSettingsModal onClose={() => setIsPrinterSettingsOpen(false)} />
-      )}
+      <AnimatePresence>
+        {isPrinterSettingsOpen && (
+          <PosPrinterSettingsModal onClose={() => setIsPrinterSettingsOpen(false)} />
+        )}
+      </AnimatePresence>
 
-      {isTodayOrdersOpen && (
-        <PosTodayOrdersModal onClose={() => setIsTodayOrdersOpen(false)} />
-      )}
+      <AnimatePresence>
+        {isTodayOrdersOpen && (
+          <PosTodayOrdersModal onClose={() => setIsTodayOrdersOpen(false)} />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isDiscountModalOpen && (
@@ -1839,11 +1858,11 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
                       type="button"
                       onClick={() => {
                         if (!manualDiscountValue || manualDiscountValue <= 0) {
-                          alert("Masukkan nilai diskon yang valid.");
+                          toast.warning("Masukkan nilai diskon yang valid.");
                           return;
                         }
                         if (!manualDiscountReason.trim()) {
-                          alert("Alasan diskon wajib diisi untuk otorisasi Manager.");
+                          toast.warning("Alasan diskon wajib diisi untuk otorisasi Manager.");
                           return;
                         }
                         setPendingDiscountValue(manualDiscountValue);
@@ -1971,40 +1990,44 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       </AnimatePresence>
 
       {/* ── Modal Otorisasi PIN Manager untuk Keluar POS ─────────────── */}
-      {isExitPinModalOpen && (
-        <PosManagerPinModal
-          title="Otorisasi Keluar Terminal POS"
-          description="Masukkan PIN Manager / Owner untuk mengizinkan keluar dari layar kasir POS."
-          purpose="EXIT_POS"
-          onClose={() => setIsExitPinModalOpen(false)}
-          onSuccess={() => {
-            setIsExitPinModalOpen(false);
-            if (isManagerOrAdmin && onNavigateBack) onNavigateBack();
-            else logout();
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {isExitPinModalOpen && (
+          <PosManagerPinModal
+            title="Otorisasi Keluar Terminal POS"
+            description="Masukkan PIN Manager / Owner untuk mengizinkan keluar dari layar kasir POS."
+            purpose="EXIT_POS"
+            onClose={() => setIsExitPinModalOpen(false)}
+            onSuccess={() => {
+              setIsExitPinModalOpen(false);
+              if (isManagerOrAdmin && onNavigateBack) onNavigateBack();
+              else logout();
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Modal Otorisasi PIN Manager untuk Diskon Khusus Manual ─── */}
-      {isPinModalOpen && (
-        <PosManagerPinModal
-          title={`Otorisasi Diskon Khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : formatCurrency(pendingDiscountValue)})`}
-          description={`Kasir mengajukan diskon manual dengan alasan: "${pendingDiscountReason || 'Diskon Khusus'}". Masukkan PIN Manager untuk menyetujui.`}
-          requireReason={false}
-          onClose={() => setIsPinModalOpen(false)}
-          onSuccess={(manager) => {
-            setIsPinModalOpen(false);
-            setDiscountType(pendingDiscountType);
-            setDiscountValue(pendingDiscountValue);
-            setDiscountReason(pendingDiscountReason || `Diskon Khusus (Disetujui ${manager.name})`);
-            setAppliedPromotionId(null);
-            setAppliedPromotionName(null);
-            setAppliedPromoMaxDiscount(undefined);
-            setIsDiscountModalOpen(false);
-            alert(`Diskon khusus berhasil disetujui oleh Manager (${manager.name}).`);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {isPinModalOpen && (
+          <PosManagerPinModal
+            title={`Otorisasi Diskon Khusus (${pendingDiscountType === "PERCENT" ? `${pendingDiscountValue}%` : formatCurrency(pendingDiscountValue)})`}
+            description={`Kasir mengajukan diskon manual dengan alasan: "${pendingDiscountReason || 'Diskon Khusus'}". Masukkan PIN Manager untuk menyetujui.`}
+            requireReason={false}
+            onClose={() => setIsPinModalOpen(false)}
+            onSuccess={(manager) => {
+              setIsPinModalOpen(false);
+              setDiscountType(pendingDiscountType);
+              setDiscountValue(pendingDiscountValue);
+              setDiscountReason(pendingDiscountReason || `Diskon Khusus (Disetujui ${manager.name})`);
+              setAppliedPromotionId(null);
+              setAppliedPromotionName(null);
+              setAppliedPromoMaxDiscount(undefined);
+              setIsDiscountModalOpen(false);
+              toast.success(`Diskon khusus berhasil disetujui oleh Manager (${manager.name}).`);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Overlay Kunci Layar POS (Terminal Lock Screen) ────────────── */}
       <AnimatePresence>
@@ -2129,6 +2152,17 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={isClearCartConfirmOpen}
+        variant="warning"
+        title="Kosongkan Keranjang Pesanan?"
+        message="Seluruh item, nomor meja, dan diskon di keranjang kasir saat ini akan dihapus."
+        confirmLabel="Ya, Kosongkan"
+        cancelLabel="Batal"
+        onConfirm={confirmClearCart}
+        onCancel={() => setIsClearCartConfirmOpen(false)}
+      />
     </div>
   );
 };

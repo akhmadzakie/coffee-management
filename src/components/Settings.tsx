@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion } from "motion/react";
 import { FEATURES } from "../config/features";
 import { useStore } from "../store/StoreContext";
 import {
@@ -22,6 +23,7 @@ import {
   Download,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
+import { CustomSelect } from "./common/CustomSelect";
 
 export const SettingsComponent = () => {
   const { settings, updateSettings, currentUser } = useStore();
@@ -129,7 +131,12 @@ export const SettingsComponent = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="space-y-8 max-w-4xl"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">
@@ -304,14 +311,15 @@ export const SettingsComponent = () => {
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
               System Language / Bahasa Sistem
             </label>
-            <select
+            <CustomSelect
               value={language}
-              onChange={(e) => setLanguage(e.target.value as "en" | "id")}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
-            >
-              <option value="id">Bahasa Indonesia</option>
-              <option value="en">English</option>
-            </select>
+              onChange={(val) => setLanguage(val as "en" | "id")}
+              options={[
+                { value: "id", label: "Bahasa Indonesia" },
+                { value: "en", label: "English" },
+              ]}
+              buttonClassName="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm font-semibold text-slate-800 hover:bg-white"
+            />
           </div>
 
           {/* Gemini API Key Configuration Card */}
@@ -462,18 +470,21 @@ export const SettingsComponent = () => {
                     <label className="text-xs font-bold text-slate-700 mb-1 block">
                       Model Perhitungan Pajak
                     </label>
-                    <select
+                    <CustomSelect
                       value={taxMode}
-                      onChange={(e) => setTaxMode(e.target.value as "INCLUSIVE" | "EXCLUSIVE")}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 bg-white outline-none"
-                    >
-                      <option value="EXCLUSIVE">
-                        Eksklusif (Subtotal + Pajak = Total Tagihan)
-                      </option>
-                      <option value="INCLUSIVE">
-                        Inklusif (Harga menu sudah termasuk pajak)
-                      </option>
-                    </select>
+                      onChange={(val) => setTaxMode(val as "INCLUSIVE" | "EXCLUSIVE")}
+                      options={[
+                        {
+                          value: "EXCLUSIVE",
+                          label: "Eksklusif (Subtotal + Pajak = Total Tagihan)",
+                        },
+                        {
+                          value: "INCLUSIVE",
+                          label: "Inklusif (Harga menu sudah termasuk pajak)",
+                        },
+                      ]}
+                      buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
+                    />
                   </div>
                 </div>
               )}
@@ -745,6 +756,6 @@ export const SettingsComponent = () => {
             : "Save Settings"}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 };

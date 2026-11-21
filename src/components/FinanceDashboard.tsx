@@ -479,29 +479,6 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
         </div>
       </div>
 
-      {/* ── OWNER MONITORING ADVISORY BANNER (Aturan #5b) ───────────────── */}
-      {isOwner && (
-        <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
-              <Eye className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold">Mode Pengawasan Finansial Owner (Read-Only)</p>
-              <p className="text-[11px] text-amber-800">
-                Memantau likuiditas kas, efisiensi rasio food cost bahan baku, dan margin laba bersih toko secara real-time tanpa mengubah data pembukuan.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate("finance_reports")}
-            className="self-start sm:self-auto px-4 py-2 rounded-2xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-50 transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer shadow-2xs"
-          >
-            <span>Buka Laporan P&L Lengkap →</span>
-          </button>
-        </div>
-      )}
-
       {/* ── HERO FINANCIAL KPI CARDS (5 BENTO PILLARS) ───────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
         {/* 1. Total Likuiditas Kas */}
@@ -533,21 +510,21 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+          className="bg-gradient-to-br from-brand-50/60 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-brand-200/70 dark:border-brand-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Total Arus Masuk (In)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-brand-100/80 dark:bg-brand-500/20 border border-brand-200/70 dark:border-brand-500/30 text-brand-600 dark:text-brand-300 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-slate-900">
+            <p className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
               {formatCurrency(totalCashIn)}
             </p>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Omzet penjualan: {formatCurrency(totalSalesRevenue)}
             </p>
           </div>
@@ -558,28 +535,28 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+          className="bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-amber-200/70 dark:border-amber-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               HPP Bahan Baku (COGS)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-amber-100/80 dark:bg-amber-500/20 border border-amber-200/70 dark:border-amber-500/30 text-amber-600 dark:text-amber-300 flex items-center justify-center">
               <Package className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-slate-900">
+            <p className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
               {formatCurrency(totalHpp)}
             </p>
             <div className="flex items-center gap-1.5 mt-1">
               <span
                 className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                   Number(foodCostPercent) <= 35
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
                     : Number(foodCostPercent) <= 40
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-rose-50 text-rose-700 border-rose-200"
+                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
                 }`}
               >
                 Food Cost: {foodCostPercent}%
@@ -593,21 +570,21 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+          className="bg-gradient-to-br from-rose-50/60 via-white to-white dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-rose-200/70 dark:border-rose-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Total Beban Keluar (Out)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-rose-100/80 dark:bg-rose-500/20 border border-rose-200/70 dark:border-rose-500/30 text-rose-600 dark:text-rose-300 flex items-center justify-center">
               <TrendingDown className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-rose-600">
+            <p className="text-xl font-bold font-mono tracking-tight text-rose-600 dark:text-rose-300">
               {formatCurrency(totalCashOut)}
             </p>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Bahan baku, gaji & operasional
             </p>
           </div>
@@ -618,17 +595,21 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+          className={`bg-gradient-to-br ${
+            netProfit >= 0
+              ? "from-emerald-50/60 via-white to-white border-emerald-200/70 dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-emerald-500/30"
+              : "from-rose-50/60 via-white to-white border-rose-200/70 dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-rose-500/30"
+          } p-5 rounded-3xl border shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between`}
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Laba Bersih (Net Profit)
             </span>
             <div
               className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                 netProfit >= 0
-                  ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                  : "bg-rose-50 text-rose-600 border border-rose-100"
+                  ? "bg-emerald-100/80 text-emerald-600 border border-emerald-200/70 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30"
+                  : "bg-rose-100/80 text-rose-600 border border-rose-200/70 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30"
               }`}
             >
               <Activity className="w-4 h-4" />
@@ -637,7 +618,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           <div>
             <p
               className={`text-xl font-bold font-mono tracking-tight ${
-                netProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+                netProfit >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
               }`}
             >
               {formatCurrency(netProfit)}
@@ -646,8 +627,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               <span
                 className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                   netProfit >= 0
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-rose-50 text-rose-700 border-rose-200"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
                 }`}
               >
                 Margin: {profitMarginPercent}%

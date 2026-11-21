@@ -6,6 +6,8 @@ import { Role, User } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
+import { CustomSelect } from "./common/CustomSelect";
+import { motion, AnimatePresence } from "motion/react";
 
 const ALL_ROLES: { value: string; label: string; description: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin",       description: "Akses penuh semua sistem" },
@@ -691,9 +693,25 @@ export const UsersComponent = () => {
         </div>
       </div>
 
-      {isEditing && createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-50 p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh]">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isEditing && (
+              <motion.div
+                key="users-edit-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-50 p-3 sm:p-6 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh]"
+                >
             <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="font-bold text-base sm:text-lg text-slate-900 flex items-center">
                 <ShieldCheck className="w-5 h-5 mr-2 text-brand-600 shrink-0" />
@@ -714,18 +732,19 @@ export const UsersComponent = () => {
                   <UserCheck className="w-4 h-4 text-brand-600" />
                   Tautkan ke Data Karyawan (SDM)
                 </label>
-                <select
+                <CustomSelect
                   value={formEmployeeId}
-                  onChange={(e) => handleSelectEmployee(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-brand-200 rounded-xl text-base sm:text-xs font-medium text-slate-800 focus:ring-2 focus:ring-brand-500/20 outline-none shadow-2xs"
-                >
-                  <option value="">-- Pilih Karyawan untuk Otomatisasi (Opsional) --</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.position}) - @{emp.username}
-                    </option>
-                  ))}
-                </select>
+                  onChange={handleSelectEmployee}
+                  placeholder="-- Pilih Karyawan untuk Otomatisasi (Opsional) --"
+                  options={[
+                    { value: "", label: "-- Pilih Karyawan untuk Otomatisasi (Opsional) --" },
+                    ...employees.map((emp) => ({
+                      value: emp.id,
+                      label: `${emp.name} (${emp.position}) - @${emp.username}`,
+                    })),
+                  ]}
+                  buttonClassName="w-full p-2.5 bg-white border border-brand-200 rounded-xl text-base sm:text-xs font-medium text-slate-800 shadow-2xs"
+                />
                 <p className="text-[11px] text-brand-700/80 mt-1 leading-relaxed">
                   Memilih data karyawan akan otomatis mengisi nama, username, role, dan PIN sesuai profil SDM sehingga data absensi langsung tersambung.
                 </p>
@@ -782,17 +801,15 @@ export const UsersComponent = () => {
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Peran (Role) *
                   </label>
-                  <select
+                  <CustomSelect
                     value={formRole}
-                    onChange={(e) => setFormRole(e.target.value as Role)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 outline-none"
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormRole(val as Role)}
+                    options={ROLES.map((r) => ({
+                      value: r.value,
+                      label: r.label,
+                    }))}
+                    buttonClassName="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
+                  />
                 </div>
               </div>
 
@@ -801,17 +818,15 @@ export const UsersComponent = () => {
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Departemen / Bidang Kerja *
                   </label>
-                  <select
+                  <CustomSelect
                     value={formDept}
-                    onChange={(e) => setFormDept(e.target.value as "BAR" | "KITCHEN" | "MAIN")}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 outline-none"
-                  >
-                    {DEPARTMENTS.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormDept(val as "BAR" | "KITCHEN" | "MAIN")}
+                    options={DEPARTMENTS.map((d) => ({
+                      value: d.value,
+                      label: d.label,
+                    }))}
+                    buttonClassName="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
+                  />
                 </div>
               )}
               </div>
@@ -832,10 +847,12 @@ export const UsersComponent = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { useStore } from "../../store/StoreContext";
 import {
   Lock,
@@ -251,8 +252,20 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: "spring", damping: 28, stiffness: 360 }}
+        className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+      >
         {/* Header */}
         <div className="p-4 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -461,7 +474,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

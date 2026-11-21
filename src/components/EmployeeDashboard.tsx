@@ -33,7 +33,7 @@ import {
   Megaphone,
   Target,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES, ensureCategoryArray, normalizeTaskItem } from "./LeaderChecklist";
 import { PayrollRecord } from "../types";
 import { formatCurrency } from "../utils/format";

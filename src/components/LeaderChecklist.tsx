@@ -8,11 +8,12 @@ import {
   Sun, Moon, Sunset, Award, Sparkles, Filter,
   Lock, Edit2, ShieldCheck
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { getLocalDateString } from "../utils/dateUtils";
 import { TaskCategoryGroup, TaskItemDetail, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import { formatCurrency } from "../utils/format";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomSelect } from "./common/CustomSelect";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 
 export const DEFAULT_BAR_CATEGORIES: TaskCategoryGroup[] = [
@@ -2186,10 +2187,19 @@ export const LeaderChecklist: React.FC = () => {
                                 {/* Pengaturan Shift, Role, & Status */}
                                 <div className="flex items-center gap-1.5 flex-wrap shrink-0 pl-7 sm:pl-0">
                                   {/* Pilihan Shift Tag */}
-                                  <select
+                                  <CustomSelect
                                     value={detail.shift || "ALL"}
-                                    onChange={(e) => handleUpdateSubTaskShift(catIdx, originalIdx, e.target.value as any)}
-                                    className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                                    onChange={(val) =>
+                                      handleUpdateSubTaskShift(catIdx, originalIdx, val as any)
+                                    }
+                                    title="Tentukan jadwal shift untuk sub-tugas ini"
+                                    options={[
+                                      { value: "ALL", label: "🌐 Semua Shift" },
+                                      { value: "PAGI", label: "☀️ Pagi (Opening)" },
+                                      { value: "MIDDLE", label: "⛅ Middle" },
+                                      { value: "SORE", label: "🌙 Sore (Closing)" },
+                                    ]}
+                                    buttonClassName={`text-[11px] font-bold px-2 py-1 rounded-lg border ${
                                       detail.shift === "PAGI"
                                         ? "bg-amber-50 border-amber-300 text-amber-900"
                                         : detail.shift === "MIDDLE"
@@ -2198,13 +2208,7 @@ export const LeaderChecklist: React.FC = () => {
                                         ? "bg-purple-50 border-purple-300 text-purple-900"
                                         : "bg-blue-50 border-blue-200 text-blue-900"
                                     }`}
-                                    title="Tentukan jadwal shift untuk sub-tugas ini"
-                                  >
-                                    <option value="ALL">🌐 Semua Shift</option>
-                                    <option value="PAGI">☀️ Pagi (Opening)</option>
-                                    <option value="MIDDLE">⛅ Middle</option>
-                                    <option value="SORE">🌙 Sore (Closing)</option>
-                                  </select>
+                                  />
 
                                   {/* Badge Peran Khusus Leader */}
                                   <span className="text-[11px] font-bold px-2 py-1 rounded-lg border bg-amber-50 border-amber-200 text-amber-950 shrink-0 flex items-center gap-1">
@@ -2300,9 +2304,23 @@ export const LeaderChecklist: React.FC = () => {
           )}
 
           {/* Modal Tambah / Edit Aturan Tunjangan */}
-          {isRuleModalOpen && (
-            <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
-              <div className="my-auto bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in duration-150 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar">
+          <AnimatePresence>
+            {isRuleModalOpen && (
+              <motion.div
+                key="leader-rule-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+                >
                 <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-emerald-600" />
@@ -2411,9 +2429,10 @@ export const LeaderChecklist: React.FC = () => {
                     Simpan Aturan
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
       </div>

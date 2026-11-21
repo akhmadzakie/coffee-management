@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { useTheme, ThemeToggleButton } from "../../context/ThemeContext";
 import {
   Coffee,
   Lock,
@@ -20,6 +22,7 @@ interface PosCashierLoginProps {
 
 export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess }) => {
   const { login, settings, users, lastLoginError } = useStore();
+  const { isDark } = useTheme();
 
   // Khusus staf terminal kasir (Role: KASIR)
   const onlyKasirUsers = (users || []).filter((u) => u.role === "KASIR");
@@ -150,15 +153,15 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f6f8ff] text-slate-900 flex flex-col justify-between items-center relative overflow-hidden select-none font-sans p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#f6f8ff] dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between items-center relative overflow-hidden select-none font-sans p-4 sm:p-6 lg:p-8">
       {/* Background Soft Brand Accent */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-brand-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       {/* ─── TOP STATUS BAR ─── */}
-      <header className="w-full max-w-4xl flex items-center justify-between z-10 py-2 border-b border-slate-200/80 pb-4">
+      <header className="w-full max-w-4xl flex items-center justify-between z-10 py-2 border-b border-slate-200/80 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-3">
           <img
-            src="/logo-name-blue.png"
+            src={isDark ? "/logo-name-white.png" : "/logo-name-blue.png"}
             alt="Julia's"
             className="h-11 w-auto object-contain"
             onError={(e) => {
@@ -182,24 +185,27 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
         </div>
 
         {/* Jam Realtime & Status Toko */}
-        <div className="flex items-center gap-3 bg-white px-3.5 py-2 rounded-2xl border border-slate-200 shadow-xs">
-          <Clock className="w-4 h-4 text-brand-600" />
-          <div className="text-right">
-            <p className="text-xs font-bold text-slate-900 font-mono leading-none">
-              {currentTime.toLocaleTimeString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              })}
-            </p>
-            <p className="text-[10px] text-slate-500 font-medium">
-              {currentTime.toLocaleDateString("id-ID", {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
-            </p>
+        <div className="flex items-center gap-2.5">
+          <ThemeToggleButton compact />
+          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <Clock className="w-4 h-4 text-brand-600 dark:text-brand-300" />
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono leading-none">
+                {currentTime.toLocaleTimeString("id-ID", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                {currentTime.toLocaleDateString("id-ID", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
           </div>
         </div>
       </header>
@@ -207,7 +213,12 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
       {/* ─── MAIN LOGIN CONTAINER ─── */}
       <main className="w-full max-w-4xl z-10 grid grid-cols-1 md:grid-cols-12 gap-6 my-auto py-4">
         {/* Kolom Kiri: Pilih Kasir Bertugas */}
-        <div className="md:col-span-5 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="md:col-span-5 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col justify-between"
+        >
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -308,10 +319,15 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>Setiap transaksi tercatat otomatis atas nama kasir terpilih.</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Kolom Kanan: Keypad PIN Kasir */}
-        <div className="md:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.24, delay: 0.04, ease: "easeOut" }}
+          className="md:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center justify-center"
+        >
           <div className="text-center mb-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center justify-center gap-2">
               <Lock className="w-4 h-4 text-brand-600" />
@@ -322,21 +338,29 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             </p>
           </div>
 
-          {selectedUser?.isSuspended && (
-            <div className="w-full max-w-md mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-2xl flex items-start gap-2.5 animate-in fade-in">
-              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p className="font-bold text-rose-950">
-                  🔒 Akun {selectedUser.name} Ter-suspend
-                </p>
-                <p className="text-[11px] text-rose-700 leading-snug">
-                  {selectedUser.suspendedReason ||
-                    "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}{" "}
-                  Silakan hubungi Manager atau Super Admin untuk membuka suspend akun Anda.
-                </p>
-              </div>
-            </div>
-          )}
+          <AnimatePresence>
+            {selectedUser?.isSuspended && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="w-full max-w-md mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-2xl flex items-start gap-2.5"
+              >
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold text-rose-950">
+                    🔒 Akun {selectedUser.name} Ter-suspend
+                  </p>
+                  <p className="text-[11px] text-rose-700 leading-snug">
+                    {selectedUser.suspendedReason ||
+                      "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}{" "}
+                    Silakan hubungi Manager atau Super Admin untuk membuka suspend akun Anda.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* PIN Indicator Dots (Support 6 digit default) */}
           <div className="flex flex-col items-center gap-1.5 mb-3">
@@ -358,12 +382,20 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             </div>
           </div>
 
-          {error && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-medium mb-3 max-w-md text-center">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16, ease: "easeOut" }}
+                className="text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-medium mb-3 max-w-md text-center"
+              >
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Keypad Grid (Ergonomis Tablet) */}
           <div className="grid grid-cols-3 gap-3 w-full max-w-[280px]">
@@ -403,7 +435,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
               <Delete className="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </motion.div>
       </main>
 
       {/* ─── FOOTER ─── */}

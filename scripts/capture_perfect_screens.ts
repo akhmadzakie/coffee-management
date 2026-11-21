@@ -99,7 +99,7 @@ async function captureAllPerfectScreens() {
     const clickNav = async (name: string) => {
       console.log(`Navigating to [${name}]...`);
       await page.evaluate((n) => {
-        const btns = Array.from(document.querySelectorAll("nav button"));
+        const btns = Array.from(document.querySelectorAll<HTMLElement>("nav button"));
         for (const b of btns) {
           if (b.innerText.trim().toLowerCase() === n.toLowerCase()) {
             b.click();
@@ -133,7 +133,7 @@ async function captureAllPerfectScreens() {
     // 7. Expand Sistem & Admin -> Manajemen Pengguna
     console.log("Expanding Sistem & Admin...");
     await page.evaluate(() => {
-      const btns = Array.from(document.querySelectorAll("nav button"));
+      const btns = Array.from(document.querySelectorAll<HTMLElement>("nav button"));
       for (const b of btns) {
         if (b.innerText.trim().toUpperCase() === "SISTEM & ADMIN") {
           b.click();

@@ -20,6 +20,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { CustomSelect } from "../common/CustomSelect";
 
 interface CartItem {
   cartId: string;
@@ -654,17 +655,15 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
               <span>Akun Kas / Laci Penyimpanan</span>
               <span className="text-[10px] text-slate-400">Otomatis catat jurnal kas</span>
             </label>
-            <select
+            <CustomSelect
               value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-            >
-              {cashAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.type})
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedAccountId}
+              options={cashAccounts.map((acc) => ({
+                value: acc.id,
+                label: `${acc.name} (${acc.type})`,
+              }))}
+              buttonClassName="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
+            />
           </div>
 
           {errorMessage && (

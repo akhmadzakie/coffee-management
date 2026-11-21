@@ -3,7 +3,12 @@ import { createPortal } from "react-dom";
 import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
-import { motion } from "motion/react";
+import { toast } from "../context/ToastContext";
+import { ConfirmModal } from "./common/ConfirmModal";
+import { CustomSelect } from "./common/CustomSelect";
+import { motion, AnimatePresence } from "motion/react";
+import { CustomDatePicker } from "./common/CustomDatePicker";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import {
   TrendingUp,
   TrendingDown,
@@ -139,6 +144,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTrx, setEditingTrx] = useState<CashTransaction | null>(null);
   const [trxType, setTrxType] = useState<"CASH_IN" | "CASH_OUT" | "TRANSFER">("CASH_OUT");
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Form fields for Add/Edit Transaction
   const [formAccountId, setFormAccountId] = useState<string>("");
@@ -923,7 +934,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
     const period = formDate.slice(0, 7);
     if (closedPeriods.some((p: any) => p.period === period)) {
-      alert(`Gagal: Periode buku (${period}) untuk tanggal ini sudah ditutup.`);
+      toast.error(`Gagal: Periode buku (${period}) untuk tanggal ini sudah ditutup.`);
       return;
     }
 
@@ -942,16 +953,16 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     // 1. Handle Internal Transfer Between Cash Accounts
     if (!editingTrx && trxType === "TRANSFER") {
       if (!formAccountId || !formToAccountId) {
-        alert("Pilih Pos Kas Asal dan Pos Kas Tujuan.");
+        toast.warning("Pilih Pos Kas Asal dan Pos Kas Tujuan.");
         return;
       }
       if (formAccountId === formToAccountId) {
-        alert("Pos Kas Asal dan Pos Kas Tujuan tidak boleh sama.");
+        toast.warning("Pos Kas Asal dan Pos Kas Tujuan tidak boleh sama.");
         return;
       }
       const transferAmount = Math.round(Number(formAmount) || 0);
       if (transferAmount <= 0) {
-        alert("Masukkan nominal transfer yang valid.");
+        toast.warning("Masukkan nominal transfer yang valid.");
         return;
       }
 
@@ -1033,7 +1044,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     const finalAmount = Math.round(Number(formAmount) || itemsSum || 0);
 
     if (finalAmount <= 0) {
-      alert("Nominal transaksi harus lebih dari Rp 0.");
+      toast.warning("Nominal transaksi harus lebih dari Rp 0.");
       return;
     }
 
@@ -1146,21 +1157,30 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     if (ref.startsWith("TRANSFER:")) {
       const pair = cashTransactions.find((t) => t.id !== trx.id && t.referenceId === ref);
       if (pair) {
-        if (
-          confirm(
-            "Transaksi ini adalah mutasi Transfer Antar Kas.\n\nHapus kedua sisi mutasi transfer (Pos Asal & Pos Tujuan) sekaligus agar saldo buku kas tetap seimbang?"
-          )
-        ) {
-          deleteCashTransaction(trx.id);
-          deleteCashTransaction(pair.id);
-        }
+        setConfirmAction({
+          title: "Hapus Transfer Antar Kas?",
+          message:
+            "Transaksi ini adalah mutasi Transfer Antar Kas.\n\nHapus kedua sisi mutasi transfer (Pos Asal & Pos Tujuan) sekaligus agar saldo buku kas tetap seimbang?",
+          confirmLabel: "Ya, Hapus Keduanya",
+          onConfirm: () => {
+            deleteCashTransaction(trx.id);
+            deleteCashTransaction(pair.id);
+            toast.success("Mutasi transfer kas kedua sisi berhasil dihapus.");
+          },
+        });
         return;
       }
     }
 
-    if (confirm("Apakah Anda yakin ingin menghapus transaksi ini dari Buku Kas?")) {
-      deleteCashTransaction(trx.id);
-    }
+    setConfirmAction({
+      title: "Hapus Transaksi Buku Kas?",
+      message: "Apakah Anda yakin ingin menghapus transaksi ini dari Buku Kas?",
+      confirmLabel: "Ya, Hapus",
+      onConfirm: () => {
+        deleteCashTransaction(trx.id);
+        toast.success("Transaksi berhasil dihapus dari Buku Kas.");
+      },
+    });
   };
 
   // ─── Open / Submit Account Modal (Add & Edit Pos Kas) ──────────────────────
@@ -1228,7 +1248,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   // ─── Excel Import Handler ───────────────────────────────────────────────────
   const handleImport = (parsedData: any[]) => {
     if (cashAccounts.length === 0) {
-      alert("Silakan buat Pos Kas terlebih dahulu sebelum mengimpor transaksi.");
+      toast.warning("Silakan buat Pos Kas terlebih dahulu sebelum mengimpor transaksi.");
       return;
     }
 
@@ -1325,8 +1345,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       }
     });
 
-    alert(
-      `Impor selesai.\nDitambahkan: ${addedCount} transaksi baru\nDiperbarui: ${updatedCount} transaksi\nDilewati: ${errors} baris`
+    toast.info(
+      `Impor selesai.\nDitambahkan: ${addedCount} transaksi baru\nDiperbarui: ${updatedCount} transaksi\nDilewati: ${errors} baris`,
+      5500
     );
   };
 
@@ -1358,23 +1379,33 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   return (
     <>
-      {syncToast &&
-        typeof document !== "undefined" &&
+      {typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed top-4 left-4 right-4 sm:left-auto sm:top-5 sm:right-5 z-[110] px-4 py-3 rounded-2xl bg-slate-900 text-emerald-400 border border-emerald-500/30 shadow-xl flex items-center justify-between gap-2.5 text-xs font-bold animate-fade-in sm:max-w-md">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="leading-snug">{syncToast}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSyncToast(null)}
-              className="text-slate-400 hover:text-white ml-1 cursor-pointer shrink-0 p-1"
-              aria-label="Tutup notifikasi"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>,
+          <AnimatePresence>
+            {syncToast && (
+              <motion.div
+                key="cashflow-sync-toast"
+                initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed top-4 left-4 right-4 sm:left-auto sm:top-5 sm:right-5 z-[110] px-4 py-3 rounded-2xl bg-slate-900 text-emerald-400 border border-emerald-500/30 shadow-xl flex items-center justify-between gap-2.5 text-xs font-bold sm:max-w-md"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="leading-snug">{syncToast}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSyncToast(null)}
+                  className="text-slate-400 hover:text-white ml-1 cursor-pointer shrink-0 p-1"
+                  aria-label="Tutup notifikasi"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>,
           document.body
         )}
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -1429,7 +1460,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             {!isReadOnly && (
               <button
                 onClick={() => openCreateModal("CASH_OUT")}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-2xl text-xs font-bold shadow-sm shadow-brand-600/20 hover:shadow-md transition-all cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Catat Transaksi</span>
@@ -1441,24 +1472,24 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         {/* ─── 4 Executive Bento KPI Cards ───────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Saldo Kas Riil */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-brand-200/70 dark:border-brand-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all flex flex-col justify-between group">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {selectedAccountId === "all" ? "Total Likuiditas Kas" : "Saldo Pos Aktif"}
               </span>
-              <div className="w-10 h-10 rounded-2xl bg-blue-50/80 text-blue-600 border border-blue-200/60 flex items-center justify-center shadow-2xs">
+              <div className="w-10 h-10 rounded-2xl bg-brand-100/80 dark:bg-brand-500/20 text-brand-600 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30 flex items-center justify-center shadow-2xs">
                 <Wallet className="w-5 h-5 stroke-[2.2]" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 tabular-nums">
                 {formatCurrency(
                   selectedAccountId === "all"
                     ? totalBalance
                     : accountBalances[selectedAccountId] || 0
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
                 {selectedAccountId === "all"
                   ? `${cashAccounts.length} pos kas & rekening terdaftar`
                   : `Pos: ${cashAccounts.find((a) => a.id === selectedAccountId)?.name || "-"}`}
@@ -1467,56 +1498,62 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
           </div>
 
           {/* Card 2: Pemasukan Kas (Cash In) */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-gradient-to-br from-emerald-50/70 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-emerald-200/70 dark:border-emerald-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all flex flex-col justify-between group">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Pemasukan Kas (+)
               </span>
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50/80 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-500/30 flex items-center justify-center shadow-2xs">
                 <TrendingUp className="w-5 h-5 stroke-[2.2]" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600">
+              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-300 tabular-nums">
                 {formatCurrency(totalCashIn)}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
                 {periodMode === "ALL" ? "Total dana masuk tercatat" : "Dana masuk pada periode dipilih"}
               </p>
             </div>
           </div>
 
           {/* Card 3: Pengeluaran Kas (Cash Out) */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-gradient-to-br from-rose-50/70 via-white to-white dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-rose-200/70 dark:border-rose-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all flex flex-col justify-between group">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Pengeluaran Kas (-)
               </span>
-              <div className="w-10 h-10 rounded-2xl bg-rose-50/80 text-rose-600 border border-rose-200/60 flex items-center justify-center shadow-2xs">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100/80 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-200/70 dark:border-rose-500/30 flex items-center justify-center shadow-2xs">
                 <TrendingDown className="w-5 h-5 stroke-[2.2]" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-600">
+              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-300 tabular-nums">
                 {formatCurrency(totalCashOut)}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
                 Belanja bahan, utilitas & operasional
               </p>
             </div>
           </div>
 
           {/* Card 4: Net Cash Flow */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col justify-between group">
+          <div
+            className={`bg-gradient-to-br ${
+              netCashFlow >= 0
+                ? "from-emerald-50/60 via-white to-white border-emerald-200/70 dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-emerald-500/30"
+                : "from-amber-50/70 via-white to-white border-amber-200/70 dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-amber-500/30"
+            } p-5 rounded-3xl border shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all flex flex-col justify-between group`}
+          >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Selisih Arus Kas (Net)
               </span>
               <div
                 className={`w-10 h-10 rounded-2xl border flex items-center justify-center shadow-2xs ${
                   netCashFlow >= 0
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-200/60"
-                    : "bg-amber-50 text-amber-600 border-amber-200/60"
+                    ? "bg-emerald-100/80 text-emerald-600 border-emerald-200/70 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30"
+                    : "bg-amber-100/80 text-amber-600 border-amber-200/70 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30"
                 }`}
               >
                 <Layers className="w-5 h-5 stroke-[2.2]" />
@@ -1524,13 +1561,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             </div>
             <div>
               <div
-                className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
-                  netCashFlow >= 0 ? "text-slate-900" : "text-amber-600"
+                className={`text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums ${
+                  netCashFlow >= 0 ? "text-slate-900 dark:text-slate-100" : "text-amber-600 dark:text-amber-300"
                 }`}
               >
                 {formatCurrency(netCashFlow)}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
                 {netCashFlow >= 0 ? "Surplus arus kas" : "Defisit arus kas periode ini"}
               </p>
             </div>
@@ -1588,8 +1625,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 onClick={() => setSelectedAccountId("all")}
                 className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col justify-between ${
                   selectedAccountId === "all"
-                    ? "bg-slate-900 text-white border-slate-900 shadow-md scale-[1.01]"
-                    : "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-xs"
+                    ? "bg-brand-gradient text-white border-brand-700 shadow-coffee scale-[1.01]"
+                    : "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-white hover:border-brand-200 hover:shadow-xs"
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
@@ -1603,7 +1640,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     <Landmark className="w-4 h-4 stroke-[2.2]" />
                   </div>
                   {selectedAccountId === "all" && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-slate-200">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">
                       Gabungan
                     </span>
                   )}
@@ -1611,12 +1648,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 <div>
                   <p
                     className={`text-xs font-semibold ${
-                      selectedAccountId === "all" ? "text-slate-300" : "text-slate-500"
+                      selectedAccountId === "all" ? "text-brand-100" : "text-slate-500"
                     }`}
                   >
                     Semua Pos Kas
                   </p>
-                  <p className="text-lg font-extrabold mt-0.5 tracking-tight">
+                  <p className="text-lg font-extrabold mt-0.5 tracking-tight tabular-nums">
                     {formatCurrency(totalBalance)}
                   </p>
                 </div>
@@ -1662,14 +1699,17 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (
-                                  confirm(
-                                    `Hapus pos kas "${acc.name}"? Pastikan tidak ada transaksi aktif yang masih bergantung pada pos ini.`
-                                  )
-                                ) {
-                                  deleteCashAccount(acc.id);
-                                  if (selectedAccountId === acc.id) setSelectedAccountId("all");
-                                }
+                                setConfirmAction({
+                                  title: `Hapus Pos Kas "${acc.name}"?`,
+                                  message:
+                                    "Pastikan tidak ada transaksi aktif yang masih bergantung pada pos ini.",
+                                  confirmLabel: "Ya, Hapus",
+                                  onConfirm: () => {
+                                    deleteCashAccount(acc.id);
+                                    if (selectedAccountId === acc.id) setSelectedAccountId("all");
+                                    toast.success(`Pos kas "${acc.name}" berhasil dihapus.`);
+                                  },
+                                });
                               }}
                               className={`p-1.5 rounded-lg opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
                                 isSelected
@@ -1711,9 +1751,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         </div>
 
         {/* ─── Riwayat Mutasi Buku Kas (Filter + Table + Mobile Cards) ─────── */}
-        <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-coffee-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
           {/* Top Filter Bar */}
-          <div className="p-5 sm:p-6 border-b border-slate-100 space-y-4">
+          <div className="p-5 sm:p-6 bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200/70 dark:border-slate-800 space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div>
@@ -1889,58 +1929,62 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                 </div>
 
                 {periodMode === "MONTH" && (
-                  <input
-                    type="month"
+                  <CustomMonthPicker
                     value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    onChange={setSelectedMonth}
+                    allowClear={false}
+                    buttonClassName="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white"
                   />
                 )}
 
                 {periodMode === "CUSTOM" && (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="date"
+                  <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                    <CustomDatePicker
                       value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white"
+                      onChange={setCustomStartDate}
+                      allowClear={false}
+                      buttonClassName="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white"
                     />
                     <span className="text-slate-400 font-bold">s/d</span>
-                    <input
-                      type="date"
+                    <CustomDatePicker
                       value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white"
+                      onChange={setCustomEndDate}
+                      allowClear={false}
+                      buttonClassName="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white"
                     />
                   </div>
                 )}
 
                 {/* Category Filter (Bertingkat: Kategori Utama & Sub-Kategori) */}
-                <select
+                <CustomSelect
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/70 hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="ALL">Semua Kategori & Sub-Kategori</option>
-                  {expenseCategories
-                    .filter((c: any) => !c.parentId && c.isActive !== false)
-                    .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0))
-                    .map((root: any) => {
-                      const children = expenseCategories
-                        .filter((c: any) => c.parentId === root.id && c.isActive !== false)
-                        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
-                      return (
-                        <optgroup key={root.id} label={`📁 ${root.name}`}>
-                          <option value={root.name}>Semua di {root.name}</option>
-                          {children.map((sub: any) => (
-                            <option key={sub.id} value={sub.name}>
-                              ↳ {sub.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                </select>
+                  onChange={setCategoryFilter}
+                  options={[
+                    { value: "ALL", label: "Semua Kategori & Sub-Kategori" },
+                    ...expenseCategories
+                      .filter((c: any) => !c.parentId && c.isActive !== false)
+                      .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                      .flatMap((root: any) => {
+                        const children = expenseCategories
+                          .filter((c: any) => c.parentId === root.id && c.isActive !== false)
+                          .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                        return [
+                          {
+                            value: root.name,
+                            label: `Semua di ${root.name}`,
+                            group: root.name,
+                          },
+                          ...children.map((sub: any) => ({
+                            value: sub.name,
+                            label: sub.name,
+                            group: root.name,
+                          })),
+                        ];
+                      }),
+                  ]}
+                  placeholder="Semua Kategori & Sub-Kategori"
+                  buttonClassName="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/70 hover:bg-white"
+                />
               </div>
 
               {/* Search Bar */}
@@ -2342,11 +2386,25 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         </div>
 
         {/* ─── CREATE / EDIT / TRANSFER TRANSACTION MODAL ────────────────────── */}
-        {isModalOpen &&
-          typeof document !== "undefined" &&
+        {typeof document !== "undefined" &&
           createPortal(
-            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-2.5 sm:p-6 flex justify-center items-center z-[100] animate-fade-in overflow-hidden">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
+            <AnimatePresence>
+              {isModalOpen && (
+                <motion.div
+                  key="cashflow-trx-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-2.5 sm:p-6 flex justify-center items-center z-[100] overflow-hidden"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/80 flex flex-col max-h-[92dvh] sm:max-h-[90vh]"
+                  >
                 {/* Modal Header */}
                 <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 shrink-0">
                   <div className="flex items-center gap-3 min-w-0">
@@ -2458,21 +2516,17 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                         {trxType === "TRANSFER" ? "Dari Pos Kas (Asal)" : "Pos Kas / Rekening"}
                       </label>
-                      <select
+                      <CustomSelect
                         value={formAccountId}
-                        onChange={(e) => setFormAccountId(e.target.value)}
+                        onChange={setFormAccountId}
                         required
-                        className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                      >
-                        <option value="" disabled>
-                          Pilih Pos Kas...
-                        </option>
-                        {cashAccounts.map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name} ({formatCurrency(accountBalances[acc.id] || 0)})
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Pilih Pos Kas..."
+                        options={cashAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (${formatCurrency(accountBalances[acc.id] || 0)})`,
+                        }))}
+                        buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
+                      />
                     </div>
 
                     {trxType === "TRANSFER" ? (
@@ -2480,33 +2534,29 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                           Ke Pos Kas (Tujuan)
                         </label>
-                        <select
+                        <CustomSelect
                           value={formToAccountId}
-                          onChange={(e) => setFormToAccountId(e.target.value)}
+                          onChange={setFormToAccountId}
                           required
-                          className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                        >
-                          <option value="" disabled>
-                            Pilih Pos Kas Tujuan...
-                          </option>
-                          {cashAccounts.map((acc) => (
-                            <option key={acc.id} value={acc.id}>
-                              {acc.name} ({formatCurrency(accountBalances[acc.id] || 0)})
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Pilih Pos Kas Tujuan..."
+                          options={cashAccounts.map((acc) => ({
+                            value: acc.id,
+                            label: `${acc.name} (${formatCurrency(accountBalances[acc.id] || 0)})`,
+                          }))}
+                          buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
+                        />
                       </div>
                     ) : (
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                           Tanggal Transaksi
                         </label>
-                        <input
-                          type="date"
+                        <CustomDatePicker
                           value={formDate}
-                          onChange={(e) => setFormDate(e.target.value)}
+                          onChange={setFormDate}
+                          allowClear={false}
                           required
-                          className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                          buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
                         />
                       </div>
                     )}
@@ -2519,12 +2569,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                           Tanggal Transfer
                         </label>
-                        <input
-                          type="date"
+                        <CustomDatePicker
                           value={formDate}
-                          onChange={(e) => setFormDate(e.target.value)}
+                          onChange={setFormDate}
+                          allowClear={false}
                           required
-                          className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
+                          buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
                         />
                       </div>
                       <div>
@@ -2574,7 +2624,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                   if (!formParentCategoryId && defaultRoot) {
                                     setFormParentCategoryId(defaultRoot.id);
                                   }
-                                  alert(
+                                  toast[restored > 0 ? "success" : "info"](
                                     restored > 0
                                       ? `Berhasil memulihkan ${restored} kategori & sub-kategori standar.`
                                       : "Semua kategori & sub-kategori standar sudah lengkap."
@@ -2608,29 +2658,29 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                             <label className="block text-[11px] font-bold text-slate-600 mb-1">
                               1. Pilih Kategori Utama (Induk) *
                             </label>
-                            <select
+                            <CustomSelect
                               value={formParentCategoryId}
-                              onChange={(e) => {
-                                const nextParentId = e.target.value;
+                              onChange={(nextParentId) => {
                                 setFormParentCategoryId(nextParentId);
                                 setFormCategoryId("");
                                 setFormCustomCategory("");
                               }}
                               required={!formCustomCategory}
-                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white transition-all"
-                            >
-                              <option value="">-- Pilih Kategori Utama --</option>
-                              {activeRootCategories.map((root: any) => {
-                                const subCount = expenseCategories.filter(
-                                  (c: any) => c.parentId === root.id && c.isActive !== false
-                                ).length;
-                                return (
-                                  <option key={root.id} value={root.id}>
-                                    {root.name} {subCount > 0 ? `(${subCount} sub)` : ""}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                              placeholder="-- Pilih Kategori Utama --"
+                              options={[
+                                { value: "", label: "-- Pilih Kategori Utama --" },
+                                ...activeRootCategories.map((root: any) => {
+                                  const subCount = expenseCategories.filter(
+                                    (c: any) => c.parentId === root.id && c.isActive !== false
+                                  ).length;
+                                  return {
+                                    value: root.id,
+                                    label: `${root.name}${subCount > 0 ? ` (${subCount} sub)` : ""}`,
+                                  };
+                                }),
+                              ]}
+                              buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl bg-white"
+                            />
                           </div>
 
                           {/* Step 2: Sub-Kategori (Child) */}
@@ -2638,39 +2688,50 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                             <label className="block text-[11px] font-bold text-slate-600 mb-1">
                               2. Pilih Sub-Kategori (Rincian Pos)
                             </label>
-                            <select
-                              value={formCategoryId}
-                              onChange={(e) => {
-                                setFormCategoryId(e.target.value);
+                            <CustomSelect
+                              value={
+                                !formParentCategoryId
+                                  ? ""
+                                  : activeSubCategories.length === 0
+                                  ? formCategoryId || formParentCategoryId
+                                  : formCategoryId
+                              }
+                              onChange={(val) => {
+                                setFormCategoryId(val);
                                 setFormCustomCategory("");
                               }}
                               disabled={!formParentCategoryId}
-                              className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white disabled:bg-slate-100 disabled:text-slate-400 transition-all"
-                            >
-                              {!formParentCategoryId ? (
-                                <option value="">Pilih Kategori Utama terlebih dahulu...</option>
-                              ) : activeSubCategories.length === 0 ? (
-                                <option value={formParentCategoryId}>
-                                  -- Gunakan Kategori Utama (Tidak ada sub-kategori) --
-                                </option>
-                              ) : (
-                                <>
-                                  <option value="">
-                                    -- Pilih Sub-Kategori ({activeSubCategories.length} tersedia) --
-                                  </option>
-                                  {activeSubCategories.map((sub: any) => (
-                                    <option key={sub.id} value={sub.id}>
-                                      {sub.name}
-                                    </option>
-                                  ))}
-                                  <option value={formParentCategoryId}>
-                                    Umum / Lainnya di {
-                                      activeRootCategories.find((r: any) => r.id === formParentCategoryId)?.name || "Kategori Utama"
-                                    }
-                                  </option>
-                                </>
-                              )}
-                            </select>
+                              placeholder="Pilih Kategori Utama terlebih dahulu..."
+                              options={
+                                !formParentCategoryId
+                                  ? [{ value: "", label: "Pilih Kategori Utama terlebih dahulu..." }]
+                                  : activeSubCategories.length === 0
+                                  ? [
+                                      {
+                                        value: formParentCategoryId,
+                                        label: "-- Gunakan Kategori Utama (Tidak ada sub-kategori) --",
+                                      },
+                                    ]
+                                  : [
+                                      {
+                                        value: "",
+                                        label: `-- Pilih Sub-Kategori (${activeSubCategories.length} tersedia) --`,
+                                      },
+                                      ...activeSubCategories.map((sub: any) => ({
+                                        value: sub.id,
+                                        label: sub.name,
+                                      })),
+                                      {
+                                        value: formParentCategoryId,
+                                        label: `Umum / Lainnya di ${
+                                          activeRootCategories.find((r: any) => r.id === formParentCategoryId)?.name ||
+                                          "Kategori Utama"
+                                        }`,
+                                      },
+                                    ]
+                              }
+                              buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                            />
                           </div>
                         </div>
 
@@ -2799,20 +2860,19 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                       </label>
                                       {showIngredientDropdown ? (
                                         <div className="space-y-1.5">
-                                          <select
+                                          <CustomSelect
                                             value={row.ingredientId || ""}
-                                            onChange={(e) =>
-                                              handleSelectRowIngredient(row.id, e.target.value)
-                                            }
-                                            className="w-full px-3 py-2 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                                          >
-                                            <option value="">-- Ketik Manual (Non-Stok) --</option>
-                                            {sortedIngredients.map((ing) => (
-                                              <option key={ing.id} value={ing.id}>
-                                                {ing.name} ({ing.purchaseUnit || ing.unit})
-                                              </option>
-                                            ))}
-                                          </select>
+                                            onChange={(val) => handleSelectRowIngredient(row.id, val)}
+                                            placeholder="-- Ketik Manual (Non-Stok) --"
+                                            options={[
+                                              { value: "", label: "-- Ketik Manual (Non-Stok) --" },
+                                              ...sortedIngredients.map((ing) => ({
+                                                value: ing.id,
+                                                label: `${ing.name} (${ing.purchaseUnit || ing.unit})`,
+                                              })),
+                                            ]}
+                                            buttonClassName="w-full px-3 py-2 text-sm sm:text-xs font-bold border border-slate-200 rounded-xl bg-white"
+                                          />
                                           {!row.ingredientId && (
                                             <input
                                               type="text"
@@ -2870,38 +2930,31 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                               packagingChoices
                                             );
                                             return (
-                                              <select
+                                              <CustomSelect
                                                 value={currentSelectVal}
-                                                onChange={(e) =>
-                                                  handleRowPackagingChoiceChange(
-                                                    row.id,
-                                                    e.target.value
-                                                  )
+                                                onChange={(val) =>
+                                                  handleRowPackagingChoiceChange(row.id, val)
                                                 }
-                                                className="w-full px-2.5 py-2 text-sm sm:text-xs font-bold border border-brand-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-brand-50/40 text-brand-900"
-                                              >
-                                                {packagingChoices.map((ch) => (
-                                                  <option key={ch.key} value={ch.key}>
-                                                    {ch.label}
-                                                  </option>
-                                                ))}
-                                              </select>
+                                                options={packagingChoices.map((ch) => ({
+                                                  value: ch.key,
+                                                  label: ch.label,
+                                                }))}
+                                                buttonClassName="w-full px-2.5 py-2 text-sm sm:text-xs font-bold border border-brand-200 rounded-xl bg-brand-50/40 text-brand-900"
+                                              />
                                             );
                                           })()
                                         ) : (
-                                          <select
+                                          <CustomSelect
                                             value={row.unit}
-                                            onChange={(e) =>
-                                              handleItemRowChange(row.id, "unit", e.target.value)
+                                            onChange={(val) =>
+                                              handleItemRowChange(row.id, "unit", val)
                                             }
-                                            className="w-full px-2.5 py-2 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                                          >
-                                            {UNIT_OPTIONS.map((u) => (
-                                              <option key={u} value={u}>
-                                                {u}
-                                              </option>
-                                            ))}
-                                          </select>
+                                            options={UNIT_OPTIONS.map((u) => ({
+                                              value: u,
+                                              label: u,
+                                            }))}
+                                            buttonClassName="w-full px-2.5 py-2 text-sm sm:text-xs font-semibold border border-slate-200 rounded-xl bg-white"
+                                          />
                                         )}
                                       </div>
 
@@ -3354,16 +3407,17 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                             Metode Pembayaran
                           </label>
-                          <select
+                          <CustomSelect
                             value={formPaymentMethod}
-                            onChange={(e) => setFormPaymentMethod(e.target.value)}
-                            className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white"
-                          >
-                            <option value="Tunai">Tunai (Cash)</option>
-                            <option value="Transfer Bank">Transfer Bank</option>
-                            <option value="QRIS / E-Wallet">QRIS / E-Wallet</option>
-                            <option value="Kartu Debit / EDC">Kartu Debit / EDC</option>
-                          </select>
+                            onChange={setFormPaymentMethod}
+                            options={[
+                              { value: "Tunai", label: "Tunai (Cash)" },
+                              { value: "Transfer Bank", label: "Transfer Bank" },
+                              { value: "QRIS / E-Wallet", label: "QRIS / E-Wallet" },
+                              { value: "Kartu Debit / EDC", label: "Kartu Debit / EDC" },
+                            ]}
+                            buttonClassName="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-white"
+                          />
                         </div>
                       </div>
                     </>
@@ -3412,7 +3466,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       </button>
                       <button
                         type="submit"
-                        className="flex-[2] sm:flex-initial px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer text-center"
+                        className="flex-[2] sm:flex-initial px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-sm shadow-brand-600/20 hover:shadow-md transition-all cursor-pointer text-center"
                       >
                         {editingTrx
                           ? "Simpan Perubahan"
@@ -3423,17 +3477,33 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     </div>
                   </div>
                 </form>
-              </div>
-            </div>,
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
             document.body
           )}
 
         {/* ─── ADD / EDIT POS KAS MODAL ───────────────────────────────────── */}
-        {isAccountModalOpen &&
-          typeof document !== "undefined" &&
+        {typeof document !== "undefined" &&
           createPortal(
-            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-center z-[100] animate-fade-in overflow-hidden">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 animate-scale-up flex flex-col max-h-[90dvh] sm:max-h-[85vh]">
+            <AnimatePresence>
+              {isAccountModalOpen && (
+                <motion.div
+                  key="cashflow-account-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-center z-[100] overflow-hidden"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 flex flex-col max-h-[90dvh] sm:max-h-[85vh]"
+                  >
                 <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 shrink-0">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
@@ -3481,17 +3551,18 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                         Jenis Pos Kas
                       </label>
-                      <select
+                      <CustomSelect
                         value={accType}
-                        onChange={(e) => setAccType(e.target.value as any)}
+                        onChange={(val) => setAccType(val as any)}
                         required
-                        className="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
-                      >
-                        <option value="CASH">Tunai (Kas Operasional / Petty Cash)</option>
-                        <option value="BANK">Rekening Bank (BCA / Mandiri / BRI / BNI)</option>
-                        <option value="E_WALLET">Dompet Digital (QRIS / GoPay / OVO / Dana)</option>
-                        <option value="SAVINGS">Tabungan / Dana Cadangan Toko</option>
-                      </select>
+                        options={[
+                          { value: "CASH", label: "Tunai (Kas Operasional / Petty Cash)" },
+                          { value: "BANK", label: "Rekening Bank (BCA / Mandiri / BRI / BNI)" },
+                          { value: "E_WALLET", label: "Dompet Digital (QRIS / GoPay / OVO / Dana)" },
+                          { value: "SAVINGS", label: "Tabungan / Dana Cadangan Toko" },
+                        ]}
+                        buttonClassName="w-full px-3.5 py-2.5 text-sm sm:text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
+                      />
                     </div>
 
                     {!editingAccount && (
@@ -3523,11 +3594,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                               Tanggal Saldo Awal
                             </label>
-                            <input
-                              type="date"
+                            <CustomDatePicker
                               value={accOpeningDate}
-                              onChange={(e) => setAccOpeningDate(e.target.value)}
-                              className="w-full px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50"
+                              onChange={setAccOpeningDate}
+                              allowClear={false}
+                              buttonClassName="w-full px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-white"
                             />
                           </div>
                         )}
@@ -3554,18 +3625,34 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>,
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
             document.body
           )}
       </div>
 
       {/* ─── SALES VERIFICATION MODAL ──────────────────────────────────── */}
-      {isVerificationModalOpen &&
-        typeof document !== "undefined" &&
+      {typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] p-3 sm:p-6 flex justify-center items-center animate-fade-in overflow-hidden">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col border border-slate-200/80 overflow-hidden animate-scale-up">
+          <AnimatePresence>
+            {isVerificationModalOpen && (
+              <motion.div
+                key="cashflow-verification-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] p-3 sm:p-6 flex justify-center items-center overflow-hidden"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col border border-slate-200/80 overflow-hidden"
+                >
               <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-2xs shrink-0">
@@ -3651,18 +3738,17 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                 Simpan ke Pos Kas
                               </label>
-                              <select
+                              <CustomSelect
                                 name="accountId"
+                                defaultValue=""
                                 required
-                                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white"
-                              >
-                                <option value="">-- Pilih Pos Kas Tujuan --</option>
-                                {cashAccounts.map((a) => (
-                                  <option key={a.id} value={a.id}>
-                                    {a.name}
-                                  </option>
-                                ))}
-                              </select>
+                                placeholder="-- Pilih Pos Kas Tujuan --"
+                                options={cashAccounts.map((a) => ({
+                                  value: a.id,
+                                  label: a.name,
+                                }))}
+                                buttonClassName="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white"
+                              />
                             </div>
                             <button
                               type="submit"
@@ -3686,10 +3772,26 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                   Tutup
                 </button>
               </div>
-            </div>
-          </div>,
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
           document.body
         )}
+
+      <ConfirmModal
+        isOpen={Boolean(confirmAction)}
+        variant="danger"
+        title={confirmAction?.title || ""}
+        message={confirmAction?.message || ""}
+        confirmLabel={confirmAction?.confirmLabel || "Ya, Hapus"}
+        cancelLabel="Batal"
+        onConfirm={() => {
+          confirmAction?.onConfirm();
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </>
   );
 };

@@ -1,7 +1,14 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
+import { CustomSelect } from "./common/CustomSelect";
+import {
+  computeAutoOverheadBaseline,
+  calculateHppOverheadSimulation,
+} from "../utils/financeMetrics";
+import { getLocalPeriodString } from "../utils/dateUtils";
 import {
   ViewState,
   Recipe,
@@ -31,16 +38,20 @@ import {
   Copy,
   Check,
   ChevronDown,
+  ChevronUp,
   ExternalLink,
   UtensilsCrossed,
   Cake,
   Flame,
   Info,
-    Layers,
+  Layers,
   ChefHat,
   ArrowUpRight,
   ShieldCheck,
   Search,
+  Users,
+  Building2,
+  Target,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -311,6 +322,12 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     updateProduct,
     batchPreparations,
     addBatchPreparation,
+    cashTransactions,
+    expenseCategories,
+    payrollRecords,
+    employees,
+    contracts,
+    salesTransactions,
     currentUser,
   } = useStore();
 
@@ -469,6 +486,47 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const [targetSellingPrice, setTargetSellingPrice] = useState<number>(22000);
   const [targetFoodCostPercent, setTargetFoodCostPercent] = useState<number>(30);
   const [dailyVolume, setDailyVolume] = useState<number>(65);
+
+  // Simulasi Overhead & BEP (Non-HPP, otomatis tarik data aktual tapi bisa diedit manual)
+  const autoOverheadBaseline = useMemo(() => {
+    return computeAutoOverheadBaseline({
+      cashTransactions,
+      expenseCategories,
+      payrollRecords,
+      employees,
+      contracts,
+      salesTransactions,
+      currentPeriod: getLocalPeriodString(),
+    });
+  }, [
+    cashTransactions,
+    expenseCategories,
+    payrollRecords,
+    employees,
+    contracts,
+    salesTransactions,
+  ]);
+
+  const [isOverheadManual, setIsOverheadManual] = useState<boolean>(false);
+  const [simMonthlyPayroll, setSimMonthlyPayroll] = useState<number>(0);
+  const [simMonthlyOperational, setSimMonthlyOperational] = useState<number>(0);
+  const [simMonthlyStorePortions, setSimMonthlyStorePortions] = useState<number>(1500);
+  const [isOverheadPanelOpen, setIsOverheadPanelOpen] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!isOverheadManual) {
+      setSimMonthlyPayroll(autoOverheadBaseline.monthlyPayroll);
+      setSimMonthlyOperational(autoOverheadBaseline.monthlyOperational);
+      setSimMonthlyStorePortions(autoOverheadBaseline.monthlyStorePortions);
+    }
+  }, [autoOverheadBaseline, isOverheadManual]);
+
+  const handleResetOverheadToActual = () => {
+    setIsOverheadManual(false);
+    setSimMonthlyPayroll(autoOverheadBaseline.monthlyPayroll);
+    setSimMonthlyOperational(autoOverheadBaseline.monthlyOperational);
+    setSimMonthlyStorePortions(autoOverheadBaseline.monthlyStorePortions);
+  };
 
   // Search filter for catalog tab
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -671,6 +729,25 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const dailyGrossProfit = grossProfit * dailyVolume;
   const monthlyGrossProfit = dailyGrossProfit * 30;
 
+  // Simulasi Alokasi Overhead, Full Cost, & BEP (tidak mengubah HPP resmi resep/produk)
+  const overheadSim = useMemo(() => {
+    return calculateHppOverheadSimulation({
+      totalHpp,
+      targetSellingPrice,
+      monthlyPayroll: simMonthlyPayroll,
+      monthlyOperational: simMonthlyOperational,
+      monthlyStorePortions: simMonthlyStorePortions,
+      menuDailyVolume: dailyVolume,
+    });
+  }, [
+    totalHpp,
+    targetSellingPrice,
+    simMonthlyPayroll,
+    simMonthlyOperational,
+    simMonthlyStorePortions,
+    dailyVolume,
+  ]);
+
   // Status Kesehatan Food Cost
   const healthStatus = useMemo(() => {
     if (foodCostPercent <= 0) {
@@ -787,18 +864,18 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   // Simpan ke Master Resep Toko
   const handleSaveToStoreRecipes = () => {
     if (!menuName.trim()) {
-      alert("Nama menu tidak boleh kosong.");
+      toast.warning("Nama menu tidak boleh kosong.");
       return;
     }
     if (items.length === 0) {
-      alert("Harap masukkan minimal 1 bahan baku.");
+      toast.warning("Harap masukkan minimal 1 bahan baku.");
       return;
     }
 
     const validIngredients = ensureRecipeIngredientsRegistered();
 
     if (validIngredients.length === 0) {
-      alert("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
+      toast.warning("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
       return;
     }
 
@@ -827,7 +904,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   // Terbitkan Langsung ke Katalog Produk Toko (Database Menu + Master Resep + Bahan Kustom)
   const handlePublishToProductCatalog = () => {
     if (!menuName.trim()) {
-      alert("Nama menu tidak boleh kosong.");
+      toast.warning("Nama menu tidak boleh kosong.");
       return;
     }
     const validIngredients = ensureRecipeIngredientsRegistered();
@@ -925,7 +1002,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   // Simpan Sebagai Resep Kondimen Olahan (Batch Prep)
   const handleSaveAsBatchPrep = () => {
     if (!menuName.trim()) {
-      alert("Nama olahan tidak boleh kosong.");
+      toast.warning("Nama olahan tidak boleh kosong.");
       return;
     }
     const validIngredients = items
@@ -936,7 +1013,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       }));
 
     if (validIngredients.length === 0) {
-      alert("Minimal 1 bahan baku harus dipilih dari master inventori.");
+      toast.warning("Minimal 1 bahan baku harus dipilih dari master inventori.");
       return;
     }
 
@@ -971,6 +1048,19 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         .map((p) => `- ${p.name}: Rp ${p.cost}`)
         .join("\n");
 
+      const overheadContextText =
+        overheadSim.monthlyTotalOpex > 0
+          ? `\nSimulasi Overhead & BEP (Non-HPP):
+- Beban Gaji Bulanan: Rp ${Math.round(simMonthlyPayroll).toLocaleString("id-ID")}
+- Beban Operasional & Utilitas Bulanan: Rp ${Math.round(simMonthlyOperational).toLocaleString("id-ID")}
+- Total OPEX Bulanan: Rp ${Math.round(overheadSim.monthlyTotalOpex).toLocaleString("id-ID")}
+- Estimasi Total Porsi Toko/Bulan: ${simMonthlyStorePortions} porsi
+- Alokasi Overhead per Porsi: Rp ${Math.round(overheadSim.overheadPerPortion).toLocaleString("id-ID")}
+- Biaya Penuh (Full Cost = HPP + Overhead): Rp ${Math.round(overheadSim.fullCostPerPortion).toLocaleString("id-ID")}
+- Estimasi Laba Bersih per Porsi: Rp ${Math.round(overheadSim.estimatedNetProfitPerPortion).toLocaleString("id-ID")} (${overheadSim.estimatedNetMarginPercent.toFixed(1)}%)
+- Target BEP Total OPEX: ${overheadSim.bepDailyPortions !== null ? `${overheadSim.bepDailyPortions} porsi/hari (${overheadSim.bepMonthlyPortions} porsi/bulan)` : "Margin kotor <= 0, BEP belum tercapai"}`
+          : "";
+
       const prompt = `Halo Julia AI Copilot! Saya sedang membuat simulasi HPP & harga jual menu kopi di kafe kami dengan rincian berikut:
 
 Nama Menu: ${menuName} (${servingNote})
@@ -987,10 +1077,10 @@ TOTAL HPP RIIL PER CUP: Rp ${Math.round(totalHpp).toLocaleString("id-ID")}
 
 Rencana Harga Jual: Rp ${Math.round(targetSellingPrice).toLocaleString("id-ID")}
 Food Cost: ${foodCostPercent.toFixed(1)}%
-Gross Margin: ${grossMarginPercent.toFixed(1)}% (Laba Kotor Rp ${Math.round(grossProfit).toLocaleString("id-ID")})
+Gross Margin: ${grossMarginPercent.toFixed(1)}% (Laba Kotor Rp ${Math.round(grossProfit).toLocaleString("id-ID")})${overheadContextText}
 
 Tolong berikan analisis singkat dan tajam (3-4 poin padat):
-1. Evaluasi apakah proporsi HPP & margin ini sudah ideal untuk standar coffee shop Indonesia?
+1. Evaluasi apakah proporsi HPP & margin ini sudah ideal untuk standar coffee shop Indonesia${overheadSim.monthlyTotalOpex > 0 ? " serta apakah sudah cukup aman menutup alokasi gaji & operasional di atas" : ""}?
 2. Komponen bahan mana yang paling menyerap biaya dan bagaimana saran efisiensi porsi/takarannya tanpa menurunkan kualitas rasa?
 3. Rekomendasi pricing kompetitif dan strategi upselling atau bundling (misal pairing pastry) agar omset kafe maksimal.
 Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
@@ -1011,6 +1101,20 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             grossMarginPercent,
             packagingCost,
             wastagePercent,
+            overheadSimulation:
+              overheadSim.monthlyTotalOpex > 0
+                ? {
+                    monthlyPayroll: simMonthlyPayroll,
+                    monthlyOperational: simMonthlyOperational,
+                    monthlyStorePortions: simMonthlyStorePortions,
+                    overheadPerPortion: overheadSim.overheadPerPortion,
+                    fullCostPerPortion: overheadSim.fullCostPerPortion,
+                    estimatedNetProfitPerPortion: overheadSim.estimatedNetProfitPerPortion,
+                    estimatedNetMarginPercent: overheadSim.estimatedNetMarginPercent,
+                    bepDailyPortions: overheadSim.bepDailyPortions,
+                    bepMonthlyPortions: overheadSim.bepMonthlyPortions,
+                  }
+                : null,
             items: items.map((it) => ({
               name: it.name,
               quantity: it.quantity,
@@ -1214,39 +1318,30 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 {/* Dropdown Muat Resep & Produk Katalog Menu */}
                 {(products.length > 0 || recipes.length > 0) && (
                   <div className="relative w-full sm:w-auto sm:min-w-[260px]">
-                    <select
+                    <CustomSelect
                       value={selectedRecipeId}
-                      onChange={(e) => handleLoadExistingRecipe(e.target.value)}
-                      className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                    >
-                      <option value="">-- Muat dari Database Menu / Resep --</option>
-                      {products.length > 0 && (
-                        <optgroup label="📖 Katalog Menu Produk Toko">
-                          {products.flatMap((prod) =>
-                            (prod.variants && prod.variants.length > 0
-                              ? prod.variants
-                              : [{ id: "default", name: "Reguler", price: 0, recipe: [] }]
-                            ).map((v) => (
-                              <option
-                                key={`PROD:${prod.id}:${v.id}`}
-                                value={`PROD:${prod.id}:${v.id}`}
-                              >
-                                {prod.name} — {v.name} ({formatCurrency(v.price || 0)})
-                              </option>
-                            ))
-                          )}
-                        </optgroup>
-                      )}
-                      {recipes.length > 0 && (
-                        <optgroup label="🧪 Master Resep Gramasi">
-                          {recipes.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.menuName} ({getSafeRecipeIngredients(r).length} bahan)
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                      onChange={handleLoadExistingRecipe}
+                      placeholder="-- Muat dari Database Menu / Resep --"
+                      options={[
+                        { value: "", label: "-- Muat dari Database Menu / Resep --" },
+                        ...products.flatMap((prod) =>
+                          (prod.variants && prod.variants.length > 0
+                            ? prod.variants
+                            : [{ id: "default", name: "Reguler", price: 0, recipe: [] }]
+                          ).map((v) => ({
+                            value: `PROD:${prod.id}:${v.id}`,
+                            label: `${prod.name} — ${v.name} (${formatCurrency(v.price || 0)})`,
+                            group: "📖 Katalog Menu Produk Toko",
+                          }))
+                        ),
+                        ...recipes.map((r) => ({
+                          value: r.id,
+                          label: `${r.menuName} (${getSafeRecipeIngredients(r).length} bahan)`,
+                          group: "🧪 Master Resep Gramasi",
+                        })),
+                      ]}
+                      buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 hover:bg-white"
+                    />
                   </div>
                 )}
               </div>
@@ -1415,26 +1510,28 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                           <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Pilih Bahan Master
                           </label>
-                          <select
+                          <CustomSelect
                             value={item.ingredientId}
-                            onChange={(e) => handleUpdateItem(item.id, { ingredientId: e.target.value })}
-                            className="w-full text-base sm:text-xs font-medium px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                          >
-                            <option value="">-- Input Bahan Kustom (Baru) --</option>
-                            {(Object.entries(groupedIngredients) as [string, Ingredient[]][]).map(([cat, list]) => (
-                              <optgroup key={cat} label={`📂 ${cat}`}>
-                                {list.map((ing) => {
-                                  const isLow = ing.currentStock <= ing.minStock;
-                                  const isZeroCost = !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
-                                  return (
-                                    <option key={ing.id} value={ing.id}>
-                                      {ing.name} ({ing.unit}) · @{formatCurrency(Number(ing.costPerUnit || 0))} · Stok: {ing.currentStock} {ing.unit} {isLow ? "⚠️" : ""} {isZeroCost ? "[Biaya 0]" : ""}
-                                    </option>
-                                  );
-                                })}
-                              </optgroup>
-                            ))}
-                          </select>
+                            onChange={(val) => handleUpdateItem(item.id, { ingredientId: val })}
+                            placeholder="-- Input Bahan Kustom (Baru) --"
+                            options={[
+                              { value: "", label: "-- Input Bahan Kustom (Baru) --" },
+                              ...(Object.entries(groupedIngredients) as [string, Ingredient[]][]).flatMap(
+                                ([cat, list]) =>
+                                  list.map((ing) => {
+                                    const isLow = ing.currentStock <= ing.minStock;
+                                    const isZeroCost =
+                                      !ing.costPerUnit || Number(ing.costPerUnit) <= 0;
+                                    return {
+                                      value: ing.id,
+                                      label: `${ing.name} (${ing.unit}) · @${formatCurrency(Number(ing.costPerUnit || 0))} · Stok: ${ing.currentStock} ${ing.unit}${isLow ? " ⚠️" : ""}${isZeroCost ? " [Biaya 0]" : ""}`,
+                                      group: `📂 ${cat}`,
+                                    };
+                                  })
+                              ),
+                            ]}
+                            buttonClassName="w-full text-base sm:text-xs font-medium px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                          />
                         </div>
 
                         {/* Nama Display / Kustom */}
@@ -1470,20 +1567,19 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             <label className="block text-[10px] font-bold text-slate-500 mb-1">
                               Satuan
                             </label>
-                            <select
+                            <CustomSelect
                               value={item.unit}
-                              onChange={(e) => handleUpdateItem(item.id, { unit: e.target.value })}
-                              className="w-full text-base sm:text-xs font-semibold px-1.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                            >
-                              {["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].map((u) => (
-                                <option key={u} value={u}>
-                                  {u}
-                                </option>
-                              ))}
-                              {!["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].includes(item.unit) && (
-                                <option value={item.unit}>{item.unit}</option>
-                              )}
-                            </select>
+                              onChange={(val) => handleUpdateItem(item.id, { unit: val })}
+                              options={[
+                                ...["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].map(
+                                  (u) => ({ value: u, label: u })
+                                ),
+                                ...(!["gr", "ml", "pcs", "shot", "slice", "porsi", "sdm", "sdt", "pack"].includes(item.unit)
+                                  ? [{ value: item.unit, label: item.unit }]
+                                  : []),
+                              ]}
+                              buttonClassName="w-full text-base sm:text-xs font-semibold px-2 py-2 bg-white border border-slate-200 rounded-xl text-slate-800"
+                            />
                           </div>
                         </div>
 
@@ -1846,17 +1942,246 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                       <p className="text-[10px] text-slate-500">Laba Kotor/Hari:</p>
-                      <p className="font-bold font-mono text-slate-900">
+                      <p className="font-bold font-mono tabular-nums text-slate-900">
                         {formatCurrency(dailyGrossProfit)}
                       </p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                       <p className="text-[10px] text-slate-500">Laba Kotor/Bulan (30h):</p>
-                      <p className="font-bold font-mono text-emerald-700">
+                      <p className="font-bold font-mono tabular-nums text-emerald-700">
                         {formatCurrency(monthlyGrossProfit)}
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Simulasi Overhead & BEP (Non-HPP) */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Target className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                          Simulasi Overhead &amp; BEP (Non-HPP)
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isOverheadManual
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : "bg-brand-50 text-brand-700 border-brand-200/80"
+                          }`}
+                        >
+                          {isOverheadManual ? "Diedit Manual" : autoOverheadBaseline.sourceLabel}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Gaji (barista, kasir, kitchen, baker) &amp; operasional tetap dicatat di OPEX P&amp;L dan tidak mengubah HPP resmi resep.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isOverheadManual && (
+                        <button
+                          type="button"
+                          onClick={handleResetOverheadToActual}
+                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Kembalikan angka simulasi ke data aktual toko"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset ke Aktual</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsOverheadPanelOpen((prev) => !prev)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors cursor-pointer"
+                        aria-label={
+                          isOverheadPanelOpen
+                            ? "Tutup simulasi overhead dan BEP"
+                            : "Buka simulasi overhead dan BEP"
+                        }
+                      >
+                        {isOverheadPanelOpen ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {isOverheadPanelOpen && (
+                      <motion.div
+                        key="hpp-overhead-panel-body"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-3 pt-1 border-t border-slate-100">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 mb-1">
+                            <Users className="w-3 h-3 text-slate-500" />
+                            <span>Beban Gaji &amp; SDM / Bln (Rp)</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="100000"
+                            value={simMonthlyPayroll}
+                            onChange={(e) => {
+                              setIsOverheadManual(true);
+                              setSimMonthlyPayroll(
+                                Math.max(0, Math.round(Number(e.target.value) || 0))
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 mb-1">
+                            <Building2 className="w-3 h-3 text-slate-500" />
+                            <span>Operasional &amp; Utilitas / Bln (Rp)</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="100000"
+                            value={simMonthlyOperational}
+                            onChange={(e) => {
+                              setIsOverheadManual(true);
+                              setSimMonthlyOperational(
+                                Math.max(0, Math.round(Number(e.target.value) || 0))
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <label className="text-[11px] font-semibold text-slate-700">
+                            Estimasi Total Porsi Toko / Bulan (Semua Menu)
+                          </label>
+                          {!autoOverheadBaseline.hasActualPortions && !isOverheadManual && (
+                            <span className="text-[10px] text-slate-400">
+                              Default asumsi (belum ada data jual)
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="50"
+                          value={simMonthlyStorePortions}
+                          onChange={(e) => {
+                            setIsOverheadManual(true);
+                            setSimMonthlyStorePortions(
+                              Math.max(0, Math.round(Number(e.target.value) || 0))
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                      </div>
+
+                      {overheadSim.monthlyTotalOpex === 0 ? (
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600">
+                          Belum ada beban gaji atau operasional yang terisi. Masukkan estimasi OPEX di atas untuk melihat <strong>Full Cost</strong>, estimasi laba bersih per porsi, dan target <strong>BEP</strong>.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {simMonthlyStorePortions <= 0 && (
+                            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+                              Isi estimasi total porsi toko/bulan (&gt; 0) untuk menghitung alokasi overhead per porsi.
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                              <p className="text-[10px] text-slate-500">Alokasi Overhead / Porsi:</p>
+                              <p className="font-bold font-mono tabular-nums text-slate-900 mt-0.5">
+                                {formatCurrency(overheadSim.overheadPerPortion)}
+                              </p>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                              <p className="text-[10px] text-slate-500">Biaya Penuh (Full Cost):</p>
+                              <p className="font-bold font-mono tabular-nums text-slate-900 mt-0.5">
+                                {formatCurrency(overheadSim.fullCostPerPortion)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                              overheadSim.status === "LOSS"
+                                ? "bg-rose-50/80 border-rose-200 text-rose-900"
+                                : overheadSim.status === "THIN"
+                                ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                                : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                            }`}
+                          >
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                                Estimasi Laba Bersih / Porsi
+                              </p>
+                              <p className="text-base font-black font-mono tabular-nums mt-0.5">
+                                {overheadSim.estimatedNetProfitPerPortion >= 0 ? "+" : ""}
+                                {formatCurrency(overheadSim.estimatedNetProfitPerPortion)}
+                                <span className="text-xs font-bold ml-1.5">
+                                  ({overheadSim.estimatedNetMarginPercent.toFixed(1)}%)
+                                </span>
+                              </p>
+                            </div>
+                            <span
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${
+                                overheadSim.status === "LOSS"
+                                  ? "bg-white text-rose-700 border-rose-200"
+                                  : overheadSim.status === "THIN"
+                                  ? "bg-white text-amber-800 border-amber-200"
+                                  : "bg-white text-emerald-700 border-emerald-200"
+                              }`}
+                            >
+                              {overheadSim.status === "LOSS"
+                                ? "Di Bawah Full Cost"
+                                : overheadSim.status === "THIN"
+                                ? "Margin Bersih Tipis"
+                                : "Sehat"}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-brand-50/50 border border-brand-200/70 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-brand-950">
+                                Target BEP (Tutup OPEX {formatCurrency(overheadSim.monthlyTotalOpex)}):
+                              </span>
+                              <span className="font-black font-mono tabular-nums text-brand-900">
+                                {overheadSim.bepDailyPortions !== null
+                                  ? `${overheadSim.bepDailyPortions} porsi/hari`
+                                  : "Belum tercapai"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
+                              <span>
+                                {overheadSim.bepMonthlyPortions !== null
+                                  ? `Setara ${overheadSim.bepMonthlyPortions.toLocaleString("id-ID")} porsi/bulan`
+                                  : "Laba kotor per porsi harus > Rp 0 untuk BEP"}
+                              </span>
+                              <span className="font-semibold text-brand-800 font-mono tabular-nums">
+                                Kontribusi menu ini: {overheadSim.menuOpexCoveragePercent.toFixed(1)}% OPEX
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Action Buttons: Terbitkan Produk, Kondimen Olahan, Simpan Resep & Konsultasi AI */}
@@ -2152,9 +2477,25 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
       )}
 
       {/* ─── MODAL: Terbitkan ke Katalog Produk Toko ──────────────────────────────── */}
-      {isPublishProductModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isPublishProductModalOpen && (
+              <motion.div
+                key="hpp-publish-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
+                >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
@@ -2194,17 +2535,18 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 <label className="block text-slate-700 font-bold mb-1.5">
                   Kategori Menu Toko
                 </label>
-                <select
+                <CustomSelect
                   value={publishCategory}
-                  onChange={(e) => setPublishCategory(e.target.value)}
-                  className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                >
-                  <option value="COFFEE">☕ COFFEE (Espresso-based, Cold Brew)</option>
-                  <option value="NON_COFFEE">🍵 NON_COFFEE (Matcha, Tea, Chocolate)</option>
-                  <option value="FOOD">🍳 FOOD (Makanan Berat, Rice Bowl)</option>
-                  <option value="SNACK">🍟 SNACK (Camilan, Finger Food)</option>
-                  <option value="PASTRY">🥐 PASTRY (Croissant, Cake, Bakery)</option>
-                </select>
+                  onChange={setPublishCategory}
+                  options={[
+                    { value: "COFFEE", label: "☕ COFFEE (Espresso-based, Cold Brew)" },
+                    { value: "NON_COFFEE", label: "🍵 NON_COFFEE (Matcha, Tea, Chocolate)" },
+                    { value: "FOOD", label: "🍳 FOOD (Makanan Berat, Rice Bowl)" },
+                    { value: "SNACK", label: "🍟 SNACK (Camilan, Finger Food)" },
+                    { value: "PASTRY", label: "🥐 PASTRY (Croissant, Cake, Bakery)" },
+                  ]}
+                  buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 hover:bg-white"
+                />
               </div>
 
               {/* Rincian Finansial yang Diterbitkan */}
@@ -2246,15 +2588,33 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 <CheckCircle2 className="w-4 h-4" /> Terbitkan Sekarang
               </button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* ─── MODAL: Simpan Sebagai Kondimen Olahan (Batch Prep) ───────────────────── */}
-      {isBatchPrepModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isBatchPrepModalOpen && (
+              <motion.div
+                key="hpp-batch-prep-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
+                >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
@@ -2305,15 +2665,16 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <label className="block text-slate-700 font-bold mb-1">
                     Satuan Hasil (Unit)
                   </label>
-                  <select
+                  <CustomSelect
                     value={batchYieldUnit}
-                    onChange={(e) => setBatchYieldUnit(e.target.value)}
-                    className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="ml">ml (Mililiter)</option>
-                    <option value="gr">gr (Gram)</option>
-                    <option value="porsi">porsi (Porsi/Pcs)</option>
-                  </select>
+                    onChange={setBatchYieldUnit}
+                    options={[
+                      { value: "ml", label: "ml (Mililiter)" },
+                      { value: "gr", label: "gr (Gram)" },
+                      { value: "porsi", label: "porsi (Porsi/Pcs)" },
+                    ]}
+                    buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 hover:bg-white"
+                  />
                 </div>
               </div>
 
@@ -2348,10 +2709,12 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Simpan ke Dapur Olahan
               </button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 };

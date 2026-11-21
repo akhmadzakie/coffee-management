@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Julia's • Specialty Room • Coffee • Eatery</title>
+    <script>
+      try {
+        if (localStorage.getItem("julias_theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      } catch (e) {}
+    </script>
     <meta
       name="description"
       content="Julia's Specialty Room • Coffee • Eatery - Integrated POS & Management System"

@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { ViewState, ManagerApprovalRequest } from "../types";
 import {
   AreaChart,
@@ -517,7 +518,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       });
     } catch (err) {
       console.error("Gagal ekspor PDF:", err);
-      alert("Terjadi kendala saat menghasilkan PDF Eksekutif.");
+      toast.error("Terjadi kendala saat menghasilkan PDF Eksekutif.");
     } finally {
       setIsExporting(null);
     }
@@ -541,7 +542,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       });
     } catch (err) {
       console.error("Gagal ekspor Excel:", err);
-      alert("Terjadi kendala saat menghasilkan Excel Eksekutif.");
+      toast.error("Terjadi kendala saat menghasilkan Excel Eksekutif.");
     } finally {
       setIsExporting(null);
     }
@@ -703,7 +704,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                     />
                     <button
                       onClick={handleSaveTarget}
-                      className="px-3 py-1 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
+                      className="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl shadow-xs shadow-brand-600/20 active:scale-95 transition-all cursor-pointer"
                     >
                       Simpan
                     </button>
@@ -963,18 +964,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       {/* ─── Peringatan Dini & Deteksi Kebocoran (Loss Prevention) ─────────── */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${FEATURES.POS ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
         {/* Kebocoran 1: Diskon & Promo */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+        <div className="bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-amber-200/70 dark:border-amber-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Potongan Diskon</span>
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Potongan Diskon</span>
+            <div className="w-10 h-10 rounded-2xl bg-amber-100/80 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <Award className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <div className="text-xl font-extrabold text-slate-900 tracking-tight">
+            <div className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight tabular-nums">
               {formatCurrency(totalDiscounts)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Margin terpotong promo periode ini
             </p>
           </div>
@@ -983,18 +984,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         {/* Kebocoran 2: Selisih Laci & Void */}
 {FEATURES.POS && (
 <>
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+        <div className={`bg-gradient-to-br ${
+          voidSummary.discrepancyTotal > 0
+            ? "from-rose-50/60 via-white to-white border-rose-200/70 dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-rose-500/30"
+            : "from-emerald-50/60 via-white to-white border-emerald-200/70 dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-emerald-500/30"
+        } p-5 rounded-3xl border shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all duration-200 flex flex-col justify-between group`}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Selisih Kasir / Void</span>
-            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selisih Kasir / Void</span>
+            <div className="w-10 h-10 rounded-2xl bg-rose-100/80 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-200/70 dark:border-rose-500/30 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <ShieldAlert className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <div className={`text-xl font-extrabold tracking-tight ${voidSummary.discrepancyTotal > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            <div className={`text-xl font-extrabold tracking-tight tabular-nums ${voidSummary.discrepancyTotal > 0 ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`}>
               {voidSummary.discrepancyTotal > 0 ? formatCurrency(voidSummary.discrepancyTotal) : "Rp 0 (Klop)"}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               {voidSummary.discrepancyTotal > 0 ? "Terdapat deviasi kasir" : "Semua shift terekonsiliasi"}
             </p>
           </div>
@@ -1003,36 +1008,36 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </>
 )}
 {/* Kebocoran 3: Waste Cost */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+        <div className="bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-amber-200/70 dark:border-amber-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Bahan Terbuang (Waste)</span>
-            <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 border border-orange-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bahan Terbuang (Waste)</span>
+            <div className="w-10 h-10 rounded-2xl bg-amber-100/80 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <AlertTriangle className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <div className="text-xl font-extrabold text-slate-900 tracking-tight">
+            <div className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight tabular-nums">
               {formatCurrency(wasteCost)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Kerugian susu basi & failed shot
             </p>
           </div>
         </div>
 
         {/* Kebocoran 4: Total Likuiditas Kas */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between group">
+        <div className="bg-gradient-to-br from-emerald-50/60 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-emerald-200/70 dark:border-emerald-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Likuiditas Kas</span>
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Likuiditas Kas</span>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-500/30 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
               <Wallet className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <div className="text-xl font-extrabold text-emerald-700 tracking-tight">
+            <div className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 tracking-tight tabular-nums">
               {formatCurrency(totalCashLiquidity)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Saldo riil siap pakai di kas & bank
             </p>
           </div>
@@ -1415,7 +1420,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 <div className="flex items-center gap-2 mt-4">
                   <button
                     onClick={() => onNavigate("import_sales")}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all shadow-xs cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 shadow-xs shadow-brand-600/20 active:scale-95 transition-all cursor-pointer"
                   >
                     Impor Data POS
                   </button>

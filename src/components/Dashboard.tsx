@@ -248,7 +248,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     return top;
   }, [filteredFinance, expenseCategories]);
 
-  const COLORS = ['#c27803', '#241813', '#d97706', '#059669', '#78350f', '#b45309'];
+  const COLORS = ["#1b2cc0", "#7692ff", "#0f1860", "#a2c5fb", "#059669", "#e11d48"];
 
   // Dynamic year options: 5 years back to current
   const currentYear = new Date().getFullYear();
@@ -347,12 +347,12 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
       )}
 
       {/* Header & Filters */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
             {isIndo ? "Ringkasan Eksekutif" : "Executive Dashboard"}
           </h1>
-          <p className="text-stone-500 text-xs mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
             {isIndo
               ? "Pantau performa bisnis dan kesehatan finansial kafe secara real-time."
               : "Monitor your coffee shop performance and financial health in real-time."}

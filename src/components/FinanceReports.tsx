@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
+import { ConfirmModal } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
+import { calculateFnbHealthMetrics } from "../utils/financeMetrics";
 import {
   Lock,
   Unlock,
@@ -15,7 +18,7 @@ import {
   Calendar,
   Layers,
   ArrowRight,
-    Receipt,
+  Receipt,
   CreditCard,
   Building2,
   ShoppingBag,
@@ -44,6 +47,7 @@ import {
   ShieldAlert,
   Check,
   X,
+  Target,
 } from "lucide-react";
 import { ExportModal } from "./ExportModal";
 import { motion, AnimatePresence } from "motion/react";
@@ -83,6 +87,7 @@ const FinanceReports: React.FC = () => {
   );
   const [activeTab, setActiveTab] = useState<"pnl" | "budget" | "reconciliation">("pnl");
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [periodConfirmAction, setPeriodConfirmAction] = useState<"close" | "reopen" | null>(null);
 
   const isPeriodClosed = useMemo(() => {
     return closedPeriods.some((p) => p.period === period);
@@ -312,6 +317,16 @@ const FinanceReports: React.FC = () => {
   const netOperatingProfit = grossProfit - totalOPEX;
   const netProfitMargin = netSales > 0 ? (netOperatingProfit / netSales) * 100 : 0;
 
+  // ─── V-B. INDIKATOR KESEHATAN BIAYA F&B & BEP OMZET ───────────────────────
+  const fnbHealth = useMemo(() => {
+    return calculateFnbHealthMetrics({
+      netSales,
+      effectiveCOGS,
+      totalHrdExpense,
+      totalOPEX,
+    });
+  }, [netSales, effectiveCOGS, totalHrdExpense, totalOPEX]);
+
   // ─── VI. REKONSILIASI KAS & POS AKUN ──────────────────────────────────────
   const accountBalances = useMemo(() => {
     const balances: Record<string, number> = {};
@@ -469,7 +484,7 @@ const FinanceReports: React.FC = () => {
                 new CustomEvent("open-ai-assistant", {
                   detail: {
                     tab: "consultant",
-                    prompt: `Analisa kondisi Laba Rugi (P&L) bulan ${period}, komposisi pengeluaran per kategori, food cost, serta tagihan PO belum lunas dan saran efisiensinya.`,
+                    prompt: `Analisa kondisi Laba Rugi (P&L) bulan ${period}, komposisi pengeluaran per kategori, food cost (${fnbHealth.foodCostPercent.toFixed(1)}%), labor cost (${fnbHealth.laborCostPercent.toFixed(1)}%), prime cost (${fnbHealth.primeCostPercent.toFixed(1)}%), BEP omzet (${fnbHealth.bepMonthlyRevenue !== null ? formatCurrency(fnbHealth.bepMonthlyRevenue) : "belum terhitung"}), serta tagihan PO belum lunas dan saran efisiensinya.`,
                   },
                 })
               );
@@ -552,15 +567,7 @@ const FinanceReports: React.FC = () => {
           <div className="shrink-0">
             {isPeriodClosed ? (
               <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Buka kembali pembukuan periode ${period}? Aktivitas ini akan tercatat dalam audit log.`
-                    )
-                  ) {
-                    reopenPeriod(period, "Permintaan koreksi/Buka buku");
-                  }
-                }}
+                onClick={() => setPeriodConfirmAction("reopen")}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
               >
                 <Unlock className="w-3.5 h-3.5" />
@@ -568,20 +575,8 @@ const FinanceReports: React.FC = () => {
               </button>
             ) : (
               <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Kunci dan tutup buku periode ${period}? Pastikan seluruh transaksi kas, payroll, dan inventori sudah selesai.`
-                    )
-                  ) {
-                    closePeriod(
-                      period,
-                      currentUser?.name || currentUser?.role || "Finance",
-                      "Tutup buku rutin"
-                    );
-                  }
-                }}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+                onClick={() => setPeriodConfirmAction("close")}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs shadow-brand-600/20 transition-all cursor-pointer active:scale-95"
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>Kunci Periode Sekarang</span>
@@ -638,47 +633,47 @@ const FinanceReports: React.FC = () => {
           {/* ── 5 BENTO KPI CARDS ─────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {/* 1. Penjualan Bersih */}
-            <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+            <div className="p-4 bg-gradient-to-br from-emerald-50/60 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 rounded-3xl border border-emerald-200/70 dark:border-emerald-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Penjualan Bersih (Net Sales)
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100/80 dark:bg-emerald-500/20 border border-emerald-200/70 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-300">
                   <TrendingUp className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-emerald-600 font-mono tracking-tight">
+                <p className="text-xl font-black text-emerald-600 dark:text-emerald-300 font-mono tracking-tight">
                   {formatCurrency(netSales)}
                 </p>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                   Kotor: {formatCurrency(grossSales)}
                 </p>
               </div>
             </div>
 
             {/* 2. HPP / COGS Bahan Baku */}
-            <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+            <div className="p-4 bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 rounded-3xl border border-amber-200/70 dark:border-amber-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   HPP Bahan Baku (COGS)
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                <div className="w-8 h-8 rounded-xl bg-amber-100/80 dark:bg-amber-500/20 border border-amber-200/70 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-300">
                   <Package className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-slate-900 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-900 dark:text-slate-100 font-mono tracking-tight">
                   {formatCurrency(effectiveCOGS)}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       foodCostPercentage <= 35
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
                         : foodCostPercentage <= 40
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-rose-50 text-rose-700 border-rose-200"
+                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                        : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
                     }`}
                   >
                     Food Cost: {foodCostPercentage.toFixed(1)}%
@@ -688,56 +683,62 @@ const FinanceReports: React.FC = () => {
             </div>
 
             {/* 3. Laba Kotor */}
-            <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+            <div className="p-4 bg-gradient-to-br from-brand-50/60 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 rounded-3xl border border-brand-200/70 dark:border-brand-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Laba Kotor (Gross Profit)
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
+                <div className="w-8 h-8 rounded-xl bg-brand-100/80 dark:bg-brand-500/20 border border-brand-200/70 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300">
                   <BarChart3 className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-brand-600 font-mono tracking-tight">
+                <p className="text-xl font-black text-brand-600 dark:text-brand-300 font-mono tracking-tight">
                   {formatCurrency(grossProfit)}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Gross Margin: <strong className="text-slate-800">{grossProfitMargin.toFixed(1)}%</strong>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Gross Margin: <strong className="text-slate-800 dark:text-slate-200">{grossProfitMargin.toFixed(1)}%</strong>
                 </p>
               </div>
             </div>
 
             {/* 4. Total OPEX */}
-            <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+            <div className="p-4 bg-gradient-to-br from-rose-50/60 via-white to-white dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 rounded-3xl border border-rose-200/70 dark:border-rose-500/30 shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Beban Usaha (OPEX)
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                <div className="w-8 h-8 rounded-xl bg-rose-100/80 dark:bg-rose-500/20 border border-rose-200/70 dark:border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-300">
                   <TrendingDown className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-rose-600 font-mono tracking-tight">
+                <p className="text-xl font-black text-rose-600 dark:text-rose-300 font-mono tracking-tight">
                   {formatCurrency(totalOPEX)}
                 </p>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                   Gaji: {formatCurrency(totalHrdExpense)}
                 </p>
               </div>
             </div>
 
             {/* 5. Laba Bersih Operasional */}
-            <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+            <div
+              className={`p-4 bg-gradient-to-br ${
+                netOperatingProfit >= 0
+                  ? "from-emerald-50/60 via-white to-white border-emerald-200/70 dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-emerald-500/30"
+                  : "from-rose-50/60 via-white to-white border-rose-200/70 dark:from-rose-500/15 dark:via-slate-900 dark:to-slate-900 dark:border-rose-500/30"
+              } rounded-3xl border shadow-coffee-sm hover:shadow-coffee transition-all flex flex-col justify-between`}
+            >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Laba Bersih (Net Profit)
                 </span>
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                     netOperatingProfit >= 0
-                      ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                      : "bg-rose-50 text-rose-600 border border-rose-100"
+                      ? "bg-emerald-100/80 text-emerald-600 border border-emerald-200/70 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30"
+                      : "bg-rose-100/80 text-rose-600 border border-rose-200/70 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30"
                   }`}
                 >
                   <Sparkles className="w-4 h-4" />
@@ -746,7 +747,7 @@ const FinanceReports: React.FC = () => {
               <div>
                 <p
                   className={`text-xl font-black font-mono tracking-tight ${
-                    netOperatingProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+                    netOperatingProfit >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
                   }`}
                 >
                   {formatCurrency(netOperatingProfit)}
@@ -755,13 +756,232 @@ const FinanceReports: React.FC = () => {
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       netOperatingProfit >= 0
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-rose-50 text-rose-700 border-rose-200"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                        : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
                     }`}
                   >
                     Net Margin: {netProfitMargin.toFixed(1)}%
                   </span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── INDIKATOR KESEHATAN BIAYA F&B & TITIK IMPAS (BEP) ──────────── */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Target className="w-4 h-4 text-brand-600 shrink-0" />
+                  <span>Indikator Kesehatan Biaya F&amp;B &amp; Titik Impas (BEP)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Rasio kontrol HPP, seluruh gaji tim (Bar, Kitchen, Bakery, Kasir), Prime Cost, dan target omzet impas periode {period}.
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80 px-3 py-1 rounded-full self-start sm:self-auto">
+                Benchmark Prime Cost F&amp;B ≤ 60%
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* 1. Food Cost % */}
+              <div className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Food Cost % (HPP / Omzet)
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      fnbHealth.foodCostStatus === "HEALTHY"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : fnbHealth.foodCostStatus === "WARNING"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : fnbHealth.foodCostStatus === "DANGER"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    {fnbHealth.foodCostStatus === "HEALTHY"
+                      ? "Sehat"
+                      : fnbHealth.foodCostStatus === "WARNING"
+                      ? "Waspada"
+                      : fnbHealth.foodCostStatus === "DANGER"
+                      ? "Tinggi"
+                      : "Belum Ada Omzet"}
+                  </span>
+                </div>
+                <p className="text-2xl font-black font-mono tabular-nums text-slate-900">
+                  {fnbHealth.foodCostPercent.toFixed(1)}%
+                </p>
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fnbHealth.foodCostStatus === "HEALTHY"
+                        ? "bg-emerald-500"
+                        : fnbHealth.foodCostStatus === "WARNING"
+                        ? "bg-amber-500"
+                        : fnbHealth.foodCostStatus === "DANGER"
+                        ? "bg-rose-500"
+                        : "bg-slate-400"
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, fnbHealth.foodCostPercent))}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  HPP: <span className="font-mono tabular-nums font-semibold text-slate-700">{formatCurrency(effectiveCOGS)}</span> • Target ≤ 30%
+                </p>
+              </div>
+
+              {/* 2. Labor Cost % */}
+              <div className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Labor Cost % (Gaji / Omzet)
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      fnbHealth.laborCostStatus === "HEALTHY"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : fnbHealth.laborCostStatus === "WARNING"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : fnbHealth.laborCostStatus === "DANGER"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    {fnbHealth.laborCostStatus === "HEALTHY"
+                      ? "Sehat"
+                      : fnbHealth.laborCostStatus === "WARNING"
+                      ? "Waspada"
+                      : fnbHealth.laborCostStatus === "DANGER"
+                      ? "Tinggi"
+                      : "Belum Ada Omzet"}
+                  </span>
+                </div>
+                <p className="text-2xl font-black font-mono tabular-nums text-slate-900">
+                  {fnbHealth.laborCostPercent.toFixed(1)}%
+                </p>
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fnbHealth.laborCostStatus === "HEALTHY"
+                        ? "bg-emerald-500"
+                        : fnbHealth.laborCostStatus === "WARNING"
+                        ? "bg-amber-500"
+                        : fnbHealth.laborCostStatus === "DANGER"
+                        ? "bg-rose-500"
+                        : "bg-slate-400"
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, fnbHealth.laborCostPercent))}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Gaji/SDM: <span className="font-mono tabular-nums font-semibold text-slate-700">{formatCurrency(totalHrdExpense)}</span> • Target ≤ 25%
+                </p>
+                {totalHrdExpense === 0 && payrollStats.paidTotal > 0 && (
+                  <p className="text-[10px] text-amber-700 font-medium">
+                    Catatan: Slip gaji PAID ({formatCurrency(payrollStats.paidTotal)}) belum tercatat di mutasi kas HRD.
+                  </p>
+                )}
+              </div>
+
+              {/* 3. Prime Cost % */}
+              <div className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Prime Cost % (HPP + Gaji)
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      fnbHealth.primeCostStatus === "HEALTHY"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : fnbHealth.primeCostStatus === "WARNING"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : fnbHealth.primeCostStatus === "DANGER"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    {fnbHealth.primeCostStatus === "HEALTHY"
+                      ? "Sehat"
+                      : fnbHealth.primeCostStatus === "WARNING"
+                      ? "Waspada"
+                      : fnbHealth.primeCostStatus === "DANGER"
+                      ? "Kritis"
+                      : "Belum Ada Omzet"}
+                  </span>
+                </div>
+                <p className="text-2xl font-black font-mono tabular-nums text-slate-900">
+                  {fnbHealth.primeCostPercent.toFixed(1)}%
+                </p>
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fnbHealth.primeCostStatus === "HEALTHY"
+                        ? "bg-emerald-500"
+                        : fnbHealth.primeCostStatus === "WARNING"
+                        ? "bg-amber-500"
+                        : fnbHealth.primeCostStatus === "DANGER"
+                        ? "bg-rose-500"
+                        : "bg-slate-400"
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, fnbHealth.primeCostPercent))}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Nominal: <span className="font-mono tabular-nums font-semibold text-slate-700">{formatCurrency(fnbHealth.primeCostAmount)}</span> • Target ≤ 60%
+                </p>
+              </div>
+
+              {/* 4. BEP Omzet Bulanan */}
+              <div className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    BEP Omzet Bulanan
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      netSales <= 0 || fnbHealth.bepMonthlyRevenue === null
+                        ? "bg-slate-100 text-slate-600 border-slate-200"
+                        : fnbHealth.isAboveBep
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    {netSales <= 0
+                      ? "Belum Ada Omzet"
+                      : fnbHealth.bepMonthlyRevenue === null
+                      ? "Margin Negatif"
+                      : fnbHealth.isAboveBep
+                      ? "Melampaui BEP"
+                      : "Menuju BEP"}
+                  </span>
+                </div>
+                <p className="text-xl font-black font-mono tabular-nums text-slate-900">
+                  {fnbHealth.bepMonthlyRevenue !== null
+                    ? formatCurrency(fnbHealth.bepMonthlyRevenue)
+                    : "Belum Terhitung"}
+                </p>
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fnbHealth.isAboveBep ? "bg-emerald-500" : "bg-brand-600"
+                    }`}
+                    style={{
+                      width: `${Math.min(100, Math.max(0, fnbHealth.bepProgressPercent))}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium">
+                  {netSales <= 0
+                    ? "Belum ada omzet tercatat di periode ini."
+                    : fnbHealth.bepMonthlyRevenue === null
+                    ? "Laba kotor ≤ 0% — BEP belum bisa dicapai."
+                    : fnbHealth.isAboveBep
+                    ? `Sudah melampaui BEP (+${formatCurrency(fnbHealth.bepGapAmount ?? 0)})`
+                    : `Kurang ${formatCurrency(Math.abs(fnbHealth.bepGapAmount ?? 0))} lagi untuk impas`}
+                </p>
               </div>
             </div>
           </div>
@@ -1516,6 +1736,39 @@ const FinanceReports: React.FC = () => {
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         defaultModule="finance"
+      />
+
+      {/* ── CONFIRM MODAL TUTUP / BUKA BUKU PERIODE ──────────────────────── */}
+      <ConfirmModal
+        isOpen={periodConfirmAction !== null}
+        variant={periodConfirmAction === "close" ? "danger" : "warning"}
+        title={
+          periodConfirmAction === "close"
+            ? `Kunci & Tutup Buku Periode ${period}?`
+            : `Buka Kembali Pembukuan ${period}?`
+        }
+        message={
+          periodConfirmAction === "close"
+            ? "Pastikan seluruh transaksi kas, payroll, dan inventori sudah selesai. Setelah dikunci, data bulan ini tidak dapat diubah staf."
+            : "Pembukaan kembali periode akan mengizinkan perubahan pembukuan dan dicatat otomatis pada audit log sistem."
+        }
+        confirmLabel={periodConfirmAction === "close" ? "Ya, Kunci Periode" : "Ya, Buka Buku"}
+        cancelLabel="Batal"
+        onConfirm={() => {
+          if (periodConfirmAction === "close") {
+            closePeriod(
+              period,
+              currentUser?.name || currentUser?.role || "Finance",
+              "Tutup buku rutin"
+            );
+            toast.success(`Pembukuan periode ${period} berhasil dikunci.`);
+          } else if (periodConfirmAction === "reopen") {
+            reopenPeriod(period, "Permintaan koreksi/Buka buku");
+            toast.info(`Pembukuan periode ${period} dibuka kembali.`);
+          }
+          setPeriodConfirmAction(null);
+        }}
+        onCancel={() => setPeriodConfirmAction(null)}
       />
     </div>
   );

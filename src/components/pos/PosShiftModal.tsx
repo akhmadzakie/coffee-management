@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { CustomSelect } from "../common/CustomSelect";
 
 interface PosShiftModalProps {
   isOpen: boolean;
@@ -180,15 +181,22 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
           }}
         >
           {/* ── Modal Z-Report Print Slip ─────────────────────────────────── */}
-          {isZReportOpen && closedShiftData && (
-            <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <AnimatePresence>
+            {isZReportOpen && closedShiftData && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 14 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 10 }}
-                transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                className="bg-white border border-slate-200 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
               >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 14 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white border border-slate-200 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+                >
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
                 <CheckCircle2 className="w-4 h-4" />
@@ -385,9 +393,10 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 Selesai
               </button>
             </div>
-          </motion.div>
-        </div>
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
       {/* ── Dialog Utama: Buka atau Tutup Shift ───────────────────────── */}
       <motion.div
@@ -456,26 +465,25 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     Wajib Dipilih
                   </span>
                 </label>
-                <select
+                <CustomSelect
                   value={selectedPicId}
-                  onChange={(e) => {
-                    setSelectedPicId(e.target.value);
+                  onChange={(val) => {
+                    setSelectedPicId(val);
                     if (picError) setPicError("");
                   }}
-                  className={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 transition ${
-                    picError
-                      ? "border-rose-400 focus:ring-rose-500/20"
-                      : "border-slate-300 focus:ring-brand-500/20 focus:border-brand-600"
-                  }`}
                   required
-                >
-                  <option value="">-- Pilih Karyawan Bertanggung Jawab --</option>
-                  {activeEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.position || "Staff"})
-                    </option>
-                  ))}
-                </select>
+                  placeholder="-- Pilih Karyawan Bertanggung Jawab --"
+                  options={[
+                    { value: "", label: "-- Pilih Karyawan Bertanggung Jawab --" },
+                    ...activeEmployees.map((emp) => ({
+                      value: emp.id,
+                      label: `${emp.name} (${emp.position || "Staff"})`,
+                    })),
+                  ]}
+                  buttonClassName={`w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 ${
+                    picError ? "border-rose-400" : "border-slate-300"
+                  }`}
+                />
                 {picError ? (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1">
                     {picError}
@@ -538,20 +546,19 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Laci Kasir / Akun Kas
                 </label>
-                <select
+                <CustomSelect
                   value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition"
-                >
-                  {cashOnlyAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} (Saldo: {formatCurrency(acc.balance)})
-                    </option>
-                  ))}
-                  {cashOnlyAccounts.length === 0 && (
-                    <option value="default">Kas Laci Utama (Default)</option>
-                  )}
-                </select>
+                  onChange={setSelectedAccountId}
+                  options={
+                    cashOnlyAccounts.length > 0
+                      ? cashOnlyAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (Saldo: ${formatCurrency(acc.balance)})`,
+                        }))
+                      : [{ value: "default", label: "Kas Laci Utama (Default)" }]
+                  }
+                  buttonClassName="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 hover:bg-white"
+                />
               </div>
 
               {/* Input Modal Awal */}

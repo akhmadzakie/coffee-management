@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { CustomSelect } from "./common/CustomSelect";
 import {
   X,
   Upload,
@@ -1099,53 +1100,41 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
                 {/* Account Picker */}
-                <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                  <Wallet className="w-3 h-3 text-slate-400" />
-                  <select
-                    value={tx.accountId || cashAccounts[0]?.id}
-                    onChange={(e) =>
-                      updateDraftInList(setter, idx, { accountId: e.target.value })
-                    }
-                    className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    {cashAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  value={tx.accountId || cashAccounts[0]?.id || ""}
+                  onChange={(val) => updateDraftInList(setter, idx, { accountId: val })}
+                  icon={<Wallet className="w-3 h-3 text-slate-400" />}
+                  options={cashAccounts.map((a) => ({
+                    value: a.id,
+                    label: a.name,
+                  }))}
+                  buttonClassName="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-800 hover:bg-white"
+                />
 
                 {/* Category Picker */}
-                <div className="flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                  <Layers className="w-3 h-3 text-slate-400" />
-                  <select
-                    value={tx.category}
-                    onChange={(e) =>
-                      updateDraftInList(setter, idx, { category: e.target.value })
-                    }
-                    className="bg-transparent border-none text-[11px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    {tx.category &&
-                      !expenseCategories.some((c: any) => c.name === tx.category) && (
-                        <option value={tx.category}>{tx.category}</option>
-                      )}
-                    {expenseCategories.map((c: any) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelect
+                  value={tx.category}
+                  onChange={(val) => updateDraftInList(setter, idx, { category: val })}
+                  icon={<Layers className="w-3 h-3 text-slate-400" />}
+                  options={[
+                    ...(tx.category &&
+                    !expenseCategories.some((c: any) => c.name === tx.category)
+                      ? [{ value: tx.category, label: tx.category }]
+                      : []),
+                    ...expenseCategories.map((c: any) => ({
+                      value: c.name,
+                      label: c.name,
+                    })),
+                  ]}
+                  buttonClassName="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-800 hover:bg-white"
+                />
 
                 {/* Linked Master Ingredient Picker + Packaging Info */}
                 {tx.type === "CASH_OUT" && (
-                  <div className="flex items-center gap-1.5 text-[11px] bg-indigo-50 text-indigo-800 px-2 py-1 rounded-lg border border-indigo-200 max-w-full">
-                    <Package className="w-3 h-3 text-indigo-600 shrink-0" />
-                    <select
+                  <div className="flex items-center gap-1.5 flex-wrap max-w-full">
+                    <CustomSelect
                       value={tx.ingredientId || ""}
-                      onChange={(e) => {
-                        const ingId = e.target.value;
+                      onChange={(ingId) => {
                         if (!ingId) {
                           updateDraftInList(setter, idx, {
                             ingredientId: null,
@@ -1173,17 +1162,19 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           category: bahanCat ? bahanCat.name : tx.category,
                         });
                       }}
-                      className="bg-transparent border-none text-[11px] font-semibold text-indigo-900 focus:outline-none cursor-pointer max-w-[160px] truncate"
-                    >
-                      <option value="">-- Kaitkan Bahan Baku --</option>
-                      {ingredients.map((ing) => (
-                        <option key={ing.id} value={ing.id}>
-                          {ing.name} ({ing.purchaseUnit || ing.unit})
-                        </option>
-                      ))}
-                    </select>
+                      icon={<Package className="w-3 h-3 text-indigo-600" />}
+                      placeholder="-- Kaitkan Bahan Baku --"
+                      options={[
+                        { value: "", label: "-- Kaitkan Bahan Baku --" },
+                        ...ingredients.map((ing) => ({
+                          value: ing.id,
+                          label: `${ing.name} (${ing.purchaseUnit || ing.unit})`,
+                        })),
+                      ]}
+                      buttonClassName="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-900 max-w-[200px]"
+                    />
                     {matchedIng && (
-                      <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap pl-1.5 border-l border-indigo-200">
+                      <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap px-2 py-1 rounded-lg bg-indigo-50/70 border border-indigo-200/70">
                         +{qtyVal} {unitLabel}
                         {factor > 1
                           ? ` = ${(qtyVal * factor).toLocaleString("id-ID")} ${matchedIng.unit}`

@@ -18,8 +18,10 @@ import {
   ArrowRight,
   TrendingDown,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
 import { Promotion, PromotionType } from "../types";
+import { CustomSelect } from "./common/CustomSelect";
 
 export const PromotionsManagement: React.FC = () => {
   const {
@@ -382,30 +384,32 @@ export const PromotionsManagement: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Filter Type */}
-          <select
+          <CustomSelect
             value={filterType}
-            onChange={(e: any) => setFilterType(e.target.value)}
-            aria-label="Filter Tipe Promo"
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-brand-500"
-          >
-            <option value="ALL">Semua Tipe Diskon</option>
-            <option value="PERCENT">Persentase (%)</option>
-            <option value="NOMINAL">Potongan Flat (Rp)</option>
-          </select>
+            onChange={(val) => setFilterType(val as any)}
+            ariaLabel="Filter Tipe Promo"
+            options={[
+              { value: "ALL", label: "Semua Tipe Diskon" },
+              { value: "PERCENT", label: "Persentase (%)" },
+              { value: "NOMINAL", label: "Potongan Flat (Rp)" },
+            ]}
+            buttonClassName="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 hover:bg-white"
+          />
 
           {/* Filter Status */}
-          <select
+          <CustomSelect
             value={filterStatus}
-            onChange={(e: any) => setFilterStatus(e.target.value)}
-            aria-label="Filter Status Promo"
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-brand-500"
-          >
-            <option value="ALL">Semua Status</option>
-            <option value="ACTIVE">Aktif Berlaku</option>
-            <option value="UPCOMING">Akan Datang (Terjadwal)</option>
-            <option value="EXPIRED">Kedaluwarsa</option>
-            <option value="INACTIVE">Nonaktif Manual</option>
-          </select>
+            onChange={(val) => setFilterStatus(val as any)}
+            ariaLabel="Filter Status Promo"
+            options={[
+              { value: "ALL", label: "Semua Status" },
+              { value: "ACTIVE", label: "Aktif Berlaku" },
+              { value: "UPCOMING", label: "Akan Datang (Terjadwal)" },
+              { value: "EXPIRED", label: "Kedaluwarsa" },
+              { value: "INACTIVE", label: "Nonaktif Manual" },
+            ]}
+            buttonClassName="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 hover:bg-white"
+          />
         </div>
       </div>
 
@@ -656,9 +660,22 @@ export const PromotionsManagement: React.FC = () => {
       </div>
 
       {/* ── Modal Tambah/Edit Promo ── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden border border-slate-100"
+            >
             {/* Modal Header */}
             <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -882,14 +899,28 @@ export const PromotionsManagement: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Confirm Delete Modal ── */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-slate-100 text-center"
+            >
             <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-3">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -913,9 +944,10 @@ export const PromotionsManagement: React.FC = () => {
                 Ya, Hapus
               </button>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

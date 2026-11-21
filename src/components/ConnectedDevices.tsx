@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
 import {
   Laptop,
@@ -153,7 +154,12 @@ export const ConnectedDevices: React.FC = () => {
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6"
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div>
@@ -205,63 +211,77 @@ export const ConnectedDevices: React.FC = () => {
       </div>
 
       {/* Action status message */}
-      {actionMessage && (
-        <div
-          className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-            actionMessage.type === "success"
-              ? "bg-blue-50 text-blue-700 border border-blue-200"
-              : "bg-rose-50 text-rose-700 border border-rose-200"
-          }`}
-        >
-          {actionMessage.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-          )}
-          <span>{actionMessage.text}</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {actionMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
+              actionMessage.type === "success"
+                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                : "bg-rose-50 text-rose-700 border border-rose-200"
+            }`}
+          >
+            {actionMessage.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            )}
+            <span>{actionMessage.text}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Confirm Revoke Others Modal / Banner */}
-      {confirmRevokeOthers && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3">
-          <div className="flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-sm font-bold text-rose-900">
-                {isIndo
-                  ? "Putus Sesi Semua Perangkat Lain?"
-                  : "Force Logout All Other Devices?"}
-              </h4>
-              <p className="text-xs text-rose-700 mt-1">
-                {isIndo
-                  ? `Tindakan ini akan langsung mengeluarkan ${otherSessions.length} sesi di perangkat lain. Pengguna harus login kembali menggunakan PIN.`
-                  : `This will immediately terminate ${otherSessions.length} active sessions on other devices. Users will need to log back in.`}
-              </p>
+      <AnimatePresence>
+        {confirmRevokeOthers && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: -4 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3"
+          >
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold text-rose-900">
+                  {isIndo
+                    ? "Putus Sesi Semua Perangkat Lain?"
+                    : "Force Logout All Other Devices?"}
+                </h4>
+                <p className="text-xs text-rose-700 mt-1">
+                  {isIndo
+                    ? `Tindakan ini akan langsung mengeluarkan ${otherSessions.length} sesi di perangkat lain. Pengguna harus login kembali menggunakan PIN.`
+                    : `This will immediately terminate ${otherSessions.length} active sessions on other devices. Users will need to log back in.`}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setConfirmRevokeOthers(false)}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
-            >
-              {isIndo ? "Batal" : "Cancel"}
-            </button>
-            <button
-              type="button"
-              onClick={handleRevokeOthers}
-              disabled={processingId === "others"}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm"
-            >
-              {processingId === "others" && (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              )}
-              <span>{isIndo ? "Ya, Keluarkan Semua" : "Yes, Revoke All"}</span>
-            </button>
-          </div>
-        </div>
-      )}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRevokeOthers(false)}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                {isIndo ? "Batal" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleRevokeOthers}
+                disabled={processingId === "others"}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm"
+              >
+                {processingId === "others" && (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                )}
+                <span>{isIndo ? "Ya, Keluarkan Semua" : "Yes, Revoke All"}</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Sessions List */}
       <div className="space-y-4">
@@ -485,6 +505,6 @@ export const ConnectedDevices: React.FC = () => {
             : 'If you notice unfamiliar devices or suspicious activities, click "Force Logout" immediately to disconnect them and update your PIN in the Users section.'}
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 };

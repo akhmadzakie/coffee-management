@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Upload, Download, FileSpreadsheet, ChevronDown, Database, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { GenericImportModal } from "./GenericImportModal";
 import {
   buildTemplateWithDropdown,
@@ -151,22 +152,31 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
         >
           <FileSpreadsheet className="w-4 h-4 sm:mr-2 text-emerald-600" />
           <span className="hidden sm:inline font-medium text-sm">{buttonLabel}</span>
-          <ChevronDown className="w-3 h-3 ml-2 hidden sm:block opacity-70" />
+          <ChevronDown
+            className={`w-3 h-3 ml-2 hidden sm:block opacity-70 transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
 
-        {isOpen && (
-          <div
-            style={{
-              width: `${dropdownPos.width}px`,
-              maxWidth: "calc(100vw - 1.5rem)",
-              ...(dropdownPos.align === "left"
-                ? { left: 0, right: "auto" }
-                : dropdownPos.align === "right"
-                ? { right: 0, left: "auto" }
-                : { left: `${dropdownPos.customLeft}px`, right: "auto" }),
-            }}
-            className="absolute mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
-          >
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.97 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              style={{
+                width: `${dropdownPos.width}px`,
+                maxWidth: "calc(100vw - 1.5rem)",
+                ...(dropdownPos.align === "left"
+                  ? { left: 0, right: "auto" }
+                  : dropdownPos.align === "right"
+                  ? { right: 0, left: "auto" }
+                  : { left: `${dropdownPos.customLeft}px`, right: "auto" }),
+              }}
+              className="absolute mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden"
+            >
             <div className="py-1">
               <button
                 onClick={handleDownloadTemplate}
@@ -203,8 +213,9 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
                 Upload Excel / CSV
               </button>
             </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <GenericImportModal

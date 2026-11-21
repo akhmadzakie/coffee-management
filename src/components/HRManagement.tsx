@@ -6,6 +6,7 @@ import { getLocalDateString } from "../utils/dateUtils";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
 import { RupiahSign } from "./common/RupiahSign";
+import { CustomSelect } from "./common/CustomSelect";
 import {
   Users,
   FileText,
@@ -1765,28 +1766,30 @@ export function HRManagement() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <select
+                  <CustomSelect
                     value={empDeptFilter}
-                    onChange={(e) => setEmpDeptFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="ALL">Semua Departemen</option>
-                    <option value="BAR">Bar & Kasir</option>
-                    <option value="KITCHEN">Kitchen</option>
-                    <option value="BAKER">Baker</option>
-                    <option value="MANAGEMENT">Manajemen</option>
-                    <option value="FINANCE">Keuangan</option>
-                  </select>
+                    onChange={setEmpDeptFilter}
+                    options={[
+                      { value: "ALL", label: "Semua Departemen" },
+                      { value: "BAR", label: "Bar & Kasir" },
+                      { value: "KITCHEN", label: "Kitchen" },
+                      { value: "BAKER", label: "Baker" },
+                      { value: "MANAGEMENT", label: "Manajemen" },
+                      { value: "FINANCE", label: "Keuangan" },
+                    ]}
+                    buttonClassName="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 hover:bg-white"
+                  />
 
-                  <select
+                  <CustomSelect
                     value={empStatusFilter}
-                    onChange={(e) => setEmpStatusFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="ALL">Semua Status</option>
-                    <option value="AKTIF">Hanya Aktif</option>
-                    <option value="NON-AKTIF">Non-Aktif / Resign</option>
-                  </select>
+                    onChange={setEmpStatusFilter}
+                    options={[
+                      { value: "ALL", label: "Semua Status" },
+                      { value: "AKTIF", label: "Hanya Aktif" },
+                      { value: "NON-AKTIF", label: "Non-Aktif / Resign" },
+                    ]}
+                    buttonClassName="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 hover:bg-white"
+                  />
                 </div>
               </div>
 
@@ -1959,17 +1962,18 @@ export function HRManagement() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <select
+                  <CustomSelect
                     value={contractStatusFilter}
-                    onChange={(e) => setContractStatusFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  >
-                    <option value="ALL">Semua Status Kontrak</option>
-                    <option value="ACTIVE">Kontrak Aktif</option>
-                    <option value="EXPIRING">Segera Berakhir (&lt; 30 Hari)</option>
-                    <option value="EXPIRED">Sudah Berakhir (Lewat)</option>
-                    <option value="INACTIVE">Non-Aktif / Diarsipkan</option>
-                  </select>
+                    onChange={setContractStatusFilter}
+                    options={[
+                      { value: "ALL", label: "Semua Status Kontrak" },
+                      { value: "ACTIVE", label: "Kontrak Aktif" },
+                      { value: "EXPIRING", label: "Segera Berakhir (< 30 Hari)" },
+                      { value: "EXPIRED", label: "Sudah Berakhir (Lewat)" },
+                      { value: "INACTIVE", label: "Non-Aktif / Diarsipkan" },
+                    ]}
+                    buttonClassName="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 hover:bg-white"
+                  />
                 </div>
               </div>
 
@@ -2486,10 +2490,10 @@ export function HRManagement() {
                                       }
                                     }
                                     return (
-                                      <select
+                                      <CustomSelect
                                         disabled={!canEditThisEmp}
                                         value={shift}
-                                        onChange={(e) => handleShiftChange(emp.id, dateStr, e.target.value)}
+                                        onChange={(val) => handleShiftChange(emp.id, dateStr, val)}
                                         title={
                                           !canEditThisEmp
                                             ? (isWeekApproved
@@ -2499,17 +2503,17 @@ export function HRManagement() {
                                                   : "Hanya Baca")
                                             : "Pilih shift kerja"
                                         }
-                                        className={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border transition-all ${
-                                          !canEditThisEmp ? "cursor-not-allowed opacity-80 bg-slate-50" : "cursor-pointer"
+                                        options={[
+                                          { value: "OFF", label: "OFF (Libur)" },
+                                          ...activeShiftDefs.map((def) => ({
+                                            value: def.id,
+                                            label: `${def.name} (${def.startTime.slice(0, 5)} - ${def.endTime.slice(0, 5)})`,
+                                          })),
+                                        ]}
+                                        buttonClassName={`w-full text-xs font-bold py-1.5 px-2 rounded-xl border ${
+                                          !canEditThisEmp ? "opacity-80 bg-slate-50" : ""
                                         } ${badgeColor}`}
-                                      >
-                                        <option value="OFF">OFF (Libur)</option>
-                                        {activeShiftDefs.map((def) => (
-                                          <option key={def.id} value={def.id}>
-                                            {def.name} ({def.startTime.slice(0, 5)} - {def.endTime.slice(0, 5)})
-                                          </option>
-                                        ))}
-                                      </select>
+                                      />
                                     );
                                   })()}
                                 </td>
@@ -2662,31 +2666,32 @@ export function HRManagement() {
                       buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
                     />
 
-                    <select
+                    <CustomSelect
                       value={attendanceEmpFilter}
-                      onChange={(e) => setAttendanceEmpFilter(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 outline-none"
-                    >
-                      <option value="ALL">Semua Karyawan</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name} ({emp.position})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setAttendanceEmpFilter}
+                      options={[
+                        { value: "ALL", label: "Semua Karyawan" },
+                        ...employees.map((emp) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.position})`,
+                        })),
+                      ]}
+                      buttonClassName="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white"
+                    />
 
-                    <select
+                    <CustomSelect
                       value={attendanceApprovalFilter}
-                      onChange={(e) => setAttendanceApprovalFilter(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 outline-none"
-                    >
-                      <option value="ALL">Semua Verifikasi</option>
-                      <option value="PENDING">⏳ Menunggu Verifikasi</option>
-                      <option value="APPROVED">✓ Disahkan (Approved)</option>
-                      <option value="REJECTED">✕ Ditolak (Rejected)</option>
-                      <option value="FORGOTTEN_CLOCKOUT">⚠️ Lupa Clock Out</option>
-                      <option value="CORRECTED">✏️ Sudah Dikoreksi</option>
-                    </select>
+                      onChange={setAttendanceApprovalFilter}
+                      options={[
+                        { value: "ALL", label: "Semua Verifikasi" },
+                        { value: "PENDING", label: "⏳ Menunggu Verifikasi" },
+                        { value: "APPROVED", label: "✓ Disahkan (Approved)" },
+                        { value: "REJECTED", label: "✕ Ditolak (Rejected)" },
+                        { value: "FORGOTTEN_CLOCKOUT", label: "⚠️ Lupa Clock Out" },
+                        { value: "CORRECTED", label: "✏️ Sudah Dikoreksi" },
+                      ]}
+                      buttonClassName="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white"
+                    />
 
                     <button
                       onClick={() => setAttendanceDateFilter(new Date().toISOString().substring(0, 10))}
@@ -3293,9 +3298,25 @@ export function HRManagement() {
         </div>
 
       {/* Modals */}
-      {isEmployeeModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isEmployeeModalOpen && (
+              <motion.div
+                key="hr-emp-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto"
+                >
             {/* Header */}
             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-base text-slate-900 flex items-center">
@@ -3376,67 +3397,73 @@ export function HRManagement() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Departemen</label>
-                      <select 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                        value={empForm.department} 
-                        onChange={e => setEmpForm({...empForm, department: e.target.value})}
-                      >
-                        <option value="">-- Pilih --</option>
-                        <option value="MAIN">Utama (Main)</option>
-                        <option value="BAR">Bar</option>
-                        <option value="KITCHEN">Dapur (Kitchen)</option>
-                        <option value="BAKER">Baker (Roti)</option>
-                        <option value="MANAGEMENT">Manajemen & Kantor</option>
-                        <option value="FINANCE">Keuangan (Finance)</option>
-                      </select>
+                      <CustomSelect
+                        value={empForm.department}
+                        onChange={(val) => setEmpForm({ ...empForm, department: val })}
+                        placeholder="-- Pilih --"
+                        options={[
+                          { value: "", label: "-- Pilih --" },
+                          { value: "MAIN", label: "Utama (Main)" },
+                          { value: "BAR", label: "Bar" },
+                          { value: "KITCHEN", label: "Dapur (Kitchen)" },
+                          { value: "BAKER", label: "Baker (Roti)" },
+                          { value: "MANAGEMENT", label: "Manajemen & Kantor" },
+                          { value: "FINANCE", label: "Keuangan (Finance)" },
+                        ]}
+                        buttonClassName="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm hover:bg-white"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Jabatan</label>
-                      <select 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                        value={empForm.position} 
-                        onChange={e => setEmpForm({...empForm, position: e.target.value})}
-                      >
-                        <option value="">-- Pilih --</option>
-                        <option value="Kasir">Kasir</option>
-                        <option value="Karyawan">Karyawan (Staff)</option>
-                        <option value="Leader">Leader</option>
-                        {currentUser?.role !== "MANAGER" && (
-                          <option value="Finance">Finance / Staf Keuangan</option>
-                        )}
-                        {currentUser?.role !== "MANAGER" && (
-                          <option value="Manager">Manager</option>
-                        )}
-                      </select>
+                      <CustomSelect
+                        value={empForm.position}
+                        onChange={(val) => setEmpForm({ ...empForm, position: val })}
+                        placeholder="-- Pilih --"
+                        options={[
+                          { value: "", label: "-- Pilih --" },
+                          { value: "Kasir", label: "Kasir" },
+                          { value: "Karyawan", label: "Karyawan (Staff)" },
+                          { value: "Leader", label: "Leader" },
+                          ...(currentUser?.role !== "MANAGER"
+                            ? [
+                                { value: "Finance", label: "Finance / Staf Keuangan" },
+                                { value: "Manager", label: "Manager" },
+                              ]
+                            : []),
+                        ]}
+                        buttonClassName="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm hover:bg-white"
+                      />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Status</label>
-                      <select 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                        value={empForm.status} 
-                        onChange={e => setEmpForm({...empForm, status: e.target.value as any})}
-                      >
-                        <option value="AKTIF">Aktif</option>
-                        <option value="TIDAK_AKTIF">Tidak Aktif</option>
-                        <option value="RESIGN">Resign</option>
-                        <option value="PHK">PHK</option>
-                      </select>
+                      <CustomSelect
+                        value={empForm.status}
+                        onChange={(val) => setEmpForm({ ...empForm, status: val as any })}
+                        options={[
+                          { value: "AKTIF", label: "Aktif" },
+                          { value: "TIDAK_AKTIF", label: "Tidak Aktif" },
+                          { value: "RESIGN", label: "Resign" },
+                          { value: "PHK", label: "PHK" },
+                        ]}
+                        buttonClassName="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm hover:bg-white"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">Tipe</label>
-                      <select 
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none text-sm transition-all" 
-                        value={empForm.employmentType} 
-                        onChange={e => setEmpForm({...empForm, employmentType: e.target.value as any})}
-                      >
-                        <option value="TETAP">Tetap</option>
-                        <option value="KONTRAK">Kontrak</option>
-                        <option value="PARUH_WAKTU">Paruh Waktu</option>
-                        <option value="MAGANG">Magang</option>
-                      </select>
+                      <CustomSelect
+                        value={empForm.employmentType}
+                        onChange={(val) => setEmpForm({ ...empForm, employmentType: val as any })}
+                        options={[
+                          { value: "TETAP", label: "Tetap" },
+                          { value: "KONTRAK", label: "Kontrak" },
+                          { value: "PARUH_WAKTU", label: "Paruh Waktu" },
+                          { value: "MAGANG", label: "Magang" },
+                        ]}
+                        buttonClassName="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm hover:bg-white"
+                      />
                     </div>
                   </div>
 
@@ -3515,14 +3542,32 @@ export function HRManagement() {
                 Simpan
               </button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
-      {isContractModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isContractModalOpen && (
+              <motion.div
+                key="hr-contract-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80"
+                >
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingContract ? "Edit Kontrak" : "Tambah Kontrak"}
@@ -3534,12 +3579,19 @@ export function HRManagement() {
             <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={contractForm.employeeId} onChange={e => setContractForm({...contractForm, employeeId: e.target.value})}>
-                  <option value="">Pilih Karyawan</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={contractForm.employeeId}
+                  onChange={(val) => setContractForm({ ...contractForm, employeeId: val })}
+                  placeholder="Pilih Karyawan"
+                  options={[
+                    { value: "", label: "Pilih Karyawan" },
+                    ...employees.map((emp) => ({
+                      value: emp.id,
+                      label: emp.name,
+                    })),
+                  ]}
+                  buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                />
               </div>
               <div className="grid grid-cols-1 gap-4">
                 <div>
@@ -3591,19 +3643,37 @@ export function HRManagement() {
               <button onClick={() => setIsContractModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-xl cursor-pointer">Batal</button>
               <button onClick={handleSaveContract} className="px-5 py-2 bg-brand-600 text-white font-medium rounded-xl hover:bg-brand-700 shadow-xs cursor-pointer">Simpan</button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       </div>
 
-            {/* Verification Modal */}
-      {isVerificationModalOpen && verifyingAttendance && (() => {
-        const emp = employees.find((e) => e.id === verifyingAttendance.employeeId);
-        return createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-100 my-auto">
+      {/* Verification Modal */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isVerificationModalOpen && verifyingAttendance && (() => {
+              const emp = employees.find((e) => e.id === verifyingAttendance.employeeId);
+              return (
+                <motion.div
+                  key="hr-verification-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col border border-slate-100 my-auto"
+                  >
             {/* Header */}
             <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-100 flex justify-between items-start sm:items-center bg-slate-50/80 z-10 shrink-0 gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -3935,16 +4005,34 @@ export function HRManagement() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-        );
-      })()}
+                  </motion.div>
+                </motion.div>
+              );
+            })()}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* Attendance Modal */}
-      {isAttendanceModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isAttendanceModalOpen && (
+              <motion.div
+                key="hr-attendance-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80"
+                >
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingAttendance ? (isIndo ? "Edit Absensi" : "Edit Attendance") : (isIndo ? "Tambah Absensi" : "Add Attendance")}
@@ -3956,12 +4044,19 @@ export function HRManagement() {
             <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Karyawan</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white" value={attendanceForm.employeeId} onChange={e => setAttendanceForm({...attendanceForm, employeeId: e.target.value})}>
-                  <option value="">Pilih Karyawan</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={attendanceForm.employeeId}
+                  onChange={(val) => setAttendanceForm({ ...attendanceForm, employeeId: val })}
+                  placeholder="Pilih Karyawan"
+                  options={[
+                    { value: "", label: "Pilih Karyawan" },
+                    ...employees.map((emp) => ({
+                      value: emp.id,
+                      label: emp.name,
+                    })),
+                  ]}
+                  buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Periode (Bulan & Tahun)</label>
@@ -4000,15 +4095,33 @@ export function HRManagement() {
               <button onClick={() => setIsAttendanceModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Batal</button>
               <button onClick={handleSaveAttendance} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700">Simpan</button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* Master Shift Configuration Modal */}
-      {showShiftConfigModal && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-100">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {showShiftConfigModal && (
+              <motion.div
+                key="hr-shift-config-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-100"
+                >
             {/* Header */}
             <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
@@ -4108,17 +4221,18 @@ export function HRManagement() {
 
                           <div className="flex items-center gap-2">
                             {/* Color Tag Selector */}
-                            <select
+                            <CustomSelect
                               value={s.color || "indigo"}
-                              onChange={(e) => updateShiftField(idx, "color", e.target.value)}
-                              className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 bg-white"
-                            >
-                              <option value="emerald">🟢 Emerald (Pagi)</option>
-                              <option value="blue">🔵 Biru (Middle)</option>
-                              <option value="amber">🟠 Amber (Sore)</option>
-                              <option value="purple">🟣 Ungu (Khusus)</option>
-                              <option value="indigo">🟦 Indigo (Malam)</option>
-                            </select>
+                              onChange={(val) => updateShiftField(idx, "color", val)}
+                              options={[
+                                { value: "emerald", label: "🟢 Emerald (Pagi)" },
+                                { value: "blue", label: "🔵 Biru (Middle)" },
+                                { value: "amber", label: "🟠 Amber (Sore)" },
+                                { value: "purple", label: "🟣 Ungu (Khusus)" },
+                                { value: "indigo", label: "🟦 Indigo (Malam)" },
+                              ]}
+                              buttonClassName="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 bg-white"
+                            />
 
                             {!isCore && (
                               <button
@@ -4213,15 +4327,33 @@ export function HRManagement() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* Brief Mingguan & Pengesahan Jadwal Modal */}
-      {isBriefModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col">
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isBriefModalOpen && (
+              <motion.div
+                key="hr-brief-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col"
+                >
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-md">
@@ -4305,26 +4437,44 @@ export function HRManagement() {
                 <span>Sahkan & Kirim ke Dashboard</span>
               </button>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* ── MODAL: KOREKSI ABSENSI OLEH MANAGER (ATURAN #3 & AUDIT LOG) ── */}
-      {isCorrectionModalOpen && correctingAttendance && (() => {
-        const emp = employees.find((e) => e.id === correctingAttendance.employeeId);
-        const inIso = correctionForm.clockInTime ? `${correctingAttendance.date}T${correctionForm.clockInTime}:00` : null;
-        const outIso = correctionForm.clockOutTime ? `${correctingAttendance.date}T${correctionForm.clockOutTime}:00` : null;
-        let previewHours = 0;
-        if (inIso && outIso) {
-          const diffMs = new Date(outIso).getTime() - new Date(inIso).getTime();
-          previewHours = Math.max(0, diffMs / 3600000);
-        }
-        const previewOvertime = previewHours > 8 ? Math.round((previewHours - 8) * 10) / 10 : 0;
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isCorrectionModalOpen && correctingAttendance && (() => {
+              const emp = employees.find((e) => e.id === correctingAttendance.employeeId);
+              const inIso = correctionForm.clockInTime ? `${correctingAttendance.date}T${correctionForm.clockInTime}:00` : null;
+              const outIso = correctionForm.clockOutTime ? `${correctingAttendance.date}T${correctionForm.clockOutTime}:00` : null;
+              let previewHours = 0;
+              if (inIso && outIso) {
+                const diffMs = new Date(outIso).getTime() - new Date(inIso).getTime();
+                previewHours = Math.max(0, diffMs / 3600000);
+              }
+              const previewOvertime = previewHours > 8 ? Math.round((previewHours - 8) * 10) / 10 : 0;
 
-        return createPortal(
-          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/90 my-auto flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              return (
+                <motion.div
+                  key="hr-correction-modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/90 my-auto flex flex-col"
+                  >
               {/* Header */}
               <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-amber-50/70 shrink-0">
                 <div className="flex items-center gap-2.5">
@@ -4369,17 +4519,18 @@ export function HRManagement() {
                   <label className="block font-bold text-slate-700 mb-1">
                     Status Kehadiran <span className="text-rose-500">*</span>
                   </label>
-                  <select
+                  <CustomSelect
                     value={correctionForm.status}
-                    onChange={(e) => setCorrectionForm({ ...correctionForm, status: e.target.value as any })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
-                  >
-                    <option value="HADIR">HADIR (Hadir Tepat Waktu)</option>
-                    <option value="TERLAMBAT">TERLAMBAT (Hadir Melewati Toleransi)</option>
-                    <option value="IZIN">IZIN (Izin Resmi dengan Surat)</option>
-                    <option value="SAKIT">SAKIT (Sakit dengan Surat Dokter)</option>
-                    <option value="ALPHA">ALPHA (Tanpa Keterangan)</option>
-                  </select>
+                    onChange={(val) => setCorrectionForm({ ...correctionForm, status: val as any })}
+                    options={[
+                      { value: "HADIR", label: "HADIR (Hadir Tepat Waktu)" },
+                      { value: "TERLAMBAT", label: "TERLAMBAT (Hadir Melewati Toleransi)" },
+                      { value: "IZIN", label: "IZIN (Izin Resmi dengan Surat)" },
+                      { value: "SAKIT", label: "SAKIT (Sakit dengan Surat Dokter)" },
+                      { value: "ALPHA", label: "ALPHA (Tanpa Keterangan)" },
+                    ]}
+                    buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-800"
+                  />
                 </div>
 
                 {/* Jam Masuk & Jam Pulang */}
@@ -4480,18 +4631,28 @@ export function HRManagement() {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>,
+                  </motion.div>
+                </motion.div>
+              );
+            })()}
+          </AnimatePresence>,
           document.body
-        );
-      })()}
+        )}
 
       {/* Photo Lightbox Modal Portal */}
-      {lightboxPhoto && createPortal(
-        <div 
-          className="fixed inset-0 z-99999 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-in fade-in duration-200"
-          onClick={() => setLightboxPhoto(null)}
-        >
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {lightboxPhoto && (
+              <motion.div
+                key="hr-lightbox-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="fixed inset-0 z-99999 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6"
+                onClick={() => setLightboxPhoto(null)}
+              >
           {/* Lightbox Top Bar */}
           <div 
             className="flex items-center justify-between gap-4 text-white p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 max-w-4xl mx-auto w-full"
@@ -4556,9 +4717,11 @@ export function HRManagement() {
               <span>Tutup Tampilan Penuh</span>
             </button>
           </div>
-        </div>,
-        document.body
-      )}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import {
@@ -128,8 +129,20 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
   const items = orderData.items || [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: "spring", damping: 28, stiffness: 360 }}
+        className="w-full max-w-md bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+      >
         {/* Top Header */}
         <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between no-print">
           <div className="flex items-center gap-2">
@@ -318,11 +331,19 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
         </div>
 
         {/* Print Status Feedback */}
-        {printStatus && (
-          <div className="px-6 py-2 bg-emerald-50 border-t border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between no-print animate-fade-in">
-            <span>{printStatus}</span>
-          </div>
-        )}
+        <AnimatePresence>
+          {printStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="px-6 py-2 bg-emerald-50 border-t border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between no-print"
+            >
+              <span>{printStatus}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Action Buttons */}
         <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 space-y-2.5 no-print">
@@ -385,7 +406,7 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Print Styles for Thermal Paper */}
       <style>{`
@@ -411,6 +432,6 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
           }
         }
       `}</style>
-    </div>
+    </motion.div>
   );
 };

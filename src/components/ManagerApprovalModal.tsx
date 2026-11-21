@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import { ManagerApprovalRequest } from "../types";
@@ -104,11 +105,23 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-70 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="fixed inset-0 z-70 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          >
         {/* Header */}
         <div className="p-4 px-6 bg-gradient-to-r from-amber-500 to-rose-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -296,7 +309,9 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
             Tutup
           </button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

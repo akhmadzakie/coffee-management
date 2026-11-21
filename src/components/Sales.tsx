@@ -2433,37 +2433,39 @@ export const Sales = () => {
       </AnimatePresence>
 
       {/* ── MODAL OTORISASI REFUND DENGAN PIN MANAGER ── */}
-      {isRefundPinModalOpen && selectedOrderForDetail && (
-        <PosManagerPinModal
-          title="Otorisasi Refund Pesanan"
-          description={`Masukkan PIN Manager / Super Admin untuk menyetujui pengembalian dana sebesar ${formatCurrency(selectedOrderForDetail.totalAmount)} pada nota #${selectedOrderForDetail.receiptNo}.`}
-          requireReason={true}
-          onClose={() => setIsRefundPinModalOpen(false)}
-          onSuccess={async (manager, reason) => {
-            try {
-              const res = await fetch(`/api/pos/orders/${selectedOrderForDetail.id}/refund`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  managerPin: manager.pin,
-                  refundReason: reason || "Refund dari Rekap Penjualan",
-                  refundMethod: "CASH",
-                  refundRestockOption: "RETURN_TO_STOCK",
-                  refundAmount: selectedOrderForDetail.totalAmount,
-                }),
-              });
-              const result = await res.json();
-              if (!res.ok) throw new Error(result.error || "Gagal memproses refund");
-              alert("Pesanan berhasil di-refund dan audit kas telah diperbarui!");
-              setIsRefundPinModalOpen(false);
-              setSelectedOrderForDetail(null);
-              fetchPosOrders();
-            } catch (err: any) {
-              alert("Gagal refund: " + err.message);
-            }
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {isRefundPinModalOpen && selectedOrderForDetail && (
+          <PosManagerPinModal
+            title="Otorisasi Refund Pesanan"
+            description={`Masukkan PIN Manager / Super Admin untuk menyetujui pengembalian dana sebesar ${formatCurrency(selectedOrderForDetail.totalAmount)} pada nota #${selectedOrderForDetail.receiptNo}.`}
+            requireReason={true}
+            onClose={() => setIsRefundPinModalOpen(false)}
+            onSuccess={async (manager, reason) => {
+              try {
+                const res = await fetch(`/api/pos/orders/${selectedOrderForDetail.id}/refund`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    managerPin: manager.pin,
+                    refundReason: reason || "Refund dari Rekap Penjualan",
+                    refundMethod: "CASH",
+                    refundRestockOption: "RETURN_TO_STOCK",
+                    refundAmount: selectedOrderForDetail.totalAmount,
+                  }),
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.error || "Gagal memproses refund");
+                alert("Pesanan berhasil di-refund dan audit kas telah diperbarui!");
+                setIsRefundPinModalOpen(false);
+                setSelectedOrderForDetail(null);
+                fetchPosOrders();
+              } catch (err: any) {
+                alert("Gagal refund: " + err.message);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── MODAL CATAT OMZET HARIAN ────────────────────────────────────── */}
       <AnimatePresence>

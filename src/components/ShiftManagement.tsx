@@ -1,4 +1,5 @@
 import { RupiahSign } from './common/RupiahSign';
+import { CustomSelect } from './common/CustomSelect';
 import React, { useState } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
@@ -276,21 +277,17 @@ export const ShiftManagement = () => {
                             : "You do not have any Cash Accounts of type CASH. Create one in Finance > Cash Flow."}
                         </div>
                       ) : (
-                        <select
+                        <CustomSelect
                           required
                           value={selectedCashAccountId}
-                          onChange={(e) => setSelectedCashAccountId(e.target.value)}
-                          className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:border-brand-600 focus:ring-4 focus:ring-brand-500/10 outline-none text-slate-800 transition-all font-semibold text-base sm:text-xs bg-slate-50/50"
-                        >
-                          <option value="" disabled>
-                            {isIndo ? "-- Pilih Pos Kas Tunai --" : "Select account..."}
-                          </option>
-                          {cashOnlyAccounts.map((acc) => (
-                            <option key={acc.id} value={acc.id}>
-                              {acc.name} ({formatCurrency(acc.balance || 0)})
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setSelectedCashAccountId}
+                          placeholder={isIndo ? "-- Pilih Pos Kas Tunai --" : "Select account..."}
+                          options={cashOnlyAccounts.map((acc) => ({
+                            value: acc.id,
+                            label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                          }))}
+                          buttonClassName="w-full px-4 py-3 border border-slate-200 rounded-2xl text-slate-800 font-semibold text-base sm:text-xs bg-slate-50/50 hover:bg-white"
+                        />
                       )}
                     </div>
 

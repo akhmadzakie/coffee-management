@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   Upload,
@@ -111,11 +112,26 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="my-auto bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-slate-200">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="generic-import-modal-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="my-auto bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-slate-200"
+          >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
           <div>
@@ -331,8 +347,10 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>,
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

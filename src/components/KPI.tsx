@@ -1,5 +1,6 @@
 import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   Save, X, BookOpen, Target, Award, Sparkles, 
   Users, Sliders, TrendingUp, CheckCircle2, AlertCircle, Check
@@ -175,7 +176,12 @@ export const KPI: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8"
+    >
       {/* Header & Sub-Tabs */}
       <div className="border-b border-slate-200 bg-slate-50/70 p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -271,14 +277,22 @@ export const KPI: React.FC = () => {
             )}
           </div>
 
-          {policyToast && (
-            <div className="mb-3 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center justify-between shadow-xs animate-fade-in">
-              <span>{policyToast}</span>
-              <button type="button" onClick={() => setPolicyToast(null)} className="text-white/80 hover:text-white">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+          <AnimatePresence>
+            {policyToast && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="mb-3 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl flex items-center justify-between shadow-xs"
+              >
+                <span>{policyToast}</span>
+                <button type="button" onClick={() => setPolicyToast(null)} className="text-white/80 hover:text-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 1. Bonus Omzet Toko */}
@@ -770,7 +784,7 @@ export const KPI: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

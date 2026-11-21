@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { ExpenseCategory, ExpenseCategoryType } from "../types";
+import { CustomSelect } from "./common/CustomSelect";
 import {
   Plus,
   Edit2,
@@ -284,17 +285,15 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Tipe Akun
               </label>
-              <select
+              <CustomSelect
                 value={type}
-                onChange={(e) => setType(e.target.value as ExpenseCategoryType)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all cursor-pointer shadow-2xs"
-              >
-                {CATEGORY_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setType(val as ExpenseCategoryType)}
+                options={CATEGORY_TYPES.map((t) => ({
+                  value: t.value,
+                  label: t.label,
+                }))}
+                buttonClassName="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 hover:bg-white shadow-2xs"
+              />
             </div>
 
             {/* Parent Category */}
@@ -302,18 +301,18 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Kategori Induk (Grup)
               </label>
-              <select
+              <CustomSelect
                 value={parentId ?? ""}
-                onChange={(e) => setParentId(e.target.value || null)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all cursor-pointer shadow-2xs"
-              >
-                <option value="">— Pos Utama (Header / Root) —</option>
-                {rootCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setParentId(val || null)}
+                options={[
+                  { value: "", label: "— Pos Utama (Header / Root) —" },
+                  ...rootCategories.map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                  })),
+                ]}
+                buttonClassName="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 hover:bg-white shadow-2xs"
+              />
             </div>
           </div>
 

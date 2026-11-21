@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus, Trash2, X, Check, UtensilsCrossed } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Recipe, RecipeIngredient, Ingredient } from "../types";
+import { CustomSelect } from "./common/CustomSelect";
 
 interface RecipeModalProps {
   isOpen: boolean;
@@ -169,18 +170,19 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                         >
                           {/* Ingredient selector */}
                           <div className="flex-1">
-                            <select
+                            <CustomSelect
                               value={ri.ingredientId}
-                              onChange={(e) => handleIngredientChange(idx, "ingredientId", e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-base sm:text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
-                            >
-                              <option value="">-- Pilih Bahan Baku --</option>
-                              {ingredients.map((ing) => (
-                                <option key={ing.id} value={ing.id}>
-                                  {ing.name} ({ing.unit})
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(val) => handleIngredientChange(idx, "ingredientId", val)}
+                              placeholder="-- Pilih Bahan Baku --"
+                              options={[
+                                { value: "", label: "-- Pilih Bahan Baku --" },
+                                ...ingredients.map((ing) => ({
+                                  value: ing.id,
+                                  label: `${ing.name} (${ing.unit})`,
+                                })),
+                              ]}
+                              buttonClassName="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-base sm:text-xs font-medium text-slate-900"
+                            />
                           </div>
 
                           {/* Quantity & Unit & Delete row on mobile, inline on tablet/desktop */}

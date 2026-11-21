@@ -21,9 +21,11 @@ import {
   Keyboard,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useTheme, ThemeToggleButton } from "../context/ThemeContext";
 
 export const Login = () => {
   const { login, settings, users, wasForceLoggedOut, dismissForceLogoutAlert, lastLoginError } = useStore();
+  const { isDark } = useTheme();
   const { t } = useTranslation(settings.language || "id");
   const isIndo = (settings.language || "id") === "id";
 
@@ -212,7 +214,7 @@ export const Login = () => {
       <header className="w-full max-w-5xl flex items-center justify-between z-10 py-2">
         <div className="flex items-center gap-3">
           <img
-            src="/logo-name-blue.png"
+            src={isDark ? "/logo-name-white.png" : "/logo-name-blue.png"}
             alt="Julia's"
             className="h-10 w-auto object-contain"
             onError={(e) => {
@@ -227,14 +229,17 @@ export const Login = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/90 text-xs font-mono text-slate-700 shadow-xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-semibold">
-            {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-          <span className="text-slate-400 text-[11px] hidden sm:inline">
-            • {currentTime.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}
-          </span>
+        <div className="flex items-center gap-2.5">
+          <ThemeToggleButton compact />
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-200 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-semibold">
+              {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <span className="text-slate-400 text-[11px] hidden sm:inline">
+              • {currentTime.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}
+            </span>
+          </div>
         </div>
       </header>
 

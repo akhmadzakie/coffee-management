@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { ViewState, CashTransactionItem } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { useStore } from "../store/StoreContext";
+import { ThemeToggleButton } from "../context/ThemeContext";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
 import { AIAssistantModal, type ParsedTransactionDraft } from "./AIAssistantModal";
@@ -1071,7 +1072,7 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* ─── MAIN CONTENT WRAPPER ─── */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#f6f8ff] h-[100dvh] overflow-hidden">
         {/* ─── MODERN HEADER BAR (RESPONSIVE & NOTCH-SAFE) ─── */}
-        <header className="pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-2.5 sm:py-0 sm:h-16 min-h-[3.75rem] px-3 sm:px-6 bg-white border-b border-slate-200/90 sticky top-0 z-30 flex items-center justify-between shadow-2xs gap-2 shrink-0">
+        <header className="pt-[max(env(safe-area-inset-top,0px),0.75rem)] pb-2.5 sm:py-0 sm:h-16 min-h-[3.75rem] px-3 sm:px-6 bg-white dark:bg-slate-900 border-b border-slate-200/90 dark:border-slate-800 sticky top-0 z-30 flex items-center justify-between shadow-2xs gap-2 shrink-0">
           {/* Left: Sidebar Toggle & Page Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Desktop / Tablet Sidebar Toggle */}
@@ -1288,6 +1289,8 @@ export const Layout: React.FC<LayoutProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-brand-600" : ""}`} />
               <span className="hidden 2xl:inline">{isSyncing ? "Sync..." : "Cloud"}</span>
             </motion.button>
+
+            <ThemeToggleButton compact />
 
             {/* ─── INTERACTIVE OPERATOR CAPSULE (ACCOUNT SWITCHER TRIGGER) ─── */}
             <div className="relative" ref={dropdownRef}>
@@ -1521,6 +1524,10 @@ export const Layout: React.FC<LayoutProps> = ({
                   </div>
                 )}
 
+                <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                  <ThemeToggleButton className="w-full" />
+                </div>
+
                 {/* Manager Operational Stations in Mobile Drawer */}
                 {(FEATURES.POS || FEATURES.KDS) && (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && (
                   <div className="px-3 py-2 border-b border-slate-100 bg-brand-50/40">
@@ -1629,7 +1636,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </AnimatePresence>
 
         {/* ─── PAGE BODY CONTAINER ─── */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] relative custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] dark:bg-slate-950 relative custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
           {/* Global Notification Banner for Suspended Accounts (Manager & Super Admin) */}
           {canManageSuspend && suspendedUsers.length > 0 && (
             <div className="mb-4 max-w-7xl mx-auto p-3.5 sm:px-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-950 text-xs shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">

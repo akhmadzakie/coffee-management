@@ -6,6 +6,8 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { StoreProvider, useStore } from "./store/StoreContext";
+import { ThemeProvider } from "./context/ThemeContext";
+import { ToastProvider } from "./context/ToastContext";
 import { Layout } from "./components/Layout";
 import { Login } from "./components/Login";
 import { ViewState } from "./types";
@@ -471,8 +473,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <StoreProvider>
-      <AppContent />
-    </StoreProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <StoreProvider>
+          <AppContent />
+        </StoreProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

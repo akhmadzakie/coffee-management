@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
+import { CustomSelect } from "./common/CustomSelect";
 import { formatCurrency } from "../utils/format";
 import { PayrollRecord, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import {
@@ -1950,14 +1951,28 @@ export function Payroll() {
       )}
 
       {/* ─── MODAL EDIT / KOREKSI SLIP GAJI ─── */}
-      {editingPayroll && (() => {
-        const perfForEdit = getEmpPerformanceSummary(editingPayroll.employeeId);
-        const isLocked = editingPayroll.status !== "DRAFT" || !canEdit;
-        const empName = employees.find((e: any) => e.id === editingPayroll.employeeId)?.name || editingPayroll.employeeId;
+      <AnimatePresence>
+        {editingPayroll && (() => {
+          const perfForEdit = getEmpPerformanceSummary(editingPayroll.employeeId);
+          const isLocked = editingPayroll.status !== "DRAFT" || !canEdit;
+          const empName = employees.find((e: any) => e.id === editingPayroll.employeeId)?.name || editingPayroll.employeeId;
 
-        return (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center">
-            <div className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden">
+          return (
+            <motion.div
+              key="payroll-edit-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden"
+              >
               <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
                 <div>
                   <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
@@ -2417,15 +2432,30 @@ export function Payroll() {
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* ─── MODAL BUAT SLIP GAJI MANUAL ─── */}
-      {manualModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center">
-          <div className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden">
+      <AnimatePresence>
+        {manualModalOpen && (
+          <motion.div
+            key="payroll-manual-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden"
+            >
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
               <div>
                 <h2 className="text-base sm:text-lg font-black text-slate-900">Buat Slip Gaji Manual</h2>
@@ -2449,19 +2479,20 @@ export function Payroll() {
                   <label className="block text-slate-700 font-bold mb-1 uppercase tracking-wider text-[11px]">
                     Pilih Karyawan <span className="text-rose-500">*</span>
                   </label>
-                  <select
+                  <CustomSelect
                     required
                     value={manualForm.employeeId}
-                    onChange={(e) => handleSelectManualEmployee(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-semibold bg-white"
-                  >
-                    <option value="">-- Pilih Staf Karyawan --</option>
-                    {employees.map((emp: any) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.position || "Staff"} • {emp.department || "Main"})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={handleSelectManualEmployee}
+                    placeholder="-- Pilih Staf Karyawan --"
+                    options={[
+                      { value: "", label: "-- Pilih Staf Karyawan --" },
+                      ...employees.map((emp: any) => ({
+                        value: emp.id,
+                        label: `${emp.name} (${emp.position || "Staff"} • ${emp.department || "Main"})`,
+                      })),
+                    ]}
+                    buttonClassName="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
+                  />
                 </div>
 
                 {/* Penghasilan */}
@@ -2653,9 +2684,10 @@ export function Payroll() {
                 );
               })()}
             </form>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── MODAL EXPORT LAPORAN ─── */}
       <ExportModal
@@ -2673,16 +2705,30 @@ export function Payroll() {
       )}
 
       {/* ─── MODAL BAYAR GAJI KARYAWAN (SINGLE SLIP) ─── */}
-      {paymentModalOpen && payrollToPay && (() => {
-        const breakdown = getPayrollCategoryBreakdown(payrollToPay);
-        const empName =
-          employees.find((e: any) => e.id === payrollToPay.employeeId)?.name ||
-          users.find((u: any) => u.id === payrollToPay.employeeId)?.name ||
-          "Karyawan";
+      <AnimatePresence>
+        {paymentModalOpen && payrollToPay && (() => {
+          const breakdown = getPayrollCategoryBreakdown(payrollToPay);
+          const empName =
+            employees.find((e: any) => e.id === payrollToPay.employeeId)?.name ||
+            users.find((u: any) => u.id === payrollToPay.employeeId)?.name ||
+            "Karyawan";
 
-        return (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]">
+          return (
+            <motion.div
+              key="payroll-single-pay-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]"
+              >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
                 <div>
                   <h2 className="text-lg font-black text-slate-800 flex items-center">
@@ -2828,18 +2874,17 @@ export function Payroll() {
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                       Gunakan Pos Kas / Rekening Pembayaran:
                     </label>
-                    <select
+                    <CustomSelect
                       name="accountId"
+                      defaultValue=""
                       required
-                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-base sm:text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Pilih Pos Kas Pembayaran --</option>
-                      {cashAccounts.map((a: any) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.type})
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="-- Pilih Pos Kas Pembayaran --"
+                      options={cashAccounts.map((a: any) => ({
+                        value: a.id,
+                        label: `${a.name} (${a.type})`,
+                      }))}
+                      buttonClassName="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
+                    />
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -2863,27 +2908,42 @@ export function Payroll() {
                   </div>
                 </form>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* ─── MODAL CAIRKAN SEMUA SLIP FINAL SEKALIGUS (BATCH PAY) ─── */}
-      {bulkPayModalOpen && (() => {
-        const approvedSlips = allPeriodRecords.filter((r: PayrollRecord) => r.status === "APPROVED");
-        const totalBatchNet = approvedSlips.reduce((sum: number, r: PayrollRecord) => sum + (r.netPay || 0), 0);
-        const totalBatchBasic = approvedSlips.reduce(
-          (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBasicPortion,
-          0
-        );
-        const totalBatchBonus = approvedSlips.reduce(
-          (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBonusAllowancePortion,
-          0
-        );
+      <AnimatePresence>
+        {bulkPayModalOpen && (() => {
+          const approvedSlips = allPeriodRecords.filter((r: PayrollRecord) => r.status === "APPROVED");
+          const totalBatchNet = approvedSlips.reduce((sum: number, r: PayrollRecord) => sum + (r.netPay || 0), 0);
+          const totalBatchBasic = approvedSlips.reduce(
+            (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBasicPortion,
+            0
+          );
+          const totalBatchBonus = approvedSlips.reduce(
+            (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBonusAllowancePortion,
+            0
+          );
 
-        return (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-            <div className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]">
+          return (
+            <motion.div
+              key="payroll-bulk-pay-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]"
+              >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
                 <div>
                   <h2 className="text-lg font-black text-slate-800 flex items-center">
@@ -3009,18 +3069,17 @@ export function Payroll() {
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                       Gunakan Pos Kas / Rekening Pembayaran:
                     </label>
-                    <select
+                    <CustomSelect
                       name="accountId"
+                      defaultValue=""
                       required
-                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-base sm:text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Pilih Pos Kas Pembayaran --</option>
-                      {cashAccounts.map((a: any) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.type})
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="-- Pilih Pos Kas Pembayaran --"
+                      options={cashAccounts.map((a: any) => ({
+                        value: a.id,
+                        label: `${a.name} (${a.type})`,
+                      }))}
+                      buttonClassName="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
+                    />
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -3041,10 +3100,11 @@ export function Payroll() {
                   </div>
                 </form>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }

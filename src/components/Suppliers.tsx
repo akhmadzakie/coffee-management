@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Supplier } from "../types";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { motion, AnimatePresence } from "motion/react";
 
 export const Suppliers = () => {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier, isReadOnly } =
@@ -268,10 +269,25 @@ export const Suppliers = () => {
       </div>
 
       {/* ─── MODAL: Add / Edit Supplier ───────────────────────────────────────────── */}
-      {isModalOpen &&
+      {typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] my-auto border border-slate-200/80 flex flex-col">
+          <AnimatePresence>
+            {isModalOpen && (
+              <motion.div
+                key="suppliers-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] my-auto border border-slate-200/80 flex flex-col"
+                >
               <div className="flex justify-between items-center border-b border-slate-100 p-4 sm:p-5 bg-slate-50/80 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100 shrink-0">
@@ -378,8 +394,10 @@ export const Suppliers = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>,
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
           document.body
         )}
     </div>

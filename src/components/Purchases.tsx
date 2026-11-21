@@ -28,6 +28,8 @@ import {
   Lock,
 } from "lucide-react";
 import { PurchaseOrderItem } from "../types";
+import { CustomSelect } from "./common/CustomSelect";
+import { CustomDatePicker } from "./common/CustomDatePicker";
 import { exportToCSV } from "../utils/export";
 import {
   calculateCashFlowHppSync,
@@ -906,17 +908,15 @@ export const Purchases = () => {
                     <Coins className="w-3.5 h-3.5 text-amber-600" />
                     Sumber Kas Pembayaran Tunai
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedCashAccountId}
-                    onChange={(e) => setSelectedCashAccountId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium"
-                  >
-                    {cashAccounts.map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} ({formatCurrency(acc.balance || 0)})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedCashAccountId}
+                    options={cashAccounts.map((acc) => ({
+                      value: acc.id,
+                      label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                    }))}
+                    buttonClassName="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white font-medium"
+                  />
                 </div>
 
                 <div>
@@ -947,20 +947,22 @@ export const Purchases = () => {
                     {isIndo ? "Pilih Supplier Rekanan" : "Select Supplier"}{" "}
                     <span className="text-rose-500">*</span>
                   </label>
-                  <select
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500/20 text-base sm:text-xs bg-white font-medium"
+                  <CustomSelect
                     value={selectedSupplier}
-                    onChange={(e) => setSelectedSupplier(e.target.value)}
-                  >
-                    <option value="">
-                      {isIndo ? "-- Pilih Supplier --" : "-- Choose Supplier --"}
-                    </option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.picName})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedSupplier}
+                    placeholder={isIndo ? "-- Pilih Supplier --" : "-- Choose Supplier --"}
+                    options={[
+                      {
+                        value: "",
+                        label: isIndo ? "-- Pilih Supplier --" : "-- Choose Supplier --",
+                      },
+                      ...suppliers.map((s) => ({
+                        value: s.id,
+                        label: `${s.name} (${s.picName})`,
+                      })),
+                    ]}
+                    buttonClassName="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white font-medium"
+                  />
                 </div>
 
                 {/* Payment Method: Tunai vs Tempo */}
@@ -1009,17 +1011,15 @@ export const Purchases = () => {
                       <label className="block text-[11px] font-bold text-emerald-900">
                         Pilih Pos Kas / Rekening Pengeluaran:
                       </label>
-                      <select
+                      <CustomSelect
                         value={selectedCashAccountId}
-                        onChange={(e) => setSelectedCashAccountId(e.target.value)}
-                        className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-emerald-500 outline-none font-medium"
-                      >
-                        {cashAccounts.map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name} ({formatCurrency(acc.balance || 0)})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setSelectedCashAccountId}
+                        options={cashAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                        }))}
+                        buttonClassName="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-medium"
+                      />
                       <p className="text-[10px] text-emerald-700 leading-tight">
                         Kas keluar otomatis tercatat saat PO disimpan.
                       </p>
@@ -1053,11 +1053,11 @@ export const Purchases = () => {
                           ))}
                         </div>
                       </div>
-                      <input
-                        type="date"
+                      <CustomDatePicker
                         value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        className="w-full border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-amber-500 outline-none font-medium"
+                        onChange={setDueDate}
+                        allowClear={false}
+                        buttonClassName="w-full border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-medium"
                       />
                       <p className="text-[10px] text-amber-800 leading-tight">
                         Kas TIDAK dipotong sekarang. Tagihan masuk ke daftar Hutang Supplier (AP).
@@ -1151,19 +1151,15 @@ export const Purchases = () => {
 
                       {product && (
                         <div className="space-y-1.5">
-                          <select
+                          <CustomSelect
                             value={selectValue}
-                            onChange={(e) =>
-                              handleCartPackagingChange(item.productId, e.target.value)
-                            }
-                            className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-950 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-                          >
-                            {pkgChoices.map((choice) => (
-                              <option key={choice.key} value={choice.key}>
-                                Satuan Beli: {choice.label}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(val) => handleCartPackagingChange(item.productId, val)}
+                            options={pkgChoices.map((choice) => ({
+                              value: choice.key,
+                              label: `Satuan Beli: ${choice.label}`,
+                            }))}
+                            buttonClassName="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-950 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold"
+                          />
 
                           {item.unitMode === "CUSTOM" && (
                             <div className="grid grid-cols-2 gap-1.5 pt-0.5">
@@ -1414,18 +1410,18 @@ export const Purchases = () => {
 
             {/* Supplier Select & Search */}
             <div className="flex items-center gap-2">
-              <select
+              <CustomSelect
                 value={payableSupplierFilter}
-                onChange={(e) => setPayableSupplierFilter(e.target.value)}
-                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-medium outline-none focus:ring-2 focus:ring-brand-500/20"
-              >
-                <option value="">Semua Supplier</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setPayableSupplierFilter}
+                options={[
+                  { value: "", label: "Semua Supplier" },
+                  ...suppliers.map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                  })),
+                ]}
+                buttonClassName="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-medium"
+              />
 
               <div className="relative flex-1 md:w-56">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -2009,9 +2005,23 @@ export const Purchases = () => {
       )}
 
       {/* ─── MODAL: Receive PO (Goods Arrival) ─────────────────────────────────────── */}
-      {poToReceive && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {poToReceive && (
+          <motion.div
+            key="po-receive-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4"
+            >
             <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
               <PackageCheck className="w-5 h-5" />
             </div>
@@ -2047,14 +2057,29 @@ export const Purchases = () => {
                 Ya, Terima & Masuk Stok
               </button>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── MODAL: View PO Invoice ────────────────────────────────────────────────── */}
-      {isInvoiceModalOpen && currentInvoiceData && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {isInvoiceModalOpen && currentInvoiceData && (
+          <motion.div
+            key="po-invoice-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 sm:p-8"
+            >
             <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1 flex items-center gap-2">
@@ -2198,14 +2223,29 @@ export const Purchases = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── MODAL: Delete Confirmation ────────────────────────────────────────────── */}
-      {invoiceToDelete && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {invoiceToDelete && (
+          <motion.div
+            key="po-delete-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4"
+            >
             <h3 className="text-base font-bold text-slate-900">
               Hapus Purchase Order?
             </h3>
@@ -2236,17 +2276,32 @@ export const Purchases = () => {
                 Ya, Hapus PO
               </button>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── MODAL: Pay PO (Hutang Dagang) ─────────────────────────────────────────── */}
-      {payModalOpen && selectedPOForPay && (() => {
-        const remaining = selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0);
-        const supplier = suppliers.find((s) => s.id === selectedPOForPay.supplierId);
-        return (
-          <div className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-            <div className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <AnimatePresence>
+        {payModalOpen && selectedPOForPay && (() => {
+          const remaining = selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0);
+          const supplier = suppliers.find((s) => s.id === selectedPOForPay.supplierId);
+          return (
+            <motion.div
+              key="po-pay-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4"
+              >
               <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                 <div>
                   <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
@@ -2330,28 +2385,29 @@ export const Purchases = () => {
                 {/* Pilih Sumber Kas / Bank */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Dari Akun Kas / Bank</label>
-                  <select
+                  <CustomSelect
                     value={payAccountId}
-                    onChange={(e) => setPayAccountId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
-                  >
-                    <option value="">-- Pilih Akun Kas/Bank --</option>
-                    {cashAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({formatCurrency(a.balance || 0)})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setPayAccountId}
+                    placeholder="-- Pilih Akun Kas/Bank --"
+                    options={[
+                      { value: "", label: "-- Pilih Akun Kas/Bank --" },
+                      ...cashAccounts.map((a) => ({
+                        value: a.id,
+                        label: `${a.name} (${formatCurrency(a.balance || 0)})`,
+                      })),
+                    ]}
+                    buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
+                  />
                 </div>
 
                 {/* Tanggal Bayar */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tanggal Pembayaran</label>
-                  <input
-                    type="date"
+                  <CustomDatePicker
                     value={payDate}
-                    onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
+                    onChange={setPayDate}
+                    allowClear={false}
+                    buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
                   />
                 </div>
 
@@ -2405,10 +2461,11 @@ export const Purchases = () => {
                   <span>Konfirmasi Pembayaran ({formatCurrency(payAmount || 0)})</span>
                 </button>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 };

@@ -20,6 +20,12 @@ import {
   parseSmartCoffeeTextEntry,
 } from "../src/utils/posDomainLogic";
 import {
+  getPreviousPeriodString,
+  computeAutoOverheadBaseline,
+  calculateHppOverheadSimulation,
+  calculateFnbHealthMetrics,
+} from "../src/utils/financeMetrics";
+import {
   buildEscPosReceipt,
   buildCashDrawerKickCommand,
 } from "../src/utils/escpos";
@@ -1268,6 +1274,228 @@ test("AI NLP Parser Mengenali Typo, Singkatan Chat, Perkalian '@' & Koma Desimal
   assert.strictEqual(res.transactions[2].category, "Utilitas");
   assert.strictEqual(res.transactions[2].amount, 500000);
   assert.strictEqual(res.transactions[2].ingredientId, null);
+});
+
+// -------------------------------------------------------------
+// 18. METRIK F&B: AUTO-OVERHEAD BASELINE, SIMULASI BEP HPP & PRIME COST P&L
+// -------------------------------------------------------------
+console.log("\n18. Pengujian Metrik F&B: Auto-Overhead Baseline, Simulasi BEP HPP & Prime Cost P&L:");
+
+test("getPreviousPeriodString menangani bulan normal & rollover Januari ke Desember", () => {
+  assert.strictEqual(getPreviousPeriodString("2026-11"), "2026-10");
+  assert.strictEqual(getPreviousPeriodString("2026-01"), "2025-12");
+});
+
+test("computeAutoOverheadBaseline memprioritaskan bulan lalu & mengecualikan BAHAN_BAKU, ASET, TRANSFER", () => {
+  const categories: any[] = [
+    { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "", icon: "", isActive: true, sortOrder: 1 },
+    { id: "cat-hrd", name: "Gaji & SDM", type: "HRD", parentId: null, color: "", icon: "", isActive: true, sortOrder: 2 },
+    { id: "cat-utilitas", name: "Listrik & Air", type: "UTILITAS", parentId: null, color: "", icon: "", isActive: true, sortOrder: 3 },
+    { id: "cat-sewa", name: "Sewa Ruko", type: "PENGELUARAN", parentId: null, color: "", icon: "", isActive: true, sortOrder: 4 },
+    { id: "cat-aset", name: "Pembelian Mesin", type: "ASET", parentId: null, color: "", icon: "", isActive: true, sortOrder: 5 },
+  ];
+
+  const cashTrx: any[] = [
+    // Bulan lalu (2026-10)
+    { id: "c1", accountId: "a1", type: "CASH_OUT", date: "2026-10-05", amount: 9000000, description: "Gaji Barista & Baker", category: "Gaji", categoryId: "cat-hrd" },
+    { id: "c2", accountId: "a1", type: "CASH_OUT", date: "2026-10-10", amount: 2500000, description: "Listrik PLN & Air", category: "Utilitas", categoryId: "cat-utilitas" },
+    { id: "c3", accountId: "a1", type: "CASH_OUT", date: "2026-10-12", amount: 3500000, description: "Sewa Tempat", category: "Sewa", categoryId: "cat-sewa" },
+    // Harus dikecualikan:
+    { id: "c4", accountId: "a1", type: "CASH_OUT", date: "2026-10-15", amount: 7000000, description: "Beli Biji Kopi & Susu", category: "Bahan Baku", categoryId: "cat-bahan-baku" },
+    { id: "c5", accountId: "a1", type: "CASH_OUT", date: "2026-10-18", amount: 25000000, description: "Beli Mesin Espresso Baru", category: "Aset", categoryId: "cat-aset" },
+    { id: "c6", accountId: "a1", type: "CASH_OUT", date: "2026-10-19", amount: 5000000, description: "Transfer Kas", category: "Transfer Antar Kas", referenceId: "TRANSFER:1" },
+    // Bulan berjalan (2026-11) - tidak dipakai jika bulan lalu ada
+    { id: "c7", accountId: "a1", type: "CASH_OUT", date: "2026-11-02", amount: 500000, description: "Token Listrik", category: "Utilitas", categoryId: "cat-utilitas" },
+  ];
+
+  const sales: any[] = [
+    { id: "s1", date: "2026-10-15", menuName: "Latte", quantitySold: 1200, totalPrice: 30000000, importLogId: "i1" },
+    { id: "s2", date: "2026-10-20", menuName: "Croissant", quantitySold: 800, totalPrice: 20000000, importLogId: "i1" },
+  ];
+
+  const baseline = computeAutoOverheadBaseline({
+    cashTransactions: cashTrx,
+    expenseCategories: categories,
+    payrollRecords: [],
+    salesTransactions: sales,
+    currentPeriod: "2026-11",
+  });
+
+  assert.strictEqual(baseline.sourceType, "PREVIOUS_MONTH");
+  assert.strictEqual(baseline.referencePeriod, "2026-10");
+  assert.strictEqual(baseline.monthlyPayroll, 9000000);
+  assert.strictEqual(baseline.monthlyOperational, 6000000);
+  assert.strictEqual(baseline.monthlyTotalOpex, 15000000);
+  assert.strictEqual(baseline.monthlyStorePortions, 2000);
+  assert.strictEqual(baseline.hasActualPortions, true);
+});
+
+test("computeAutoOverheadBaseline fallback ke payrollRecords, current month, dan kontrak aktif", () => {
+  const categories: any[] = [
+    { id: "cat-utilitas", name: "Utilitas", type: "UTILITAS", parentId: null, color: "", icon: "", isActive: true, sortOrder: 1 },
+  ];
+
+  // Fallback ke payrollRecords (PAID/APPROVED) ketika tidak ada CASH_OUT HRD di bulan lalu
+  const withPayrollRecs = computeAutoOverheadBaseline({
+    cashTransactions: [
+      { id: "u1", accountId: "a1", type: "CASH_OUT", date: "2026-10-08", amount: 1500000, description: "PLN", category: "Utilitas", categoryId: "cat-utilitas" },
+    ],
+    expenseCategories: categories,
+    payrollRecords: [
+      { id: "p1", employeeId: "e1", period: "2026-10", netPay: 4000000, status: "PAID" } as any,
+      { id: "p2", employeeId: "e2", period: "2026-10", netPay: 3500000, status: "APPROVED" } as any,
+      { id: "p3", employeeId: "e3", period: "2026-10", netPay: 3000000, status: "DRAFT" } as any,
+    ],
+    salesTransactions: [],
+    currentPeriod: "2026-11",
+  });
+  assert.strictEqual(withPayrollRecs.sourceType, "PREVIOUS_MONTH");
+  assert.strictEqual(withPayrollRecs.monthlyPayroll, 7500000);
+  assert.strictEqual(withPayrollRecs.monthlyOperational, 1500000);
+  assert.strictEqual(withPayrollRecs.hasActualPortions, false);
+  assert.strictEqual(withPayrollRecs.monthlyStorePortions, 1500);
+
+  // Fallback ke bulan berjalan jika bulan lalu kosong
+  const currentMonthFallback = computeAutoOverheadBaseline({
+    cashTransactions: [
+      { id: "u2", accountId: "a1", type: "CASH_OUT", date: "2026-11-05", amount: 2000000, description: "Sewa", category: "Operasional" } as any,
+    ],
+    expenseCategories: categories,
+    payrollRecords: [],
+    salesTransactions: [],
+    currentPeriod: "2026-11",
+  });
+  assert.strictEqual(currentMonthFallback.sourceType, "CURRENT_MONTH");
+  assert.strictEqual(currentMonthFallback.referencePeriod, "2026-11");
+  assert.strictEqual(currentMonthFallback.monthlyOperational, 2000000);
+
+  // Fallback ke kontrak aktif jika semua kas & payroll kosong
+  const contractFallback = computeAutoOverheadBaseline({
+    cashTransactions: [],
+    expenseCategories: categories,
+    payrollRecords: [],
+    employees: [
+      { id: "e1", status: "AKTIF" } as any,
+      { id: "e2", status: "RESIGN" } as any,
+    ],
+    contracts: [
+      { id: "ct1", employeeId: "e1", status: "ACTIVE", basicSalary: 3000000, mealAllowance: 300000, positionAllowance: 200000, transportAllowance: 200000 } as any,
+      { id: "ct2", employeeId: "e2", status: "ACTIVE", basicSalary: 2500000, mealAllowance: 0, positionAllowance: 0, transportAllowance: 0 } as any,
+    ],
+    salesTransactions: [],
+    currentPeriod: "2026-11",
+  });
+  assert.strictEqual(contractFallback.sourceType, "CONTRACTS_FALLBACK");
+  assert.strictEqual(contractFallback.monthlyPayroll, 3700000);
+  assert.strictEqual(contractFallback.monthlyOperational, 0);
+});
+
+test("calculateHppOverheadSimulation menghitung alokasi overhead, Full Cost, BEP, dan edge case nol/rugi", () => {
+  const sim = calculateHppOverheadSimulation({
+    totalHpp: 7000,
+    targetSellingPrice: 25000,
+    monthlyPayroll: 10000000,
+    monthlyOperational: 8000000,
+    monthlyStorePortions: 3000,
+    menuDailyVolume: 50,
+  });
+
+  // OPEX 18.000.000 / 3000 = 6.000; Full Cost = 13.000; Net Profit = 12.000 (48%)
+  assert.strictEqual(sim.monthlyTotalOpex, 18000000);
+  assert.strictEqual(sim.overheadPerPortion, 6000);
+  assert.strictEqual(sim.fullCostPerPortion, 13000);
+  assert.strictEqual(sim.estimatedNetProfitPerPortion, 12000);
+  assert.strictEqual(sim.estimatedNetMarginPercent, 48);
+  // Gross profit/cup = 18.000 -> BEP = 1.000 porsi/bulan = 34 porsi/hari
+  assert.strictEqual(sim.bepMonthlyPortions, 1000);
+  assert.strictEqual(sim.bepDailyPortions, 34);
+  // 50 cup * 30 * 18.000 = 27.000.000 -> 150% OPEX
+  assert.strictEqual(sim.menuMonthlyGrossProfit, 27000000);
+  assert.strictEqual(sim.menuOpexCoveragePercent, 150);
+  assert.strictEqual(sim.status, "HEALTHY");
+
+  // Edge case: harga di bawah full cost & gross margin negatif
+  const lossSim = calculateHppOverheadSimulation({
+    totalHpp: 15000,
+    targetSellingPrice: 12000,
+    monthlyPayroll: 5000000,
+    monthlyOperational: 5000000,
+    monthlyStorePortions: 1000,
+    menuDailyVolume: 10,
+  });
+  assert.strictEqual(lossSim.bepMonthlyPortions, null);
+  assert.strictEqual(lossSim.bepDailyPortions, null);
+  assert.strictEqual(lossSim.status, "LOSS");
+
+  // Edge case: OPEX = 0 tidak menghasilkan NaN/Infinity
+  const zeroOpex = calculateHppOverheadSimulation({
+    totalHpp: 7000,
+    targetSellingPrice: 22000,
+    monthlyPayroll: 0,
+    monthlyOperational: 0,
+    monthlyStorePortions: 0,
+    menuDailyVolume: 20,
+  });
+  assert.strictEqual(zeroOpex.overheadPerPortion, 0);
+  assert.strictEqual(zeroOpex.bepMonthlyPortions, null);
+  assert.strictEqual(zeroOpex.status, "NO_OPEX");
+});
+
+test("calculateFnbHealthMetrics menghitung Food/Labor/Prime Cost % dan BEP Omzet Bulanan", () => {
+  // Omzet 60jt, HPP 18jt (30%), Gaji 15jt (25% -> Prime Cost 55%), Total OPEX 21jt
+  // Gross Profit = 42jt (70%) -> BEP = ceil(21jt / 0.7) = 30.000.000 -> surplus +30.000.000
+  const healthy = calculateFnbHealthMetrics({
+    netSales: 60000000,
+    effectiveCOGS: 18000000,
+    totalHrdExpense: 15000000,
+    totalOPEX: 21000000,
+  });
+
+  assert.strictEqual(healthy.foodCostPercent, 30);
+  assert.strictEqual(healthy.foodCostStatus, "HEALTHY");
+  assert.strictEqual(healthy.laborCostPercent, 25);
+  assert.strictEqual(healthy.laborCostStatus, "HEALTHY");
+  assert.strictEqual(healthy.primeCostAmount, 33000000);
+  assert.strictEqual(healthy.primeCostPercent, 55);
+  assert.strictEqual(healthy.primeCostStatus, "HEALTHY");
+  assert.strictEqual(healthy.nonLaborOpexAmount, 6000000);
+  assert.strictEqual(healthy.bepMonthlyRevenue, 30000000);
+  assert.strictEqual(healthy.bepGapAmount, 30000000);
+  assert.strictEqual(healthy.isAboveBep, true);
+
+  // Omzet di bawah BEP & Prime Cost tinggi
+  const shortfall = calculateFnbHealthMetrics({
+    netSales: 20000000,
+    effectiveCOGS: 8000000, // 40% DANGER
+    totalHrdExpense: 6000000, // 30% WARNING -> Prime Cost 70% DANGER
+    totalOPEX: 18000000, // Gross Margin 60% -> BEP 30jt -> kurang 10jt
+  });
+  assert.strictEqual(shortfall.foodCostStatus, "DANGER");
+  assert.strictEqual(shortfall.laborCostStatus, "WARNING");
+  assert.strictEqual(shortfall.primeCostStatus, "DANGER");
+  assert.strictEqual(shortfall.bepMonthlyRevenue, 30000000);
+  assert.strictEqual(shortfall.bepGapAmount, -10000000);
+  assert.strictEqual(shortfall.isAboveBep, false);
+
+  // Edge case: netSales = 0 dan gross margin <= 0
+  const zeroSales = calculateFnbHealthMetrics({
+    netSales: 0,
+    effectiveCOGS: 5000000,
+    totalHrdExpense: 3000000,
+    totalOPEX: 6000000,
+  });
+  assert.strictEqual(zeroSales.foodCostStatus, "NEUTRAL");
+  assert.strictEqual(zeroSales.bepMonthlyRevenue, null);
+  assert.strictEqual(zeroSales.bepProgressPercent, 0);
+
+  const negativeGross = calculateFnbHealthMetrics({
+    netSales: 10000000,
+    effectiveCOGS: 12000000,
+    totalHrdExpense: 2000000,
+    totalOPEX: 5000000,
+  });
+  assert.strictEqual(negativeGross.bepMonthlyRevenue, null);
+  assert.strictEqual(negativeGross.isAboveBep, false);
 });
 
 // -------------------------------------------------------------

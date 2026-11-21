@@ -600,20 +600,36 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
       </AnimatePresence>
 
       {/* Modal Fallback PIN Manager di Tempat */}
-      {selectedVoidOrder && showPinModal && (
-        <PosManagerPinModal
-          title={`Batalkan Open Bill #${selectedVoidOrder.receiptNo}`}
-          description={`Anda akan membatalkan tagihan ${selectedVoidOrder.tableNumber} (${selectedVoidOrder.customerName || "Tamu"}). Masukkan PIN Manager untuk otorisasi.`}
-          requireReason={false}
-          onClose={() => setShowPinModal(false)}
-          onSuccess={(manager) => handleConfirmVoid(manager, voidReason)}
-        />
-      )}
+      <AnimatePresence>
+        {selectedVoidOrder && showPinModal && (
+          <PosManagerPinModal
+            title={`Batalkan Open Bill #${selectedVoidOrder.receiptNo}`}
+            description={`Anda akan membatalkan tagihan ${selectedVoidOrder.tableNumber} (${selectedVoidOrder.customerName || "Tamu"}). Masukkan PIN Manager untuk otorisasi.`}
+            requireReason={false}
+            onClose={() => setShowPinModal(false)}
+            onSuccess={(manager) => handleConfirmVoid(manager, voidReason)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ─── Modal Split Bill (Pecah Tagihan) ────────────────────────────── */}
-      {selectedSplitOrder && (
-        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <AnimatePresence>
+        {selectedSplitOrder && (
+          <motion.div
+            key="open-bills-split-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 360 }}
+              className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            >
             {/* Header Split Bill */}
             <div className="p-4 px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -834,9 +850,10 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

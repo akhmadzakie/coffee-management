@@ -76,10 +76,11 @@ async function runFullSystemSimulation() {
   });
 
   page.on("pageerror", (err) => {
-    console.log(`[Browser Unhandled Exception] ${err.message}`);
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.log(`[Browser Unhandled Exception] ${errMessage}`);
     detectedBugs.push({
       step: "Page Exception",
-      message: err.message,
+      message: errMessage,
       severity: "HIGH",
     });
   });
