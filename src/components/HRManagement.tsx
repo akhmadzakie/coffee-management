@@ -2431,7 +2431,7 @@ export function HRManagement() {
                 <table className="w-full text-left border-collapse min-w-[850px]">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 text-xs uppercase font-bold border-b border-slate-200">
-                      <th className="py-3.5 px-4 sticky left-0 bg-slate-50 z-10 w-52 shadow-[1px_0_0_0_#e2e8f0]">
+                      <th className="py-3.5 px-4 sticky left-0 bg-slate-50 z-10 w-52 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#1e293b]">
                         Karyawan & Divisi
                       </th>
                       {weekDays.map((d, idx) => (
@@ -2454,7 +2454,7 @@ export function HRManagement() {
                         const canEditThisEmp = canEditShiftForEmployee(emp);
                         return (
                           <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0]">
+                            <td className="py-3 px-4 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#1e293b]">
                               <p className="font-bold text-slate-800 truncate">{emp.name}</p>
                               <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">

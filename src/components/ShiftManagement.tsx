@@ -512,7 +512,7 @@ export const ShiftManagement = () => {
                     />
                     <Bar dataKey="kas" radius={[8, 8, 0, 0]}>
                       {shiftChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.isPagi ? "#1b2cc0" : "#0f172a"} />
+                        <Cell key={`cell-${index}`} fill={entry.isPagi ? "#1b2cc0" : "#7692ff"} />
                       ))}
                     </Bar>
                   </BarChart>

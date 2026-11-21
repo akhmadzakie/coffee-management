@@ -400,8 +400,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     return [
       { name: "Coffee Beverages", value: Math.round(totalRevenue * 0.54), color: "#d97706" },
       { name: "Non-Coffee & Tea", value: Math.round(totalRevenue * 0.22), color: "#f59e0b" },
-      { name: "Pastry & Food", value: Math.round(totalRevenue * 0.16), color: "#0f172a" },
-      { name: "Retail Beans & Merch", value: Math.round(totalRevenue * 0.08), color: "#64748b" },
+      { name: "Pastry & Food", value: Math.round(totalRevenue * 0.16), color: "#4a5ff0" },
+      { name: "Retail Beans & Merch", value: Math.round(totalRevenue * 0.08), color: "#94a3b8" },
     ];
   }, [totalRevenue]);
 

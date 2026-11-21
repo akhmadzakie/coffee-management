@@ -374,7 +374,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
 
             <button
               onClick={() => handleOpenCopilot("quick-input")}
-              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-brand-900 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-900 text-brand-900 dark:text-brand-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent dark:border-brand-300/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
             >
               <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
               <span>Buka Copilot Penuh →</span>
@@ -419,7 +419,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               </div>
               <button
                 onClick={() => onNavigate("finance_reports")}
-                className="px-3 py-1.5 rounded-xl bg-white text-brand-900 font-bold text-xs hover:bg-slate-100 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 text-brand-900 dark:text-brand-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent dark:border-brand-300/30 font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
               >
                 <span>Buka Laporan P&L →</span>
               </button>
