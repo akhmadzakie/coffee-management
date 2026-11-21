@@ -1,0 +1,65 @@
+/* Snapshot token @theme & utility dari src/index.css (Sumber kebenaran tetap src/index.css) */
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #dfe6ff;
+  --color-brand-200: #c3cfff;
+  --color-brand-300: #a8bcff;
+  --color-brand-400: #7692ff;
+  --color-brand-500: #4a5ff0;
+  --color-brand-600: #1b2cc0;
+  --color-brand-700: #1624a0;
+  --color-brand-800: #121d80;
+  --color-brand-900: #0f1860;
+  --color-brand-950: #0a1040;
+  --color-brand-sky: #a2c5fb;
+
+  --color-primary: #1b2cc0;
+  --color-accent: #1b2cc0;
+  --color-secondary: #f6f8ff;
+  --color-coffee-dark: #0a1040;
+  --color-coffee-roast: #0f1860;
+  --color-coffee-crema: #1b2cc0;
+  --color-coffee-latte: #eef2ff;
+  --color-coffee-border: #dfe6ff;
+}
+
+/* Light Mode Surface & Semantic Utilities (Default) */
+:root {
+  --surface-canvas: #f6f8ff;
+  --surface-card: #ffffff;
+  --surface-inset: #f8fafc;
+  --surface-inset-brand: #eef2ff;
+  --border-card: rgba(226, 232, 240, 0.9);
+  --border-brand-soft: rgba(195, 207, 255, 0.7);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --brand-action: #1b2cc0;
+  --brand-action-hover: #1624a0;
+}
+
+/* Dark Mode Pairing Reference (Kontras >= 4.5:1, non-clashing) */
+.dark {
+  --surface-canvas: #0a1040;      /* bg-brand-950 / bg-slate-950 */
+  --surface-card: #0f172a;        /* bg-slate-900 */
+  --surface-inset: rgba(30, 41, 59, 0.7); /* bg-slate-800/70 */
+  --surface-inset-brand: rgba(74, 95, 240, 0.15);
+  --border-card: #1e293b;         /* border-slate-800 */
+  --border-brand-soft: rgba(162, 197, 251, 0.3);
+  --text-primary: #f1f5f9;        /* text-slate-100 */
+  --text-secondary: #cbd5e1;      /* text-slate-300 */
+  --text-muted: #94a3b8;          /* text-slate-400 */
+  --brand-action: #4a5ff0;        /* bg-brand-500 / dark:text-brand-300 / brand-sky */
+  --brand-action-hover: #7692ff;
+}
+
+/*
+ * Dark Mode Tailwind Class Pairing Reference:
+ * - Canvas         : bg-[#f6f8ff] dark:bg-slate-950 (atau dark:bg-brand-950 untuk KDS/hero gelap)
+ * - Kartu utama    : bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800
+ * - Sub-panel/bar  : bg-slate-50/90 dark:bg-slate-800/70
+ * - Aksen teks     : text-brand-600 dark:text-brand-300 (JANGAN pakai brand-600 di atas bg gelap)
+ * - Tints semantik : bg-{c}-50/60 dark:bg-{c}-500/15 text-{c}-700 dark:text-{c}-300 border-{c}-200/70 dark:border-{c}-500/30
+ */

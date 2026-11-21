@@ -11,6 +11,7 @@
 - **Database Schema (Drizzle ORM)**: [`src/db/schema.ts`](file:///c:/Users/User/Documents/coffee%20management/src/db/schema.ts) (~512 baris) & [`src/db/db.ts`](file:///c:/Users/User/Documents/coffee%20management/src/db/db.ts) (~37 baris).
 - **Global Types & Interfaces**: [`src/types.ts`](file:///c:/Users/User/Documents/coffee%20management/src/types.ts) (~818 baris).
 - **Global State & Sync Engine**: [`src/store/StoreContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/store/StoreContext.tsx) (~3.089 baris) — Context provider, sync `/api/sync`, offline localStorage fallback, dan mutasi data.
+- **Theme & Global Toast Contexts**: [`src/context/ThemeContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/context/ThemeContext.tsx) (`ThemeProvider`, `useTheme`, `ThemeToggleButton`) & [`src/context/ToastContext.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/context/ToastContext.tsx) (`ToastProvider`, `useToast`, `toast`).
 - **Root App & Routing View**: [`src/App.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/App.tsx) (~452 baris) & [`src/components/Layout.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Layout.tsx) (~1.712 baris).
 - **Feature Flags**: [`src/config/features.ts`](file:///c:/Users/User/Documents/coffee%20management/src/config/features.ts) (~25 baris).
 
@@ -240,6 +241,7 @@
 - [`src/utils/export.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/export.ts) (1.188 baris) — PDF & CSV export
 - [`src/utils/exportXlsx.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/exportXlsx.ts) (925 baris) — Excel `.xlsx` generator
 - [`src/utils/posDomainLogic.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posDomainLogic.ts) (1.391 baris) — Kalkulasi diskon, pajak, service charge, HPP resep, sinkronisasi HPP arus kas & PO (`calculateCashFlowHppSync`, `getIngredientPackagingChoices`), NLP Finance parser (`parseSmartCoffeeTextEntry`), dan validasi POS
+- [`src/utils/financeMetrics.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/financeMetrics.ts) — Baseline otomatis overhead & BEP menu (`computeAutoOverheadBaseline`, `calculateHppOverheadSimulation`, `getPreviousPeriodString`) serta indikator kesehatan biaya F&B (`calculateFnbHealthMetrics`: Food Cost %, Labor Cost %, Prime Cost %, BEP omzet)
 - [`src/utils/escpos.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/escpos.ts) (289 baris) — Thermal printer ESC/POS formatter
 - [`src/utils/excelTemplate.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/excelTemplate.ts) (199 baris) — Template import Excel
 - [`src/utils/salesImportMapper.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/salesImportMapper.ts) (157 baris) — Mapper import data penjualan eksternal

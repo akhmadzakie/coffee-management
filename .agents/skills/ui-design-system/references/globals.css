@@ -1,28 +1,42 @@
+/* Referensi variabel tema Julia's (selaras dengan token @theme di src/index.css) */
 :root {
-  --background: #FAF6F0;
-  --surface: #FFFFFF;
-  --foreground: #2B1D14;
-  --muted: #7A6A5E;
-  --border: #E6DCCF;
+  --background: #f6f8ff;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
 
-  --primary: #6F4E37;
-  --primary-foreground: #FFFFFF;
-  --accent: #A85F26;
+  --primary: #1b2cc0;
+  --primary-hover: #1624a0;
+  --primary-foreground: #ffffff;
+  --accent: #4a5ff0;
+  --brand-tint: #eef2ff;
 
-  --success: #2F7D4F;
-  --warning: #B7791F;
-  --danger: #B3382C;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #e11d48;
+  --info: #0284c7;
 
   --radius: 12px;
 }
 
 .dark {
-  --background: #1C1410;
-  --surface: #261C16;
-  --foreground: #F3EAE0;
-  --muted: #B3A296;
-  --border: #3A2C23;
-  --primary: #C9A27E;
-  --primary-foreground: #1C1410;
-  --accent: #E0914F;
+  --background: #0a1040;
+  --surface: #0f172a;
+  --surface-subtle: #1e293b;
+  --foreground: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #1e293b;
+
+  --primary: #4a5ff0;
+  --primary-hover: #7692ff;
+  --primary-foreground: #ffffff;
+  --accent: #a2c5fb;
+  --brand-tint: rgba(74, 95, 240, 0.15);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --info: #38bdf8;
 }
