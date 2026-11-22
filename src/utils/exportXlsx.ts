@@ -16,6 +16,10 @@ import {
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
 } from "./financeMetrics";
+import {
+  calculateWorkDurationHours,
+  classifyDailyAttendanceStatus,
+} from "./attendanceRecap";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -594,16 +598,16 @@ export const exportAttendanceToXlsx = ({
   const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
   attendances.forEach((att) => {
     const prev = empMap.get(att.employeeId) || { present: 0, late: 0, sick: 0, alpha: 0, totalHours: 0 };
-    if (att.status === "HADIR") prev.present++;
-    else if (att.status === "TERLAMBAT") {
+    const cls = classifyDailyAttendanceStatus(att);
+    if (cls === "HADIR") prev.present++;
+    else if (cls === "TERLAMBAT") {
       prev.present++;
       prev.late++;
-    } else if (["IZIN", "SAKIT"].includes(att.status)) prev.sick++;
-    else if (["ALPHA", "DITOLAK"].includes(att.status)) prev.alpha++;
+    } else if (cls === "IZIN" || cls === "SAKIT") prev.sick++;
+    else prev.alpha++;
 
-    if (att.clockInTime && att.clockOutTime) {
-      const dur = (new Date(att.clockOutTime).getTime() - new Date(att.clockInTime).getTime()) / 3600000;
-      if (dur > 0 && dur < 24) prev.totalHours += dur;
+    if (cls === "HADIR" || cls === "TERLAMBAT") {
+      prev.totalHours += calculateWorkDurationHours(att.clockInTime, att.clockOutTime);
     }
     empMap.set(att.employeeId, prev);
   });
@@ -755,7 +759,10 @@ export const exportMasterExecutiveReportXlsx = ({
   }, 0);
   const lowStockCount = ingredients.filter((ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)).length;
 
-  const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+  const totalPresentLogs = attendances.filter((a) => {
+    const cls = classifyDailyAttendanceStatus(a);
+    return cls === "HADIR" || cls === "TERLAMBAT";
+  }).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
 
   const summaryRows = [
@@ -880,10 +887,11 @@ export const exportMasterExecutiveReportXlsx = ({
   // ─── 6. SHEET 6: ABSENSI & KEHADIRAN (ATTENDANCE) ───────────────────────────
   const attendanceRows = attendances.map((a, idx) => {
     const emp = employees.find((e) => e.id === a.employeeId);
-    let dur = "-";
-    if (a.clockInTime && a.clockOutTime) {
-      dur = ((new Date(a.clockOutTime).getTime() - new Date(a.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam";
-    }
+    const cls = classifyDailyAttendanceStatus(a);
+    const durHours = (cls === "HADIR" || cls === "TERLAMBAT")
+      ? calculateWorkDurationHours(a.clockInTime, a.clockOutTime)
+      : 0;
+    const dur = durHours > 0 ? `${durHours.toFixed(1)} Jam` : "-";
     return {
       No: idx + 1,
       Tanggal: a.date,
@@ -948,6 +956,10 @@ export const exportDailySalesRecapToXlsx = ({
   const totalQris = recaps.reduce((acc, r) => acc + (r.qrisAmount || 0), 0);
   const totalEdc = recaps.reduce((acc, r) => acc + (r.edcAmount || 0), 0);
   const totalTransfer = recaps.reduce((acc, r) => acc + (r.transferAmount || 0), 0);
+  const totalOnline = recaps.reduce((acc, r) => acc + (r.onlineDeliveryAmount || 0), 0);
+  const totalDiscount = recaps.reduce((acc, r) => acc + (r.discountAmount || 0), 0);
+  const totalRefund = recaps.reduce((acc, r) => acc + (r.refundAmount || 0), 0);
+  const totalMdr = recaps.reduce((acc, r) => acc + (r.mdrFeeAmount || 0), 0);
   const grandTotal = recaps.reduce((acc, r) => acc + (r.totalAmount || 0), 0);
 
   const summaryData = [
@@ -960,11 +972,15 @@ export const exportDailySalesRecapToXlsx = ({
     ["Total QRIS", totalQris],
     ["Total Mesin EDC", totalEdc],
     ["Total Transfer Bank", totalTransfer],
+    ["Total Ojol / Delivery (Bank)", totalOnline],
+    ["Total Diskon POS", totalDiscount],
+    ["Total Refund", totalRefund],
+    ["Total Potongan MDR", totalMdr],
     ["Grand Total Omzet", grandTotal],
   ];
 
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  wsSummary["!cols"] = [{ wch: 25 }, { wch: 30 }];
+  wsSummary["!cols"] = [{ wch: 28 }, { wch: 30 }];
   boldFirstRow(wsSummary, 2);
   XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
 
@@ -976,6 +992,11 @@ export const exportDailySalesRecapToXlsx = ({
     "QRIS",
     "Mesin EDC",
     "Transfer Bank",
+    "Ojol / Delivery",
+    "Diskon POS",
+    "Refund",
+    "Biaya MDR",
+    "Status Non-Tunai",
     "Total Omzet",
     "Keterangan",
     "Dicatat Oleh",
@@ -989,6 +1010,11 @@ export const exportDailySalesRecapToXlsx = ({
     r.qrisAmount || 0,
     r.edcAmount || 0,
     r.transferAmount || 0,
+    r.onlineDeliveryAmount || 0,
+    r.discountAmount || 0,
+    r.refundAmount || 0,
+    r.mdrFeeAmount || 0,
+    r.nonCashSettlementStatus === "PENDING" ? "Menunggu Cair" : "Sudah Masuk Bank",
     r.totalAmount || 0,
     r.notes || "-",
     r.recordedBy || "Kasir",
@@ -1003,6 +1029,11 @@ export const exportDailySalesRecapToXlsx = ({
     totalQris,
     totalEdc,
     totalTransfer,
+    totalOnline,
+    totalDiscount,
+    totalRefund,
+    totalMdr,
+    "",
     grandTotal,
     "",
     "",
@@ -1017,6 +1048,11 @@ export const exportDailySalesRecapToXlsx = ({
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 18 },
     { wch: 18 },
     { wch: 28 },
     { wch: 16 },

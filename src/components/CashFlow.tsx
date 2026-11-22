@@ -48,7 +48,10 @@ import {
   getIngredientPackagingChoices,
   getPackagingSelectValue,
 } from "../utils/posDomainLogic";
-import { computePeriodFinancialSummary } from "../utils/financeMetrics";
+import {
+  computeCashLiquidityBreakdown,
+  computePeriodFinancialSummary,
+} from "../utils/financeMetrics";
 import { CsvImportExport } from "./common/CsvImportExport";
 
 interface CashFlowProps {
@@ -131,6 +134,8 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     batchPreparations,
     dailySalesRecaps,
     syncMissingSalesToCashFlow,
+    purchaseOrders = [],
+    addStockMovement,
   } = useStore();
 
   const unsyncedSalesStats = useMemo(() => {
@@ -147,7 +152,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     let missingDays = 0;
     let missingAmount = 0;
     summary.dailyBreakdown.forEach((day) => {
-      const gap = Math.round(day.recognizedRevenue - day.cashSalesInflow);
+      const gap = Math.round(
+        day.recognizedRevenue - day.cashSalesInflow - day.pendingNonCash
+      );
       if (gap > 0) {
         missingDays++;
         missingAmount += gap;
@@ -202,6 +209,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
   const [useItemBreakdown, setUseItemBreakdown] = useState<boolean>(true);
   const [itemRows, setItemRows] = useState<DraftItemRow[]>([createEmptyItemRow()]);
   const [syncIngredientPrices, setSyncIngredientPrices] = useState<boolean>(true);
+  const [alsoAddToStock, setAlsoAddToStock] = useState<boolean>(true);
   const [priceSyncMethod, setPriceSyncMethod] = useState<"LAST_PRICE" | "WEIGHTED_AVERAGE">("LAST_PRICE");
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
@@ -228,6 +236,30 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     const ref = String(trx.referenceId || "");
     if (ref.startsWith("TRANSFER:")) return true;
     return String(trx.category || "").toLowerCase() === "transfer antar kas";
+  };
+
+  const getLinkedModuleSource = (trx: CashTransaction): string | null => {
+    const ref = String(trx.referenceId || "").trim();
+    if (!ref) return null;
+    if (
+      ref.startsWith("recap-cash:") ||
+      ref.startsWith("recap-noncash:") ||
+      ref.startsWith("recap-mdr:") ||
+      dailySalesRecaps.some((r) => r.id === ref)
+    ) {
+      return "Rekap Omzet";
+    }
+    const cleanPoRef = ref.startsWith("po:") ? ref.slice(3) : ref;
+    if (purchaseOrders.some((po) => po.id === ref || po.id === cleanPoRef)) {
+      return "Pembelian (PO)";
+    }
+    if (
+      ref.startsWith("pay-") ||
+      (trx.categoryId === "cat-hrd" && ref.toLowerCase().includes("payroll"))
+    ) {
+      return "Payroll";
+    }
+    return null;
   };
 
   const unverifiedSalesLogs = useMemo(() => {
@@ -278,9 +310,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     };
   }, [cashTransactions, cashAccounts, selectedAccountId]);
 
-  const totalBalance = useMemo(() => {
-    return (Object.values(accountBalances) as number[]).reduce((sum, b) => sum + b, 0);
-  }, [accountBalances]);
+  const liquidityBreakdown = useMemo(() => {
+    return computeCashLiquidityBreakdown(cashAccounts, cashTransactions);
+  }, [cashAccounts, cashTransactions]);
+
+  const totalBalance = liquidityBreakdown.totalLiquidity;
 
   // ─── Date Filter Matcher ────────────────────────────────────────────────────
   const matchesPeriod = (isoDate: string): boolean => {
@@ -718,11 +752,46 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     setUseItemBreakdown(initialType === "CASH_OUT");
     setItemRows([createEmptyItemRow()]);
     setSyncIngredientPrices(true);
+    setAlsoAddToStock(true);
     setPriceSyncMethod("LAST_PRICE");
     setIsModalOpen(true);
   };
 
+  const openSavingsDepositModal = () => {
+    const firstSavings = cashAccounts.find((a) => a.type === "SAVINGS");
+    if (!firstSavings) return;
+    const sourceAcc =
+      cashAccounts.find((a) => a.id !== firstSavings.id && a.type === "BANK") ||
+      cashAccounts.find((a) => a.id !== firstSavings.id) ||
+      firstSavings;
+    setEditingTrx(null);
+    setTrxType("TRANSFER");
+    setFormAccountId(sourceAcc.id);
+    setFormToAccountId(firstSavings.id);
+    setFormDate(getLocalDateString());
+    setFormAmount("");
+    setFormParentCategoryId("");
+    setFormCategoryId("");
+    setFormCustomCategory("");
+    setFormDescription("Sisihkan Dana ke Tabungan");
+    setFormVendorName("");
+    setFormReceiptNo("");
+    setFormPaymentMethod("Transfer Internal");
+    setUseItemBreakdown(false);
+    setItemRows([createEmptyItemRow()]);
+    setSyncIngredientPrices(false);
+    setAlsoAddToStock(false);
+    setIsModalOpen(true);
+  };
+
   const openEditModal = (trx: CashTransaction) => {
+    const linkedSource = getLinkedModuleSource(trx);
+    if (linkedSource) {
+      toast.warning(
+        `Transaksi ini tercatat otomatis dari modul ${linkedSource}. Silakan ubah dari modul ${linkedSource} agar saldo & laporan tetap sinkron.`
+      );
+      return;
+    }
     setEditingTrx(trx);
     const normType = getNormalizedType(trx.type);
     const effectiveType = normType === "TRANSFER" ? "CASH_OUT" : normType;
@@ -812,6 +881,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       setItemRows([createEmptyItemRow()]);
     }
     setSyncIngredientPrices(false);
+    setAlsoAddToStock(false);
     setPriceSyncMethod("LAST_PRICE");
     setIsModalOpen(true);
   };
@@ -954,6 +1024,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       );
 
       setSyncIngredientPrices(true);
+      setAlsoAddToStock(true);
       setPriceSyncMethod("LAST_PRICE");
       setIsModalOpen(true);
     };
@@ -1109,6 +1180,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       name: it.name || (validItems.length === 1 ? finalDescription : "Item"),
     }));
 
+    let createdTrxId: string | undefined;
     if (editingTrx) {
       updateCashTransaction({
         ...editingTrx,
@@ -1125,7 +1197,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
         items: normalizedItems.length > 0 ? normalizedItems : undefined,
       });
     } else {
-      addCashTransaction({
+      createdTrxId = addCashTransaction({
         accountId: formAccountId,
         type: trxType === "CASH_IN" ? "CASH_IN" : "CASH_OUT",
         date: isoDate,
@@ -1141,14 +1213,15 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       });
     }
 
-    // 3. Sinkronisasi Harga Bahan Baku -> Kondimen Olahan -> HPP Menu (tanpa mengubah currentStock fisik)
-    if (
+    // 3. Sinkronisasi Harga Bahan Baku -> Kondimen Olahan -> HPP Menu (HARUS sebelum addStockMovement agar currentStock tidak tertimpa)
+    const shouldSyncPrices =
       trxType === "CASH_OUT" &&
       useItemBreakdown &&
       (isBahanBakuCategory || hppSyncPreview.directUpdates.length > 0) &&
       syncIngredientPrices &&
-      hppSyncPreview.directUpdates.length > 0
-    ) {
+      hppSyncPreview.directUpdates.length > 0;
+
+    if (shouldSyncPrices) {
       hppSyncPreview.directUpdates.forEach((upd) => {
         updateIngredient({
           ...upd.ingredient,
@@ -1172,14 +1245,51 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
       hppSyncPreview.productsToUpdate.forEach((prod) => {
         updateProduct(prod);
       });
+    }
 
+    // 4. Tambah Stok Fisik Gudang jika opsi dicentang (untuk belanja bahan langsung di Arus Kas)
+    let addedStockCount = 0;
+    if (
+      !editingTrx &&
+      trxType === "CASH_OUT" &&
+      useItemBreakdown &&
+      alsoAddToStock &&
+      (isBahanBakuCategory || hppSyncPreview.directUpdates.length > 0)
+    ) {
+      normalizedItems.forEach((it) => {
+        if (!it.ingredientId) return;
+        const factor = Math.max(0.001, Number(it.conversionFactor) || 1);
+        const baseQty = Number(((Number(it.qty) || 0) * factor).toFixed(4));
+        if (baseQty <= 0) return;
+        addedStockCount++;
+        addStockMovement({
+          ingredientId: it.ingredientId,
+          type: "IN",
+          quantity: baseQty,
+          unitCost:
+            baseQty > 0
+              ? Math.round((Number(it.totalPrice || 0) / baseQty) * 100) / 100
+              : 0,
+          totalCost: Math.round(Number(it.totalPrice) || 0),
+          date: isoDate,
+          note: `Belanja Kas: ${finalDescription} (${it.qty} ${it.unit})`,
+          referenceId: createdTrxId || null,
+          createdBy: "Finance",
+        });
+      });
+    }
+
+    if (shouldSyncPrices || addedStockCount > 0) {
       const ingCount = hppSyncPreview.directUpdates.length + hppSyncPreview.batchPrepUpdates.length;
       const menuCount = hppSyncPreview.productsToUpdate.length;
-      setSyncToast(
-        `Transaksi tersimpan! Harga modal ${ingCount} bahan${
-          menuCount > 0 ? ` & HPP ${menuCount} menu` : ""
-        } berhasil disinkronkan.`
-      );
+      const msgParts: string[] = [];
+      if (addedStockCount > 0) msgParts.push(`+${addedStockCount} item masuk stok gudang`);
+      if (shouldSyncPrices) {
+        msgParts.push(
+          `harga modal ${ingCount} bahan${menuCount > 0 ? ` & HPP ${menuCount} menu` : ""} disinkronkan`
+        );
+      }
+      setSyncToast(`Transaksi tersimpan! ${msgParts.join(", ")}.`);
       setTimeout(() => setSyncToast(null), 5000);
     }
 
@@ -1189,6 +1299,13 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
 
   // ─── Delete Transaction (with Paired Transfer Detection) ───────────────────
   const handleDeleteTransaction = (trx: CashTransaction) => {
+    const linkedSource = getLinkedModuleSource(trx);
+    if (linkedSource) {
+      toast.warning(
+        `Transaksi ini tercatat otomatis dari modul ${linkedSource}. Silakan hapus dari modul ${linkedSource} agar saldo & laporan tetap sinkron.`
+      );
+      return;
+    }
     const ref = String(trx.referenceId || "");
     if (ref.startsWith("TRANSFER:")) {
       const pair = cashTransactions.find((t) => t.id !== trx.id && t.referenceId === ref);
@@ -1569,11 +1686,20 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                     : accountBalances[selectedAccountId] || 0
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-                {selectedAccountId === "all"
-                  ? `${cashAccounts.length} pos kas & rekening terdaftar`
-                  : `Pos: ${cashAccounts.find((a) => a.id === selectedAccountId)?.name || "-"}`}
-              </p>
+              {selectedAccountId === "all" ? (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-800 border border-brand-200/70 dark:border-slate-700 text-slate-700 dark:text-slate-200 tabular-nums">
+                    Kas Ops: {formatCurrency(liquidityBreakdown.operationalBalance)}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200/70 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    Tabungan: {formatCurrency(liquidityBreakdown.savingsBalance)}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                  {`Pos: ${cashAccounts.find((a) => a.id === selectedAccountId)?.name || "-"}`}
+                </p>
+              )}
             </div>
           </div>
 
@@ -1672,6 +1798,17 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             </div>
             {!isReadOnly && (
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {liquidityBreakdown.savingsAccounts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={openSavingsDepositModal}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 active:scale-95 text-emerald-800 transition-all cursor-pointer"
+                    title="Transfer dana operasional ke rekening Tabungan / Dana Cadangan"
+                  >
+                    <Landmark className="w-3.5 h-3.5" />
+                    <span>Sisihkan ke Tabungan</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -1842,13 +1979,26 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                       </div>
                     </div>
                     <div>
-                      <p
-                        className={`text-xs font-bold truncate ${
-                          isSelected ? "text-white" : "text-slate-800"
-                        }`}
-                      >
-                        {acc.name}
-                      </p>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <p
+                          className={`text-xs font-bold truncate ${
+                            isSelected ? "text-white" : "text-slate-800"
+                          }`}
+                        >
+                          {acc.name}
+                        </p>
+                        {acc.type === "SAVINGS" && (
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                              isSelected
+                                ? "bg-white/20 text-white"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            Tabungan
+                          </span>
+                        )}
+                      </div>
                       <p
                         className={`text-[10px] font-medium ${
                           isSelected ? "text-brand-100" : "text-slate-400"
@@ -2233,28 +2383,39 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           {trx.description}
                         </p>
 
-                        {/* Meta badges: Vendor & No Nota */}
-                        {(trx.vendorName || trx.receiptNo || trx.paymentMethod) && (
-                          <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
-                            {trx.vendorName && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50/80 text-amber-800 border border-amber-200/60 font-medium">
-                                <Store className="w-3 h-3 text-amber-600" />
-                                {trx.vendorName}
-                              </span>
-                            )}
-                            {trx.receiptNo && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono text-[10px]">
-                                <FileText className="w-3 h-3 text-slate-400" />
-                                {trx.receiptNo}
-                              </span>
-                            )}
-                            {trx.paymentMethod && (
-                              <span className="text-[10px] text-slate-400 font-semibold">
-                                • {trx.paymentMethod}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        {/* Meta badges: Sumber Modul, Vendor & No Nota */}
+                        {(() => {
+                          const linkedSource = getLinkedModuleSource(trx);
+                          if (!linkedSource && !trx.vendorName && !trx.receiptNo && !trx.paymentMethod) {
+                            return null;
+                          }
+                          return (
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
+                              {linkedSource && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200/70 font-bold text-[10px]">
+                                  Sumber: {linkedSource}
+                                </span>
+                              )}
+                              {trx.vendorName && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50/80 text-amber-800 border border-amber-200/60 font-medium">
+                                  <Store className="w-3 h-3 text-amber-600" />
+                                  {trx.vendorName}
+                                </span>
+                              )}
+                              {trx.receiptNo && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono text-[10px]">
+                                  <FileText className="w-3 h-3 text-slate-400" />
+                                  {trx.receiptNo}
+                                </span>
+                              )}
+                              {trx.paymentMethod && (
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  • {trx.paymentMethod}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Item Breakdown Badges (Qty × Harga Satuan = Total) */}
                         {hasItems && (
@@ -3225,10 +3386,30 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                               </span>
                             </div>
 
-                            {/* ─── PANEL SINKRONISASI HARGA BAHAN & HPP MENU ───────── */}
+                            {/* ─── PANEL SINKRONISASI STOK & HARGA BAHAN ───────── */}
                             {trxType === "CASH_OUT" &&
                               (isBahanBakuCategory || hppSyncPreview.directUpdates.length > 0) && (
                                 <div className="mt-2 p-3.5 rounded-2xl bg-gradient-to-br from-brand-50/80 via-white to-amber-50/50 border border-brand-200/80 space-y-3">
+                                  {!editingTrx && itemRows.some((r) => Boolean(r.ingredientId)) && (
+                                    <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={alsoAddToStock}
+                                        onChange={(e) => setAlsoAddToStock(e.target.checked)}
+                                        className="mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                                      />
+                                      <div>
+                                        <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1.5">
+                                          <Package className="w-3.5 h-3.5 text-emerald-600" />
+                                          Sekaligus tambah ke Stok Gudang (Mutasi IN)
+                                        </span>
+                                        <span className="block text-[11px] text-emerald-800 mt-0.5">
+                                          Centang jika barang langsung diterima agar stok bahan bertambah otomatis tanpa input ulang di Pembelian.
+                                        </span>
+                                      </div>
+                                    </label>
+                                  )}
+
                                   <div className="flex flex-wrap items-start justify-between gap-2">
                                     <label className="inline-flex items-start gap-2.5 cursor-pointer select-none">
                                       <input
@@ -3247,10 +3428,12 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                         </span>
                                       </div>
                                     </label>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
-                                      <Info className="w-3 h-3 text-slate-500" />
-                                      Stok fisik tetap (tidak diubah)
-                                    </span>
+                                    {!alsoAddToStock && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
+                                        <Info className="w-3 h-3 text-slate-500" />
+                                        Stok fisik tetap (tidak diubah)
+                                      </span>
+                                    )}
                                   </div>
 
                                   {syncIngredientPrices && (

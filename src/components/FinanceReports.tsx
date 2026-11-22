@@ -5,6 +5,7 @@ import { ConfirmModal } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
 import {
   calculateFnbHealthMetrics,
+  computeCashLiquidityBreakdown,
   computePeriodFinancialSummary,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
@@ -17,6 +18,8 @@ import {
   TrendingDown,
   Sparkles,
   Wallet,
+  PiggyBank,
+  Clock,
   PieChart as PieChartIcon,
   CheckCircle2,
   Calendar,
@@ -72,6 +75,8 @@ const FinanceReports: React.FC = () => {
     recipes,
     ingredients,
     products,
+    stockOpnames = [],
+    stockOpnameItems = [],
     bankReconciliations,
     bankStatementLines,
     budgets,
@@ -158,6 +163,10 @@ const FinanceReports: React.FC = () => {
       recipes,
       ingredients,
       products,
+      stockOpnames,
+      stockOpnameItems,
+      purchaseOrders,
+      cashAccounts,
     });
   }, [
     period,
@@ -169,29 +178,24 @@ const FinanceReports: React.FC = () => {
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
   ]);
 
-  const totalRecapAmount = unifiedPeriodSummary.recapRevenue;
-  const totalSalesAmount = unifiedPeriodSummary.salesTxRevenue;
   const totalCashIn = unifiedPeriodSummary.totalOperationalCashIn;
 
-  // Penjualan Kotor (Gross Sales) menggabungkan Rekap Harian, Item/POS Sales, dan Kas Masuk Penjualan per hari tanpa double-count
-  const grossSales = unifiedPeriodSummary.recognizedRevenue;
+  // Penjualan Kotor, Diskon, Refund & Penjualan Bersih (dari engine akuntansi terpusat)
+  const grossSales = unifiedPeriodSummary.grossSales;
+  const totalDiscountAmount = unifiedPeriodSummary.totalDiscountAmount;
+  const totalRefundAmount = unifiedPeriodSummary.totalRefundAmount;
+  const netSales = unifiedPeriodSummary.netSales;
 
-  const totalDiscountAmount = 0; // Potongan diskon promo
-  const totalRefundAmount = 0; // Pengembalian dana / void
-  const netSales = Math.max(0, grossSales - totalDiscountAmount - totalRefundAmount);
+  // Breakdown Metode Pembayaran Rekap Kasir (Tunai, QRIS, EDC, Transfer, Ojol/Delivery)
+  const paymentMethodBreakdown = unifiedPeriodSummary.paymentBreakdown;
 
-  // Breakdown Metode Pembayaran Rekap Kasir
-  const paymentMethodBreakdown = useMemo(() => {
-    const cash = periodRecaps.reduce((sum, r) => sum + (r.cashAmount || 0), 0);
-    const qris = periodRecaps.reduce((sum, r) => sum + (r.qrisAmount || 0), 0);
-    const edc = periodRecaps.reduce((sum, r) => sum + (r.edcAmount || 0), 0);
-    const transfer = periodRecaps.reduce((sum, r) => sum + (r.transferAmount || 0), 0);
-    return { cash, qris, edc, transfer };
-  }, [periodRecaps]);
-
-  // ─── II. HARGA POKOK PENJUALAN (HPP / COGS) ───────────────────────────────
+  // ─── II. HARGA POKOK PENJUALAN (HPP / COGS — OPSI A PERIODIK OPNAME) ─────
   const ingredientTransactions = useMemo(() => {
     return periodTransactions.filter((t) => {
       if (t.type !== "CASH_OUT") return false;
@@ -208,30 +212,28 @@ const FinanceReports: React.FC = () => {
     return ingredientTransactions.reduce((sum, t) => sum + t.amount, 0);
   }, [ingredientTransactions]);
 
-  // Rincian Pos HPP Bahan Baku
-  const cogsBreakdown = useMemo(() => {
-    const breakdown: Record<string, number> = {};
-    ingredientTransactions.forEach((t) => {
-      const name = getCategoryName(t.categoryId, "Bahan Baku Umum");
-      breakdown[name] = (breakdown[name] || 0) + t.amount;
-    });
-    return Object.entries(breakdown)
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [ingredientTransactions, expenseCategories]);
-
-  // HPP Teoretis Berdasarkan Resep (BOM) & Katalog Menu Terjual
+  // Komponen HPP Periodik Opsi A: Persediaan Awal + Pembelian Bahan − Persediaan Akhir Opname
+  const openingInventoryValue = unifiedPeriodSummary.openingInventoryValue;
+  const periodMaterialPurchases = unifiedPeriodSummary.periodMaterialPurchases;
+  const poReceivedPurchases = unifiedPeriodSummary.poReceivedPurchases;
+  const directCashMaterialPurchases = unifiedPeriodSummary.directCashMaterialPurchases;
+  const closingInventoryValue = unifiedPeriodSummary.closingInventoryValue;
   const theoreticalCOGS = unifiedPeriodSummary.theoreticalCOGS;
-
-  const effectiveCOGS = totalActualCOGS > 0 ? totalActualCOGS : theoreticalCOGS;
+  const effectiveCOGS = unifiedPeriodSummary.effectiveCOGS;
+  const cogsMethod = unifiedPeriodSummary.cogsMethod;
+  const cogsVariance = unifiedPeriodSummary.cogsVariance;
+  const opnameCoverageCount = unifiedPeriodSummary.opnameCoverageCount;
+  const opnameTotalIngredients = unifiedPeriodSummary.opnameTotalIngredients;
+  const hasOpeningOpname = unifiedPeriodSummary.hasOpeningOpname;
+  const hasClosingOpname = unifiedPeriodSummary.hasClosingOpname;
   const foodCostPercentage = netSales > 0 ? (effectiveCOGS / netSales) * 100 : 0;
 
   // ─── III. LABA KOTOR (GROSS PROFIT) ───────────────────────────────────────
-  const grossProfit = netSales - effectiveCOGS;
+  const grossProfit = unifiedPeriodSummary.grossProfit;
   const grossProfitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
 
-  // ─── IV. BEBAN OPERASIONAL (OPERATING EXPENSES / OPEX) ─────────────────────
-  // 1. Beban SDM / HRD / Payroll
+  // ─── IV. BEBAN OPERASIONAL (OPERATING EXPENSES / OPEX — BEBAS CAPEX) ────
+  // 1. Beban SDM / HRD / Payroll (sub-breakdown per kategori untuk rincian P&L)
   const hrdTransactions = useMemo(() => {
     const hrdKeywords = [
       "gaji",
@@ -260,9 +262,7 @@ const FinanceReports: React.FC = () => {
     });
   }, [periodTransactions, expenseCategories]);
 
-  const totalHrdExpense = useMemo(() => {
-    return hrdTransactions.reduce((sum, t) => sum + t.amount, 0);
-  }, [hrdTransactions]);
+  const totalHrdExpense = unifiedPeriodSummary.totalHrdExpense;
 
   // Rincian Beban HRD per Sub-Kategori (Gaji, Bonus/Tunjangan, BPJS, Seragam/Pelatihan)
   const hrdBreakdown = useMemo(() => {
@@ -278,41 +278,21 @@ const FinanceReports: React.FC = () => {
     return Object.values(map).sort((a, b) => b.amount - a.amount);
   }, [hrdTransactions, expenseCategories]);
 
-  // 2. Beban Utilitas
-  const utilityTransactions = useMemo(() => {
-    return periodTransactions.filter((t) => {
-      if (t.type !== "CASH_OUT") return false;
-      const catType = getCategoryType(t.categoryId);
-      return catType === "UTILITAS" || t.categoryId === "cat-utilitas";
-    });
-  }, [periodTransactions, expenseCategories]);
+  const totalUtilityExpense = unifiedPeriodSummary.totalUtilityExpense;
+  const totalGeneralOpsExpense = unifiedPeriodSummary.totalGeneralOpsExpense;
+  const totalAdminBankExpense = unifiedPeriodSummary.totalAdminBankExpense;
+  const totalOPEX = unifiedPeriodSummary.totalOPEX;
 
-  const totalUtilityExpense = useMemo(() => {
-    return utilityTransactions.reduce((sum, t) => sum + t.amount, 0);
-  }, [utilityTransactions]);
-
-  // 3. Beban Operasional Toko & Sewa
-  const generalOpsTransactions = useMemo(() => {
-    return periodTransactions.filter((t) => {
-      if (t.type !== "CASH_OUT") return false;
-      const catType = getCategoryType(t.categoryId);
-      return (
-        catType === "PENGELUARAN" ||
-        catType === "ASET" ||
-        catType === "LAINNYA"
-      );
-    });
-  }, [periodTransactions, expenseCategories]);
-
-  const totalGeneralOpsExpense = useMemo(() => {
-    return generalOpsTransactions.reduce((sum, t) => sum + t.amount, 0);
-  }, [generalOpsTransactions]);
-
-  const totalOPEX = totalHrdExpense + totalUtilityExpense + totalGeneralOpsExpense;
+  // Pos Non-Laba/Rugi & Arus Cadangan (Bagian VI)
+  const capexExpense = unifiedPeriodSummary.capexExpense;
+  const savingsDeposit = unifiedPeriodSummary.savingsDeposit;
+  const savingsWithdrawal = unifiedPeriodSummary.savingsWithdrawal;
+  const netSavingsAllocation = unifiedPeriodSummary.netSavingsAllocation;
+  const pendingNonCashSettlement = unifiedPeriodSummary.pendingNonCashSettlement;
 
   // ─── V. LABA BERSIH OPERASIONAL (NET OPERATING PROFIT) ────────────────────
-  const netOperatingProfit = grossProfit - totalOPEX;
-  const netProfitMargin = netSales > 0 ? (netOperatingProfit / netSales) * 100 : 0;
+  const netOperatingProfit = unifiedPeriodSummary.netProfit;
+  const netProfitMargin = unifiedPeriodSummary.netMarginPercent;
 
   // ─── V-B. INDIKATOR KESEHATAN BIAYA F&B & BEP OMZET ───────────────────────
   const fnbHealth = useMemo(() => {
@@ -324,21 +304,15 @@ const FinanceReports: React.FC = () => {
     });
   }, [netSales, effectiveCOGS, totalHrdExpense, totalOPEX]);
 
-  // ─── VI. REKONSILIASI KAS & POS AKUN ──────────────────────────────────────
-  const accountBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    cashAccounts.forEach((acc) => (balances[acc.id] = 0));
-    cashTransactions.forEach((trx) => {
-      if (balances[trx.accountId] === undefined) balances[trx.accountId] = 0;
-      if (trx.type === "CASH_IN") balances[trx.accountId] += trx.amount;
-      else if (trx.type === "CASH_OUT") balances[trx.accountId] -= trx.amount;
-    });
-    return balances;
-  }, [cashTransactions, cashAccounts]);
-
-  const totalLiquidity = useMemo(() => {
-    return (Object.values(accountBalances) as number[]).reduce((sum, val) => sum + val, 0);
-  }, [accountBalances]);
+  // ─── VI. REKONSILIASI KAS & POS AKUN (OPERASIONAL VS TABUNGAN) ───────────
+  const liquidityBreakdown = useMemo(
+    () => computeCashLiquidityBreakdown(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
+  const accountBalances = liquidityBreakdown.accountBalances;
+  const operationalBalance = liquidityBreakdown.operationalBalance;
+  const savingsBalance = liquidityBreakdown.savingsBalance;
+  const totalLiquidity = liquidityBreakdown.totalLiquidity;
 
   // Rekonsiliasi Payroll
   const payrollStats = useMemo(() => {
@@ -379,16 +353,59 @@ const FinanceReports: React.FC = () => {
     };
   }, [periodPurchaseOrders]);
 
-  // Rekonsiliasi Omzet
+  // Rekonsiliasi Omzet (memperhitungkan non-tunai yang belum cair H+1)
   const salesReconStats = useMemo(() => {
-    const diff = totalCashIn - grossSales;
+    const expectedSettledSales = Math.max(0, netSales - pendingNonCashSettlement);
+    const diff = totalCashIn - expectedSettledSales;
     return {
-      grossSales,
+      grossSales: netSales,
       totalCashIn,
+      pendingNonCashSettlement,
       diff,
       isMatch: Math.abs(diff) < 100,
     };
-  }, [grossSales, totalCashIn]);
+  }, [netSales, pendingNonCashSettlement, totalCashIn]);
+
+  // Kesiapan Tutup Buku Periode (Closing Checklist — Informatif)
+  const closingChecklist = useMemo(() => {
+    const unpaidPayrolls = periodPayrolls.filter((p) => p.status !== "PAID").length;
+    return [
+      {
+        label: hasClosingOpname
+          ? `Opname FINAL (${opnameCoverageCount}/${opnameTotalIngredients} bahan)`
+          : "Opname FINAL belum ada",
+        done: hasClosingOpname,
+      },
+      {
+        label:
+          pendingNonCashSettlement === 0
+            ? "Non-tunai QRIS/EDC/Ojol cair"
+            : `Belum cair: ${formatCurrency(pendingNonCashSettlement)}`,
+        done: pendingNonCashSettlement === 0,
+      },
+      {
+        label:
+          periodPayrolls.length === 0 || unpaidPayrolls === 0
+            ? "Payroll periode lunas"
+            : `${unpaidPayrolls} slip gaji belum lunas`,
+        done: unpaidPayrolls === 0,
+      },
+      {
+        label:
+          poStats.unpaidCount === 0
+            ? "PO bahan periode lunas"
+            : `${poStats.unpaidCount} PO bahan belum lunas`,
+        done: poStats.unpaidCount === 0,
+      },
+    ];
+  }, [
+    hasClosingOpname,
+    opnameCoverageCount,
+    opnameTotalIngredients,
+    pendingNonCashSettlement,
+    periodPayrolls,
+    poStats.unpaidCount,
+  ]);
 
   // ─── VII. REALISASI VS ANGGARAN (BUDGET COMPARISON) ──────────────────────
   const budgetComparison = useMemo(() => {
@@ -532,53 +549,76 @@ const FinanceReports: React.FC = () => {
       {/* ── PERIOD MANAGEMENT BANNER (FINANCE / MANAGER / SUPER_ADMIN) ─── */}
       {canManagePeriod && (
         <div
-          className={`p-4 sm:p-5 rounded-3xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+          className={`p-4 sm:p-5 rounded-3xl border transition-all space-y-3 ${
             isPeriodClosed
-              ? "bg-rose-50/70 border-rose-200 text-rose-950"
-              : "bg-white border-slate-200/90 shadow-2xs text-slate-800"
+              ? "bg-rose-50/70 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-950 dark:text-rose-100"
+              : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-2xs text-slate-800 dark:text-slate-100"
           }`}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
-                isPeriodClosed
-                  ? "bg-rose-100 text-rose-700 border border-rose-200"
-                  : "bg-slate-100 text-slate-700 border border-slate-200"
-              }`}
-            >
-              {isPeriodClosed ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  isPeriodClosed
+                    ? "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                {isPeriodClosed ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+              </div>
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <span>Manajemen Tutup Buku Periode ({period})</span>
+                  {isPeriodClosed && <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {isPeriodClosed
+                    ? "Periode ini telah dikunci resmi. Seluruh mutasi kas, transaksi penjualan, opname, dan payroll tidak dapat diubah."
+                    : "Kunci periode ini jika seluruh pembukuan bulan ini sudah final untuk mengunci angka laporan dari modifikasi tidak disengaja."}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <span>Manajemen Tutup Buku Periode ({period})</span>
-                {isPeriodClosed && <AlertTriangle className="w-4 h-4 text-rose-600" />}
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {isPeriodClosed
-                  ? "Periode ini telah dikunci resmi. Seluruh mutasi kas, transaksi penjualan, dan payroll tidak dapat diubah oleh staf."
-                  : "Kunci periode ini jika seluruh pembukuan bulan ini sudah final untuk mengunci angka laporan dari modifikasi tidak disengaja."}
-              </p>
+
+            <div className="shrink-0">
+              {isPeriodClosed ? (
+                <button
+                  onClick={() => setPeriodConfirmAction("reopen")}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Buka Kembali Buku</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setPeriodConfirmAction("close")}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs shadow-brand-600/20 transition-all cursor-pointer active:scale-95"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Kunci Periode Sekarang</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="shrink-0">
-            {isPeriodClosed ? (
-              <button
-                onClick={() => setPeriodConfirmAction("reopen")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+          {/* Checklist Kesiapan Tutup Buku (Informatif) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/60">
+            {closingChecklist.map((chk) => (
+              <div
+                key={chk.label}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-semibold ${
+                  chk.done
+                    ? "bg-emerald-50/70 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-500/30"
+                    : "bg-amber-50/70 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-200/70 dark:border-amber-500/30"
+                }`}
               >
-                <Unlock className="w-3.5 h-3.5" />
-                <span>Buka Kembali Buku</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setPeriodConfirmAction("close")}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs shadow-brand-600/20 transition-all cursor-pointer active:scale-95"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Kunci Periode Sekarang</span>
-              </button>
-            )}
+                {chk.done ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                ) : (
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span className="truncate">{chk.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -660,10 +700,10 @@ const FinanceReports: React.FC = () => {
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-slate-900 dark:text-slate-100 font-mono tracking-tight">
+                <p className="text-xl font-black text-slate-900 dark:text-slate-100 font-mono tabular-nums tracking-tight">
                   {formatCurrency(effectiveCOGS)}
                 </p>
-                <div className="flex items-center gap-1.5 mt-1">
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       foodCostPercentage <= 35
@@ -674,6 +714,19 @@ const FinanceReports: React.FC = () => {
                     }`}
                   >
                     Food Cost: {foodCostPercentage.toFixed(1)}%
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      cogsMethod === "OPNAME_PERIODIC"
+                        ? "bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30"
+                        : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                    }`}
+                  >
+                    {cogsMethod === "OPNAME_PERIODIC"
+                      ? "Opname Periodik"
+                      : cogsMethod === "THEORETICAL_FALLBACK"
+                      ? "Estimasi BOM"
+                      : "Belanja Kas"}
                   </span>
                 </div>
               </div>
@@ -690,7 +743,7 @@ const FinanceReports: React.FC = () => {
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-brand-600 dark:text-brand-300 font-mono tracking-tight">
+                <p className="text-xl font-black text-brand-600 dark:text-brand-300 font-mono tabular-nums tracking-tight">
                   {formatCurrency(grossProfit)}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -710,12 +763,17 @@ const FinanceReports: React.FC = () => {
                 </div>
               </div>
               <div>
-                <p className="text-xl font-black text-rose-600 dark:text-rose-300 font-mono tracking-tight">
+                <p className="text-xl font-black text-rose-600 dark:text-rose-300 font-mono tabular-nums tracking-tight">
                   {formatCurrency(totalOPEX)}
                 </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
                   Gaji: {formatCurrency(totalHrdExpense)}
                 </p>
+                {capexExpense > 0 && (
+                  <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                    CapEx dipisah: {formatCurrency(capexExpense)}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1033,7 +1091,7 @@ const FinanceReports: React.FC = () => {
                     <td className="p-3 sm:px-6 pl-8">
                       Potongan Penjualan / Diskon Promo (-)
                     </td>
-                    <td className="p-3 text-right font-mono text-rose-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-rose-600">
                       {totalDiscountAmount > 0 ? `-${formatCurrency(totalDiscountAmount)}` : "Rp 0"}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
@@ -1041,59 +1099,133 @@ const FinanceReports: React.FC = () => {
                       {netSales > 0 ? ((totalDiscountAmount / netSales) * 100).toFixed(1) : 0}%
                     </td>
                   </tr>
+                  <tr className="hover:bg-slate-50/50 text-slate-500">
+                    <td className="p-3 sm:px-6 pl-8">
+                      Pengembalian Dana / Refund / Void POS (-)
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums text-rose-600">
+                      {totalRefundAmount > 0 ? `-${formatCurrency(totalRefundAmount)}` : "Rp 0"}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-400">
+                      {netSales > 0 ? ((totalRefundAmount / netSales) * 100).toFixed(1) : 0}%
+                    </td>
+                  </tr>
                   <tr className="bg-emerald-50/40 font-bold text-emerald-950 border-t border-b border-emerald-100">
                     <td className="p-3.5 sm:px-6">
                       = Total Penjualan Bersih (Net Revenue)
                     </td>
                     <td className="p-3 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 sm:px-6 text-right font-mono text-emerald-700 text-sm font-black">
+                    <td className="p-3 sm:px-6 text-right font-mono tabular-nums text-emerald-700 text-sm font-black">
                       {formatCurrency(netSales)}
                     </td>
                     <td className="p-3 text-center font-bold text-emerald-700">100.0%</td>
                   </tr>
 
-                  {/* ── BAGIAN II: HARGA POKOK PENJUALAN (HPP / COGS) ── */}
+                  {/* ── BAGIAN II: HARGA POKOK PENJUALAN (HPP / COGS — OPSI A PERIODIK) ── */}
                   <tr className="bg-slate-50/60 font-bold text-slate-900">
                     <td colSpan={4} className="p-3 sm:px-6 text-amber-900 text-xs uppercase tracking-wider">
-                      II. Harga Pokok Penjualan (HPP / COGS Bahan Baku & Kemasan)
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>II. Harga Pokok Penjualan (HPP / COGS Periodik Opname)</span>
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border normal-case tracking-normal ${
+                            cogsMethod === "OPNAME_PERIODIC"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                              : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                          }`}
+                        >
+                          {cogsMethod === "OPNAME_PERIODIC"
+                            ? `Opname Periodik (${opnameCoverageCount}/${opnameTotalIngredients} bahan)`
+                            : cogsMethod === "THEORETICAL_FALLBACK"
+                            ? "Fallback: Estimasi Resep BOM (Belum ada Opname Akhir)"
+                            : "Fallback: Belanja Bahan Periode (Belum ada Opname Akhir)"}
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                  {cogsBreakdown.length > 0 ? (
-                    cogsBreakdown.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
+                  {cogsMethod === "OPNAME_PERIODIC" ? (
+                    <>
+                      <tr className="hover:bg-slate-50/50">
                         <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
-                          <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          <span>{item.name}</span>
+                          <Package className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>
+                            (+) Persediaan Awal Bahan Baku{" "}
+                            <span className="text-[11px] text-slate-400">
+                              {hasOpeningOpname ? "(Opname FINAL bulan lalu)" : "(Belum ada opname bulan lalu)"}
+                            </span>
+                          </span>
                         </td>
-                        <td className="p-3 text-right font-mono text-slate-600">
-                          {formatCurrency(item.amount)}
+                        <td className="p-3 text-right font-mono tabular-nums text-slate-700">
+                          {formatCurrency(openingInventoryValue)}
                         </td>
                         <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
                         <td className="p-3 text-center text-slate-500">
-                          {netSales > 0 ? ((item.amount / netSales) * 100).toFixed(1) : 0}%
+                          {netSales > 0 ? ((openingInventoryValue / netSales) * 100).toFixed(1) : 0}%
                         </td>
                       </tr>
-                    ))
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="p-3 sm:px-6 pl-8 text-slate-700">
+                          <div className="flex items-center gap-2">
+                            <ShoppingBag className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>(+) Pembelian Bahan Baku Periode Berjalan</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 pl-5 mt-0.5 tabular-nums">
+                            PO Diterima: {formatCurrency(poReceivedPurchases)} · Belanja Bahan Non-PO: {formatCurrency(directCashMaterialPurchases)}
+                          </p>
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums text-slate-700">
+                          {formatCurrency(periodMaterialPurchases)}
+                        </td>
+                        <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                        <td className="p-3 text-center text-slate-500">
+                          {netSales > 0 ? ((periodMaterialPurchases / netSales) * 100).toFixed(1) : 0}%
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/50 text-emerald-700">
+                        <td className="p-3 sm:px-6 pl-8 flex items-center gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>(-) Persediaan Akhir Bahan Baku (Opname FINAL Bulan Ini)</span>
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums font-semibold">
+                          -{formatCurrency(closingInventoryValue)}
+                        </td>
+                        <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                        <td className="p-3 text-center text-emerald-600">
+                          {netSales > 0 ? ((closingInventoryValue / netSales) * 100).toFixed(1) : 0}%
+                        </td>
+                      </tr>
+                    </>
                   ) : (
-                    <tr className="hover:bg-slate-50/50">
-                      <td className="p-3 sm:px-6 pl-8 text-slate-500 italic">
-                        Bahan Baku Terpakai (Estimasi Resep BOM)
-                      </td>
-                      <td className="p-3 text-right font-mono text-slate-600">
-                        {formatCurrency(theoreticalCOGS)}
-                      </td>
-                      <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
-                      <td className="p-3 text-center text-slate-500">
-                        {netSales > 0 ? ((theoreticalCOGS / netSales) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
+                    <>
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="p-3 sm:px-6 pl-8 text-slate-600">
+                          <span className="italic">
+                            {cogsMethod === "THEORETICAL_FALLBACK"
+                              ? "Pemakaian Bahan Terpakai (Estimasi Resep BOM — selesaikan Opname FINAL untuk HPP periodik)"
+                              : "Belanja Bahan Periode Berjalan (PO Diterima + Belanja Non-PO — belum ada Opname FINAL)"}
+                          </span>
+                          {periodMaterialPurchases > 0 && (
+                            <p className="text-[10px] text-slate-400 not-italic mt-0.5 tabular-nums">
+                              Pembelian bahan tercatat periode ini: {formatCurrency(periodMaterialPurchases)} (PO: {formatCurrency(poReceivedPurchases)} · Kas Non-PO: {formatCurrency(directCashMaterialPurchases)})
+                            </p>
+                          )}
+                        </td>
+                        <td className="p-3 text-right font-mono tabular-nums text-slate-600">
+                          {formatCurrency(effectiveCOGS)}
+                        </td>
+                        <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                        <td className="p-3 text-center text-slate-500">
+                          {foodCostPercentage.toFixed(1)}%
+                        </td>
+                      </tr>
+                    </>
                   )}
                   <tr className="bg-amber-50/40 font-bold text-amber-950 border-t border-b border-amber-100">
                     <td className="p-3.5 sm:px-6">
                       = Total Harga Pokok Penjualan (COGS)
                     </td>
                     <td className="p-3 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 sm:px-6 text-right font-mono text-amber-700 text-sm font-black">
+                    <td className="p-3 sm:px-6 text-right font-mono tabular-nums text-amber-700 text-sm font-black">
                       {formatCurrency(effectiveCOGS)}
                     </td>
                     <td className="p-3 text-center font-bold text-amber-700">
@@ -1107,7 +1239,7 @@ const FinanceReports: React.FC = () => {
                       III. LABA KOTOR (GROSS PROFIT)
                     </td>
                     <td className="p-4 text-right font-mono text-slate-400">-</td>
-                    <td className="p-4 sm:px-6 text-right font-mono text-brand-700 text-base font-black">
+                    <td className="p-4 sm:px-6 text-right font-mono tabular-nums text-brand-700 text-base font-black">
                       {formatCurrency(grossProfit)}
                     </td>
                     <td className="p-4 text-center font-bold text-brand-700 text-xs">
@@ -1118,16 +1250,16 @@ const FinanceReports: React.FC = () => {
                   {/* ── BAGIAN IV: BEBAN USAHA / OPERASIONAL (OPEX) ── */}
                   <tr className="bg-slate-50/60 font-bold text-slate-900">
                     <td colSpan={4} className="p-3 sm:px-6 text-rose-900 text-xs uppercase tracking-wider">
-                      IV. Beban Usaha / Operasional (Operating Expenses / OPEX)
+                      IV. Beban Usaha / Operasional (Operating Expenses / OPEX — Tanpa Belanja Aset CapEx)
                     </td>
                   </tr>
                   {/* Gaji / HRD & Sub-Kategori SDM */}
                   <tr className="hover:bg-slate-50/50">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2 font-semibold">
                       <Users className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                      <span>Beban SDM, Payroll, Bonus & Tunjangan (HRD & Personalia)</span>
+                      <span>Beban SDM, Payroll, Bonus &amp; Tunjangan (HRD &amp; Personalia)</span>
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-700 font-bold">
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-700 font-bold">
                       {formatCurrency(totalHrdExpense)}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
@@ -1141,7 +1273,7 @@ const FinanceReports: React.FC = () => {
                         <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
                         <span>Sub: {item.name}</span>
                       </td>
-                      <td className="py-2 px-3 text-right font-mono text-slate-600">
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
                         {formatCurrency(item.amount)}
                       </td>
                       <td className="py-2 px-4 sm:px-6 text-right font-mono text-slate-300">-</td>
@@ -1156,7 +1288,7 @@ const FinanceReports: React.FC = () => {
                       <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       <span>Beban Utilitas (Listrik PLN, Air PDAM, Gas LPG, Wifi)</span>
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-600">
                       {formatCurrency(totalUtilityExpense)}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
@@ -1164,13 +1296,13 @@ const FinanceReports: React.FC = () => {
                       {netSales > 0 ? ((totalUtilityExpense / netSales) * 100).toFixed(1) : 0}%
                     </td>
                   </tr>
-                  {/* Operasional Toko */}
+                  {/* Operasional Toko Non-CapEx */}
                   <tr className="hover:bg-slate-50/50">
                     <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
                       <Building2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                      <span>Beban Operasional Toko (Sewa Tempat, Kebersihan, Pemasaran, Perawatan)</span>
+                      <span>Beban Operasional Toko &amp; Sewa (Non-CapEx)</span>
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-600">
                       {formatCurrency(totalGeneralOpsExpense)}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
@@ -1178,12 +1310,26 @@ const FinanceReports: React.FC = () => {
                       {netSales > 0 ? ((totalGeneralOpsExpense / netSales) * 100).toFixed(1) : 0}%
                     </td>
                   </tr>
+                  {/* Biaya Admin Bank & MDR */}
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
+                      <CreditCard className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Biaya Admin Bank, MDR QRIS/EDC &amp; Komisi Delivery</span>
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-600">
+                      {formatCurrency(totalAdminBankExpense)}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-500">
+                      {netSales > 0 ? ((totalAdminBankExpense / netSales) * 100).toFixed(1) : 0}%
+                    </td>
+                  </tr>
                   <tr className="bg-rose-50/40 font-bold text-rose-950 border-t border-b border-rose-100">
                     <td className="p-3.5 sm:px-6">
                       = Total Beban Usaha / Operasional (Total OPEX)
                     </td>
                     <td className="p-3 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 sm:px-6 text-right font-mono text-rose-600 text-sm font-black">
+                    <td className="p-3 sm:px-6 text-right font-mono tabular-nums text-rose-600 text-sm font-black">
                       {formatCurrency(totalOPEX)}
                     </td>
                     <td className="p-3 text-center font-bold text-rose-600">
@@ -1204,7 +1350,7 @@ const FinanceReports: React.FC = () => {
                     </td>
                     <td className="p-4 text-right font-mono text-slate-400">-</td>
                     <td
-                      className={`p-4 sm:px-6 text-right font-mono text-lg font-black ${
+                      className={`p-4 sm:px-6 text-right font-mono tabular-nums text-lg font-black ${
                         netOperatingProfit >= 0 ? "text-emerald-700" : "text-rose-600"
                       }`}
                     >
@@ -1218,6 +1364,63 @@ const FinanceReports: React.FC = () => {
                       {netProfitMargin.toFixed(1)}%
                     </td>
                   </tr>
+
+                  {/* ── BAGIAN VI: ARUS NON-LABA/RUGI (CAPEX, TABUNGAN & NERACA KAS) ── */}
+                  <tr className="bg-slate-100/80 font-bold text-slate-700">
+                    <td colSpan={4} className="p-3 sm:px-6 text-xs uppercase tracking-wider">
+                      VI. Pos Non-Operasional, Investasi Aset &amp; Neraca Kas Periode (Di Luar Laba Bersih)
+                    </td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                      <span>Belanja Modal / Pembelian Aset &amp; Mesin (CapEx — Dipisah dari OPEX)</span>
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-700">
+                      {formatCurrency(capexExpense)}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-400">Non-P&amp;L</td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700">
+                      <div className="flex items-center gap-2">
+                        <PiggyBank className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Alokasi Bersih ke Tabungan / Dana Cadangan (SAVINGS)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 pl-5 mt-0.5 tabular-nums">
+                        Disisihkan: +{formatCurrency(savingsDeposit)} · Dicairkan ke Ops: -{formatCurrency(savingsWithdrawal)}
+                      </p>
+                    </td>
+                    <td className={`p-3 text-right font-mono tabular-nums font-semibold ${netSavingsAllocation >= 0 ? "text-amber-700" : "text-rose-600"}`}>
+                      {netSavingsAllocation >= 0 ? "+" : ""}
+                      {formatCurrency(netSavingsAllocation)}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-400">Neraca Kas</td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Piutang Settlement Non-Tunai Belum Cair (QRIS / EDC / Ojol H+1)</span>
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums text-amber-700 font-semibold">
+                      {formatCurrency(pendingNonCashSettlement)}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-400">Piutang</td>
+                  </tr>
+                  <tr className="hover:bg-slate-50/50">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>Sisa Hutang Purchase Order Bahan Periode (Unpaid PO)</span>
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums text-rose-600 font-semibold">
+                      {formatCurrency(poStats.unpaidDebt)}
+                    </td>
+                    <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
+                    <td className="p-3 text-center text-slate-400">Hutang</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1228,25 +1431,25 @@ const FinanceReports: React.FC = () => {
                 <Info className="w-4 h-4 text-brand-600 shrink-0" />
                 <span className="text-slate-600">
                   HPP Teoretis menurut resep menu terjual:{" "}
-                  <strong className="font-mono text-slate-800">{formatCurrency(theoreticalCOGS)}</strong>.
-                  {totalActualCOGS > 0 && theoreticalCOGS > 0 && (
+                  <strong className="font-mono tabular-nums text-slate-800">{formatCurrency(theoreticalCOGS)}</strong>.
+                  {cogsVariance !== null && theoreticalCOGS > 0 && (
                     <>
-                      {" "}Selisih vs Pembelian Aktual:{" "}
+                      {" "}Selisih HPP Periodik Opname vs Resep BOM:{" "}
                       <strong
-                        className={`font-mono ${
-                          totalActualCOGS > theoreticalCOGS ? "text-rose-600" : "text-emerald-600"
+                        className={`font-mono tabular-nums ${
+                          cogsVariance > 0 ? "text-rose-600" : "text-emerald-600"
                         }`}
                       >
-                        {totalActualCOGS > theoreticalCOGS ? "+" : ""}
-                        {formatCurrency(totalActualCOGS - theoreticalCOGS)}
+                        {cogsVariance > 0 ? "+" : ""}
+                        {formatCurrency(cogsVariance)}
                       </strong>{" "}
-                      ({totalActualCOGS > theoreticalCOGS ? "Potensi Pemborosan / Over-portioning" : "Pemanfaatan Stok Lama"})
+                      ({cogsVariance > 0 ? "Potensi Waste / Over-portioning" : "Efisiensi / Penggunaan Stok"})
                     </>
                   )}
                 </span>
               </div>
               <span className="text-[11px] font-bold text-slate-500">
-                Target Rasio F&B Coffee Shop: 28% – 35%
+                Target Rasio F&amp;B Coffee Shop: 28% – 35%
               </span>
             </div>
           </div>
@@ -1448,20 +1651,28 @@ const FinanceReports: React.FC = () => {
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Omzet Penjualan POS / Rekap Harian:</span>
-                  <span className="font-mono font-bold text-slate-900">
+                  <span className="font-mono tabular-nums font-bold text-slate-900">
                     {formatCurrency(salesReconStats.grossSales)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Total Kas Masuk Tercatat (Buku Kas):</span>
-                  <span className="font-mono font-bold text-emerald-600">
+                  <span className="font-mono tabular-nums font-bold text-emerald-600">
                     {formatCurrency(salesReconStats.totalCashIn)}
                   </span>
                 </div>
+                {salesReconStats.pendingNonCashSettlement > 0 && (
+                  <div className="flex justify-between items-center text-amber-700">
+                    <span>Piutang Non-Tunai Belum Cair (H+1):</span>
+                    <span className="font-mono tabular-nums font-bold">
+                      {formatCurrency(salesReconStats.pendingNonCashSettlement)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-2 border-t border-slate-200/80">
                   <span className="font-bold text-slate-800">Selisih Penjualan vs Kas In:</span>
                   <span
-                    className={`font-mono font-black ${
+                    className={`font-mono tabular-nums font-black ${
                       salesReconStats.diff === 0
                         ? "text-slate-700"
                         : salesReconStats.diff > 0
@@ -1474,24 +1685,28 @@ const FinanceReports: React.FC = () => {
                 </div>
               </div>
 
-              {/* Rincian Kanal Bayar POS */}
+              {/* Rincian Kanal Bayar POS (5 Kanal: Tunai, QRIS, EDC, Transfer, Ojol) */}
               {periodRecaps.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] pt-1">
                   <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
                     <span className="text-slate-400 block text-[10px]">Tunai / Cash</span>
-                    <strong className="font-mono text-slate-800">{formatCurrency(paymentMethodBreakdown.cash)}</strong>
+                    <strong className="font-mono tabular-nums text-slate-800">{formatCurrency(paymentMethodBreakdown.cash)}</strong>
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
                     <span className="text-slate-400 block text-[10px]">QRIS Statis/Dinamis</span>
-                    <strong className="font-mono text-slate-800">{formatCurrency(paymentMethodBreakdown.qris)}</strong>
+                    <strong className="font-mono tabular-nums text-slate-800">{formatCurrency(paymentMethodBreakdown.qris)}</strong>
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
                     <span className="text-slate-400 block text-[10px]">Debit / EDC</span>
-                    <strong className="font-mono text-slate-800">{formatCurrency(paymentMethodBreakdown.edc)}</strong>
+                    <strong className="font-mono tabular-nums text-slate-800">{formatCurrency(paymentMethodBreakdown.edc)}</strong>
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
                     <span className="text-slate-400 block text-[10px]">Transfer Bank</span>
-                    <strong className="font-mono text-slate-800">{formatCurrency(paymentMethodBreakdown.transfer)}</strong>
+                    <strong className="font-mono tabular-nums text-slate-800">{formatCurrency(paymentMethodBreakdown.transfer)}</strong>
+                  </div>
+                  <div className="p-2.5 bg-brand-50/60 rounded-xl border border-brand-100">
+                    <span className="text-brand-700 block text-[10px] font-semibold">Ojol / Delivery</span>
+                    <strong className="font-mono tabular-nums text-brand-900">{formatCurrency(paymentMethodBreakdown.onlineDelivery)}</strong>
                   </div>
                 </div>
               )}
@@ -1672,51 +1887,81 @@ const FinanceReports: React.FC = () => {
           </div>
 
           {/* ── DISTRIBUSI SALDO POS KAS & REKENING TOKO ────────────────────── */}
-          <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/90 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-brand-600" />
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-brand-600 dark:text-brand-300" />
                   <span>Posisi Likuiditas Kas Toko Saat Ini</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Saldo riil di seluruh pos kas fisik (kas toko) dan akun bank operasional kafe.
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Pemisahan kas kerja operasional (siap pakai) dan rekening tabungan / dana cadangan kafe.
                 </p>
               </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Total Likuiditas
-                </span>
-                <span className="text-lg sm:text-xl font-black font-mono text-brand-700">
-                  {formatCurrency(totalLiquidity)}
-                </span>
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                <div className="px-3 py-1.5 rounded-2xl bg-slate-100/90 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                    Kas Operasional
+                  </span>
+                  <span className="text-sm font-black font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatCurrency(operationalBalance)}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-2xl bg-amber-50/90 dark:bg-amber-500/15 border border-amber-200/80 dark:border-amber-500/30 text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center justify-end gap-1">
+                    <PiggyBank className="w-3 h-3" />
+                    Tabungan
+                  </span>
+                  <span className="text-sm font-black font-mono tabular-nums text-amber-800 dark:text-amber-200">
+                    {formatCurrency(savingsBalance)}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-2xl bg-brand-50/90 dark:bg-brand-500/15 border border-brand-200/80 dark:border-brand-500/30 text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-300 block">
+                    Total Likuiditas
+                  </span>
+                  <span className="text-base sm:text-lg font-black font-mono tabular-nums text-brand-700 dark:text-brand-200">
+                    {formatCurrency(totalLiquidity)}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {cashAccounts.map((acc) => {
                 const bal = accountBalances[acc.id] || 0;
+                const isSavings = acc.type === "SAVINGS";
                 return (
                   <div
                     key={acc.id}
-                    className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:border-brand-300 transition-all flex flex-col justify-between"
+                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                      isSavings
+                        ? "bg-amber-50/40 dark:bg-amber-500/10 border-amber-200/80 dark:border-amber-500/30 hover:border-amber-300"
+                        : "bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/70 dark:border-slate-700/80 hover:border-brand-300"
+                    }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-slate-800 truncate mr-2">{acc.name}</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white border border-slate-200 font-semibold text-slate-500">
-                        {acc.type}
-                      </span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mr-2">{acc.name}</span>
+                      {isSavings ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-200 dark:border-amber-500/30 font-bold text-amber-800 dark:text-amber-300 shrink-0">
+                          Tabungan
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-semibold text-slate-500 dark:text-slate-300 shrink-0">
+                          {acc.type}
+                        </span>
+                      )}
                     </div>
                     <p
-                      className={`text-base sm:text-lg font-black font-mono ${
-                        bal < 0 ? "text-rose-600" : "text-slate-900"
+                      className={`text-base sm:text-lg font-black font-mono tabular-nums ${
+                        bal < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"
                       }`}
                     >
                       {formatCurrency(bal)}
                     </p>
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400">
-                      <span>Porsi Kas:</span>
-                      <strong className="font-mono text-slate-700">
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-400">
+                      <span>{isSavings ? "Dana Cadangan:" : "Porsi Kas:"}</span>
+                      <strong className="font-mono tabular-nums text-slate-700 dark:text-slate-200">
                         {totalLiquidity > 0 ? `${((bal / totalLiquidity) * 100).toFixed(1)}%` : "0%"}
                       </strong>
                     </div>

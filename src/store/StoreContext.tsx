@@ -52,6 +52,7 @@ import {
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
 import { getLocalDateString } from "../utils/dateUtils";
+import { syncAttendanceRecordsWithDaily } from "../utils/attendanceRecap";
 import {
   computePeriodFinancialSummary,
   DEFAULT_INGREDIENT_CATEGORIES,
@@ -417,6 +418,11 @@ interface StoreContextType {
   salesTransactions: SalesTransaction[];
   dailySalesRecaps: DailySalesRecap[];
   addDailySalesRecap: (recap: Omit<DailySalesRecap, "id" | "createdAt">) => void;
+  updateDailySalesRecap: (recap: DailySalesRecap) => void;
+  settleDailySalesRecapNonCash: (
+    id: string,
+    opts?: { bankAccountId?: string; mdrFeeAmount?: number; settledDate?: string }
+  ) => void;
   deleteDailySalesRecap: (id: string) => void;
   syncMissingSalesToCashFlow: (targetAccountId?: string) => { syncedCount: number; syncedAmount: number };
   salesImportLogs: SalesImportLog[];
@@ -559,7 +565,7 @@ interface StoreContextType {
   updateCashAccount: (account: CashAccount) => void;
   deleteCashAccount: (id: string) => void;
 
-  addCashTransaction: (transaction: Omit<CashTransaction, "id">) => void;
+  addCashTransaction: (transaction: Omit<CashTransaction, "id">) => string;
   updateCashTransaction: (transaction: CashTransaction) => void;
   deleteCashTransaction: (id: string) => void;
 
@@ -1891,7 +1897,24 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
   const handleSetDailyAttendances = (a: DailyAttendance[]) => {
     setDailyAttendances(a);
-    markChanged("dailyAttendances");
+    const { updatedAttendances, changed } = syncAttendanceRecordsWithDaily({
+      dailyAttendances: a,
+      existingAttendances: attendances,
+      affectedPairs: a
+        .filter((item) => item.employeeId && item.date && item.date.length >= 7)
+        .map((item) => ({
+          employeeId: item.employeeId,
+          period: item.date.slice(0, 7),
+        })),
+      employees,
+      users,
+    });
+    if (changed) {
+      setAttendances(updatedAttendances);
+      markChanged("dailyAttendances", "attendances");
+    } else {
+      markChanged("dailyAttendances");
+    }
   };
 
   const addUser = (user: Omit<User, "id">) => {
@@ -2051,9 +2074,29 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateDailyAttendance = (att: DailyAttendance) => {
-    setDailyAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
+    const nextDailyAttendances = dailyAttendances.map((a) =>
+      a.id === att.id ? att : a
+    );
+    setDailyAttendances(nextDailyAttendances);
     writeAuditLog("UPDATE", "daily_attendances", att.id);
-    markChanged("dailyAttendances");
+
+    const period = (att.date || "").slice(0, 7);
+    const { updatedAttendances, changed } = syncAttendanceRecordsWithDaily({
+      dailyAttendances: nextDailyAttendances,
+      existingAttendances: attendances,
+      affectedPairs:
+        att.employeeId && period.length === 7
+          ? [{ employeeId: att.employeeId, period }]
+          : [],
+      employees,
+      users,
+    });
+    if (changed) {
+      setAttendances(updatedAttendances);
+      markChanged("dailyAttendances", "attendances");
+    } else {
+      markChanged("dailyAttendances");
+    }
   };
 
   const addKPI = (kpi: Omit<KPIRecord, "id" | "createdAt" | "evaluatedBy">) => {
@@ -2213,6 +2256,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setCashTransactions((prev) => [...prev, normalizedTrx]);
     writeAuditLog("CREATE", "cash_transactions", id);
     markChanged("cash_transactions");
+    return id;
   };
 
   const updateCashTransaction = (trx: CashTransaction) => {
@@ -2237,8 +2281,38 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteCashTransaction = (id: string) => {
+    const linkedMovements = stockMovements.filter((m) => m.referenceId === id);
     setCashTransactions((prev) => prev.filter((t) => t.id !== id));
     writeAuditLog("DELETE", "cash_transactions", id);
+
+    if (linkedMovements.length > 0) {
+      const qtyToReverseByIng = new Map<string, number>();
+      linkedMovements.forEach((m) => {
+        const delta =
+          m.type === "IN" || m.type === "RETURN"
+            ? -Number(m.quantity || 0)
+            : Number(m.quantity || 0);
+        qtyToReverseByIng.set(
+          m.ingredientId,
+          (qtyToReverseByIng.get(m.ingredientId) || 0) + delta
+        );
+      });
+
+      setStockMovements((prev) => prev.filter((m) => m.referenceId !== id));
+      setIngredients((prev) =>
+        prev.map((ing) => {
+          const delta = qtyToReverseByIng.get(ing.id);
+          if (!delta) return ing;
+          return {
+            ...ing,
+            currentStock: Math.max(0, Number((ing.currentStock + delta).toFixed(4))),
+          };
+        })
+      );
+      markChanged("cash_transactions", "stock_movements", "ingredients");
+      return;
+    }
+
     markChanged("cash_transactions");
   };
 
@@ -3070,6 +3144,115 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     return { count: newTxs.length, cashSyncedAmount, stockDeductedCount };
   };
 
+  const isRecapCashRef = (ref: string | null | undefined, recapId: string): boolean => {
+    if (!ref) return false;
+    return (
+      ref === recapId ||
+      ref === `recap-cash:${recapId}` ||
+      ref === `recap-noncash:${recapId}` ||
+      ref === `recap-mdr:${recapId}`
+    );
+  };
+
+  const buildRecapCashTransactions = (recap: DailySalesRecap): CashTransaction[] => {
+    const entries: CashTransaction[] = [];
+    const cashAcc =
+      (recap.cashAccountId && cashAccounts.find((a) => a.id === recap.cashAccountId)) ||
+      cashAccounts.find((a) => a.type === "CASH") ||
+      cashAccounts[0];
+    const bankAcc =
+      (recap.bankAccountId && cashAccounts.find((a) => a.id === recap.bankAccountId)) ||
+      cashAccounts.find((a) => a.type === "BANK") ||
+      cashAccounts[0];
+    const actor = recap.recordedBy || currentUser?.name || "Finance";
+
+    const cashAmt = Math.round(Number(recap.cashAmount) || 0);
+    if (cashAmt > 0 && cashAcc) {
+      entries.push({
+        id: generateId(),
+        accountId: cashAcc.id,
+        type: "CASH_IN",
+        amount: cashAmt,
+        category: "Penjualan Menu & Kasir",
+        categoryId: "cat-penjualan",
+        description: `Omzet Penjualan Tunai (${recap.date})${recap.notes ? ` - ${recap.notes}` : ""}`,
+        date: recap.date,
+        referenceId: `recap-cash:${recap.id}`,
+        paymentMethod: "Tunai",
+        createdBy: actor,
+      });
+    }
+
+    const qris = Math.round(Number(recap.qrisAmount) || 0);
+    const edc = Math.round(Number(recap.edcAmount) || 0);
+    const transfer = Math.round(Number(recap.transferAmount) || 0);
+    const online = Math.round(Number(recap.onlineDeliveryAmount) || 0);
+    const nonCashTotal = qris + edc + transfer + online;
+    const settlementStatus = recap.nonCashSettlementStatus || "SETTLED";
+
+    if (nonCashTotal > 0 && bankAcc && settlementStatus === "SETTLED") {
+      const parts = [
+        qris > 0 ? `QRIS: ${qris.toLocaleString("id-ID")}` : null,
+        edc > 0 ? `EDC: ${edc.toLocaleString("id-ID")}` : null,
+        transfer > 0 ? `Transfer: ${transfer.toLocaleString("id-ID")}` : null,
+        online > 0 ? `Ojol: ${online.toLocaleString("id-ID")}` : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      const settleDate = recap.nonCashSettledAt || recap.date;
+
+      entries.push({
+        id: generateId(),
+        accountId: bankAcc.id,
+        type: "CASH_IN",
+        amount: nonCashTotal,
+        category: "Penjualan Menu & Kasir",
+        categoryId: "cat-penjualan",
+        description: `Omzet Non-Tunai (${parts}) - ${recap.date}`,
+        date: settleDate,
+        referenceId: `recap-noncash:${recap.id}`,
+        paymentMethod: "Non-Tunai / Bank",
+        createdBy: actor,
+      });
+
+      const mdrFee = Math.round(Number(recap.mdrFeeAmount) || 0);
+      if (mdrFee > 0) {
+        entries.push({
+          id: generateId(),
+          accountId: bankAcc.id,
+          type: "CASH_OUT",
+          amount: mdrFee,
+          category: "Biaya Admin Bank & Pajak",
+          categoryId: "cat-admin-bank",
+          description: `Biaya MDR / Admin Non-Tunai (${recap.date})`,
+          date: settleDate,
+          referenceId: `recap-mdr:${recap.id}`,
+          paymentMethod: "Potongan Bank / MDR",
+          createdBy: actor,
+        });
+      }
+    }
+
+    return entries;
+  };
+
+  const persistDailySalesRecaps = (updater: (prev: DailySalesRecap[]) => DailySalesRecap[]) => {
+    setDailySalesRecaps((prev) => {
+      const updated = updater(prev);
+      try {
+        localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
+      } catch {}
+      setSettings((sPrev) => {
+        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
+        try {
+          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
+        } catch {}
+        return nextSettings;
+      });
+      return updated;
+    });
+  };
+
   const addDailySalesRecap = (recap: Omit<DailySalesRecap, "id" | "createdAt">) => {
     const newId = generateId();
     const newRecord: DailySalesRecap = {
@@ -3077,81 +3260,51 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       id: newId,
       createdAt: new Date().toISOString(),
     };
-    setDailySalesRecaps((prev) => {
-      const updated = [newRecord, ...prev];
-      try {
-        localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
-      } catch {}
-      setSettings((sPrev) => {
-        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
-        try {
-          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
-        } catch {}
-        return nextSettings;
-      });
-      return updated;
-    });
+    persistDailySalesRecaps((prev) => [newRecord, ...prev]);
 
-    // Otomatis catat ke Buku Kas agar sinkron ke Keuangan & Laba Rugi
-    if (newRecord.cashAmount > 0) {
-      const cashAcc = cashAccounts.find((a) => a.type === "CASH") || cashAccounts[0];
-      if (cashAcc) {
-        addCashTransaction({
-          accountId: cashAcc.id,
-          type: "CASH_IN",
-          amount: Math.round(newRecord.cashAmount),
-          category: "Penjualan Menu & Kasir",
-          categoryId: "cat-penjualan",
-          description: `Omzet Penjualan Tunai (${newRecord.date})${newRecord.notes ? ` - ${newRecord.notes}` : ""}`,
-          date: newRecord.date,
-          referenceId: newId,
-          createdBy: newRecord.recordedBy || currentUser?.name || "Finance",
-        });
-      }
-    }
-    const nonCashTotal = newRecord.qrisAmount + newRecord.edcAmount + newRecord.transferAmount;
-    if (nonCashTotal > 0) {
-      const bankAcc = cashAccounts.find((a) => a.type === "BANK") || cashAccounts[0];
-      if (bankAcc) {
-        const parts = [
-          newRecord.qrisAmount > 0 ? `QRIS: ${newRecord.qrisAmount.toLocaleString("id-ID")}` : null,
-          newRecord.edcAmount > 0 ? `EDC: ${newRecord.edcAmount.toLocaleString("id-ID")}` : null,
-          newRecord.transferAmount > 0 ? `Transfer: ${newRecord.transferAmount.toLocaleString("id-ID")}` : null,
-        ].filter(Boolean).join(", ");
-
-        addCashTransaction({
-          accountId: bankAcc.id,
-          type: "CASH_IN",
-          amount: Math.round(nonCashTotal),
-          category: "Penjualan Menu & Kasir",
-          categoryId: "cat-penjualan",
-          description: `Omzet Non-Tunai (${parts}) - ${newRecord.date}`,
-          date: newRecord.date,
-          referenceId: newId,
-          createdBy: newRecord.recordedBy || currentUser?.name || "Finance",
-        });
-      }
+    const generatedCash = buildRecapCashTransactions(newRecord);
+    if (generatedCash.length > 0) {
+      setCashTransactions((prev) => [...prev, ...generatedCash]);
     }
     writeAuditLog("CREATE", "daily_sales_recap", newId);
     markChanged("cash_transactions", "settings");
   };
 
+  const updateDailySalesRecap = (recap: DailySalesRecap) => {
+    persistDailySalesRecaps((prev) =>
+      prev.map((r) => (r.id === recap.id ? recap : r))
+    );
+    const regenerated = buildRecapCashTransactions(recap);
+    setCashTransactions((prev) => [
+      ...prev.filter((t) => !isRecapCashRef(t.referenceId, recap.id)),
+      ...regenerated,
+    ]);
+    writeAuditLog("UPDATE", "daily_sales_recap", recap.id);
+    markChanged("cash_transactions", "settings");
+  };
+
+  const settleDailySalesRecapNonCash = (
+    id: string,
+    opts?: { bankAccountId?: string; mdrFeeAmount?: number; settledDate?: string }
+  ) => {
+    const target = dailySalesRecaps.find((r) => r.id === id);
+    if (!target) return;
+    const updated: DailySalesRecap = {
+      ...target,
+      bankAccountId: opts?.bankAccountId || target.bankAccountId || null,
+      mdrFeeAmount:
+        opts?.mdrFeeAmount !== undefined
+          ? Math.round(Number(opts.mdrFeeAmount) || 0)
+          : target.mdrFeeAmount,
+      nonCashSettlementStatus: "SETTLED",
+      nonCashSettledAt: opts?.settledDate || getLocalDateString(),
+    };
+    updateDailySalesRecap(updated);
+  };
+
   const deleteDailySalesRecap = (id: string) => {
-    setDailySalesRecaps((prev) => {
-      const updated = prev.filter((r) => r.id !== id);
-      try {
-        localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
-      } catch {}
-      setSettings((sPrev) => {
-        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
-        try {
-          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
-        } catch {}
-        return nextSettings;
-      });
-      return updated;
-    });
-    setCashTransactions((prev) => prev.filter((t) => t.referenceId !== id));
+    persistDailySalesRecaps((prev) => prev.filter((r) => r.id !== id));
+    setCashTransactions((prev) => prev.filter((t) => !isRecapCashRef(t.referenceId, id)));
     writeAuditLog("DELETE", "daily_sales_recap", id);
     markChanged("cash_transactions", "settings");
   };
@@ -3178,7 +3331,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     let syncedAmount = 0;
 
     summary.dailyBreakdown.forEach((day) => {
-      const gap = Math.round(day.recognizedRevenue - day.cashSalesInflow);
+      const gap = Math.round(
+        day.recognizedRevenue - day.cashSalesInflow - day.pendingNonCash
+      );
       if (gap > 0) {
         syncedAmount += gap;
         toCreate.push({
@@ -3227,6 +3382,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         salesTransactions,
         dailySalesRecaps,
         addDailySalesRecap,
+        updateDailySalesRecap,
+        settleDailySalesRecapNonCash,
         deleteDailySalesRecap,
         syncMissingSalesToCashFlow,
         salesImportLogs,

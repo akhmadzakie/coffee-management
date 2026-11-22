@@ -1,8 +1,16 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { Role, DEFAULT_LEADER_ALLOWANCE_RULES, DEFAULT_SHIFT_DEFINITIONS, ShiftDefinition } from "../types";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
+import {
+  buildAttendanceCorrectionUpdate,
+  calculateWorkDurationHours,
+  classifyDailyAttendanceStatus,
+  computeMonthlyAttendanceRecap,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
 import { RupiahSign } from "./common/RupiahSign";
@@ -232,6 +240,7 @@ export function HRManagement() {
     }
   };
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
+  const [attendanceRecapPeriod, setAttendanceRecapPeriod] = useState<string>(() => getLocalPeriodString());
   const [attendanceDateFilter, setAttendanceDateFilter] = useState<string>("");
   const [attendanceEmpFilter, setAttendanceEmpFilter] = useState<string>("ALL");
   const [attendanceApprovalFilter, setAttendanceApprovalFilter] = useState<string>("ALL");
@@ -389,43 +398,25 @@ export function HRManagement() {
     e.preventDefault();
     if (!correctingAttendance) return;
     if (!correctionForm.reason.trim()) {
-      alert("Alasan koreksi wajib diisi sebagai rekam jejak Audit Log.");
+      toast.warning("Alasan koreksi wajib diisi sebagai rekam jejak Audit Log.");
       return;
     }
 
-    const dateStr = correctingAttendance.date; // YYYY-MM-DD
-    const inIso = correctionForm.clockInTime ? `${dateStr}T${correctionForm.clockInTime}:00` : null;
-    const outIso = correctionForm.clockOutTime ? `${dateStr}T${correctionForm.clockOutTime}:00` : null;
-
-    let workHours = 0;
-    if (inIso && outIso) {
-      const diffMs = new Date(outIso).getTime() - new Date(inIso).getTime();
-      workHours = Math.max(0, diffMs / 3600000);
-    }
-    const overtimeHours = workHours > 8 ? Math.round((workHours - 8) * 10) / 10 : 0;
-
     const managerName = currentUser?.name || currentUser?.username || "Manager";
-    const updatedAtt = {
-      ...correctingAttendance,
-      status: correctionForm.status,
-      clockInTime: inIso ? new Date(inIso).toISOString() : null,
-      clockOutTime: outIso ? new Date(outIso).toISOString() : null,
-      overtimeHours,
-      overtimeApproved: correctionForm.overtimeApproved && overtimeHours > 0,
-      approvalStatus: "APPROVED" as const,
-      isCorrected: true,
-      correctedBy: managerName,
-      correctedAt: new Date().toISOString(),
-      correctionReason: correctionForm.reason.trim(),
-      notes: [
-        correctingAttendance.notes,
-        `[KOREKSI MANAGER oleh ${managerName}]: ${correctionForm.reason.trim()}`
-      ].filter(Boolean).join(" • "),
-    };
+    const updatedAtt = buildAttendanceCorrectionUpdate(
+      correctingAttendance,
+      correctionForm,
+      managerName
+    );
 
     updateDailyAttendance(updatedAtt);
+    if (correctingAttendance.date && correctingAttendance.date.length >= 7) {
+      setAttendanceRecapPeriod(correctingAttendance.date.substring(0, 7));
+    }
     setIsCorrectionModalOpen(false);
-    alert(`Berhasil mengoreksi dan mengesahkan absensi ${getEmployeeName(correctingAttendance.employeeId)}! Perubahan tercatat otomatis di Audit Log.`);
+    toast.success(
+      `Berhasil mengoreksi dan mengesahkan absensi ${getEmployeeName(correctingAttendance.employeeId)}! Rekap absensi otomatis diperbarui.`
+    );
   };
 
   const [attendanceForm, setAttendanceForm] = useState({ employeeId: "", period: "", presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
@@ -436,20 +427,25 @@ export function HRManagement() {
       setAttendanceForm({ ...att });
     } else {
       setEditingAttendance(null);
-      const currentPeriod = new Date().toISOString().substring(0, 7);
+      const currentPeriod = attendanceRecapPeriod || getLocalPeriodString();
       setAttendanceForm({ employeeId: employeeId || "", period: currentPeriod, presentDays: 0, sickDays: 0, permissionDays: 0, alphaDays: 0, notes: "" });
     }
     setIsAttendanceModalOpen(true);
   };
 
   const handleSaveAttendance = () => {
-    if (!attendanceForm.employeeId || !attendanceForm.period) return alert("Pilih Karyawan dan Periode");
+    if (!attendanceForm.employeeId || !attendanceForm.period) {
+      toast.warning("Pilih Karyawan dan Periode terlebih dahulu.");
+      return;
+    }
     if (editingAttendance) {
       updateAttendance({ ...editingAttendance, ...attendanceForm });
     } else {
       addAttendance(attendanceForm);
     }
+    setAttendanceRecapPeriod(attendanceForm.period);
     setIsAttendanceModalOpen(false);
+    toast.success("Rekap absensi manual berhasil disimpan.");
   };
 
   const handleOpenEmployeeModal = (emp?: any) => {
@@ -1058,40 +1054,31 @@ export function HRManagement() {
   const todayStr = getLocalDateString();
 
   const attendanceChartData = useMemo(() => {
-    if (attendances && attendances.length > 0) {
-      return attendances.map((a) => ({
-        name: getEmployeeName(a.employeeId).substring(0, 10),
-        Hadir: a.presentDays,
-        Alpha: a.alphaDays,
-        Izin: a.sickDays + a.permissionDays,
-      }));
-    }
-
-    // Fallback dinamis dari presensi harian (dailyAttendances) bulan berjalan
-    const currentMonthPrefix = todayStr.substring(0, 7);
-    const currentMonthDaily = (dailyAttendances || []).filter((d) => (d.date || "").startsWith(currentMonthPrefix));
-
-    const empMap: Record<string, { Hadir: number; Alpha: number; Izin: number }> = {};
-    currentMonthDaily.forEach((d) => {
-      if (!empMap[d.employeeId]) {
-        empMap[d.employeeId] = { Hadir: 0, Alpha: 0, Izin: 0 };
-      }
-      if (d.status === "HADIR" || d.status === "TERLAMBAT") {
-        empMap[d.employeeId].Hadir++;
-      } else if (d.status === "ALPHA") {
-        empMap[d.employeeId].Alpha++;
-      } else if (d.status === "IZIN" || d.status === "SAKIT") {
-        empMap[d.employeeId].Izin++;
-      }
+    const recap = computeMonthlyAttendanceRecap({
+      period: todayStr.substring(0, 7),
+      dailyAttendances,
+      manualAttendances: attendances,
+      employees,
+      users,
     });
 
-    return Object.entries(empMap).map(([empId, stats]) => ({
-      name: getEmployeeName(empId).substring(0, 10),
-      Hadir: stats.Hadir,
-      Alpha: stats.Alpha,
-      Izin: stats.Izin,
+    return recap.map((r) => ({
+      name: r.employeeName.substring(0, 10),
+      Hadir: r.presentDays,
+      Alpha: r.alphaDays,
+      Izin: r.sickDays + r.permissionDays,
     }));
   }, [attendances, dailyAttendances, employees, users, todayStr]);
+
+  const monthlyRecapRows = useMemo(() => {
+    return computeMonthlyAttendanceRecap({
+      period: attendanceRecapPeriod,
+      dailyAttendances,
+      manualAttendances: attendances,
+      employees,
+      users,
+    });
+  }, [attendanceRecapPeriod, dailyAttendances, attendances, employees, users]);
 
   // Roster Staf Bertugas Hari Ini
   const todayShifts = useMemo(() => {
@@ -2537,102 +2524,185 @@ export function HRManagement() {
 
           {activeTab === "attendance" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                
-                <h3 className="text-lg font-bold text-slate-800">
-                  {isIndo
-                    ? "Rekap Absensi Bulanan"
-                    : "Monthly Attendance Recap"}
-                </h3>
-                {canEditHR && (
-                  <div className="flex items-center gap-3">
-                    <CsvImportExport
-                      onImport={handleImportAttendances}
-                      templateHeaders={["Username", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
-                      templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
-                      templateFilename="template_absensi"
-                      buttonLabel={isIndo ? "Import" : "Import"}
-                      templateDropdowns={{
-                        Username: employees.map(e => e.username).filter(Boolean),
-                      }}
-                      templateColumnTypes={{
-                        Hadir: "integer",
-                        Sakit: "integer",
-                        Izin: "integer",
-                        Alpha: "integer",
-                      }}
-                      templateHints={{
-                        Username: "Pilih username karyawan",
-                        "Periode (YYYY-MM)": "Format: YYYY-MM (contoh: 2024-10)",
-                      }}
-                    />
-                    <button onClick={() => handleOpenAttendanceModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors">
-                      <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
-                    </button>
-                  </div>
-                )}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                    {isIndo
+                      ? "Rekap Absensi Bulanan"
+                      : "Monthly Attendance Recap"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {isIndo
+                      ? `Otomatis terhitung dari presensi harian periode ${attendanceRecapPeriod} (termasuk koreksi Manager).`
+                      : `Automatically aggregated from daily attendance for ${attendanceRecapPeriod}.`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <CustomMonthPicker
+                    value={attendanceRecapPeriod}
+                    onChange={(val) => {
+                      if (val) setAttendanceRecapPeriod(val);
+                    }}
+                    allowClear={false}
+                    placeholder="Pilih Periode Rekap"
+                    buttonClassName="py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                  />
+                  {canEditHR && (
+                    <>
+                      <CsvImportExport
+                        onImport={handleImportAttendances}
+                        templateHeaders={["Username", "Periode (YYYY-MM)", "Hadir", "Sakit", "Izin", "Alpha", "Catatan"]}
+                        templateExampleRow={["EMP-001", "2024-01", "22", "1", "0", "0", "Rajin"]}
+                        templateFilename="template_absensi"
+                        buttonLabel={isIndo ? "Import" : "Import"}
+                        templateDropdowns={{
+                          Username: employees.map(e => e.username).filter(Boolean),
+                        }}
+                        templateColumnTypes={{
+                          Hadir: "integer",
+                          Sakit: "integer",
+                          Izin: "integer",
+                          Alpha: "integer",
+                        }}
+                        templateHints={{
+                          Username: "Pilih username karyawan",
+                          "Periode (YYYY-MM)": "Format: YYYY-MM (contoh: 2024-10)",
+                        }}
+                      />
+                      <button
+                        onClick={() => handleOpenAttendanceModal()}
+                        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-brand-600/20 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" /> {isIndo ? "Tambah Absensi" : "Add Attendance"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-coffee-sm">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-sm border-y border-slate-200">
-                      <th className="py-3 px-4 font-semibold">
+                    <tr className="bg-slate-50/90 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+                      <th className="py-3 px-4 font-bold">
                         {isIndo ? "Karyawan" : "Employee"}
                       </th>
-                      <th className="py-3 px-4 font-semibold">Periode</th>
-                      <th className="py-3 px-4 font-semibold text-emerald-600">
+                      <th className="py-3 px-4 font-bold">Periode</th>
+                      <th className="py-3 px-4 font-bold text-emerald-700 dark:text-emerald-300 text-center">
                         Hadir
                       </th>
-                      <th className="py-3 px-4 font-semibold text-amber-500">
+                      <th className="py-3 px-4 font-bold text-amber-700 dark:text-amber-300 text-center">
+                        Terlambat
+                      </th>
+                      <th className="py-3 px-4 font-bold text-sky-700 dark:text-sky-300 text-center">
                         Izin/Sakit
                       </th>
-                      <th className="py-3 px-4 font-semibold text-rose-600">
+                      <th className="py-3 px-4 font-bold text-rose-700 dark:text-rose-300 text-center">
                         Alpha
+                      </th>
+                      <th className="py-3 px-4 font-bold text-right">
+                        Total Jam &amp; Lembur
+                      </th>
+                      <th className="py-3 px-4 font-bold text-right">
+                        Koreksi / Status
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                                        {(() => {
-                        // Auto-generate rekapan bulanan dari dailyAttendances
-                        const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
-                        const uniqueEmpIds = Array.from(new Set([
-                          ...employees.map(e => e.id),
-                          ...dailyAttendances.filter(a => a.date.startsWith(currentMonth)).map(a => a.employeeId)
-                        ]));
-                        const recap = uniqueEmpIds.map(empId => {
-                          const logs = dailyAttendances.filter(a => a.employeeId === empId && a.date.startsWith(currentMonth));
-                          if (logs.length === 0) return null;
-                          return {
-                            id: empId,
-                            employeeId: empId,
-                            period: currentMonth,
-                            presentDays: logs.filter(l => ["HADIR", "TERLAMBAT"].includes(l.status) && l.approvalStatus !== "REJECTED").length,
-                            sickDays: logs.filter(l => l.status === "SAKIT" && l.approvalStatus !== "REJECTED").length,
-                            permissionDays: logs.filter(l => l.status === "IZIN" && l.approvalStatus !== "REJECTED").length,
-                            alphaDays: logs.filter(l => l.status === "ALPHA" || l.approvalStatus === "REJECTED").length,
-                          };
-                        }).filter(Boolean);
-
-                        if (recap.length === 0) {
-                          return (
-                            <tr>
-                              <td colSpan={5} className="py-8 text-center text-slate-500 italic">
-                                {isIndo ? "Belum ada data absensi untuk bulan ini." : "No attendance data yet."}
-                              </td>
-                            </tr>
-                          );
-                        }
-
-                        return recap.map((a: any) => (
-                          <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4 font-medium text-slate-800">{getEmployeeName(a.employeeId)}</td>
-                            <td className="py-3 px-4 text-slate-600">{a.period}</td>
-                            <td className="py-3 px-4 font-semibold text-emerald-600">{a.presentDays}</td>
-                            <td className="py-3 px-4 font-semibold text-amber-500">{a.sickDays + a.permissionDays}</td>
-                            <td className="py-3 px-4 font-semibold text-rose-600">{a.alphaDays}</td>
-                          </tr>
-                        ));
-                    })()}
+                    {monthlyRecapRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-500 dark:text-slate-400 italic text-xs">
+                          {isIndo
+                            ? `Belum ada data absensi untuk periode ${attendanceRecapPeriod}.`
+                            : `No attendance data for ${attendanceRecapPeriod}.`}
+                        </td>
+                      </tr>
+                    ) : (
+                      monthlyRecapRows.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors text-xs"
+                        >
+                          <td className="py-3 px-4">
+                            <p className="font-bold text-slate-900 dark:text-slate-100">
+                              {row.employeeName}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {row.employeePosition}
+                            </p>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {row.period}
+                            </span>
+                            {row.source === "MANUAL" && (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                Manual
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                            {row.presentDays}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                            {row.lateDays}x
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-sky-600 dark:text-sky-400 tabular-nums">
+                            {row.sickDays + row.permissionDays}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+                            {row.alphaDays}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap tabular-nums">
+                            {row.source === "MANUAL" ? (
+                              <span className="text-slate-400 dark:text-slate-500">—</span>
+                            ) : (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                                  {row.totalWorkHours.toFixed(1)} Jam
+                                </span>
+                                {row.approvedOvertimeHours > 0 && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-500/30">
+                                    +{row.approvedOvertimeHours.toFixed(1)}j Lembur
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {row.correctedCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30 tabular-nums">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  {row.correctedCount} dikoreksi
+                                </span>
+                              )}
+                              {row.pendingCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30 tabular-nums">
+                                  <Clock className="w-3 h-3" />
+                                  {row.pendingCount} menunggu
+                                </span>
+                              )}
+                              {row.source === "MANUAL" && canEditHR && row.manualRecordId && (() => {
+                                const targetManual = attendances.find((rec) => rec.id === row.manualRecordId);
+                                if (!targetManual) return null;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenAttendanceModal(targetManual)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                                  >
+                                    <Edit2 className="w-3 h-3" /> Edit
+                                  </button>
+                                );
+                              })()}
+                              {row.correctedCount === 0 && row.pendingCount === 0 && row.source === "DAILY" && (
+                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2660,7 +2730,12 @@ export function HRManagement() {
                   <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
                     <CustomDatePicker
                       value={attendanceDateFilter}
-                      onChange={setAttendanceDateFilter}
+                      onChange={(val) => {
+                        setAttendanceDateFilter(val);
+                        if (val && val.length >= 7) {
+                          setAttendanceRecapPeriod(val.substring(0, 7));
+                        }
+                      }}
                       placeholder="Semua Tanggal"
                       allowClear={true}
                       buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
@@ -2694,8 +2769,12 @@ export function HRManagement() {
                     />
 
                     <button
-                      onClick={() => setAttendanceDateFilter(new Date().toISOString().substring(0, 10))}
-                      className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        setAttendanceDateFilter(today);
+                        setAttendanceRecapPeriod(today.substring(0, 7));
+                      }}
+                      className="px-3 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:hover:bg-brand-500/25 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
                       Hari Ini
                     </button>
@@ -2740,7 +2819,12 @@ export function HRManagement() {
                               onChange={(e) => {
                                 const currentFiltered = [...dailyAttendances].filter((d) => {
                                   if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                  if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                  if (
+                                    attendanceEmpFilter !== "ALL" &&
+                                    resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
+                                  ) {
+                                    return false;
+                                  }
                                   if (attendanceApprovalFilter !== "ALL") {
                                     if (attendanceApprovalFilter === "FORGOTTEN_CLOCKOUT") {
                                       if (!(!d.clockOutTime && d.clockInTime && d.date < todayStr)) return false;
@@ -2764,7 +2848,12 @@ export function HRManagement() {
                                 [...dailyAttendances]
                                   .filter((d) => {
                                     if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                    if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                    if (
+                                      attendanceEmpFilter !== "ALL" &&
+                                      resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
+                                    ) {
+                                      return false;
+                                    }
                                     if (attendanceApprovalFilter !== "ALL") {
                                       const appStatus = d.approvalStatus || "PENDING";
                                       if (appStatus !== attendanceApprovalFilter) return false;
@@ -2789,7 +2878,12 @@ export function HRManagement() {
                             {canEditHR && (() => {
                               const pendingItems = [...dailyAttendances].filter((d) => {
                                 if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                                if (
+                                  attendanceEmpFilter !== "ALL" &&
+                                  resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
+                                ) {
+                                  return false;
+                                }
                                 const appStatus = d.approvalStatus || "PENDING";
                                 return appStatus === "PENDING" && d.status !== "ALPHA";
                               });
@@ -2816,7 +2910,12 @@ export function HRManagement() {
                         const filtered = [...dailyAttendances]
                           .filter((d) => {
                             if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                            if (attendanceEmpFilter !== "ALL" && d.employeeId !== attendanceEmpFilter) return false;
+                            if (
+                              attendanceEmpFilter !== "ALL" &&
+                              resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
+                            ) {
+                              return false;
+                            }
                             if (attendanceApprovalFilter !== "ALL") {
                               if (attendanceApprovalFilter === "FORGOTTEN_CLOCKOUT") {
                                 if (!(!d.clockOutTime && d.clockInTime && d.date < todayStr)) return false;
@@ -3007,12 +3106,15 @@ export function HRManagement() {
                                 {" - "}
                                 {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
                               </td>
-                              {/* Durasi */}
-                              <td className="py-3 px-4 font-bold text-slate-800 whitespace-nowrap">
-                                {d.clockInTime && d.clockOutTime 
-                                  ? (((new Date(d.clockOutTime).getTime() - new Date(d.clockInTime).getTime()) / 3600000).toFixed(1) + " Jam")
-                                  : "-"}
-                              </td>
+                                {/* Durasi */}
+                                <td className="py-3 px-4 font-bold text-slate-800 whitespace-nowrap tabular-nums">
+                                  {(() => {
+                                    const cls = classifyDailyAttendanceStatus(d);
+                                    if (cls !== "HADIR" && cls !== "TERLAMBAT") return "-";
+                                    const dur = calculateWorkDurationHours(d.clockInTime, d.clockOutTime);
+                                    return dur > 0 ? `${dur.toFixed(1)} Jam` : "-";
+                                  })()}
+                                </td>
                               {/* Aksi & Verifikasi */}
                               <td className="py-3 px-4 text-right whitespace-nowrap">
                                 <div className="flex items-center justify-end gap-1.5">
@@ -3992,11 +4094,16 @@ export function HRManagement() {
                 <button 
                   type="button"
                   onClick={() => {
+                    const isRejectedAlpha =
+                      verifyingAttendance.approvalStatus === "REJECTED" &&
+                      verifyingAttendance.status === "ALPHA";
                     updateDailyAttendance({
-                      ...verifyingAttendance, 
-                      approvalStatus: 'APPROVED'
+                      ...verifyingAttendance,
+                      status: isRejectedAlpha ? "HADIR" : verifyingAttendance.status,
+                      approvalStatus: 'APPROVED',
                     });
                     setIsVerificationModalOpen(false);
+                    toast.success("Kehadiran berhasil disahkan.");
                   }} 
                   className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5"
                 >
@@ -4450,12 +4557,21 @@ export function HRManagement() {
           <AnimatePresence>
             {isCorrectionModalOpen && correctingAttendance && (() => {
               const emp = employees.find((e) => e.id === correctingAttendance.employeeId);
-              const inIso = correctionForm.clockInTime ? `${correctingAttendance.date}T${correctionForm.clockInTime}:00` : null;
-              const outIso = correctionForm.clockOutTime ? `${correctingAttendance.date}T${correctionForm.clockOutTime}:00` : null;
+              const isPresentStatus =
+                correctionForm.status === "HADIR" || correctionForm.status === "TERLAMBAT";
               let previewHours = 0;
-              if (inIso && outIso) {
-                const diffMs = new Date(outIso).getTime() - new Date(inIso).getTime();
-                previewHours = Math.max(0, diffMs / 3600000);
+              if (isPresentStatus && correctionForm.clockInTime && correctionForm.clockOutTime) {
+                const inDate = new Date(`${correctingAttendance.date}T${correctionForm.clockInTime}:00`);
+                const outDate = new Date(`${correctingAttendance.date}T${correctionForm.clockOutTime}:00`);
+                if (!Number.isNaN(inDate.getTime()) && !Number.isNaN(outDate.getTime())) {
+                  if (outDate.getTime() < inDate.getTime()) {
+                    outDate.setDate(outDate.getDate() + 1);
+                  }
+                  previewHours = calculateWorkDurationHours(
+                    inDate.toISOString(),
+                    outDate.toISOString()
+                  );
+                }
               }
               const previewOvertime = previewHours > 8 ? Math.round((previewHours - 8) * 10) / 10 : 0;
 
@@ -4534,40 +4650,47 @@ export function HRManagement() {
                 </div>
 
                 {/* Jam Masuk & Jam Pulang */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Jam Masuk (Clock In)
-                    </label>
-                    <input
-                      type="time"
-                      value={correctionForm.clockInTime}
-                      onChange={(e) => setCorrectionForm({ ...correctionForm, clockInTime: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    />
+                {isPresentStatus ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Jam Masuk (Clock In)
+                      </label>
+                      <input
+                        type="time"
+                        value={correctionForm.clockInTime}
+                        onChange={(e) => setCorrectionForm({ ...correctionForm, clockInTime: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Jam Pulang (Clock Out)
+                      </label>
+                      <input
+                        type="time"
+                        value={correctionForm.clockOutTime}
+                        onChange={(e) => setCorrectionForm({ ...correctionForm, clockOutTime: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Jam Pulang (Clock Out)
-                    </label>
-                    <input
-                      type="time"
-                      value={correctionForm.clockOutTime}
-                      onChange={(e) => setCorrectionForm({ ...correctionForm, clockOutTime: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                    />
+                ) : (
+                  <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-amber-800 text-[11px] font-medium flex items-center gap-2">
+                    <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Status non-hadir ({correctionForm.status}) tidak menghitung jam kerja &amp; lembur.</span>
                   </div>
-                </div>
+                )}
 
                 {/* Live Duration & Overtime Calculation */}
                 <div className="p-3 bg-brand-50/60 rounded-2xl border border-brand-100 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-600 font-medium block">Total Durasi Kerja:</span>
-                    <strong className="text-brand-950 font-mono font-extrabold text-sm">
+                    <strong className="text-brand-950 font-mono font-extrabold text-sm tabular-nums">
                       {previewHours.toFixed(1)} Jam
                     </strong>
                   </div>
-                  {previewOvertime > 0 ? (
+                  {isPresentStatus && previewOvertime > 0 ? (
                     <div className="text-right">
                       <span className="text-amber-800 font-bold block text-[11px]">
                         Kelebihan Kerja: +{previewOvertime} Jam
@@ -4583,7 +4706,9 @@ export function HRManagement() {
                       </label>
                     </div>
                   ) : (
-                    <span className="text-[11px] text-slate-500 font-medium">Normal 8 Jam</span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {isPresentStatus ? "Normal 8 Jam" : "Non-Hadir (0 Jam)"}
+                    </span>
                   )}
                 </div>
 
@@ -4624,7 +4749,7 @@ export function HRManagement() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold cursor-pointer shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
+                    className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold cursor-pointer shadow-sm shadow-brand-600/20 active:scale-[0.98] transition-all flex items-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Simpan & Sahkan Koreksi</span>

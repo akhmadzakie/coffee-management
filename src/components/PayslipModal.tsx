@@ -18,6 +18,10 @@ import {
   Award,
 } from "lucide-react";
 import { formatCurrency } from "../utils/format";
+import {
+  classifyDailyAttendanceStatus,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
 import { useStore } from "../store/StoreContext";
 import { PayrollRecord } from "../types";
 import jsPDF from "jspdf";
@@ -60,18 +64,31 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
   // 2. Identify Attendance Breakdown for this employee & period
   const attendanceBreakdown = useMemo(() => {
+    const canonicalEmpId = resolveCanonicalEmployeeId(
+      payroll.employeeId,
+      employees,
+      users
+    );
     const periodLogs = (dailyAttendances || []).filter(
-      (a) => a.employeeId === payroll.employeeId && a.date.startsWith(payroll.period)
+      (a) =>
+        resolveCanonicalEmployeeId(a.employeeId, employees, users) === canonicalEmpId &&
+        (a.date || "").startsWith(payroll.period)
     );
 
-    const presentDays = periodLogs.filter((a) =>
-      ["HADIR", "TERLAMBAT"].includes(a.status)
+    const presentDays = periodLogs.filter((a) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      return cls === "HADIR" || cls === "TERLAMBAT";
+    }).length;
+    const lateDays = periodLogs.filter(
+      (a) => classifyDailyAttendanceStatus(a) === "TERLAMBAT"
     ).length;
-    const lateDays = periodLogs.filter((a) => a.status === "TERLAMBAT").length;
-    const sickOrLeaveDays = periodLogs.filter((a) =>
-      ["IZIN", "SAKIT"].includes(a.status)
+    const sickOrLeaveDays = periodLogs.filter((a) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      return cls === "IZIN" || cls === "SAKIT";
+    }).length;
+    const alphaDays = periodLogs.filter(
+      (a) => classifyDailyAttendanceStatus(a) === "ALPHA"
     ).length;
-    const alphaDays = periodLogs.filter((a) => a.status === "ALPHA").length;
 
     // Working days baseline (standard 25/26 days)
     const totalWorkingDays = Math.max(25, presentDays + sickOrLeaveDays + alphaDays);
@@ -83,7 +100,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
       alphaDays,
       totalWorkingDays,
     };
-  }, [dailyAttendances, payroll.employeeId, payroll.period]);
+  }, [dailyAttendances, employees, users, payroll.employeeId, payroll.period]);
 
   // 3. Identify KPI / Checklist details
   const kpiDetails = useMemo(() => {

@@ -16,6 +16,10 @@ import {
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
 } from "./financeMetrics";
+import {
+  calculateWorkDurationHours,
+  classifyDailyAttendanceStatus,
+} from "./attendanceRecap";
 
 export const formatDateIndo = (dateStr: string | Date): string => {
   if (!dateStr) return "-";
@@ -662,16 +666,16 @@ export const exportAttendanceToPDF = ({
   const empMap = new Map<string, { present: number; late: number; sick: number; alpha: number; totalHours: number }>();
   attendances.forEach((att) => {
     const prev = empMap.get(att.employeeId) || { present: 0, late: 0, sick: 0, alpha: 0, totalHours: 0 };
-    if (att.status === "HADIR") prev.present++;
-    else if (att.status === "TERLAMBAT") {
+    const cls = classifyDailyAttendanceStatus(att);
+    if (cls === "HADIR") prev.present++;
+    else if (cls === "TERLAMBAT") {
       prev.present++;
       prev.late++;
-    } else if (["IZIN", "SAKIT"].includes(att.status)) prev.sick++;
-    else if (["ALPHA", "DITOLAK"].includes(att.status)) prev.alpha++;
+    } else if (cls === "IZIN" || cls === "SAKIT") prev.sick++;
+    else prev.alpha++;
 
-    if (att.clockInTime && att.clockOutTime) {
-      const dur = (new Date(att.clockOutTime).getTime() - new Date(att.clockInTime).getTime()) / 3600000;
-      if (dur > 0 && dur < 24) prev.totalHours += dur;
+    if (cls === "HADIR" || cls === "TERLAMBAT") {
+      prev.totalHours += calculateWorkDurationHours(att.clockInTime, att.clockOutTime);
     }
     empMap.set(att.employeeId, prev);
   });
@@ -870,7 +874,10 @@ export const exportMasterExecutiveReportPDF = ({
   }, 0);
   const lowStockCount = ingredients.filter((ing) => (ing.currentStock ?? (ing as any).stock ?? 0) <= (ing.minStock || 0)).length;
 
-  const totalPresentLogs = attendances.filter((a) => ["HADIR", "TERLAMBAT"].includes(a.status)).length;
+  const totalPresentLogs = attendances.filter((a) => {
+    const cls = classifyDailyAttendanceStatus(a);
+    return cls === "HADIR" || cls === "TERLAMBAT";
+  }).length;
   const attendanceRate = attendances.length > 0 ? Math.round((totalPresentLogs / attendances.length) * 100) : 100;
 
   // 1. Table KPI Finansial

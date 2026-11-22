@@ -76,6 +76,7 @@ export const stockOpnameItems = pgTable("stock_opname_items", {
   systemStock: doublePrecision("system_stock").notNull(),
   physicalStock: doublePrecision("physical_stock").notNull(),
   difference: doublePrecision("difference").notNull(), // physicalStock - systemStock
+  unitCost: doublePrecision("unit_cost").default(0),
   notes: text("notes"),
 });
 
@@ -310,6 +311,10 @@ export const dailyAttendances = pgTable("daily_attendances", {
   overtimeHours: doublePrecision("overtime_hours").default(0),
   overtimeApproved: boolean("overtime_approved").default(false),
   notes: text("notes"),
+  isCorrected: boolean("is_corrected").default(false),
+  correctedBy: text("corrected_by"),
+  correctedAt: text("corrected_at"),
+  correctionReason: text("correction_reason"),
 });
 
 

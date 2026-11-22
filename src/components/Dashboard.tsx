@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import {
+  computeCashLiquidityBreakdown,
   computePeriodFinancialSummary,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
@@ -30,6 +31,7 @@ import {
   Download,
   Calendar,
   Wallet,
+  PiggyBank,
   Building2,
   Landmark,
   Smartphone,
@@ -53,6 +55,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     products,
     ingredients,
     stockMovements,
+    stockOpnames = [],
+    stockOpnameItems = [],
+    purchaseOrders = [],
     cashTransactions,
     cashAccounts,
     settings,
@@ -120,6 +125,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
         recipes,
         ingredients,
         products,
+        stockOpnames,
+        stockOpnameItems,
+        purchaseOrders,
+        cashAccounts,
       });
     }
     const yearStr = `${filterYear}-`;
@@ -132,6 +141,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
       recipes,
       ingredients,
       products,
+      stockOpnames,
+      stockOpnameItems,
+      purchaseOrders: purchaseOrders.filter((po) => String(po.date).startsWith(yearStr)),
+      cashAccounts,
     });
   }, [
     filterMonth,
@@ -143,25 +156,27 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
   ]);
 
   const totalCashIn = periodSummary.totalOperationalCashIn;
   const totalCashOut = periodSummary.totalOperationalCashOut;
-  const totalSalesRevenue = periodSummary.recognizedRevenue;
-  const netProfit = Math.max(totalCashIn, totalSalesRevenue) - totalCashOut;
+  const totalSalesRevenue =
+    periodSummary.netSales > 0 ? periodSummary.netSales : periodSummary.recognizedRevenue;
+  const netProfit = periodSummary.netProfit;
 
-  // Account Balances
-  const accountBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    cashAccounts.forEach((acc) => (balances[acc.id] = 0));
-
-    cashTransactions.forEach((trx) => {
-      if (balances[trx.accountId] === undefined) balances[trx.accountId] = 0;
-      if (trx.type === "CASH_IN") balances[trx.accountId] += trx.amount;
-      else if (trx.type === "CASH_OUT") balances[trx.accountId] -= trx.amount;
-    });
-    return balances;
-  }, [cashTransactions, cashAccounts]);
+  // Account Balances (memisahkan Kas Operasional vs Tabungan)
+  const liquidityBreakdown = useMemo(
+    () => computeCashLiquidityBreakdown(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
+  const accountBalances = liquidityBreakdown.accountBalances;
+  const operationalBalance = liquidityBreakdown.operationalBalance;
+  const savingsBalance = liquidityBreakdown.savingsBalance;
+  const totalLiquidity = liquidityBreakdown.totalLiquidity;
 
   // Best Sellers (from Sales)
   const productSalesCount: Record<string, number> = {};
@@ -194,6 +209,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           recipes,
           ingredients,
           products,
+          stockOpnames,
+          stockOpnameItems,
+          purchaseOrders,
+          cashAccounts,
         });
 
         return {
@@ -231,6 +250,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
     periodSummary,
     daysInMonth,
   ]);
@@ -424,26 +447,57 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="space-y-6"
         >
-          {/* Cash Account Balances */}
+          {/* Cash Liquidity Split & Account Balances */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs text-xs">
+            <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+              <Wallet className="w-4 h-4 text-brand-600 dark:text-brand-300" />
+              <span>Posisi Likuiditas Akun</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 tabular-nums">
+              <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold">
+                Kas Operasional: {formatCurrency(operationalBalance)}
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30 font-semibold inline-flex items-center gap-1">
+                <PiggyBank className="w-3.5 h-3.5" />
+                Tabungan: {formatCurrency(savingsBalance)}
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30 font-bold">
+                Total: {formatCurrency(totalLiquidity)}
+              </span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {cashAccounts.map((acc, idx) => {
               const bal = accountBalances[acc.id] || 0;
+              const isSavings = acc.type === "SAVINGS";
               return (
                 <motion.div
                   key={acc.id}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ type: "spring", damping: 26, stiffness: 340, delay: idx * 0.04 }}
-                  className="bg-white p-5 rounded-3xl border border-stone-200/80 shadow-coffee hover:shadow-coffee-lg transition-all"
+                  className={`p-5 rounded-3xl border shadow-coffee hover:shadow-coffee-lg transition-all ${
+                    isSavings
+                      ? "bg-amber-50/50 dark:bg-amber-500/10 border-amber-200/80 dark:border-amber-500/30"
+                      : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800"
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider truncate mr-2">{acc.name}</span>
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate mr-2">{acc.name}</span>
                     {getAccountIcon(acc.type)}
                   </div>
-                  <p className={`text-xl font-bold font-mono ${bal < 0 ? "text-rose-600" : "text-stone-900"}`}>
+                  <p className={`text-xl font-bold font-mono tabular-nums ${bal < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"}`}>
                     {formatCurrency(bal)}
                   </p>
-                  <p className="text-[10px] text-stone-400 font-semibold uppercase mt-1 tracking-wider">{acc.type}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{acc.type}</p>
+                    {isSavings && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-500/30">
+                        Tabungan
+                      </span>
+                    )}
+                  </div>
                 </motion.div>
               );
             })}

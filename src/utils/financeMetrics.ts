@@ -8,8 +8,11 @@ import {
   Ingredient,
   PayrollRecord,
   Product,
+  PurchaseOrder,
   Recipe,
   SalesTransaction,
+  StockOpname,
+  StockOpnameItem,
 } from "../types";
 import { getLocalDateString, getLocalPeriodString } from "./dateUtils";
 
@@ -646,12 +649,48 @@ export function calculateHppWithOverheadPercentage(
 
 // ─── Rekonsiliasi Penjualan, Omzet, & Arus Kas Terpusat ─────────────────────
 
-/** Mengecek apakah transaksi kas adalah mutasi internal atau saldo awal (non-operasional). */
+function toLocalDateKey(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : null;
+  }
+  return getLocalDateString(parsed);
+}
+
+function matchesPeriodDate(
+  rawDate: string | undefined | null,
+  period: string
+): boolean {
+  if (!period || period === "ALL") return true;
+  const dayKey = toLocalDateKey(rawDate);
+  if (dayKey) return dayKey.slice(0, 7) === period;
+  return extractValidPeriod(rawDate) === period;
+}
+
+function isBahanBakuCashTransaction(
+  t: Pick<CashTransaction, "category" | "categoryId">,
+  expenseCategories: ExpenseCategory[]
+): boolean {
+  const catType = resolveCategoryType(expenseCategories, t.categoryId);
+  const catText = String(t.category || "").toLowerCase();
+  return (
+    catType === "BAHAN_BAKU" ||
+    t.categoryId === "cat-bahan-baku" ||
+    catText.includes("bahan") ||
+    catText.includes("cogs")
+  );
+}
+
+/** Mengecek apakah transaksi kas adalah mutasi internal, saldo awal, atau setoran/prive modal (non-operasional). */
 export function isNonOperationalCashTransaction(
   t: Pick<CashTransaction, "category" | "description" | "referenceId">
 ): boolean {
   const cat = String(t.category || "").trim().toLowerCase();
-  const desc = String(t.description || "").trim().toUpperCase();
+  const desc = String(t.description || "").trim().toLowerCase();
   const ref = String(t.referenceId || "").trim().toUpperCase();
 
   return (
@@ -660,12 +699,359 @@ export function isNonOperationalCashTransaction(
     cat === "mutasi kas" ||
     cat.includes("transfer kas") ||
     cat.includes("mutasi kas") ||
+    cat.includes("transfer antar kas") ||
     cat === "saldo awal" ||
-    desc.startsWith("TRANSFER:") ||
-    desc.startsWith("OPENING:") ||
+    cat.includes("prive") ||
+    cat.includes("setoran modal") ||
+    cat.includes("penarikan modal") ||
+    desc.startsWith("transfer:") ||
+    desc.startsWith("opening:") ||
+    desc.includes("prive owner") ||
+    desc.includes("setoran modal") ||
+    desc.includes("penarikan modal") ||
     ref.startsWith("TRF-") ||
-    ref.startsWith("OPENING-")
+    ref.startsWith("TRANSFER:") ||
+    ref.startsWith("OPENING-") ||
+    ref.startsWith("OPENING:")
   );
+}
+
+/** Mengecek apakah transaksi kas keluar merupakan belanja modal / pembelian aset (CapEx). */
+export function isCapexCashTransaction(
+  t: Pick<CashTransaction, "type" | "category" | "categoryId">,
+  expenseCategories: ExpenseCategory[] = []
+): boolean {
+  if (t.type !== "CASH_OUT") return false;
+  const catType = resolveCategoryType(expenseCategories, t.categoryId);
+  const catId = String(t.categoryId || "").trim().toLowerCase();
+  return catType === "ASET" || catId.startsWith("cat-aset");
+}
+
+/** Mengecek apakah transaksi kas keluar merupakan biaya MDR / admin bank. */
+export function isAdminBankOrMdrTransaction(
+  t: Pick<CashTransaction, "type" | "category" | "categoryId" | "description" | "referenceId">,
+  expenseCategories: ExpenseCategory[] = []
+): boolean {
+  if (t.type !== "CASH_OUT") return false;
+  const catId = String(t.categoryId || "").trim().toLowerCase();
+  const cat = String(t.category || "").trim().toLowerCase();
+  const desc = String(t.description || "").trim().toLowerCase();
+  const ref = String(t.referenceId || "").trim().toLowerCase();
+  const resolvedName = (
+    expenseCategories.find((c) => c.id === t.categoryId)?.name || cat
+  ).toLowerCase();
+
+  return (
+    catId === "cat-admin-bank" ||
+    ref.startsWith("recap-mdr:") ||
+    resolvedName.includes("admin bank") ||
+    resolvedName.includes("mdr") ||
+    desc.includes("biaya mdr") ||
+    desc.includes("biaya admin bank")
+  );
+}
+
+export interface CashLiquidityBreakdown {
+  accountBalances: Record<string, number>;
+  operationalBalance: number;
+  savingsBalance: number;
+  totalLiquidity: number;
+  operationalAccounts: CashAccount[];
+  savingsAccounts: CashAccount[];
+}
+
+/** Memisahkan saldo Kas Operasional (CASH/BANK/E_WALLET) dari Tabungan / Dana Cadangan (SAVINGS). */
+export function computeCashLiquidityBreakdown(
+  cashAccounts: CashAccount[] = [],
+  cashTransactions: CashTransaction[] = []
+): CashLiquidityBreakdown {
+  const accountBalances: Record<string, number> = {};
+  for (const acc of cashAccounts) {
+    if (acc?.id) accountBalances[acc.id] = 0;
+  }
+
+  for (const trx of cashTransactions) {
+    if (!trx?.accountId) continue;
+    if (accountBalances[trx.accountId] === undefined) {
+      accountBalances[trx.accountId] = 0;
+    }
+    const amt = Math.round(Number(trx.amount) || 0);
+    const rawType = String(trx.type || "").toUpperCase();
+    if (rawType === "CASH_IN" || rawType === "IN" || rawType === "INCOME") {
+      accountBalances[trx.accountId] += amt;
+    } else if (rawType === "CASH_OUT" || rawType === "OUT" || rawType === "EXPENSE") {
+      accountBalances[trx.accountId] -= amt;
+    }
+  }
+
+  const operationalAccounts = cashAccounts.filter((a) => a.type !== "SAVINGS");
+  const savingsAccounts = cashAccounts.filter((a) => a.type === "SAVINGS");
+  const savingsIdSet = new Set(savingsAccounts.map((a) => a.id));
+
+  let operationalBalance = 0;
+  let savingsBalance = 0;
+  for (const [accId, bal] of Object.entries(accountBalances)) {
+    if (savingsIdSet.has(accId)) {
+      savingsBalance += bal;
+    } else {
+      operationalBalance += bal;
+    }
+  }
+
+  operationalBalance = Math.round(operationalBalance);
+  savingsBalance = Math.round(savingsBalance);
+
+  return {
+    accountBalances,
+    operationalBalance,
+    savingsBalance,
+    totalLiquidity: operationalBalance + savingsBalance,
+    operationalAccounts,
+    savingsAccounts,
+  };
+}
+
+export interface PeriodSavingsFlow {
+  savingsDeposit: number;
+  savingsWithdrawal: number;
+  netSavingsAllocation: number;
+}
+
+/** Menghitung mutasi bersih penyisihan & penarikan Tabungan (SAVINGS) pada periode tertentu. */
+export function computePeriodSavingsFlow(
+  period: string,
+  cashAccounts: CashAccount[] = [],
+  cashTransactions: CashTransaction[] = []
+): PeriodSavingsFlow {
+  const savingsIds = new Set(
+    cashAccounts.filter((a) => a.type === "SAVINGS").map((a) => a.id)
+  );
+  if (savingsIds.size === 0) {
+    return { savingsDeposit: 0, savingsWithdrawal: 0, netSavingsAllocation: 0 };
+  }
+
+  let savingsDeposit = 0;
+  let savingsWithdrawal = 0;
+
+  for (const t of cashTransactions) {
+    if (!savingsIds.has(t.accountId)) continue;
+    if (!matchesPeriodDate(t.date, period)) continue;
+
+    const cat = String(t.category || "").trim().toLowerCase();
+    const desc = String(t.description || "").trim().toUpperCase();
+    const ref = String(t.referenceId || "").trim().toUpperCase();
+    if (
+      cat === "saldo awal" ||
+      desc.startsWith("OPENING:") ||
+      ref.startsWith("OPENING")
+    ) {
+      continue;
+    }
+
+    const amt = Math.max(0, Math.round(Number(t.amount) || 0));
+    if (t.type === "CASH_IN") {
+      savingsDeposit += amt;
+    } else if (t.type === "CASH_OUT") {
+      savingsWithdrawal += amt;
+    }
+  }
+
+  return {
+    savingsDeposit: Math.round(savingsDeposit),
+    savingsWithdrawal: Math.round(savingsWithdrawal),
+    netSavingsAllocation: Math.round(savingsDeposit - savingsWithdrawal),
+  };
+}
+
+export type CogsCalculationMethod =
+  | "OPNAME_PERIODIC"
+  | "THEORETICAL_FALLBACK"
+  | "PURCHASE_FALLBACK";
+
+export interface PeriodicOpnameCogsParams {
+  period: string;
+  stockOpnames?: StockOpname[];
+  stockOpnameItems?: StockOpnameItem[];
+  purchaseOrders?: PurchaseOrder[];
+  cashTransactions: CashTransaction[];
+  expenseCategories: ExpenseCategory[];
+  ingredients?: Ingredient[];
+  theoreticalCOGS: number;
+}
+
+export interface PeriodicOpnameCogsResult {
+  openingInventoryValue: number;
+  periodMaterialPurchases: number;
+  poReceivedPurchases: number;
+  directCashMaterialPurchases: number;
+  closingInventoryValue: number;
+  effectiveCOGS: number;
+  cogsMethod: CogsCalculationMethod;
+  cogsVariance: number | null;
+  opnameCoverageCount: number;
+  opnameTotalIngredients: number;
+  hasOpeningOpname: boolean;
+  hasClosingOpname: boolean;
+}
+
+/**
+ * Menghitung HPP Aktual Opsi A (Periodik Opname):
+ * `Nilai Stok Awal + Pembelian Bahan Periode − Nilai Stok Akhir Opname`.
+ * Menggabungkan opname parsial per divisi dan mencegah double-counting PO tempo vs pelunasan kas.
+ */
+export function computePeriodicOpnameCogs(
+  params: PeriodicOpnameCogsParams
+): PeriodicOpnameCogsResult {
+  const {
+    period,
+    stockOpnames = [],
+    stockOpnameItems = [],
+    purchaseOrders = [],
+    cashTransactions,
+    expenseCategories,
+    ingredients = [],
+    theoreticalCOGS,
+  } = params;
+
+  const poIdSet = new Set(purchaseOrders.map((po) => po.id));
+
+  let poReceivedPurchases = 0;
+  for (const po of purchaseOrders) {
+    if (po.deliveryStatus !== "RECEIVED") continue;
+    if (!matchesPeriodDate(po.date, period)) continue;
+    poReceivedPurchases += Math.max(0, Math.round(Number(po.totalAmount) || 0));
+  }
+
+  let directCashMaterialPurchases = 0;
+  for (const t of cashTransactions) {
+    if (t.type !== "CASH_OUT") continue;
+    if (!matchesPeriodDate(t.date, period)) continue;
+    if (isNonOperationalCashTransaction(t)) continue;
+    if (!isBahanBakuCashTransaction(t, expenseCategories)) continue;
+
+    const rawRef = String(t.referenceId || "").trim();
+    const normalizedPoRef = rawRef.startsWith("po:") ? rawRef.slice(3) : rawRef;
+    const lowerRef = rawRef.toLowerCase();
+    if (
+      rawRef &&
+      (poIdSet.has(rawRef) ||
+        poIdSet.has(normalizedPoRef) ||
+        lowerRef.startsWith("po:") ||
+        lowerRef.startsWith("po-"))
+    ) {
+      continue;
+    }
+
+    directCashMaterialPurchases += Math.max(0, Math.round(Number(t.amount) || 0));
+  }
+
+  const periodMaterialPurchases = Math.round(
+    poReceivedPurchases + directCashMaterialPurchases
+  );
+
+  const ingMap = new Map(ingredients.map((i) => [i.id, i]));
+  const itemsByOpname = new Map<string, StockOpnameItem[]>();
+  for (const item of stockOpnameItems) {
+    if (!item?.opnameId || !item?.ingredientId) continue;
+    const list = itemsByOpname.get(item.opnameId);
+    if (list) list.push(item);
+    else itemsByOpname.set(item.opnameId, [item]);
+  }
+
+  const buildOpnameValuationMap = (opnamesList: StockOpname[]) => {
+    const sorted = [...opnamesList].sort((a, b) => {
+      const aDate = toLocalDateKey(a.date) || "";
+      const bDate = toLocalDateKey(b.date) || "";
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      const aCreated = String(a.createdAt || "");
+      const bCreated = String(b.createdAt || "");
+      if (aCreated !== bCreated) return aCreated.localeCompare(bCreated);
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    const latestValueByIngredient = new Map<string, number>();
+    for (const op of sorted) {
+      const items = itemsByOpname.get(op.id) || [];
+      for (const item of items) {
+        const ing = ingMap.get(item.ingredientId);
+        const unitCost =
+          Number(item.unitCost) > 0
+            ? Number(item.unitCost)
+            : Number(ing?.costPerUnit) || 0;
+        const qty = Math.max(0, Number(item.physicalStock) || 0);
+        latestValueByIngredient.set(item.ingredientId, qty * unitCost);
+      }
+    }
+    return latestValueByIngredient;
+  };
+
+  const finalOpnames = stockOpnames.filter((op) => op.status === "FINAL");
+  const isSpecificMonth = Boolean(period && period !== "ALL");
+
+  const closingOpnames = isSpecificMonth
+    ? finalOpnames.filter((op) => matchesPeriodDate(op.date, period))
+    : [];
+  const openingOpnames = isSpecificMonth
+    ? finalOpnames.filter((op) => {
+        const opDay = toLocalDateKey(op.date);
+        const opPeriod = opDay ? opDay.slice(0, 7) : extractValidPeriod(op.date);
+        return Boolean(opPeriod && opPeriod < period);
+      })
+    : [];
+
+  const closingMap = buildOpnameValuationMap(closingOpnames);
+  const openingMap = buildOpnameValuationMap(openingOpnames);
+
+  const closingInventoryValue = Math.round(
+    Array.from(closingMap.values()).reduce((sum, v) => sum + v, 0)
+  );
+  const openingInventoryValue = Math.round(
+    Array.from(openingMap.values()).reduce((sum, v) => sum + v, 0)
+  );
+
+  const hasClosingOpname = closingMap.size > 0;
+  const hasOpeningOpname = openingMap.size > 0;
+  const opnameCoverageCount = closingMap.size;
+  const opnameTotalIngredients = ingredients.length;
+
+  let effectiveCOGS = 0;
+  let cogsMethod: CogsCalculationMethod = "PURCHASE_FALLBACK";
+
+  if (hasClosingOpname && isSpecificMonth) {
+    effectiveCOGS = Math.max(
+      0,
+      Math.round(
+        openingInventoryValue + periodMaterialPurchases - closingInventoryValue
+      )
+    );
+    cogsMethod = "OPNAME_PERIODIC";
+  } else if (theoreticalCOGS > 0) {
+    effectiveCOGS = Math.round(theoreticalCOGS);
+    cogsMethod = "THEORETICAL_FALLBACK";
+  } else {
+    effectiveCOGS = periodMaterialPurchases;
+    cogsMethod = "PURCHASE_FALLBACK";
+  }
+
+  const cogsVariance =
+    cogsMethod === "OPNAME_PERIODIC" && theoreticalCOGS > 0
+      ? Math.round(effectiveCOGS - theoreticalCOGS)
+      : null;
+
+  return {
+    openingInventoryValue,
+    periodMaterialPurchases,
+    poReceivedPurchases,
+    directCashMaterialPurchases,
+    closingInventoryValue,
+    effectiveCOGS,
+    cogsMethod,
+    cogsVariance,
+    opnameCoverageCount,
+    opnameTotalIngredients,
+    hasOpeningOpname,
+    hasClosingOpname,
+  };
 }
 
 /** Mengecek apakah transaksi kas masuk berasal dari penjualan / omzet kasir. */
@@ -724,6 +1110,10 @@ export interface ComputePeriodFinancialSummaryParams {
   recipes?: Recipe[];
   ingredients?: Ingredient[];
   products?: Product[];
+  stockOpnames?: StockOpname[];
+  stockOpnameItems?: StockOpnameItem[];
+  purchaseOrders?: PurchaseOrder[];
+  cashAccounts?: CashAccount[];
 }
 
 export interface DailyFinancialBreakdownRow {
@@ -731,28 +1121,61 @@ export interface DailyFinancialBreakdownRow {
   recapRevenue: number;
   salesTxRevenue: number;
   cashSalesInflow: number;
+  pendingNonCash: number;
   recognizedRevenue: number;
   operationalCashIn: number;
   operationalCashOut: number;
 }
 
+export interface PaymentMethodRecapBreakdown {
+  cash: number;
+  qris: number;
+  edc: number;
+  transfer: number;
+  onlineDelivery: number;
+}
+
 export interface PeriodFinancialSummaryResult {
   period: string;
+  grossSales: number;
+  totalDiscountAmount: number;
+  totalRefundAmount: number;
+  totalMdrFee: number;
+  netSales: number;
   recognizedRevenue: number;
   recapRevenue: number;
   salesTxRevenue: number;
   cashSalesInflow: number;
   otherCashInflow: number;
+  pendingNonCashSettlement: number;
+  paymentBreakdown: PaymentMethodRecapBreakdown;
   totalOperationalCashIn: number;
   totalOperationalCashOut: number;
   netOperationalCashFlow: number;
   theoreticalCOGS: number;
   actualCogsExpense: number;
+  openingInventoryValue: number;
+  periodMaterialPurchases: number;
+  poReceivedPurchases: number;
+  directCashMaterialPurchases: number;
+  closingInventoryValue: number;
   effectiveCOGS: number;
+  cogsMethod: CogsCalculationMethod;
+  cogsVariance: number | null;
+  opnameCoverageCount: number;
+  opnameTotalIngredients: number;
+  hasOpeningOpname: boolean;
+  hasClosingOpname: boolean;
   totalHrdExpense: number;
   totalUtilityExpense: number;
   totalGeneralOpsExpense: number;
+  totalAdminBankExpense: number;
   totalOPEX: number;
+  capexExpense: number;
+  savingsDeposit: number;
+  savingsWithdrawal: number;
+  netSavingsAllocation: number;
+  unpaidPoDebt: number;
   grossProfit: number;
   netProfit: number;
   netMarginPercent: number;
@@ -762,8 +1185,8 @@ export interface PeriodFinancialSummaryResult {
 }
 
 /**
- * Menghitung ringkasan penjualan, arus kas operasional, HPP/COGS, dan laba rugi periode
- * secara terpusat tanpa double-counting antar Rekap Harian, Import/POS Sales, dan Arus Kas.
+ * Menghitung ringkasan penjualan, arus kas operasional, HPP Opsi A (Periodik Opname),
+ * OPEX, CapEx, Tabungan, dan laba rugi periode secara terpusat tanpa double-counting.
  */
 export function computePeriodFinancialSummary(
   params: ComputePeriodFinancialSummaryParams
@@ -777,26 +1200,14 @@ export function computePeriodFinancialSummary(
     recipes = [],
     ingredients = [],
     products = [],
+    stockOpnames = [],
+    stockOpnameItems = [],
+    purchaseOrders = [],
+    cashAccounts = [],
   } = params;
 
-  const toLocalDateKey = (raw: string | undefined | null): string | null => {
-    if (!raw) return null;
-    const trimmed = String(raw).trim();
-    if (!trimmed) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) {
-      return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : null;
-    }
-    return getLocalDateString(parsed);
-  };
-
-  const matchesPeriod = (rawDate: string | undefined | null) => {
-    if (!period || period === "ALL") return true;
-    const dayKey = toLocalDateKey(rawDate);
-    if (dayKey) return dayKey.slice(0, 7) === period;
-    return extractValidPeriod(rawDate) === period;
-  };
+  const matchesPeriod = (rawDate: string | undefined | null) =>
+    matchesPeriodDate(rawDate, period);
 
   const dailyMap = new Map<
     string,
@@ -804,6 +1215,7 @@ export function computePeriodFinancialSummary(
       recapRevenue: number;
       salesTxRevenue: number;
       cashSalesInflow: number;
+      pendingNonCash: number;
       operationalCashIn: number;
       operationalCashOut: number;
     }
@@ -816,6 +1228,7 @@ export function computePeriodFinancialSummary(
       recapRevenue: 0,
       salesTxRevenue: 0,
       cashSalesInflow: 0,
+      pendingNonCash: 0,
       operationalCashIn: 0,
       operationalCashOut: 0,
     };
@@ -824,13 +1237,49 @@ export function computePeriodFinancialSummary(
   };
 
   let recapRevenue = 0;
+  let totalDiscountAmount = 0;
+  let totalRefundAmount = 0;
+  let totalMdrFee = 0;
+  let pendingNonCashSettlement = 0;
+  const paymentBreakdown: PaymentMethodRecapBreakdown = {
+    cash: 0,
+    qris: 0,
+    edc: 0,
+    transfer: 0,
+    onlineDelivery: 0,
+  };
+
   for (const r of dailySalesRecaps) {
     if (!matchesPeriod(r.date)) continue;
     const amt = Math.max(0, Math.round(Number(r.totalAmount) || 0));
     recapRevenue += amt;
+    totalDiscountAmount += Math.max(0, Math.round(Number(r.discountAmount) || 0));
+    totalRefundAmount += Math.max(0, Math.round(Number(r.refundAmount) || 0));
+    totalMdrFee += Math.max(0, Math.round(Number(r.mdrFeeAmount) || 0));
+
+    const cashAmt = Math.max(0, Math.round(Number(r.cashAmount) || 0));
+    const qrisAmt = Math.max(0, Math.round(Number(r.qrisAmount) || 0));
+    const edcAmt = Math.max(0, Math.round(Number(r.edcAmount) || 0));
+    const transferAmt = Math.max(0, Math.round(Number(r.transferAmount) || 0));
+    const onlineAmt = Math.max(0, Math.round(Number(r.onlineDeliveryAmount) || 0));
+
+    paymentBreakdown.cash += cashAmt;
+    paymentBreakdown.qris += qrisAmt;
+    paymentBreakdown.edc += edcAmt;
+    paymentBreakdown.transfer += transferAmt;
+    paymentBreakdown.onlineDelivery += onlineAmt;
+
+    if (r.nonCashSettlementStatus === "PENDING") {
+      pendingNonCashSettlement += qrisAmt + edcAmt + transferAmt + onlineAmt;
+    }
+
     const dayKey = toLocalDateKey(r.date);
     if (dayKey) {
-      getOrCreateDay(dayKey).recapRevenue += amt;
+      const dayRow = getOrCreateDay(dayKey);
+      dayRow.recapRevenue += amt;
+      if (r.nonCashSettlementStatus === "PENDING") {
+        dayRow.pendingNonCash += qrisAmt + edcAmt + transferAmt + onlineAmt;
+      }
     }
   }
 
@@ -899,6 +1348,8 @@ export function computePeriodFinancialSummary(
   let totalHrdExpense = 0;
   let totalUtilityExpense = 0;
   let totalGeneralOpsExpense = 0;
+  let totalAdminBankExpense = 0;
+  let capexExpense = 0;
 
   for (const t of cashTransactions) {
     if (!matchesPeriod(t.date)) continue;
@@ -922,12 +1373,9 @@ export function computePeriodFinancialSummary(
 
       const catType = resolveCategoryType(expenseCategories, t.categoryId);
       const catText = String(t.category || "").toLowerCase();
-      if (
-        catType === "BAHAN_BAKU" ||
-        t.categoryId === "cat-bahan-baku" ||
-        catText.includes("bahan") ||
-        catText.includes("cogs")
-      ) {
+      if (isCapexCashTransaction(t, expenseCategories)) {
+        capexExpense += amt;
+      } else if (isBahanBakuCashTransaction(t, expenseCategories)) {
         actualCogsExpense += amt;
       } else if (
         catType === "HRD" ||
@@ -944,6 +1392,8 @@ export function computePeriodFinancialSummary(
         catText.includes("utilitas")
       ) {
         totalUtilityExpense += amt;
+      } else if (isAdminBankOrMdrTransaction(t, expenseCategories)) {
+        totalAdminBankExpense += amt;
       } else {
         totalGeneralOpsExpense += amt;
       }
@@ -957,6 +1407,7 @@ export function computePeriodFinancialSummary(
       recapRevenue: d.recapRevenue,
       salesTxRevenue: d.salesTxRevenue,
       cashSalesInflow: d.cashSalesInflow,
+      pendingNonCash: d.pendingNonCash,
       recognizedRevenue: Math.max(
         d.recapRevenue,
         d.salesTxRevenue,
@@ -970,32 +1421,88 @@ export function computePeriodFinancialSummary(
     (sum, d) => sum + d.recognizedRevenue,
     0
   );
+  const netSales = recognizedRevenue;
+  const grossSales = recognizedRevenue + totalDiscountAmount + totalRefundAmount;
+
+  const cogsResult = computePeriodicOpnameCogs({
+    period,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashTransactions,
+    expenseCategories,
+    ingredients,
+    theoreticalCOGS,
+  });
+
+  const savingsFlow = computePeriodSavingsFlow(
+    period,
+    cashAccounts,
+    cashTransactions
+  );
+
+  let unpaidPoDebt = 0;
+  for (const po of purchaseOrders) {
+    if (!matchesPeriod(po.date)) continue;
+    if (po.status === "UNPAID" || po.status === "PARTIAL") {
+      const rem = Math.round(Number(po.totalAmount) || 0) - Math.round(Number(po.amountPaid) || 0);
+      if (rem > 0) unpaidPoDebt += rem;
+    }
+  }
 
   const netOperationalCashFlow = totalOperationalCashIn - totalOperationalCashOut;
-  const effectiveCOGS = theoreticalCOGS > 0 ? theoreticalCOGS : actualCogsExpense;
-  const totalOPEX = totalHrdExpense + totalUtilityExpense + totalGeneralOpsExpense;
-  const grossProfit = Math.round(recognizedRevenue - effectiveCOGS);
-  const netProfit = Math.round(recognizedRevenue - effectiveCOGS - totalOPEX);
+  const effectiveCOGS = cogsResult.effectiveCOGS;
+  const totalOPEX =
+    totalHrdExpense +
+    totalUtilityExpense +
+    totalGeneralOpsExpense +
+    totalAdminBankExpense;
+  const grossProfit = Math.round(netSales - effectiveCOGS);
+  const netProfit = Math.round(netSales - effectiveCOGS - totalOPEX);
   const netMarginPercent =
-    recognizedRevenue > 0 ? (netProfit / recognizedRevenue) * 100 : 0;
+    netSales > 0 ? (netProfit / netSales) * 100 : 0;
 
   return {
     period,
+    grossSales,
+    totalDiscountAmount,
+    totalRefundAmount,
+    totalMdrFee,
+    netSales,
     recognizedRevenue,
     recapRevenue,
     salesTxRevenue,
     cashSalesInflow,
     otherCashInflow,
+    pendingNonCashSettlement,
+    paymentBreakdown,
     totalOperationalCashIn,
     totalOperationalCashOut,
     netOperationalCashFlow,
     theoreticalCOGS,
     actualCogsExpense,
+    openingInventoryValue: cogsResult.openingInventoryValue,
+    periodMaterialPurchases: cogsResult.periodMaterialPurchases,
+    poReceivedPurchases: cogsResult.poReceivedPurchases,
+    directCashMaterialPurchases: cogsResult.directCashMaterialPurchases,
+    closingInventoryValue: cogsResult.closingInventoryValue,
     effectiveCOGS,
+    cogsMethod: cogsResult.cogsMethod,
+    cogsVariance: cogsResult.cogsVariance,
+    opnameCoverageCount: cogsResult.opnameCoverageCount,
+    opnameTotalIngredients: cogsResult.opnameTotalIngredients,
+    hasOpeningOpname: cogsResult.hasOpeningOpname,
+    hasClosingOpname: cogsResult.hasClosingOpname,
     totalHrdExpense,
     totalUtilityExpense,
     totalGeneralOpsExpense,
+    totalAdminBankExpense,
     totalOPEX,
+    capexExpense,
+    savingsDeposit: savingsFlow.savingsDeposit,
+    savingsWithdrawal: savingsFlow.savingsWithdrawal,
+    netSavingsAllocation: savingsFlow.netSavingsAllocation,
+    unpaidPoDebt,
     grossProfit,
     netProfit,
     netMarginPercent,

@@ -3,6 +3,11 @@ import { useStore } from "../store/StoreContext";
 import { CustomSelect } from "./common/CustomSelect";
 import { formatCurrency } from "../utils/format";
 import { computePeriodFinancialSummary } from "../utils/financeMetrics";
+import {
+  calculateWorkDurationHours,
+  classifyDailyAttendanceStatus,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
 import { PayrollRecord, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import {
   Calculator,
@@ -166,7 +171,9 @@ export function Payroll() {
   const generatedCalculations = useMemo(() => {
     const uniqueEmpIds = Array.from(new Set([
       ...employees.filter((e: any) => e.status === "AKTIF").map((e: any) => e.id),
-      ...dailyAttendances.filter((a: any) => a.date.startsWith(period)).map((a: any) => a.employeeId)
+      ...dailyAttendances
+        .filter((a: any) => (a.date || "").startsWith(period))
+        .map((a: any) => resolveCanonicalEmployeeId(a.employeeId, employees, users))
     ]));
 
     return uniqueEmpIds.map((empId: any) => {
@@ -175,9 +182,18 @@ export function Payroll() {
           || contracts.find((c: any) => c.employeeId === empId);
         
         // Auto-calculate from daily attendances (Opsi B: dihitung hadir kecuali ditolak Manager atau berstatus Alpha)
-        const dailyLogs = dailyAttendances.filter((a: any) => a.employeeId === emp.id && a.date.startsWith(period));
-        const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
-        const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA" || a.approvalStatus === "REJECTED").length;
+        const dailyLogs = dailyAttendances.filter(
+          (a: any) =>
+            resolveCanonicalEmployeeId(a.employeeId, employees, users) === emp.id &&
+            (a.date || "").startsWith(period)
+        );
+        const presentDays = dailyLogs.filter((a: any) => {
+          const cls = classifyDailyAttendanceStatus(a);
+          return cls === "HADIR" || cls === "TERLAMBAT";
+        }).length;
+        const alphaDays = dailyLogs.filter(
+          (a: any) => classifyDailyAttendanceStatus(a) === "ALPHA"
+        ).length;
         const kpi = kpiRecords.find((k: any) => k.employeeId === emp.id && k.period === period);
 
         const rawBasicSalary = contract?.basicSalary || contract?.baseSalary || 0;
@@ -213,7 +229,9 @@ export function Payroll() {
         const alphaDeduction = alphaDays * (contract?.alphaDeductionPerDay !== undefined && contract?.alphaDeductionPerDay !== 0 ? contract.alphaDeductionPerDay : dailyWage);
         
         // Potongan Keterlambatan Proporsional Jam Kerja
-        const lateLogs = dailyLogs.filter((a: any) => a.status === "TERLAMBAT" && a.approvalStatus !== "REJECTED");
+        const lateLogs = dailyLogs.filter(
+          (a: any) => classifyDailyAttendanceStatus(a) === "TERLAMBAT"
+        );
         const lateDays = lateLogs.length;
         let totalLateHours = 0;
         lateLogs.forEach((l: any) => {
@@ -291,19 +309,16 @@ export function Payroll() {
         let detectedOvertimeHours = 0;
         let approvedOvertimeHours = 0;
         dailyLogs.forEach((l: any) => {
-          if (l.clockInTime && l.clockOutTime && ["HADIR", "TERLAMBAT"].includes(l.status) && l.approvalStatus !== "REJECTED") {
-            try {
-              const inT = new Date(l.clockInTime).getTime();
-              const outT = new Date(l.clockOutTime).getTime();
-              const durHours = (outT - inT) / (1000 * 60 * 60);
-              if (durHours > 8) {
-                const ot = Math.round((durHours - 8) * 10) / 10;
-                detectedOvertimeHours += ot;
-                if (l.overtimeApproved === true) {
-                  approvedOvertimeHours += (l.overtimeHours || ot);
-                }
+          const cls = classifyDailyAttendanceStatus(l);
+          if (l.clockInTime && l.clockOutTime && (cls === "HADIR" || cls === "TERLAMBAT")) {
+            const durHours = calculateWorkDurationHours(l.clockInTime, l.clockOutTime);
+            if (durHours > 8) {
+              const ot = Math.round((durHours - 8) * 10) / 10;
+              detectedOvertimeHours += ot;
+              if (l.overtimeApproved === true) {
+                approvedOvertimeHours += (l.overtimeHours || ot);
               }
-            } catch {}
+            }
           }
         });
         detectedOvertimeHours = Math.round(detectedOvertimeHours * 10) / 10;
@@ -374,29 +389,38 @@ export function Payroll() {
 
   const getEmpPerformanceSummary = (employeeId: string) => {
     const dailyLogs = (dailyAttendances || []).filter(
-      (a: any) => a.employeeId === employeeId && a.date.startsWith(period)
+      (a: any) =>
+        resolveCanonicalEmployeeId(a.employeeId, employees, users) === employeeId &&
+        (a.date || "").startsWith(period)
     );
-    const presentDays = dailyLogs.filter((a: any) => ["HADIR", "TERLAMBAT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
-    const lateDays = dailyLogs.filter((a: any) => a.status === "TERLAMBAT" && a.approvalStatus !== "REJECTED").length;
-    const alphaDays = dailyLogs.filter((a: any) => a.status === "ALPHA" || a.approvalStatus === "REJECTED").length;
-    const sickOrLeaveDays = dailyLogs.filter((a: any) => ["IZIN", "SAKIT"].includes(a.status) && a.approvalStatus !== "REJECTED").length;
+    const presentDays = dailyLogs.filter((a: any) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      return cls === "HADIR" || cls === "TERLAMBAT";
+    }).length;
+    const lateDays = dailyLogs.filter(
+      (a: any) => classifyDailyAttendanceStatus(a) === "TERLAMBAT"
+    ).length;
+    const alphaDays = dailyLogs.filter(
+      (a: any) => classifyDailyAttendanceStatus(a) === "ALPHA"
+    ).length;
+    const sickOrLeaveDays = dailyLogs.filter((a: any) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      return cls === "IZIN" || cls === "SAKIT";
+    }).length;
 
     let detectedOvertimeHours = 0;
     let approvedOvertimeHours = 0;
     dailyLogs.forEach((l: any) => {
-      if (l.clockInTime && l.clockOutTime && ["HADIR", "TERLAMBAT"].includes(l.status) && l.approvalStatus !== "REJECTED") {
-        try {
-          const inT = new Date(l.clockInTime).getTime();
-          const outT = new Date(l.clockOutTime).getTime();
-          const durHours = (outT - inT) / (1000 * 60 * 60);
-          if (durHours > 8) {
-            const ot = Math.round((durHours - 8) * 10) / 10;
-            detectedOvertimeHours += ot;
-            if (l.overtimeApproved === true) {
-              approvedOvertimeHours += (l.overtimeHours || ot);
-            }
+      const cls = classifyDailyAttendanceStatus(l);
+      if (l.clockInTime && l.clockOutTime && (cls === "HADIR" || cls === "TERLAMBAT")) {
+        const durHours = calculateWorkDurationHours(l.clockInTime, l.clockOutTime);
+        if (durHours > 8) {
+          const ot = Math.round((durHours - 8) * 10) / 10;
+          detectedOvertimeHours += ot;
+          if (l.overtimeApproved === true) {
+            approvedOvertimeHours += (l.overtimeHours || ot);
           }
-        } catch {}
+        }
       }
     });
     detectedOvertimeHours = Math.round(detectedOvertimeHours * 10) / 10;

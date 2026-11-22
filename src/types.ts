@@ -145,6 +145,7 @@ export interface StockOpnameItem {
   systemStock: number;
   physicalStock: number;
   difference: number;
+  unitCost?: number; // Snapshot harga modal/unit saat opname difinalisasi
   notes: string | null;
 }
 
@@ -474,12 +475,20 @@ export interface StockMovement {
 export interface DailySalesRecap {
   id: string;
   date: string; // YYYY-MM-DD
-  shift?: "ALL" | "PAGI" | "SORE" | "MALAM";
+  shift?: "ALL" | "PAGI" | "SORE" | "MALAM" | "MIDDLE";
   cashAmount: number;
   qrisAmount: number;
   edcAmount: number;
   transferAmount: number;
+  onlineDeliveryAmount?: number; // Ojol (GoFood/GrabFood/ShopeeFood) -> masuk Bank
+  discountAmount?: number;
+  refundAmount?: number;
+  mdrFeeAmount?: number;
   totalAmount: number;
+  cashAccountId?: string | null;
+  bankAccountId?: string | null;
+  nonCashSettlementStatus?: "SETTLED" | "PENDING";
+  nonCashSettledAt?: string | null;
   notes?: string;
   recordedBy: string;
   createdAt: string;

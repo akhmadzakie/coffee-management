@@ -488,6 +488,10 @@ async function ensureTables() {
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'PENDING'`,
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC DEFAULT 0`,
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS overtime_approved BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS is_corrected BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS corrected_by TEXT`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS corrected_at TEXT`,
+    `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS correction_reason TEXT`,
     `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
@@ -661,6 +665,7 @@ async function ensureTables() {
     `ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'CASH'`,
     `ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS order_id TEXT`,
     `ALTER TABLE stock_opnames ADD COLUMN IF NOT EXISTS date TEXT`,
+    `ALTER TABLE stock_opname_items ADD COLUMN IF NOT EXISTS unit_cost DOUBLE PRECISION DEFAULT 0`,
     `ALTER TABLE cash_transactions ALTER COLUMN amount TYPE DOUBLE PRECISION`,
     `ALTER TABLE sales_transactions ALTER COLUMN quantity_sold TYPE DOUBLE PRECISION`,
     `ALTER TABLE sales_transactions ALTER COLUMN total_price TYPE DOUBLE PRECISION`,
@@ -1011,6 +1016,7 @@ async function startServer() {
     systemStock: Number(i.systemStock) || 0,
     physicalStock: Number(i.physicalStock) || 0,
     difference: Number(i.difference) || 0,
+    unitCost: Number(i.unitCost) || 0,
     notes: i.notes ? String(i.notes) : null,
   });
 
@@ -1271,6 +1277,10 @@ async function startServer() {
     overtimeHours: Number(a.overtimeHours) || 0,
     overtimeApproved: Boolean(a.overtimeApproved),
     notes: String(a.notes || ""),
+    isCorrected: Boolean(a.isCorrected),
+    correctedBy: a.correctedBy ? String(a.correctedBy) : null,
+    correctedAt: a.correctedAt ? String(a.correctedAt) : null,
+    correctionReason: a.correctionReason ? String(a.correctionReason) : null,
   });
 
 

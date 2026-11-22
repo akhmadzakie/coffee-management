@@ -3,12 +3,14 @@ import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
 import {
+  computeCashLiquidityBreakdown,
   computePeriodFinancialSummary,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
 import { ViewState } from "../types";
 import {
   Wallet,
+  PiggyBank,
   Building2,
   Landmark,
   Smartphone,
@@ -70,6 +72,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     products,
     expenseCategories,
     purchaseOrders,
+    stockOpnames = [],
+    stockOpnameItems = [],
     suppliers,
     employees,
     contracts,
@@ -119,23 +123,15 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     [cashTransactions, filterMonth, filterYear]
   );
 
-  // Hitung Saldo Tiap Akun Kas & Bank (memperhitungkan mutasi & saldo awal agar saldo riil rekening akurat)
-  const accountBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    cashAccounts.forEach((acc) => (balances[acc.id] = 0));
-
-    cashTransactions.forEach((trx) => {
-      if (balances[trx.accountId] === undefined) balances[trx.accountId] = 0;
-      if (trx.type === "CASH_IN") balances[trx.accountId] += trx.amount;
-      else if (trx.type === "CASH_OUT") balances[trx.accountId] -= trx.amount;
-    });
-    return balances;
-  }, [cashTransactions, cashAccounts]);
-
-  // Total Likuiditas Kas
-  const totalLiquidity = useMemo(() => {
-    return (Object.values(accountBalances) as number[]).reduce((sum, val) => sum + val, 0);
-  }, [accountBalances]);
+  // Hitung Saldo Tiap Akun Kas & Bank (memisahkan Kas Operasional vs Tabungan)
+  const liquidityBreakdown = useMemo(
+    () => computeCashLiquidityBreakdown(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
+  const accountBalances = liquidityBreakdown.accountBalances;
+  const operationalBalance = liquidityBreakdown.operationalBalance;
+  const savingsBalance = liquidityBreakdown.savingsBalance;
+  const totalLiquidity = liquidityBreakdown.totalLiquidity;
 
   // Ringkasan Terpusat Penjualan, Omzet & Arus Kas Operasional (Bebas Mutasi Internal / Saldo Awal)
   const periodSummary = useMemo(() => {
@@ -150,6 +146,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
         recipes,
         ingredients,
         products,
+        stockOpnames,
+        stockOpnameItems,
+        purchaseOrders,
+        cashAccounts,
       });
     }
     const yearStr = `${filterYear}-`;
@@ -162,6 +162,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       recipes,
       ingredients,
       products,
+      stockOpnames,
+      stockOpnameItems,
+      purchaseOrders: purchaseOrders.filter((po) => String(po.date).startsWith(yearStr)),
+      cashAccounts,
     });
   }, [
     filterMonth,
@@ -173,6 +177,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
   ]);
 
   const totalCashIn = periodSummary.totalOperationalCashIn;
@@ -180,25 +188,24 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
 
-  // Hitung HPP Bahan Baku Riil (Aktual kas bahan baku atau fallback HPP teoretis resep terjual)
+  // Hitung HPP Bahan Baku Riil (Metode Periodik Opname Opsi A atau fallback teoretis/pembelian)
   const totalHpp = periodSummary.effectiveCOGS;
 
   const netSalesRevenue =
-    periodSummary.recognizedRevenue > 0 ? periodSummary.recognizedRevenue : totalCashIn;
-  const netProfit = netSalesRevenue - totalCashOut;
+    periodSummary.netSales > 0
+      ? periodSummary.netSales
+      : periodSummary.recognizedRevenue > 0
+      ? periodSummary.recognizedRevenue
+      : totalCashIn;
+  const netProfit = periodSummary.netProfit;
 
   // Food Cost & Margin
   const foodCostPercent = netSalesRevenue > 0 ? ((totalHpp / netSalesRevenue) * 100).toFixed(1) : "0.0";
-  const grossProfit = Math.max(0, netSalesRevenue - totalHpp);
+  const grossProfit = periodSummary.grossProfit;
   const grossProfitMargin = netSalesRevenue > 0 ? ((grossProfit / netSalesRevenue) * 100).toFixed(1) : "0.0";
 
   // Margin Laba Operasional Bersih
-  const profitMarginPercent =
-    netSalesRevenue > 0
-      ? ((netProfit / netSalesRevenue) * 100).toFixed(1)
-      : totalCashIn > 0
-      ? ((netProfit / totalCashIn) * 100).toFixed(1)
-      : "0.0";
+  const profitMarginPercent = periodSummary.netMarginPercent.toFixed(1);
 
   // Data Grafik Omzet & Kas Masuk Operasional vs Arus Keluar
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -217,6 +224,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           recipes,
           ingredients,
           products,
+          stockOpnames,
+          stockOpnameItems,
+          purchaseOrders,
+          cashAccounts,
         });
 
         return {
@@ -256,6 +267,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
     periodSummary,
     daysInMonth,
   ]);
@@ -533,12 +548,17 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </div>
           </div>
           <div className="relative z-10">
-            <p className="text-xl sm:text-2xl font-black font-mono text-white tracking-tight">
+            <p className="text-xl sm:text-2xl font-black font-mono tabular-nums text-white tracking-tight">
               {formatCurrency(totalLiquidity)}
             </p>
-            <p className="text-[11px] text-brand-100/70 mt-1">
-              Dari {cashAccounts.length} pos kas & rekening aktif
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px]">
+              <span className="px-2 py-0.5 rounded-full bg-white/15 border border-white/20 text-white font-semibold tabular-nums">
+                Ops: {formatCurrency(operationalBalance)}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-100 font-semibold tabular-nums">
+                Tabungan: {formatCurrency(savingsBalance)}
+              </span>
+            </div>
           </div>
         </motion.div>
 
@@ -558,12 +578,17 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
+            <p className="text-xl font-bold font-mono tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
               {formatCurrency(totalCashIn)}
             </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Omzet penjualan: {formatCurrency(netSalesRevenue)}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+              Omzet bersih: {formatCurrency(netSalesRevenue)}
             </p>
+            {periodSummary.pendingNonCashSettlement > 0 && (
+              <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 mt-0.5 tabular-nums">
+                Menunggu cair H+1: {formatCurrency(periodSummary.pendingNonCashSettlement)}
+              </p>
+            )}
           </div>
         </motion.div>
 
@@ -583,10 +608,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
+            <p className="text-xl font-bold font-mono tabular-nums tracking-tight text-slate-900 dark:text-slate-100">
               {formatCurrency(totalHpp)}
             </p>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex flex-wrap items-center gap-1.5 mt-1">
               <span
                 className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                   Number(foodCostPercent) <= 35
@@ -597,6 +622,19 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
                 }`}
               >
                 Food Cost: {foodCostPercent}%
+              </span>
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  periodSummary.cogsMethod === "OPNAME_PERIODIC"
+                    ? "bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30"
+                    : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                }`}
+              >
+                {periodSummary.cogsMethod === "OPNAME_PERIODIC"
+                  ? "Opname"
+                  : periodSummary.cogsMethod === "THEORETICAL_FALLBACK"
+                  ? "Estimasi BOM"
+                  : "Belanja Kas"}
               </span>
             </div>
           </div>
@@ -618,12 +656,17 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </div>
           </div>
           <div>
-            <p className="text-xl font-bold font-mono tracking-tight text-rose-600 dark:text-rose-300">
+            <p className="text-xl font-bold font-mono tabular-nums tracking-tight text-rose-600 dark:text-rose-300">
               {formatCurrency(totalCashOut)}
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
               Bahan baku, gaji & operasional
             </p>
+            {periodSummary.capexExpense > 0 && (
+              <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                CapEx aset dipisah: {formatCurrency(periodSummary.capexExpense)}
+              </p>
+            )}
           </div>
         </motion.div>
 
@@ -654,7 +697,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           </div>
           <div>
             <p
-              className={`text-xl font-bold font-mono tracking-tight ${
+              className={`text-xl font-bold font-mono tabular-nums tracking-tight ${
                 netProfit >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
               }`}
             >
@@ -676,47 +719,67 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       </div>
 
       {/* ── SALDO POS KAS & AKUN BANK ────────────────────────────────────── */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/90 shadow-2xs">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-5">
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
           <div>
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Rincian Pos Kas & Rekening Bank
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              Rincian Pos Kas &amp; Rekening Bank
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Distribusi saldo riil di kas fisik toko, rekening bank operasional, dan e-wallet.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Distribusi saldo riil di kas fisik toko, rekening bank operasional, e-wallet, dan tabungan cadangan.
             </p>
           </div>
-          <button
-            onClick={() => onNavigate("cash_flow")}
-            className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 group cursor-pointer"
-          >
-            <span>Buka Mutasi Kas</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 tabular-nums">
+              Kas Ops: {formatCurrency(operationalBalance)}
+            </span>
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-500/30 tabular-nums inline-flex items-center gap-1">
+              <PiggyBank className="w-3.5 h-3.5" />
+              Tabungan: {formatCurrency(savingsBalance)}
+            </span>
+            <button
+              onClick={() => onNavigate("cash_flow")}
+              className="text-xs font-bold text-brand-600 dark:text-brand-300 hover:text-brand-700 flex items-center gap-1 group cursor-pointer ml-1"
+            >
+              <span>Buka Mutasi Kas</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {cashAccounts.map((acc) => {
             const bal = accountBalances[acc.id] || 0;
+            const isSavings = acc.type === "SAVINGS";
             return (
               <div
                 key={acc.id}
-                className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:border-brand-300 transition-all flex flex-col justify-between"
+                className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                  isSavings
+                    ? "bg-amber-50/40 dark:bg-amber-500/10 border-amber-200/80 dark:border-amber-500/30 hover:border-amber-300"
+                    : "bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/70 dark:border-slate-700/80 hover:border-brand-300"
+                }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-800 truncate mr-2">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mr-2">
                     {acc.name}
                   </span>
-                  <div className="w-8 h-8 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0">
                     {getAccountIcon(acc.type)}
                   </div>
                 </div>
-                <p className={`text-lg font-bold font-mono ${bal < 0 ? "text-rose-600" : "text-slate-900"}`}>
+                <p className={`text-lg font-bold font-mono tabular-nums ${bal < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"}`}>
                   {formatCurrency(bal)}
                 </p>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60 text-[10px]">
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px]">
                   <span className="text-slate-400 font-semibold uppercase">{acc.type}</span>
-                  <span className="text-emerald-700 font-bold">Aktif</span>
+                  {isSavings ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold border border-amber-200/70 dark:border-amber-500/30">
+                      Tabungan
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 dark:text-emerald-300 font-bold">Aktif</span>
+                  )}
                 </div>
               </div>
             );

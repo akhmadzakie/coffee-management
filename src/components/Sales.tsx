@@ -2,7 +2,11 @@ import { RupiahSign } from './common/RupiahSign';
 import { FEATURES } from "../config/features";
 import { mapSalesRows } from "../utils/salesImportMapper";
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
+import { getLocalDateString } from "../utils/dateUtils";
+import { DailySalesRecap } from "../types";
 import {
   Upload,
   Search,
@@ -14,7 +18,7 @@ import {
   Receipt,
   Eye,
   Filter,
-    CreditCard,
+  CreditCard,
   QrCode,
   Banknote,
   RotateCcw,
@@ -37,10 +41,14 @@ import {
   CheckCircle2,
   Users,
   ShieldAlert,
+  Edit2,
+  ArrowLeftRight,
+  Landmark,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
 import { CsvImportExport } from "./common/CsvImportExport";
+import { ConfirmModal } from "./common/ConfirmModal";
 import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportXlsx";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CurrencyInput } from "./common/CurrencyInput";
@@ -93,7 +101,11 @@ export const Sales = () => {
     salesImportLogs,
     dailySalesRecaps = [],
     addDailySalesRecap,
+    updateDailySalesRecap,
+    settleDailySalesRecapNonCash,
     deleteDailySalesRecap,
+    cashAccounts = [],
+    addCashTransaction,
     syncData,
     currentUser,
     settings,
@@ -120,18 +132,51 @@ export const Sales = () => {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // State untuk Input Omzet Harian
+  const defaultCashAccountId =
+    cashAccounts.find((a) => a.type === "CASH")?.id || cashAccounts[0]?.id || "";
+  const defaultBankAccountId =
+    cashAccounts.find((a) => a.type === "BANK")?.id || cashAccounts[0]?.id || "";
+
+  // State untuk Input / Edit Omzet Harian
   const [isAddRecapOpen, setIsAddRecapOpen] = useState(false);
+  const [editingRecapId, setEditingRecapId] = useState<string | null>(null);
+  const [showOptionalRecapFields, setShowOptionalRecapFields] = useState(false);
   const [recapForm, setRecapForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    shift: "ALL" as "ALL" | "PAGI" | "SORE" | "MALAM",
+    date: getLocalDateString(),
+    shift: "ALL" as "ALL" | "PAGI" | "MIDDLE" | "SORE" | "MALAM",
     cashAmount: "",
     qrisAmount: "",
     edcAmount: "",
     transferAmount: "",
+    onlineDeliveryAmount: "",
+    discountAmount: "",
+    refundAmount: "",
+    mdrFeeAmount: "",
+    cashAccountId: "",
+    bankAccountId: "",
+    nonCashSettlementStatus: "SETTLED" as "SETTLED" | "PENDING",
     notes: "",
   });
   const [recapDateFilter, setRecapDateFilter] = useState<string>("");
+  const [confirmDeleteRecap, setConfirmDeleteRecap] = useState<{
+    id: string;
+    date: string;
+    amount: number;
+  } | null>(null);
+  const [settlingRecap, setSettlingRecap] = useState<DailySalesRecap | null>(null);
+  const [settleForm, setSettleForm] = useState({
+    bankAccountId: "",
+    mdrFeeAmount: "",
+    settledDate: getLocalDateString(),
+  });
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const [depositForm, setDepositForm] = useState({
+    fromAccountId: "",
+    toAccountId: "",
+    date: getLocalDateString(),
+    amount: "",
+    notes: "",
+  });
 
   // State untuk Tab Transaksi Kasir POS
   const [posOrders, setPosOrders] = useState<PosOrderDetail[]>([]);
@@ -158,13 +203,25 @@ export const Sales = () => {
     let totalQris = 0;
     let totalEdc = 0;
     let totalTransfer = 0;
+    let totalOnlineDelivery = 0;
+    let totalPendingNonCash = 0;
+    let pendingCount = 0;
 
-    dailySalesRecaps.forEach((r) => {
+    filteredRecaps.forEach((r) => {
       totalRevenue += Number(r.totalAmount) || 0;
       totalCash += Number(r.cashAmount) || 0;
-      totalQris += Number(r.qrisAmount) || 0;
-      totalEdc += Number(r.edcAmount) || 0;
-      totalTransfer += Number(r.transferAmount) || 0;
+      const qris = Number(r.qrisAmount) || 0;
+      const edc = Number(r.edcAmount) || 0;
+      const tf = Number(r.transferAmount) || 0;
+      const online = Number(r.onlineDeliveryAmount) || 0;
+      totalQris += qris;
+      totalEdc += edc;
+      totalTransfer += tf;
+      totalOnlineDelivery += online;
+      if (r.nonCashSettlementStatus === "PENDING") {
+        totalPendingNonCash += qris + edc + tf + online;
+        pendingCount++;
+      }
     });
 
     return {
@@ -173,101 +230,265 @@ export const Sales = () => {
       totalQris,
       totalEdc,
       totalTransfer,
-      count: dailySalesRecaps.length,
+      totalOnlineDelivery,
+      totalPendingNonCash,
+      pendingCount,
+      count: filteredRecaps.length,
     };
-  }, [dailySalesRecaps]);
+  }, [filteredRecaps]);
 
   const currentFormTotal =
     (Number(recapForm.cashAmount) || 0) +
     (Number(recapForm.qrisAmount) || 0) +
     (Number(recapForm.edcAmount) || 0) +
-    (Number(recapForm.transferAmount) || 0);
+    (Number(recapForm.transferAmount) || 0) +
+    (Number(recapForm.onlineDeliveryAmount) || 0);
 
-  const handleSaveRecap = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentFormTotal <= 0) {
-      alert("Total omzet harus lebih besar dari Rp 0.");
-      return;
-    }
+  const currentNonCashTotal =
+    (Number(recapForm.qrisAmount) || 0) +
+    (Number(recapForm.edcAmount) || 0) +
+    (Number(recapForm.transferAmount) || 0) +
+    (Number(recapForm.onlineDeliveryAmount) || 0);
 
-    // ── ATURAN #6: CEK PERIODE TUTUP BUKU ──────────────────────────────────
-    if (isPeriodClosed(recapForm.date)) {
-      alert(
-        `⛔ Periode Telah Ditutup (Aturan #6):\n\n` +
-        `Bulan ${recapForm.date.slice(0, 7)} sudah ditutup buku secara permanen oleh Manajemen/Finance.\n\n` +
-        `Pencatatan omzet harian baru untuk periode yang sudah dikunci tidak diizinkan demi menjaga integritas laporan keuangan.`
-      );
-      return;
-    }
-
-    // ── ATURAN ANTI DOUBLE COUNT (Rekap Omzet vs POS Kasir Langsung) ────────
-    // 1. Cek apakah tanggal dan shift ini sudah ada entri rekap omzet sebelumnya
-    const existingRecap = dailySalesRecaps.find(
-      (r) => r.date === recapForm.date && r.shift === recapForm.shift
-    );
-    if (existingRecap) {
-      alert(
-        `Peringatan Anti-Double Count:\n\nRekap omzet untuk tanggal ${recapForm.date} dengan shift "${recapForm.shift}" sudah tercatat sebelumnya senilai ${formatCurrency(existingRecap.totalAmount)}.\n\nHarap edit atau hapus rekap sebelumnya terlebih dahulu untuk mencegah duplikasi pendapatan.`
-      );
-      return;
-    }
-
-    // 2. Cek apakah pada tanggal tersebut sudah ada transaksi POS Kasir langsung
-    const posPaidOnDate = posOrders.filter(
-      (o) => o.createdAt.startsWith(recapForm.date) && o.status === "PAID"
-    );
-    const posTotalRevenue = posPaidOnDate.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-    if (posTotalRevenue > 0) {
-      const proceed = window.confirm(
-        `⚠️ Peringatan Risiko Double Count:\n\n` +
-        `Sistem mendeteksi ada transaksi kasir POS langsung senilai ${formatCurrency(posTotalRevenue)} (${posPaidOnDate.length} order lunas) pada tanggal ${recapForm.date}.\n\n` +
-        `Setiap transaksi POS otomatis mencatat uang masuk (CASH_IN) di Buku Kas saat pembayaran dilakukan.\n\n` +
-        `Menambahkan Rekap Omzet Harian manual pada tanggal yang sama berisiko mendobelkan catatan pendapatan di Buku Kas & Laba Rugi.\n\n` +
-        `Apakah Anda yakin ingin tetap menyimpan rekap omzet manual ini?`
-      );
-      if (!proceed) return;
-    }
-
-    addDailySalesRecap({
-      date: recapForm.date,
-      shift: recapForm.shift,
-      cashAmount: Number(recapForm.cashAmount) || 0,
-      qrisAmount: Number(recapForm.qrisAmount) || 0,
-      edcAmount: Number(recapForm.edcAmount) || 0,
-      transferAmount: Number(recapForm.transferAmount) || 0,
-      totalAmount: currentFormTotal,
-      notes: recapForm.notes.trim() || undefined,
-      recordedBy: currentUser?.name || "Kasir / Finance",
-    });
-
-    setIsAddRecapOpen(false);
+  const openNewRecapModal = () => {
+    setEditingRecapId(null);
+    setShowOptionalRecapFields(false);
     setRecapForm({
-      date: new Date().toISOString().slice(0, 10),
+      date: getLocalDateString(),
       shift: "ALL",
       cashAmount: "",
       qrisAmount: "",
       edcAmount: "",
       transferAmount: "",
+      onlineDeliveryAmount: "",
+      discountAmount: "",
+      refundAmount: "",
+      mdrFeeAmount: "",
+      cashAccountId: defaultCashAccountId,
+      bankAccountId: defaultBankAccountId,
+      nonCashSettlementStatus: "SETTLED",
       notes: "",
     });
+    setIsAddRecapOpen(true);
+  };
 
-    setUploadStatus({
-      type: "success",
-      message: `Omzet harian tanggal ${recapForm.date} sebesar ${formatCurrency(currentFormTotal)} berhasil dicatat & otomatis masuk ke Buku Kas!`,
+  const openEditRecapModal = (item: DailySalesRecap) => {
+    setEditingRecapId(item.id);
+    const hasOptional =
+      Boolean(item.discountAmount) ||
+      Boolean(item.refundAmount) ||
+      Boolean(item.mdrFeeAmount) ||
+      item.nonCashSettlementStatus === "PENDING";
+    setShowOptionalRecapFields(hasOptional);
+    setRecapForm({
+      date: item.date,
+      shift: (item.shift as any) || "ALL",
+      cashAmount: item.cashAmount ? String(item.cashAmount) : "",
+      qrisAmount: item.qrisAmount ? String(item.qrisAmount) : "",
+      edcAmount: item.edcAmount ? String(item.edcAmount) : "",
+      transferAmount: item.transferAmount ? String(item.transferAmount) : "",
+      onlineDeliveryAmount: item.onlineDeliveryAmount ? String(item.onlineDeliveryAmount) : "",
+      discountAmount: item.discountAmount ? String(item.discountAmount) : "",
+      refundAmount: item.refundAmount ? String(item.refundAmount) : "",
+      mdrFeeAmount: item.mdrFeeAmount ? String(item.mdrFeeAmount) : "",
+      cashAccountId: item.cashAccountId || defaultCashAccountId,
+      bankAccountId: item.bankAccountId || defaultBankAccountId,
+      nonCashSettlementStatus: item.nonCashSettlementStatus || "SETTLED",
+      notes: item.notes || "",
     });
+    setIsAddRecapOpen(true);
+  };
+
+  const openSettleModal = (item: DailySalesRecap) => {
+    setSettlingRecap(item);
+    setSettleForm({
+      bankAccountId: item.bankAccountId || defaultBankAccountId,
+      mdrFeeAmount: item.mdrFeeAmount ? String(item.mdrFeeAmount) : "",
+      settledDate: getLocalDateString(),
+    });
+  };
+
+  const openDepositModal = () => {
+    const firstCash = cashAccounts.find((a) => a.type === "CASH")?.id || cashAccounts[0]?.id || "";
+    const firstBank =
+      cashAccounts.find((a) => a.type === "BANK" && a.id !== firstCash)?.id ||
+      cashAccounts.find((a) => a.id !== firstCash)?.id ||
+      firstCash;
+    setDepositForm({
+      fromAccountId: firstCash,
+      toAccountId: firstBank,
+      date: getLocalDateString(),
+      amount: "",
+      notes: "Setoran uang tunai kasir ke rekening bank",
+    });
+    setIsDepositModalOpen(true);
+  };
+
+  const handleSaveRecap = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentFormTotal <= 0) {
+      toast.warning("Total omzet harus lebih besar dari Rp 0.");
+      return;
+    }
+
+    if (isPeriodClosed(recapForm.date)) {
+      toast.error(
+        `Periode bulan ${recapForm.date.slice(0, 7)} sudah ditutup buku. Pencatatan omzet pada periode terkunci tidak diizinkan.`
+      );
+      return;
+    }
+
+    const existingRecap = dailySalesRecaps.find(
+      (r) => r.id !== editingRecapId && r.date === recapForm.date && r.shift === recapForm.shift
+    );
+    if (existingRecap) {
+      toast.warning(
+        `Rekap omzet tanggal ${recapForm.date} untuk shift "${recapForm.shift}" sudah tercatat (${formatCurrency(existingRecap.totalAmount)}). Edit entri tersebut untuk mencegah duplikasi.`
+      );
+      return;
+    }
+
+    const posPaidOnDate = posOrders.filter(
+      (o) => o.createdAt.startsWith(recapForm.date) && o.status === "PAID"
+    );
+    if (!editingRecapId && posPaidOnDate.length > 0) {
+      const posTotalRevenue = posPaidOnDate.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+      const proceed = window.confirm(
+        `⚠️ Peringatan Risiko Double Count:\n\n` +
+        `Sistem mendeteksi ada transaksi kasir POS langsung senilai ${formatCurrency(posTotalRevenue)} (${posPaidOnDate.length} order lunas) pada tanggal ${recapForm.date}.\n\n` +
+        `Tetap simpan rekap omzet manual ini?`
+      );
+      if (!proceed) return;
+    }
+
+    const payload = {
+      date: recapForm.date,
+      shift: recapForm.shift,
+      cashAmount: Math.round(Number(recapForm.cashAmount) || 0),
+      qrisAmount: Math.round(Number(recapForm.qrisAmount) || 0),
+      edcAmount: Math.round(Number(recapForm.edcAmount) || 0),
+      transferAmount: Math.round(Number(recapForm.transferAmount) || 0),
+      onlineDeliveryAmount: Math.round(Number(recapForm.onlineDeliveryAmount) || 0),
+      discountAmount: Math.round(Number(recapForm.discountAmount) || 0),
+      refundAmount: Math.round(Number(recapForm.refundAmount) || 0),
+      mdrFeeAmount: Math.round(Number(recapForm.mdrFeeAmount) || 0),
+      totalAmount: Math.round(currentFormTotal),
+      cashAccountId: recapForm.cashAccountId || defaultCashAccountId || null,
+      bankAccountId: recapForm.bankAccountId || defaultBankAccountId || null,
+      nonCashSettlementStatus:
+        currentNonCashTotal > 0 ? recapForm.nonCashSettlementStatus : ("SETTLED" as const),
+      notes: recapForm.notes.trim() || undefined,
+      recordedBy: currentUser?.name || "Kasir / Finance",
+    };
+
+    if (editingRecapId) {
+      const prevRec = dailySalesRecaps.find((r) => r.id === editingRecapId);
+      if (prevRec) {
+        updateDailySalesRecap({
+          ...prevRec,
+          ...payload,
+          nonCashSettledAt:
+            payload.nonCashSettlementStatus === "SETTLED"
+              ? prevRec.nonCashSettledAt || recapForm.date
+              : null,
+        });
+        toast.success(`Rekap omzet tanggal ${recapForm.date} berhasil diperbarui & Buku Kas ikut tersinkron.`);
+      }
+    } else {
+      addDailySalesRecap({
+        ...payload,
+        nonCashSettledAt: payload.nonCashSettlementStatus === "SETTLED" ? recapForm.date : null,
+      });
+      toast.success(
+        payload.nonCashSettlementStatus === "PENDING" && currentNonCashTotal > 0
+          ? `Omzet ${formatCurrency(currentFormTotal)} tercatat. Tunai masuk Kas, Non-Tunai menunggu cair ke Bank.`
+          : `Omzet harian tanggal ${recapForm.date} sebesar ${formatCurrency(currentFormTotal)} berhasil masuk ke Buku Kas & Bank!`
+      );
+    }
+
+    setIsAddRecapOpen(false);
+    setEditingRecapId(null);
+  };
+
+  const handleConfirmSettle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settlingRecap) return;
+    if (isPeriodClosed(settleForm.settledDate)) {
+      toast.error(`Periode ${settleForm.settledDate.slice(0, 7)} sudah ditutup buku.`);
+      return;
+    }
+    settleDailySalesRecapNonCash(settlingRecap.id, {
+      bankAccountId: settleForm.bankAccountId || defaultBankAccountId,
+      mdrFeeAmount: Math.round(Number(settleForm.mdrFeeAmount) || 0),
+      settledDate: settleForm.settledDate || getLocalDateString(),
+    });
+    toast.success("Dana Non-Tunai berhasil ditandai cair dan masuk ke rekening Bank!");
+    setSettlingRecap(null);
+  };
+
+  const handleSaveDeposit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Math.round(Number(depositForm.amount) || 0);
+    if (!depositForm.fromAccountId || !depositForm.toAccountId) {
+      toast.warning("Pilih pos Kas Asal dan Rekening Bank Tujuan.");
+      return;
+    }
+    if (depositForm.fromAccountId === depositForm.toAccountId) {
+      toast.warning("Pos Kas Asal dan Bank Tujuan tidak boleh sama.");
+      return;
+    }
+    if (amt <= 0) {
+      toast.warning("Nominal setoran harus lebih dari Rp 0.");
+      return;
+    }
+    if (isPeriodClosed(depositForm.date)) {
+      toast.error(`Periode ${depositForm.date.slice(0, 7)} sudah ditutup buku.`);
+      return;
+    }
+
+    const fromAcc = cashAccounts.find((a) => a.id === depositForm.fromAccountId);
+    const toAcc = cashAccounts.find((a) => a.id === depositForm.toAccountId);
+    const pairRef = `TRANSFER:${Date.now()}`;
+    const noteSuffix = depositForm.notes.trim() ? ` — ${depositForm.notes.trim()}` : "";
+
+    addCashTransaction({
+      accountId: depositForm.fromAccountId,
+      type: "CASH_OUT",
+      date: depositForm.date,
+      amount: amt,
+      description: `Setor Tunai ke ${toAcc?.name || "Bank"}${noteSuffix}`,
+      category: "Transfer Antar Kas",
+      categoryId: null,
+      referenceId: pairRef,
+      vendorName: toAcc?.name || null,
+      paymentMethod: "Setoran Tunai",
+      createdBy: currentUser?.name || "Finance",
+    });
+
+    addCashTransaction({
+      accountId: depositForm.toAccountId,
+      type: "CASH_IN",
+      date: depositForm.date,
+      amount: amt,
+      description: `Setoran Tunai dari ${fromAcc?.name || "Kas Toko"}${noteSuffix}`,
+      category: "Transfer Antar Kas",
+      categoryId: null,
+      referenceId: pairRef,
+      vendorName: fromAcc?.name || null,
+      paymentMethod: "Setoran Tunai",
+      createdBy: currentUser?.name || "Finance",
+    });
+
+    toast.success(`Setoran tunai ${formatCurrency(amt)} ke ${toAcc?.name || "Bank"} berhasil dicatat!`);
+    setIsDepositModalOpen(false);
   };
 
   const handleDeleteRecap = (id: string, date: string, amount: number) => {
     if (isPeriodClosed(date)) {
-      alert(
-        `⛔ Periode Telah Ditutup (Aturan #6):\n\n` +
-        `Bulan ${date.slice(0, 7)} sudah dikunci/tutup buku. Rekapitulasi omzet pada periode terkunci tidak dapat dihapus demi menjaga integritas pembukuan.`
-      );
+      toast.error(`Periode ${date.slice(0, 7)} sudah ditutup buku. Rekap omzet tidak dapat dihapus.`);
       return;
     }
-    if (window.confirm(`Yakin ingin menghapus rekap omzet tanggal ${date} (${formatCurrency(amount)})?`)) {
-      deleteDailySalesRecap(id);
-    }
+    setConfirmDeleteRecap({ id, date, amount });
   };
 
   // Fetch POS orders dari API backend
@@ -572,7 +793,10 @@ export const Sales = () => {
     }
 
     addSalesTransactions(uniqueTransactions, actualFileName);
+    const recapDates = new Set(dailySalesRecaps.map((r) => r.date.slice(0, 10)));
+    const hasRecapOverlap = importDates.some((d) => recapDates.has(d.slice(0, 10)));
     const notes: string[] = [];
+    if (hasRecapOverlap) notes.push("Tanggal yang sudah ada Rekap Omzet tetap mengikuti Buku Kas Rekap Harian (data menu dipakai untuk analitik & HPP teoretis)");
     if (duplicateRowsCount > 0) notes.push(`${duplicateRowsCount} baris duplikat dilewati otomatis (Aturan #7)`);
     if (mapped.skippedRows > 0) notes.push(`${mapped.skippedRows} baris dilewati karena nama menu kosong`);
     if (mapped.autoMatchedCount > 0) notes.push(`${mapped.autoMatchedCount} nama menu disamakan otomatis dengan katalog`);
@@ -1171,7 +1395,7 @@ export const Sales = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 onClick={handleExportDailyRecap}
                 className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
@@ -1182,13 +1406,24 @@ export const Sales = () => {
               </button>
 
               {!isReadOnly && (
-                <button
-                  onClick={() => setIsAddRecapOpen(true)}
-                  className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 shrink-0" />
-                  <span>Catat Omzet Harian</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={openDepositModal}
+                    className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-xs transition cursor-pointer"
+                    title="Catat setoran uang tunai kasir ke rekening Bank (Transfer Internal)"
+                  >
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300 shrink-0" />
+                    <span>Setor Tunai ke Bank</span>
+                  </button>
+                  <button
+                    onClick={openNewRecapModal}
+                    className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 shrink-0" />
+                    <span>Catat Omzet Harian</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1209,7 +1444,7 @@ export const Sales = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white tabular-nums">
                     {formatCurrency(recapSummary.totalRevenue)}
                   </h3>
                   <p className="text-[11px] text-slate-300 mt-1 font-medium">
@@ -1229,7 +1464,7 @@ export const Sales = () => {
                   <Banknote className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight tabular-nums">
                 {formatCurrency(recapSummary.totalCash)}
               </h3>
               <p className="text-xs text-slate-500 mt-1 font-medium">
@@ -1241,57 +1476,59 @@ export const Sales = () => {
             <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs hover:border-sky-300 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200/70">
-                  Non-Tunai QRIS
+                  Non-Tunai QRIS &amp; Ojol
                 </span>
                 <div className="w-9 h-9 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 shadow-2xs">
                   <QrCode className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-sky-600 tracking-tight">
-                {formatCurrency(recapSummary.totalQris)}
+              <h3 className="text-xl sm:text-2xl font-black text-sky-600 tracking-tight tabular-nums">
+                {formatCurrency(recapSummary.totalQris + recapSummary.totalOnlineDelivery)}
               </h3>
-              <p className="text-xs text-slate-500 mt-1 font-medium">
-                Langsung Masuk Rekening Bank
+              <p className="text-xs text-slate-500 mt-1 font-medium tabular-nums">
+                QRIS: {formatCurrency(recapSummary.totalQris)} • Ojol: {formatCurrency(recapSummary.totalOnlineDelivery)}
               </p>
             </div>
 
             {/* Card 4: EDC & Transfer */}
-            <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs hover:border-indigo-300 transition-all">
+            <div className="rounded-3xl bg-white border border-slate-200/80 p-5 shadow-xs hover:border-brand-300 transition-all">
               <div className="flex items-center justify-between mb-3">
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/70">
-                  Mesin EDC & Transfer
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-200/70">
+                  EDC, Transfer &amp; Pending
                 </span>
-                <div className="w-9 h-9 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
+                <div className="w-9 h-9 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs">
                   <CreditCard className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-indigo-600 tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-black text-brand-700 tracking-tight tabular-nums">
                 {formatCurrency(recapSummary.totalEdc + recapSummary.totalTransfer)}
               </h3>
-              <p className="text-xs text-slate-500 mt-1 font-medium">
-                EDC: {formatCurrency(recapSummary.totalEdc)} • TF: {formatCurrency(recapSummary.totalTransfer)}
+              <p className="text-xs text-slate-500 mt-1 font-medium tabular-nums">
+                {recapSummary.totalPendingNonCash > 0
+                  ? `Menunggu Cair: ${formatCurrency(recapSummary.totalPendingNonCash)}`
+                  : `EDC: ${formatCurrency(recapSummary.totalEdc)} • TF: ${formatCurrency(recapSummary.totalTransfer)}`}
               </p>
             </div>
           </div>
 
           {/* Banner Sinkronisasi Otomatis */}
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-50 via-indigo-50 to-amber-50 border border-brand-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-50 via-sky-50/60 to-amber-50/50 border border-brand-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs shrink-0">
                 <RupiahSign className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900">
-                  Sinkronisasi Otomatis Buku Kas & Laporan Laba Rugi
+                  Sinkronisasi Otomatis Buku Kas, Bank &amp; Laporan Laba Rugi
                 </h4>
                 <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                  Setiap rekapitulasi harian yang dicatat langsung memperbarui saldo <strong>Buku Kas Fisik</strong> untuk tunai, dan <strong>Rekening Bank</strong> untuk QRIS/EDC, sehingga laporan laba rugi bulanan langsung mutakhir tanpa input manual berulang.
+                  Tunai masuk ke <strong>Kas Fisik</strong>, sedangkan QRIS, EDC, Transfer, dan <strong>Ojol</strong> masuk ke <strong>Rekening Bank</strong> (langsung atau setelah diklik <em>Tandai Cair</em> untuk H+1).
                 </p>
               </div>
             </div>
             {!isReadOnly && (
               <button
-                onClick={() => setIsAddRecapOpen(true)}
+                onClick={openNewRecapModal}
                 className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs font-bold transition shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -1325,15 +1562,16 @@ export const Sales = () => {
                     <th className="p-3.5 text-right">QRIS</th>
                     <th className="p-3.5 text-right">Mesin EDC</th>
                     <th className="p-3.5 text-right">Transfer</th>
+                    <th className="p-3.5 text-right">Ojol (Bank)</th>
                     <th className="p-3.5 text-right">Total Omzet</th>
-                    <th className="p-3.5">Keterangan & Dicatat Oleh</th>
+                    <th className="p-3.5">Keterangan &amp; Settlement</th>
                     {!isReadOnly && <th className="p-3.5 text-center">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRecaps.length === 0 ? (
                     <tr>
-                      <td colSpan={isReadOnly ? 8 : 9} className="p-10 text-center text-slate-400">
+                      <td colSpan={isReadOnly ? 9 : 10} className="p-10 text-center text-slate-400">
                         <div className="max-w-md mx-auto space-y-2">
                           <RupiahSign className="w-10 h-10 text-slate-300 mx-auto" />
                           <p className="font-bold text-slate-700 text-sm">Belum Ada Rekapitulasi Omzet</p>
@@ -1348,6 +1586,7 @@ export const Sales = () => {
                   ) : (
                     filteredRecaps.map((item) => {
                       const locked = isPeriodClosed(item.date);
+                      const isPendingNonCash = item.nonCashSettlementStatus === "PENDING";
                       return (
                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-3.5 font-bold text-slate-900 whitespace-nowrap">
@@ -1376,38 +1615,54 @@ export const Sales = () => {
                                 : item.shift === "SORE"
                                 ? "bg-orange-100 text-orange-800"
                                 : item.shift === "MALAM"
-                                ? "bg-indigo-100 text-indigo-800"
+                                ? "bg-brand-100 text-brand-800"
                                 : "bg-slate-100 text-slate-700"
                             }`}
                           >
                             {item.shift || "ALL"}
                           </span>
                         </td>
-                        <td className="p-3.5 text-right font-semibold text-emerald-600">
+                        <td className="p-3.5 text-right font-semibold text-emerald-600 tabular-nums">
                           {formatCurrency(item.cashAmount)}
                         </td>
-                        <td className="p-3.5 text-right font-semibold text-sky-600">
+                        <td className="p-3.5 text-right font-semibold text-sky-600 tabular-nums">
                           {formatCurrency(item.qrisAmount)}
                         </td>
-                        <td className="p-3.5 text-right font-semibold text-indigo-600">
+                        <td className="p-3.5 text-right font-semibold text-brand-700 tabular-nums">
                           {formatCurrency(item.edcAmount)}
                         </td>
-                        <td className="p-3.5 text-right font-semibold text-purple-600">
+                        <td className="p-3.5 text-right font-semibold text-slate-700 tabular-nums">
                           {formatCurrency(item.transferAmount)}
                         </td>
-                        <td className="p-3.5 text-right font-black text-slate-900 text-sm">
+                        <td className="p-3.5 text-right font-semibold text-sky-700 tabular-nums">
+                          {formatCurrency(item.onlineDeliveryAmount || 0)}
+                        </td>
+                        <td className="p-3.5 text-right font-black text-slate-900 text-sm tabular-nums">
                           {formatCurrency(item.totalAmount)}
                         </td>
                         <td className="p-3.5 text-slate-600">
                           <div className="truncate max-w-[220px] font-medium" title={item.notes || "-"}>
                             {item.notes || "-"}
                           </div>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            Oleh: {item.recordedBy || "Kasir"}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              Oleh: {item.recordedBy || "Kasir"}
+                            </span>
+                            {isPendingNonCash && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <Clock className="w-2.5 h-2.5" />
+                                Menunggu Cair
+                              </span>
+                            )}
+                            {Number(item.mdrFeeAmount || 0) > 0 && (
+                              <span className="text-[10px] font-semibold text-rose-600 tabular-nums">
+                                • MDR {formatCurrency(item.mdrFeeAmount || 0)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         {!isReadOnly && (
-                          <td className="p-3.5 text-center">
+                          <td className="p-3.5 text-center whitespace-nowrap">
                             {locked ? (
                               <span
                                 className="inline-block p-1.5 text-slate-300 cursor-not-allowed"
@@ -1416,13 +1671,34 @@ export const Sales = () => {
                                 <Lock className="w-4 h-4 mx-auto text-slate-300" />
                               </span>
                             ) : (
-                              <button
-                                onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
-                                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                                title="Hapus Rekap Omzet"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="inline-flex items-center justify-center gap-1">
+                                {isPendingNonCash && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openSettleModal(item)}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold transition cursor-pointer"
+                                    title="Tandai dana non-tunai sudah cair masuk Bank"
+                                  >
+                                    Tandai Cair
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => openEditRecapModal(item)}
+                                  className="p-1.5 rounded-xl text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition cursor-pointer"
+                                  title="Edit Rekap Omzet"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                                  className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                  title="Hapus Rekap Omzet"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             )}
                           </td>
                         )}
@@ -1492,8 +1768,8 @@ export const Sales = () => {
                       </div>
                     </div>
 
-                    {/* Breakdown 2x2 Grid */}
-                    <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    {/* Breakdown Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 tabular-nums">
                       <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-100">
                         <span className="text-[10px] text-emerald-800 font-bold block">Cash (Tunai)</span>
                         <span className="font-black text-emerald-600">{formatCurrency(item.cashAmount)}</span>
@@ -1502,17 +1778,23 @@ export const Sales = () => {
                         <span className="text-[10px] text-sky-800 font-bold block">QRIS</span>
                         <span className="font-black text-sky-600">{formatCurrency(item.qrisAmount)}</span>
                       </div>
-                      <div className="p-2 rounded-xl bg-indigo-50/60 border border-indigo-100">
-                        <span className="text-[10px] text-indigo-800 font-bold block">Mesin EDC</span>
-                        <span className="font-black text-indigo-600">{formatCurrency(item.edcAmount)}</span>
+                      <div className="p-2 rounded-xl bg-brand-50/60 border border-brand-100">
+                        <span className="text-[10px] text-brand-800 font-bold block">Mesin EDC</span>
+                        <span className="font-black text-brand-700">{formatCurrency(item.edcAmount)}</span>
                       </div>
-                      <div className="p-2 rounded-xl bg-purple-50/60 border border-purple-100">
-                        <span className="text-[10px] text-purple-800 font-bold block">Transfer</span>
-                        <span className="font-black text-purple-600">{formatCurrency(item.transferAmount)}</span>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[10px] text-slate-700 font-bold block">Transfer Bank</span>
+                        <span className="font-black text-slate-800">{formatCurrency(item.transferAmount)}</span>
                       </div>
+                      {(item.onlineDeliveryAmount || 0) > 0 && (
+                        <div className="col-span-2 p-2 rounded-xl bg-sky-50/80 border border-sky-200/70 flex items-center justify-between">
+                          <span className="text-[10px] text-sky-800 font-bold">Ojol / Delivery (Bank)</span>
+                          <span className="font-black text-sky-700">{formatCurrency(item.onlineDeliveryAmount || 0)}</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Footer Info & Delete */}
+                    {/* Footer Info & Actions */}
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                       <div className="truncate mr-2">
                         {item.notes ? (
@@ -1520,7 +1802,10 @@ export const Sales = () => {
                         ) : (
                           <span className="text-slate-400">Tanpa catatan</span>
                         )}
-                        <span className="block text-[10px] text-slate-400">Dicatat: {item.recordedBy || "Kasir"}</span>
+                        <span className="block text-[10px] text-slate-400">
+                          Dicatat: {item.recordedBy || "Kasir"}
+                          {item.nonCashSettlementStatus === "PENDING" ? " • Menunggu Cair" : ""}
+                        </span>
                       </div>
                       {!isReadOnly && (
                         locked ? (
@@ -1531,13 +1816,33 @@ export const Sales = () => {
                             <Lock className="w-4 h-4 text-slate-300" />
                           </span>
                         ) : (
-                          <button
-                            onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
-                            title="Hapus"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {item.nonCashSettlementStatus === "PENDING" && (
+                              <button
+                                type="button"
+                                onClick={() => openSettleModal(item)}
+                                className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold cursor-pointer"
+                              >
+                                Cairkan
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openEditRecapModal(item)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecap(item.id, item.date, item.totalAmount)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         )
                       )}
                     </div>
@@ -2468,201 +2773,628 @@ export const Sales = () => {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL CATAT OMZET HARIAN ────────────────────────────────────── */}
-      <AnimatePresence>
-        {isAddRecapOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="my-auto bg-white rounded-3xl border border-slate-200/80 w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh]"
-            >
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs">
-                    <RupiahSign className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900">
-                      Catat Omzet Harian Toko
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Input total penerimaan kasir per metode pembayaran
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddRecapOpen(false)}
-                  className="p-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+      {/* ── MODAL CATAT / EDIT OMZET HARIAN ────────────────────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isAddRecapOpen && (
+              <motion.div
+                key="sales-recap-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[88vh]"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveRecap} className="flex flex-col flex-1 overflow-hidden text-xs">
-                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Tanggal Penjualan
-                    </label>
-                    <CustomDatePicker
-                      value={recapForm.date}
-                      onChange={(val) => setRecapForm({ ...recapForm, date: val })}
-                      placeholder="Pilih Tanggal"
-                      allowClear={false}
-                      buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
-                    />
-                    {isPeriodClosed(recapForm.date) && (
-                      <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center gap-1.5 text-amber-800 text-[11px] font-semibold">
-                        <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>Periode bulan {recapForm.date.slice(0, 7)} sudah ditutup buku (Aturan #6).</span>
+                  <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs">
+                        <RupiahSign className="w-5 h-5" />
                       </div>
-                    )}
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-slate-100">
+                          {editingRecapId ? "Edit Rekap Omzet Harian" : "Catat Omzet Harian Toko"}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Input total penerimaan dari POS kasir &amp; pilih pos kas/bank tujuan
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddRecapOpen(false);
+                        setEditingRecapId(null);
+                      }}
+                      className="p-2 rounded-xl bg-slate-200/70 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Shift Operasional
-                    </label>
-                    <CustomSelect
-                      value={recapForm.shift}
-                      onChange={(val) => setRecapForm({ ...recapForm, shift: val as any })}
-                      options={[
-                        { value: "ALL", label: "Semua Shift (Full Day)" },
-                        { value: "PAGI", label: "Shift Pagi (Opening)" },
-                        { value: "MIDDLE", label: "Shift Middle" },
-                        { value: "SORE", label: "Shift Sore (Closing)" },
-                      ]}
-                      placeholder="Pilih Shift"
-                      buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-3 pt-2">
-                  <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">
-                    Rincian Nominal per Metode Pembayaran
-                  </p>
+                  <form onSubmit={handleSaveRecap} className="flex flex-col flex-1 overflow-hidden text-xs">
+                    <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                            Tanggal Penjualan
+                          </label>
+                          <CustomDatePicker
+                            value={recapForm.date}
+                            onChange={(val) => setRecapForm({ ...recapForm, date: val })}
+                            placeholder="Pilih Tanggal"
+                            allowClear={false}
+                            buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                          />
+                          {isPeriodClosed(recapForm.date) && (
+                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center gap-1.5 text-amber-800 text-[11px] font-semibold">
+                              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span>Periode bulan {recapForm.date.slice(0, 7)} sudah ditutup buku (Aturan #6).</span>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                            Shift Operasional
+                          </label>
+                          <CustomSelect
+                            value={recapForm.shift}
+                            onChange={(val) => setRecapForm({ ...recapForm, shift: val as any })}
+                            options={[
+                              { value: "ALL", label: "Semua Shift (Full Day)" },
+                              { value: "PAGI", label: "Shift Pagi (Opening)" },
+                              { value: "MIDDLE", label: "Shift Middle" },
+                              { value: "SORE", label: "Shift Sore (Closing)" },
+                            ]}
+                            placeholder="Pilih Shift"
+                            buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                          />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="flex items-center gap-1.5 text-slate-700 font-bold mb-1">
-                        <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Uang Tunai (Cash Fisik)</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <CurrencyInput
-                          placeholder="0"
-                          value={recapForm.cashAmount}
-                          onValueChange={(raw) => setRecapForm({ ...recapForm, cashAmount: raw })}
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
+                      <div className="space-y-3 pt-1">
+                        <p className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
+                          Rincian Nominal per Metode Pembayaran (5 Pintu)
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold mb-1">
+                              <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Uang Tunai (Masuk Kas)</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                              <CurrencyInput
+                                placeholder="0"
+                                value={recapForm.cashAmount}
+                                onValueChange={(raw) => setRecapForm({ ...recapForm, cashAmount: raw })}
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs tabular-nums"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold mb-1">
+                              <QrCode className="w-3.5 h-3.5 text-sky-600" />
+                              <span>QRIS (Masuk Bank)</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                              <CurrencyInput
+                                placeholder="0"
+                                value={recapForm.qrisAmount}
+                                onValueChange={(raw) => setRecapForm({ ...recapForm, qrisAmount: raw })}
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs tabular-nums"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold mb-1">
+                              <CreditCard className="w-3.5 h-3.5 text-brand-600" />
+                              <span>Mesin EDC (Masuk Bank)</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                              <CurrencyInput
+                                placeholder="0"
+                                value={recapForm.edcAmount}
+                                onValueChange={(raw) => setRecapForm({ ...recapForm, edcAmount: raw })}
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs tabular-nums"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold mb-1">
+                              <Building2 className="w-3.5 h-3.5 text-slate-600" />
+                              <span>Transfer Bank Langsung</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                              <CurrencyInput
+                                placeholder="0"
+                                value={recapForm.transferAmount}
+                                onValueChange={(raw) => setRecapForm({ ...recapForm, transferAmount: raw })}
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs tabular-nums"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold mb-1">
+                              <ShoppingBag className="w-3.5 h-3.5 text-sky-600" />
+                              <span>Ojol / Online Delivery (GoFood, GrabFood, ShopeeFood → Masuk Bank)</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
+                              <CurrencyInput
+                                placeholder="0"
+                                value={recapForm.onlineDeliveryAmount}
+                                onValueChange={(raw) => setRecapForm({ ...recapForm, onlineDeliveryAmount: raw })}
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs tabular-nums"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pilihan Pos Kas & Rekening Bank Tujuan */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                            Pos Kas Tujuan (Tunai)
+                          </label>
+                          <CustomSelect
+                            value={recapForm.cashAccountId || defaultCashAccountId}
+                            onChange={(val) => setRecapForm({ ...recapForm, cashAccountId: val })}
+                            options={cashAccounts.map((acc) => ({
+                              value: acc.id,
+                              label: `${acc.name} (${acc.type})`,
+                            }))}
+                            placeholder="Pilih Pos Kas"
+                            buttonClassName="w-full py-2 px-3 text-xs bg-white border-slate-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                            Rekening Bank Tujuan (Non-Tunai &amp; Ojol)
+                          </label>
+                          <CustomSelect
+                            value={recapForm.bankAccountId || defaultBankAccountId}
+                            onChange={(val) => setRecapForm({ ...recapForm, bankAccountId: val })}
+                            options={cashAccounts.map((acc) => ({
+                              value: acc.id,
+                              label: `${acc.name} (${acc.type})`,
+                            }))}
+                            placeholder="Pilih Rekening Bank"
+                            buttonClassName="w-full py-2 px-3 text-xs bg-white border-slate-200"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Bagian Opsional: Diskon, Refund, MDR & Settlement H+1 */}
+                      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowOptionalRecapFields((prev) => !prev)}
+                          className="w-full px-4 py-2.5 bg-slate-50/90 dark:bg-slate-800/70 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 transition cursor-pointer"
+                        >
+                          <span>Opsi Lanjutan (Diskon, Refund, Biaya MDR, &amp; Settlement H+1)</span>
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform ${showOptionalRecapFields ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {showOptionalRecapFields && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                              className="p-4 space-y-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800"
+                            >
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-slate-600 dark:text-slate-300 font-bold mb-1">
+                                    Diskon POS (Info)
+                                  </label>
+                                  <CurrencyInput
+                                    placeholder="0"
+                                    value={recapForm.discountAmount}
+                                    onValueChange={(raw) => setRecapForm({ ...recapForm, discountAmount: raw })}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-xs tabular-nums"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-slate-600 dark:text-slate-300 font-bold mb-1">
+                                    Refund / Void (Info)
+                                  </label>
+                                  <CurrencyInput
+                                    placeholder="0"
+                                    value={recapForm.refundAmount}
+                                    onValueChange={(raw) => setRecapForm({ ...recapForm, refundAmount: raw })}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-xs tabular-nums"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-slate-600 dark:text-slate-300 font-bold mb-1">
+                                    Potongan MDR / Admin
+                                  </label>
+                                  <CurrencyInput
+                                    placeholder="0"
+                                    value={recapForm.mdrFeeAmount}
+                                    onValueChange={(raw) => setRecapForm({ ...recapForm, mdrFeeAmount: raw })}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-rose-700 text-xs tabular-nums"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-600 dark:text-slate-300 font-bold mb-1.5">
+                                  Status Pencairan Non-Tunai (QRIS / EDC / Ojol)
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setRecapForm({ ...recapForm, nonCashSettlementStatus: "SETTLED" })
+                                    }
+                                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                                      recapForm.nonCashSettlementStatus === "SETTLED"
+                                        ? "bg-brand-50 border-brand-500 text-brand-900"
+                                        : "bg-slate-50 border-slate-200 text-slate-600"
+                                    }`}
+                                  >
+                                    <span className="font-bold block">Langsung Masuk Bank</span>
+                                    <span className="text-[10px] opacity-80">Saldo bank bertambah sekarang</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setRecapForm({ ...recapForm, nonCashSettlementStatus: "PENDING" })
+                                    }
+                                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                                      recapForm.nonCashSettlementStatus === "PENDING"
+                                        ? "bg-amber-50 border-amber-500 text-amber-900"
+                                        : "bg-slate-50 border-slate-200 text-slate-600"
+                                    }`}
+                                  >
+                                    <span className="font-bold block">Menunggu Cair (H+1)</span>
+                                    <span className="text-[10px] opacity-80">Omzet tercatat, bank tunggu cair</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Live Calculated Total */}
+                      <div className="p-4 rounded-2xl bg-brand-50/80 border border-brand-200/80 flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-600 font-bold">Total Omzet Masuk:</span>
+                          <p className="text-[11px] text-brand-700 font-medium">
+                            {recapForm.nonCashSettlementStatus === "PENDING" && currentNonCashTotal > 0
+                              ? "Tunai langsung masuk Kas; Non-Tunai tunggu pencairan Bank"
+                              : "Otomatis dicatat ke Kas & Rekening Bank terpilih"}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-lg font-black text-brand-700 tabular-nums">
+                            {formatCurrency(currentFormTotal)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                          Catatan / Keterangan (Opsional)
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Contoh: Ramai promo weekend, ada selisih kas fisik +Rp 2.000"
+                          value={recapForm.notes}
+                          onChange={(e) => setRecapForm({ ...recapForm, notes: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-base sm:text-xs"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label className="flex items-center gap-1.5 text-slate-700 font-bold mb-1">
-                        <QrCode className="w-3.5 h-3.5 text-sky-600" />
-                        <span>QRIS (Statis / Dinamis)</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <CurrencyInput
-                          placeholder="0"
-                          value={recapForm.qrisAmount}
-                          onValueChange={(raw) => setRecapForm({ ...recapForm, qrisAmount: raw })}
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
-                        />
-                      </div>
+                    <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddRecapOpen(false);
+                          setEditingRecapId(null);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={currentFormTotal <= 0 || isPeriodClosed(recapForm.date)}
+                        className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:opacity-50 text-white font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>{editingRecapId ? "Simpan Perubahan" : "Simpan & Masukkan ke Kas"}</span>
+                      </button>
                     </div>
-
-                    <div>
-                      <label className="flex items-center gap-1.5 text-slate-700 font-bold mb-1">
-                        <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Mesin EDC (Debit / Kredit)</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <CurrencyInput
-                          placeholder="0"
-                          value={recapForm.edcAmount}
-                          onValueChange={(raw) => setRecapForm({ ...recapForm, edcAmount: raw })}
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="flex items-center gap-1.5 text-slate-700 font-bold mb-1">
-                        <Building2 className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Transfer Bank Langsung</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <CurrencyInput
-                          placeholder="0"
-                          value={recapForm.transferAmount}
-                          onValueChange={(raw) => setRecapForm({ ...recapForm, transferAmount: raw })}
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Live Calculated Total */}
-                <div className="p-4 rounded-2xl bg-brand-50/80 border border-brand-200/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-slate-600 font-bold">Total Omzet Masuk:</span>
-                    <p className="text-[11px] text-brand-700 font-medium">Otomatis dicatat ke Buku Kas & Bank</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-black text-brand-700">
-                      {formatCurrency(currentFormTotal)}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Catatan / Keterangan (Opsional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Contoh: Ramai promo weekend, ada selisih kas fisik +Rp 2.000"
-                    value={recapForm.notes}
-                    onChange={(e) => setRecapForm({ ...recapForm, notes: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 text-base sm:text-xs"
-                  />
-                </div>
-
-                </div>
-
-                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddRecapOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={currentFormTotal <= 0 || isPeriodClosed(recapForm.date)}
-                    className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] disabled:opacity-50 text-white font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Simpan & Masukkan ke Kas</span>
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
+                  </form>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
+
+      {/* ── MODAL TANDAI CAIR NON-TUNAI (SETTLEMENT H+1) ───────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {settlingRecap && (
+              <motion.div
+                key="sales-settle-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 w-full max-w-md overflow-hidden shadow-2xl"
+                >
+                  <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-500/10">
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 dark:text-slate-100">
+                        Cairkan Dana Non-Tunai (Settlement)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Rekap tanggal {settlingRecap.date}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSettlingRecap(null)}
+                      className="p-1.5 rounded-xl text-slate-500 hover:bg-slate-200/70 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleConfirmSettle} className="p-5 space-y-4 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between">
+                      <span className="font-bold text-slate-600 dark:text-slate-300">
+                        Total QRIS / EDC / TF / Ojol:
+                      </span>
+                      <span className="text-base font-black text-brand-700 dark:text-brand-300 tabular-nums">
+                        {formatCurrency(
+                          (settlingRecap.qrisAmount || 0) +
+                            (settlingRecap.edcAmount || 0) +
+                            (settlingRecap.transferAmount || 0) +
+                            (settlingRecap.onlineDeliveryAmount || 0)
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Tanggal Masuk Rekening Bank
+                      </label>
+                      <CustomDatePicker
+                        value={settleForm.settledDate}
+                        onChange={(val) => setSettleForm({ ...settleForm, settledDate: val })}
+                        allowClear={false}
+                        buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Rekening Bank Tujuan
+                      </label>
+                      <CustomSelect
+                        value={settleForm.bankAccountId || defaultBankAccountId}
+                        onChange={(val) => setSettleForm({ ...settleForm, bankAccountId: val })}
+                        options={cashAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (${acc.type})`,
+                        }))}
+                        buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Potongan Biaya MDR / Admin (Opsional)
+                      </label>
+                      <CurrencyInput
+                        placeholder="0"
+                        value={settleForm.mdrFeeAmount}
+                        onValueChange={(raw) => setSettleForm({ ...settleForm, mdrFeeAmount: raw })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-rose-700 text-xs tabular-nums"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setSettlingRecap(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold shadow-xs cursor-pointer"
+                      >
+                        Konfirmasi Cair ke Bank
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      {/* ── MODAL SETOR TUNAI KE BANK (CASH DROP) ──────────────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isDepositModalOpen && (
+              <motion.div
+                key="sales-deposit-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 w-full max-w-md overflow-hidden shadow-2xl"
+                >
+                  <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-brand-50/70 dark:bg-brand-500/10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center">
+                        <Landmark className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-slate-100">
+                          Setor Tunai Kasir ke Bank
+                        </h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Transfer internal (tidak memengaruhi omzet maupun Laba Rugi)
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDepositModalOpen(false)}
+                      className="p-1.5 rounded-xl text-slate-500 hover:bg-slate-200/70 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSaveDeposit} className="p-5 space-y-3.5 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Tanggal Setor
+                      </label>
+                      <CustomDatePicker
+                        value={depositForm.date}
+                        onChange={(val) => setDepositForm({ ...depositForm, date: val })}
+                        allowClear={false}
+                        buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Dari Pos Kas Tunai
+                      </label>
+                      <CustomSelect
+                        value={depositForm.fromAccountId}
+                        onChange={(val) => setDepositForm({ ...depositForm, fromAccountId: val })}
+                        options={cashAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (${acc.type})`,
+                        }))}
+                        buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Ke Rekening Bank / Tujuan
+                      </label>
+                      <CustomSelect
+                        value={depositForm.toAccountId}
+                        onChange={(val) => setDepositForm({ ...depositForm, toAccountId: val })}
+                        options={cashAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: `${acc.name} (${acc.type})`,
+                        }))}
+                        buttonClassName="w-full py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Nominal Setoran (Rp)
+                      </label>
+                      <CurrencyInput
+                        placeholder="0"
+                        value={depositForm.amount}
+                        onValueChange={(raw) => setDepositForm({ ...depositForm, amount: raw })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-xs tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Keterangan
+                      </label>
+                      <input
+                        type="text"
+                        value={depositForm.notes}
+                        onChange={(e) => setDepositForm({ ...depositForm, notes: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setIsDepositModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold shadow-xs cursor-pointer"
+                      >
+                        Catat Setoran
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      {/* ── CONFIRM MODAL HAPUS REKAP OMZET ─────────────────────────────── */}
+      <ConfirmModal
+        isOpen={confirmDeleteRecap !== null}
+        variant="danger"
+        title="Hapus Rekap Omzet Harian?"
+        message={
+          confirmDeleteRecap
+            ? `Rekap omzet tanggal ${confirmDeleteRecap.date} senilai ${formatCurrency(confirmDeleteRecap.amount)} beserta entri Buku Kas & Bank terkait akan ikut dihapus.`
+            : ""
+        }
+        confirmLabel="Ya, Hapus Rekap"
+        cancelLabel="Batal"
+        onConfirm={() => {
+          if (confirmDeleteRecap) {
+            deleteDailySalesRecap(confirmDeleteRecap.id);
+            toast.success("Rekap omzet & mutasi kas terkait berhasil dihapus.");
+            setConfirmDeleteRecap(null);
+          }
+        }}
+        onCancel={() => setConfirmDeleteRecap(null)}
+      />
     </div>
   );
 };

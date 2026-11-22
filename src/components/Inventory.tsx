@@ -5,6 +5,8 @@ import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ConfirmModal } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
+import { getLocalDateString } from "../utils/dateUtils";
+import { CustomDatePicker } from "./common/CustomDatePicker";
 import {
   DEFAULT_INGREDIENT_CATEGORIES,
   matchesIngredientCategory,
@@ -234,6 +236,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     employees,
     settings,
     updateSettings,
+    closedPeriods = [],
   } = useStore();
 
   // User division resolution
@@ -601,6 +604,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   // OPNAME STATE
   const [isOpnameMode, setIsOpnameMode] = useState(false);
   const [opnameId, setOpnameId] = useState("");
+  const [opnameDate, setOpnameDate] = useState<string>(() => getLocalDateString());
   const [opnameItems, setOpnameItems] = useState<{ ingredientId: string; physicalStock: number; difference: number; notes: string }[]>([]);
   const [opnameSearch, setOpnameSearch] = useState("");
   const [opnameDivisionFilter, setOpnameDivisionFilter] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(defaultDivisionFilter);
@@ -1177,6 +1181,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         ? crypto.randomUUID()
         : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
     setOpnameId(newId);
+    setOpnameDate(getLocalDateString());
 
     // Filter relevant ingredients according to user's division permissions
     const relevantIngredients = isManagerOrAdmin
@@ -1212,6 +1217,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
   const handleResumeDraft = (draft: StockOpname) => {
     setOpnameId(draft.id);
+    setOpnameDate((draft.date || "").slice(0, 10) || getLocalDateString());
     const draftItems = stockOpnameItems.filter((i) => i.opnameId === draft.id);
 
     const relevantIngredients = isManagerOrAdmin
@@ -1361,12 +1367,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const saveOpname = (status: "DRAFT" | "FINAL") => {
+    const chosenDate = (opnameDate || getLocalDateString()).slice(0, 10);
+    if (
+      status === "FINAL" &&
+      closedPeriods.some((p) => p.period === chosenDate.slice(0, 7))
+    ) {
+      toast.error(
+        `Periode ${chosenDate.slice(0, 7)} sudah ditutup buku. Finalisasi stok opname pada periode terkunci tidak diizinkan.`
+      );
+      return;
+    }
+
     const existingOp = stockOpnames.find((op) => op.id === opnameId);
     const currentTimestamp = new Date().toISOString();
+    const opnameTimestamp =
+      chosenDate === getLocalDateString()
+        ? currentTimestamp
+        : new Date(`${chosenDate}T12:00:00`).toISOString();
 
     const opname: StockOpname = {
       id: opnameId,
-      date: currentTimestamp,
+      date: opnameTimestamp,
       status,
       notes: existingOp?.notes || (status === "DRAFT" ? "Draf Stok Opname" : "Stock Opname Periodik"),
       createdBy: existingOp?.createdBy || currentUser?.name || "System",
@@ -1395,6 +1416,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         systemStock: ing ? ing.currentStock : 0,
         physicalStock: item.physicalStock,
         difference: item.difference,
+        unitCost: Number(ing?.costPerUnit) || 0,
         notes: item.notes || null,
       };
     });
@@ -1409,7 +1431,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             ingredientId: item.ingredientId,
             type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
             quantity: Math.abs(item.difference),
-            date: currentTimestamp,
+            date: opnameTimestamp,
             note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
             createdBy: currentUser?.name || "System",
           });
@@ -1422,9 +1444,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
           }
         }
       });
-      alert("✅ Stok opname berhasil difinalisasi! Penyesuaian stok telah dicatat ke kartu stok bahan baku.");
+      toast.success("Stok opname berhasil difinalisasi! Snapshot nilai persediaan dan koreksi stok tercatat.");
     } else {
-      alert("💾 Draf stok opname berhasil disimpan! Anda dapat melanjutkan kembali perhitungan kapan saja melalui tombol 'Lanjutkan Draf'.");
+      toast.info("Draf stok opname berhasil disimpan! Anda dapat melanjutkannya kapan saja.");
     }
 
     setIsOpnameMode(false);
@@ -2560,9 +2582,32 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     Auditor: <strong className="font-semibold">{currentUser?.name || "Staff"}</strong> ({currentUser?.role || "LEADER"}) • Masukkan jumlah fisik nyata hasil hitungan di bar / gudang.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[11px] font-bold border border-brand-200">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-brand-900">Tgl Opname:</span>
+                      <CustomDatePicker
+                        value={opnameDate}
+                        onChange={(val) => {
+                          if (val) setOpnameDate(val);
+                        }}
+                        allowClear={false}
+                        placeholder="Pilih Tanggal"
+                        buttonClassName="py-1 px-2.5 text-[11px] bg-white border-brand-200"
+                      />
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[11px] font-bold border border-brand-200 tabular-nums">
                       Total: {opnameItems.length} Bahan
                     </span>
+                    {(() => {
+                      const totalPhysicalValuation = opnameItems.reduce((acc, item) => {
+                        const ing = ingredients.find((i) => i.id === item.ingredientId);
+                        return acc + Math.max(0, item.physicalStock) * (Number(ing?.costPerUnit) || 0);
+                      }, 0);
+                      return (
+                        <span className="px-2.5 py-0.5 rounded-full bg-brand-600 text-white text-[11px] font-bold tabular-nums">
+                          Nilai Stok Fisik: {formatCurrency(Math.round(totalPhysicalValuation))}
+                        </span>
+                      );
+                    })()}
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
                       Sesuai: {opnameItems.filter((i) => i.difference === 0).length}
                     </span>
@@ -3120,6 +3165,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           <th className="p-3.5">Tanggal & Waktu</th>
                           <th className="p-3.5">Auditor / Petugas</th>
                           <th className="p-3.5 text-center">Status</th>
+                          <th className="p-3.5 text-right">Nilai Stok Fisik</th>
                           <th className="p-3.5">Catatan</th>
                           <th className="p-3.5 text-center">Aksi</th>
                         </tr>
@@ -3131,6 +3177,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           .map((op) => {
                             const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
                             const discrepancyCount = relatedItems.filter((i) => i.difference !== 0).length;
+                            const totalOpnameValue = Math.round(
+                              relatedItems.reduce((sum, item) => {
+                                const ing = ingredients.find((i) => i.id === item.ingredientId);
+                                const cost =
+                                  Number(item.unitCost) > 0
+                                    ? Number(item.unitCost)
+                                    : Number(ing?.costPerUnit) || 0;
+                                return sum + Math.max(0, Number(item.physicalStock) || 0) * cost;
+                              }, 0)
+                            );
                             return (
                               <tr key={op.id} className="hover:bg-slate-50/60 transition-colors">
                                 <td className="p-3.5">
@@ -3159,6 +3215,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                       : "bg-amber-50 text-amber-700 border-amber-200"
                                   }`}>
                                     {op.status === "FINAL" ? "FINAL (Tersinkron)" : "DRAFT"}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-right font-mono font-bold text-slate-900 tabular-nums">
+                                  {formatCurrency(totalOpnameValue)}
+                                  <span className="block text-[10px] font-sans font-normal text-slate-400">
+                                    {relatedItems.length} item dihitung
                                   </span>
                                 </td>
                                 <td className="p-3.5 text-slate-600">
@@ -3218,6 +3280,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       .map((op) => {
                         const relatedItems = stockOpnameItems.filter((i) => i.opnameId === op.id);
                         const discrepancyCount = relatedItems.filter((i) => i.difference !== 0).length;
+                        const totalOpnameValue = Math.round(
+                          relatedItems.reduce((sum, item) => {
+                            const ing = ingredients.find((i) => i.id === item.ingredientId);
+                            const cost =
+                              Number(item.unitCost) > 0
+                                ? Number(item.unitCost)
+                                : Number(ing?.costPerUnit) || 0;
+                            return sum + Math.max(0, Number(item.physicalStock) || 0) * cost;
+                          }, 0)
+                        );
                         return (
                           <div key={op.id} className="p-4 space-y-2 hover:bg-slate-50/50 transition-colors">
                             <div className="flex items-start justify-between gap-2">
@@ -3231,7 +3303,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                   })}
                                 </h4>
                                 <p className="text-[10px] text-slate-400 font-mono">
-                                  Opr: {op.createdBy} • {new Date(op.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                                  Opr: {op.createdBy} • {new Date(op.date).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB • Nilai: <strong className="text-slate-700">{formatCurrency(totalOpnameValue)}</strong>
                                 </p>
                               </div>
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${

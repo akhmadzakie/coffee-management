@@ -24,6 +24,12 @@ import {
   computeAutoOverheadBaseline,
   calculateHppOverheadSimulation,
   calculateFnbHealthMetrics,
+  computePeriodicOpnameCogs,
+  computeCashLiquidityBreakdown,
+  computePeriodSavingsFlow,
+  computePeriodFinancialSummary,
+  isCapexCashTransaction,
+  isAdminBankOrMdrTransaction,
 } from "../src/utils/financeMetrics";
 import {
   buildEscPosReceipt,
@@ -36,13 +42,25 @@ import {
 } from "../src/utils/whatsappReceipt";
 import { exportSinglePayslipPDF } from "../src/utils/export";
 import {
+  AttendanceRecord,
   CashTransaction,
   CashAccount,
+  DailyAttendance,
+  Employee,
   Recipe,
   Ingredient,
   BatchPreparation,
   Product,
+  User,
 } from "../src/types";
+import {
+  buildAttendanceCorrectionUpdate,
+  calculateWorkDurationHours,
+  classifyDailyAttendanceStatus,
+  computeMonthlyAttendanceRecap,
+  resolveCanonicalEmployeeId,
+  syncAttendanceRecordsWithDaily,
+} from "../src/utils/attendanceRecap";
 
 console.log("=========================================================");
 console.log("   TESTING & SYSTEM AUDIT SUITE: JULIA'S COFFEE ERP/POS   ");
@@ -1722,6 +1740,573 @@ test("formatThousandInput & parseThousandInput: Memformat pemisah ribuan titik &
   assert.strictEqual(parseThousandInput("Rp 250.000"), "250000");
   assert.strictEqual(parseThousandInput("12.500,75", true), "12500.75");
   assert.strictEqual(parseThousandInput("18,", true), "18.");
+});
+
+// -------------------------------------------------------------
+// 23. PENGUJIAN REKAP ABSENSI & KOREKSI KEHADIRAN MANAGER
+// -------------------------------------------------------------
+console.log("\n23. Pengujian Rekap Absensi Bulanan & Koreksi Kehadiran:");
+
+test("Koreksi ALPHA/REJECTED -> HADIR/APPROVED langsung memperbarui rekap bulanan", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-1", username: "rina", name: "Rina Barista", position: "Barista" },
+  ];
+  const initialLog: DailyAttendance = {
+    id: "att-1",
+    employeeId: "emp-1",
+    date: "2026-11-10",
+    clockInTime: null,
+    clockOutTime: null,
+    clockInLocation: null,
+    clockOutLocation: null,
+    clockInPhotoUrl: null,
+    clockOutPhotoUrl: null,
+    status: "ALPHA",
+    approvalStatus: "REJECTED",
+    notes: "Tidak clock in",
+  };
+
+  const before = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [initialLog],
+    employees,
+  });
+  assert.strictEqual(before.length, 1);
+  assert.strictEqual(before[0].presentDays, 0);
+  assert.strictEqual(before[0].alphaDays, 1);
+  assert.strictEqual(before[0].correctedCount, 0);
+
+  const correctedLog = buildAttendanceCorrectionUpdate(
+    initialLog,
+    {
+      status: "HADIR",
+      clockInTime: "07:00",
+      clockOutTime: "15:00",
+      overtimeApproved: false,
+      reason: "Hadir di bar, HP mati saat clock in",
+    },
+    "Manager Budi"
+  );
+
+  const after = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [correctedLog],
+    employees,
+  });
+  assert.strictEqual(after[0].presentDays, 1);
+  assert.strictEqual(after[0].alphaDays, 0);
+  assert.strictEqual(after[0].totalWorkHours, 8);
+  assert.strictEqual(after[0].correctedCount, 1);
+  assert.strictEqual(correctedLog.approvalStatus, "APPROVED");
+  assert.strictEqual(correctedLog.isCorrected, true);
+  assert.strictEqual(correctedLog.correctedBy, "Manager Budi");
+});
+
+test("Koreksi TERLAMBAT -> HADIR menurunkan jumlah terlambat dan membersihkan tag terlambat pada notes", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-2", username: "doni", name: "Doni Kitchen", position: "Cook" },
+  ];
+  const lateLog: DailyAttendance = {
+    id: "att-2",
+    employeeId: "emp-2",
+    date: "2026-11-12",
+    clockInTime: "2026-11-12T00:05:00.000Z",
+    clockOutTime: "2026-11-12T08:05:00.000Z",
+    clockInLocation: null,
+    clockOutLocation: null,
+    clockInPhotoUrl: null,
+    clockOutPhotoUrl: null,
+    status: "TERLAMBAT",
+    approvalStatus: "PENDING",
+    notes: "Bantu belanja es • [Terlambat 35 menit]",
+  };
+
+  const before = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [lateLog],
+    employees,
+  });
+  assert.strictEqual(before[0].presentDays, 1);
+  assert.strictEqual(before[0].lateDays, 1);
+
+  const corrected = buildAttendanceCorrectionUpdate(
+    lateLog,
+    {
+      status: "HADIR",
+      clockInTime: "07:00",
+      clockOutTime: "15:00",
+      overtimeApproved: false,
+      reason: "Beli es batu darurat sebelum ke outlet",
+    },
+    "Manager Budi"
+  );
+
+  assert.strictEqual(/Terlambat\s+\d+\s+menit/i.test(corrected.notes), false);
+  assert.ok(corrected.notes.includes("Bantu belanja es"));
+
+  const after = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [corrected],
+    employees,
+  });
+  assert.strictEqual(after[0].presentDays, 1);
+  assert.strictEqual(after[0].lateDays, 0);
+  assert.strictEqual(after[0].correctedCount, 1);
+});
+
+test("Koreksi jam kerja lintas tengah malam & lembur disahkan memperbarui Total Jam & Lembur", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-3", username: "sari", name: "Sari Kasir", position: "Kasir" },
+  ];
+  const baseLog: DailyAttendance = {
+    id: "att-3",
+    employeeId: "emp-3",
+    date: "2026-11-14",
+    clockInTime: null,
+    clockOutTime: null,
+    clockInLocation: null,
+    clockOutLocation: null,
+    clockInPhotoUrl: null,
+    clockOutPhotoUrl: null,
+    status: "HADIR",
+    approvalStatus: "PENDING",
+    notes: "Lupa clock out",
+  };
+
+  const corrected = buildAttendanceCorrectionUpdate(
+    baseLog,
+    {
+      status: "HADIR",
+      clockInTime: "15:00",
+      clockOutTime: "00:30",
+      overtimeApproved: true,
+      reason: "Closing akhir pekan",
+    },
+    "Manager Budi"
+  );
+
+  assert.strictEqual(
+    calculateWorkDurationHours(corrected.clockInTime, corrected.clockOutTime),
+    9.5
+  );
+  assert.strictEqual(corrected.overtimeHours, 1.5);
+  assert.strictEqual(corrected.overtimeApproved, true);
+
+  const recap = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [corrected],
+    employees,
+  });
+  assert.strictEqual(recap[0].totalWorkHours, 9.5);
+  assert.strictEqual(recap[0].approvedOvertimeHours, 1.5);
+});
+
+test("Koreksi HADIR -> SAKIT/IZIN/ALPHA mengosongkan jam kerja & lembur menjadi 0", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-4", username: "eko", name: "Eko Baker", position: "Baker" },
+  ];
+  const presentLog: DailyAttendance = {
+    id: "att-4",
+    employeeId: "emp-4",
+    date: "2026-11-15",
+    clockInTime: "2026-11-15T00:00:00.000Z",
+    clockOutTime: "2026-11-15T10:00:00.000Z",
+    clockInLocation: null,
+    clockOutLocation: null,
+    clockInPhotoUrl: null,
+    clockOutPhotoUrl: null,
+    status: "HADIR",
+    approvalStatus: "APPROVED",
+    overtimeHours: 2,
+    overtimeApproved: true,
+    notes: "Clock in keliru akun",
+  };
+
+  const corrected = buildAttendanceCorrectionUpdate(
+    presentLog,
+    {
+      status: "SAKIT",
+      clockInTime: "07:00",
+      clockOutTime: "17:00",
+      overtimeApproved: true,
+      reason: "Ternyata sakit, surat dokter terlampir",
+    },
+    "Manager Budi"
+  );
+
+  assert.strictEqual(corrected.clockInTime, null);
+  assert.strictEqual(corrected.clockOutTime, null);
+  assert.strictEqual(corrected.overtimeHours, 0);
+  assert.strictEqual(corrected.overtimeApproved, false);
+
+  const recap = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: [corrected],
+    employees,
+  });
+  assert.strictEqual(recap[0].presentDays, 0);
+  assert.strictEqual(recap[0].sickDays, 1);
+  assert.strictEqual(recap[0].totalWorkHours, 0);
+  assert.strictEqual(recap[0].approvedOvertimeHours, 0);
+});
+
+test("Pemisahan periode antar bulan & resolusi user.id -> employee.id menggabungkan rekap tanpa duplikasi", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-10", username: "andi", name: "Andi Barista", position: "Barista" },
+  ];
+  const users: Pick<User, "id" | "username" | "name" | "role" | "employeeId">[] = [
+    { id: "user-10", username: "andi", name: "Andi Barista", role: "BAR", employeeId: "emp-10" },
+  ];
+
+  assert.strictEqual(resolveCanonicalEmployeeId("user-10", employees, users), "emp-10");
+  assert.strictEqual(
+    classifyDailyAttendanceStatus({ status: "HADIR", approvalStatus: "REJECTED" }),
+    "ALPHA"
+  );
+
+  const logs: DailyAttendance[] = [
+    {
+      id: "d-oct",
+      employeeId: "emp-10",
+      date: "2026-10-28",
+      clockInTime: "2026-10-28T07:00:00",
+      clockOutTime: "2026-10-28T15:00:00",
+      clockInLocation: null,
+      clockOutLocation: null,
+      clockInPhotoUrl: null,
+      clockOutPhotoUrl: null,
+      status: "HADIR",
+      approvalStatus: "APPROVED",
+      notes: "",
+    },
+    {
+      id: "d-nov-1",
+      employeeId: "emp-10",
+      date: "2026-11-02",
+      clockInTime: "2026-11-02T07:00:00",
+      clockOutTime: "2026-11-02T15:00:00",
+      clockInLocation: null,
+      clockOutLocation: null,
+      clockInPhotoUrl: null,
+      clockOutPhotoUrl: null,
+      status: "HADIR",
+      approvalStatus: "APPROVED",
+      notes: "",
+    },
+    {
+      id: "d-nov-2",
+      employeeId: "user-10",
+      date: "2026-11-03",
+      clockInTime: "2026-11-03T07:00:00",
+      clockOutTime: "2026-11-03T15:00:00",
+      clockInLocation: null,
+      clockOutLocation: null,
+      clockInPhotoUrl: null,
+      clockOutPhotoUrl: null,
+      status: "TERLAMBAT",
+      approvalStatus: "APPROVED",
+      notes: "",
+    },
+  ];
+
+  const octRecap = computeMonthlyAttendanceRecap({
+    period: "2026-10",
+    dailyAttendances: logs,
+    employees,
+    users,
+  });
+  const novRecap = computeMonthlyAttendanceRecap({
+    period: "2026-11",
+    dailyAttendances: logs,
+    employees,
+    users,
+  });
+
+  assert.strictEqual(octRecap.length, 1);
+  assert.strictEqual(octRecap[0].presentDays, 1);
+  assert.strictEqual(novRecap.length, 1);
+  assert.strictEqual(novRecap[0].employeeId, "emp-10");
+  assert.strictEqual(novRecap[0].presentDays, 2);
+  assert.strictEqual(novRecap[0].lateDays, 1);
+});
+
+test("syncAttendanceRecordsWithDaily menyinkronkan record manual di attendances setelah koreksi harian", () => {
+  const employees: Pick<Employee, "id" | "username" | "name" | "position">[] = [
+    { id: "emp-20", username: "bima", name: "Bima Cook", position: "Cook" },
+  ];
+  const dailyLogs: DailyAttendance[] = [
+    {
+      id: "dl-1",
+      employeeId: "emp-20",
+      date: "2026-11-05",
+      clockInTime: "2026-11-05T07:00:00",
+      clockOutTime: "2026-11-05T15:00:00",
+      clockInLocation: null,
+      clockOutLocation: null,
+      clockInPhotoUrl: null,
+      clockOutPhotoUrl: null,
+      status: "HADIR",
+      approvalStatus: "APPROVED",
+      isCorrected: true,
+      notes: "",
+    },
+    {
+      id: "dl-2",
+      employeeId: "emp-20",
+      date: "2026-11-06",
+      clockInTime: null,
+      clockOutTime: null,
+      clockInLocation: null,
+      clockOutLocation: null,
+      clockInPhotoUrl: null,
+      clockOutPhotoUrl: null,
+      status: "SAKIT",
+      approvalStatus: "APPROVED",
+      notes: "",
+    },
+  ];
+  const manualAttendances: AttendanceRecord[] = [
+    {
+      id: "man-1",
+      employeeId: "emp-20",
+      period: "2026-11",
+      presentDays: 0,
+      sickDays: 0,
+      permissionDays: 0,
+      alphaDays: 2,
+      holidayDays: 0,
+      workingDays: 26,
+      notes: "",
+      createdBy: "admin",
+      createdAt: "2026-11-01T00:00:00Z",
+    },
+  ];
+
+  const { updatedAttendances, changed } = syncAttendanceRecordsWithDaily({
+    dailyAttendances: dailyLogs,
+    existingAttendances: manualAttendances,
+    affectedPairs: [{ employeeId: "emp-20", period: "2026-11" }],
+    employees,
+  });
+
+  assert.strictEqual(changed, true);
+  assert.strictEqual(updatedAttendances[0].presentDays, 1);
+  assert.strictEqual(updatedAttendances[0].sickDays, 1);
+  assert.strictEqual(updatedAttendances[0].alphaDays, 0);
+});
+
+// -------------------------------------------------------------
+// 24. ALUR KEUANGAN TERINTEGRASI (HPP OPSI A, CAPEX, TABUNGAN & REKAP 5 KANAL)
+// -------------------------------------------------------------
+console.log("\n[SECTION 24] Testing HPP Opsi A (Periodik Opname), CapEx, Tabungan & Rekap 5 Kanal...");
+
+const financeTestCategories: any[] = [
+  { id: "cat-penjualan", name: "Penjualan", type: "PENDAPATAN", parentId: null, color: "#10b981", icon: "Wallet", isActive: true, sortOrder: 1 },
+  { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "#f59e0b", icon: "Package", isActive: true, sortOrder: 2 },
+  { id: "cat-hrd", name: "Gaji Staf", type: "HRD", parentId: null, color: "#8b5cf6", icon: "Users", isActive: true, sortOrder: 3 },
+  { id: "cat-utilitas", name: "Listrik & Air", type: "UTILITAS", parentId: null, color: "#3b82f6", icon: "Zap", isActive: true, sortOrder: 4 },
+  { id: "cat-ops", name: "Operasional", type: "PENGELUARAN", parentId: null, color: "#64748b", icon: "Building2", isActive: true, sortOrder: 5 },
+  { id: "cat-aset", name: "Pembelian Aset & Mesin", type: "ASET", parentId: null, color: "#1b2cc0", icon: "Layers", isActive: true, sortOrder: 6 },
+  { id: "cat-admin-bank", name: "Biaya Admin Bank & MDR", type: "LAINNYA", parentId: null, color: "#f59e0b", icon: "CreditCard", isActive: true, sortOrder: 7 },
+];
+
+const financeTestAccounts: any[] = [
+  { id: "acc-cash", name: "Kas Kasir", type: "CASH", isDefault: true },
+  { id: "acc-bank", name: "BCA Operasional", type: "BANK", isDefault: false },
+  { id: "acc-save", name: "Tabungan Dana Darurat", type: "SAVINGS", isDefault: false },
+];
+
+test("24a. computePeriodicOpnameCogs Opsi A menggabungkan opname parsial divisi & cegah double-count pelunasan PO", () => {
+  const ingredients = [
+    { id: "ing-bean", name: "Kopi Espresso", unit: "gr", currentStock: 1000, minStock: 500, category: "Kopi", costPerUnit: 300 },
+    { id: "ing-flour", name: "Tepung Dapur", unit: "gr", currentStock: 2000, minStock: 500, category: "Dapur", costPerUnit: 20 },
+  ];
+  const stockOpnames: any[] = [
+    { id: "op-oct", date: "2026-10-31", status: "FINAL", notes: null, createdBy: "u1", createdAt: "2026-10-31T20:00:00Z" },
+    { id: "op-nov-bar", date: "2026-11-30", status: "FINAL", notes: "BAR", createdBy: "u1", createdAt: "2026-11-30T19:00:00Z" },
+    { id: "op-nov-kitchen", date: "2026-11-30", status: "FINAL", notes: "KITCHEN", createdBy: "u1", createdAt: "2026-11-30T20:00:00Z" },
+    { id: "op-nov-draft", date: "2026-11-30", status: "DRAFT", notes: "Abai", createdBy: "u1", createdAt: "2026-11-30T21:00:00Z" },
+  ];
+  // Opening (Okt): bean 1000 * 300 = 300.000 + flour 1000 * 20 = 20.000 => 320.000
+  // Closing (Nov): bean 500 * 320 (historical snapshot) = 160.000 + flour 1500 * 20 = 30.000 => 190.000
+  const stockOpnameItems: any[] = [
+    { id: "oi-1", opnameId: "op-oct", ingredientId: "ing-bean", systemStock: 1000, physicalStock: 1000, difference: 0, unitCost: 300, notes: null },
+    { id: "oi-2", opnameId: "op-oct", ingredientId: "ing-flour", systemStock: 1000, physicalStock: 1000, difference: 0, unitCost: 20, notes: null },
+    { id: "oi-3", opnameId: "op-nov-bar", ingredientId: "ing-bean", systemStock: 500, physicalStock: 500, difference: 0, unitCost: 320, notes: null },
+    { id: "oi-4", opnameId: "op-nov-kitchen", ingredientId: "ing-flour", systemStock: 1500, physicalStock: 1500, difference: 0, unitCost: 20, notes: null },
+    { id: "oi-5", opnameId: "op-nov-draft", ingredientId: "ing-bean", systemStock: 500, physicalStock: 0, difference: -500, unitCost: 320, notes: null },
+  ];
+  const purchaseOrders: any[] = [
+    { id: "po-nov-1", poNumber: "PO-01", supplierId: "sup-1", date: "2026-11-10", items: [], totalAmount: 400000, status: "PAID", deliveryStatus: "RECEIVED" },
+    { id: "po-nov-pending", poNumber: "PO-02", supplierId: "sup-1", date: "2026-11-20", items: [], totalAmount: 250000, status: "UNPAID", deliveryStatus: "PENDING" },
+  ];
+  const cashTransactions: any[] = [
+    // Pelunasan PO-01 -> tidak boleh dihitung ganda dengan PO RECEIVED!
+    { id: "c-po-pay", accountId: "acc-bank", type: "CASH_OUT", date: "2026-11-15", amount: 400000, description: "Pelunasan PO-01", category: "Bahan Baku", categoryId: "cat-bahan-baku", referenceId: "po:po-nov-1" },
+    // Belanja bahan tunai non-PO -> masuk directCashMaterialPurchases
+    { id: "c-direct", accountId: "acc-cash", type: "CASH_OUT", date: "2026-11-18", amount: 80000, description: "Beli es batu & susu", category: "Bahan Baku", categoryId: "cat-bahan-baku", referenceId: null },
+  ];
+
+  const res = computePeriodicOpnameCogs({
+    period: "2026-11",
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    ingredients,
+    theoreticalCOGS: 600000,
+  });
+
+  // Opening 320.000 + Pembelian (PO Received 400.000 + Non-PO 80.000 = 480.000) - Closing 190.000 = 610.000
+  assert.strictEqual(res.cogsMethod, "OPNAME_PERIODIC");
+  assert.strictEqual(res.openingInventoryValue, 320000);
+  assert.strictEqual(res.poReceivedPurchases, 400000);
+  assert.strictEqual(res.directCashMaterialPurchases, 80000);
+  assert.strictEqual(res.periodMaterialPurchases, 480000);
+  assert.strictEqual(res.closingInventoryValue, 190000);
+  assert.strictEqual(res.effectiveCOGS, 610000);
+  assert.strictEqual(res.cogsVariance, 10000); // 610.000 - 600.000 teoretis
+  assert.strictEqual(res.opnameCoverageCount, 2);
+});
+
+test("24b. computePeriodicOpnameCogs fallback ke THEORETICAL_FALLBACK lalu PURCHASE_FALLBACK jika belum ada opname akhir", () => {
+  const cashTransactions: any[] = [
+    { id: "c-1", accountId: "acc-cash", type: "CASH_OUT", date: "2026-11-05", amount: 150000, description: "Beli susu", category: "Bahan Baku", categoryId: "cat-bahan-baku" },
+  ];
+
+  const resTheo = computePeriodicOpnameCogs({
+    period: "2026-11",
+    stockOpnames: [],
+    stockOpnameItems: [],
+    purchaseOrders: [],
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    ingredients: [],
+    theoreticalCOGS: 225000,
+  });
+  assert.strictEqual(resTheo.cogsMethod, "THEORETICAL_FALLBACK");
+  assert.strictEqual(resTheo.effectiveCOGS, 225000);
+  assert.strictEqual(resTheo.cogsVariance, null);
+
+  const resPurch = computePeriodicOpnameCogs({
+    period: "2026-11",
+    stockOpnames: [],
+    stockOpnameItems: [],
+    purchaseOrders: [],
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    ingredients: [],
+    theoreticalCOGS: 0,
+  });
+  assert.strictEqual(resPurch.cogsMethod, "PURCHASE_FALLBACK");
+  assert.strictEqual(resPurch.effectiveCOGS, 150000);
+});
+
+test("24c. CapEx (ASET) dipisah dari OPEX agar tidak mendistorsi Laba Bersih", () => {
+  const recaps: any[] = [
+    { id: "rec-1", date: "2026-11-10", shift: "ALL", cashAmount: 2000000, qrisAmount: 0, edcAmount: 0, transferAmount: 0, totalAmount: 2000000, recordedBy: "kasir" },
+  ];
+  const cashTransactions: any[] = [
+    { id: "c-rev", accountId: "acc-cash", type: "CASH_IN", date: "2026-11-10", amount: 2000000, description: "Rekap Harian", category: "Penjualan", categoryId: "cat-penjualan", referenceId: "recap-cash:rec-1" },
+    { id: "c-util", accountId: "acc-bank", type: "CASH_OUT", date: "2026-11-11", amount: 300000, description: "Bayar Listrik PLN", category: "Listrik & Air", categoryId: "cat-utilitas" },
+    { id: "c-capex", accountId: "acc-bank", type: "CASH_OUT", date: "2026-11-12", amount: 15000000, description: "Beli Grinder Baru", category: "Pembelian Aset & Mesin", categoryId: "cat-aset" },
+    { id: "c-bhn", accountId: "acc-cash", type: "CASH_OUT", date: "2026-11-12", amount: 500000, description: "Beli Kopi", category: "Bahan Baku", categoryId: "cat-bahan-baku" },
+  ];
+
+  assert.strictEqual(isCapexCashTransaction(cashTransactions[2], financeTestCategories), true);
+  assert.strictEqual(isCapexCashTransaction(cashTransactions[1], financeTestCategories), false);
+
+  const summary = computePeriodFinancialSummary({
+    period: "2026-11",
+    salesTransactions: [],
+    dailySalesRecaps: recaps,
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    cashAccounts: financeTestAccounts,
+  });
+
+  // Laba bersih = Omzet (2.000.000) - COGS (500.000) - OPEX (300.000) = 1.200.000; CapEx 15jt tidak mengurangi laba!
+  assert.strictEqual(summary.totalOPEX, 300000);
+  assert.strictEqual(summary.capexExpense, 15000000);
+  assert.strictEqual(summary.netProfit, 1200000);
+});
+
+test("24d. Pemisahan Kas Operasional vs Tabungan (SAVINGS) dan transfer tabungan tidak kurangi Laba", () => {
+  const cashTransactions: any[] = [
+    { id: "t-open", accountId: "acc-bank", type: "CASH_IN", date: "2026-11-01", amount: 5000000, description: "OPENING: Modal", category: "Saldo Awal" },
+    { id: "t-sale", accountId: "acc-cash", type: "CASH_IN", date: "2026-11-05", amount: 3000000, description: "Rekap Omzet", category: "Penjualan", categoryId: "cat-penjualan" },
+    // Sisihkan Rp 1.000.000 dari Bank ke Tabungan
+    { id: "t-tr-out", accountId: "acc-bank", type: "CASH_OUT", date: "2026-11-10", amount: 1000000, description: "Sisihkan ke Tabungan", category: "Mutasi Tabungan", referenceId: "TRF-SAVE-1" },
+    { id: "t-tr-in", accountId: "acc-save", type: "CASH_IN", date: "2026-11-10", amount: 1000000, description: "Terima dari BCA Ops", category: "Mutasi Tabungan", referenceId: "TRF-SAVE-1" },
+  ];
+
+  const liq = computeCashLiquidityBreakdown(financeTestAccounts, cashTransactions);
+  assert.strictEqual(liq.operationalBalance, 7000000); // Cash 3jt + Bank (5jt - 1jt = 4jt)
+  assert.strictEqual(liq.savingsBalance, 1000000);
+  assert.strictEqual(liq.totalLiquidity, 8000000);
+
+  const flow = computePeriodSavingsFlow("2026-11", financeTestAccounts, cashTransactions);
+  assert.strictEqual(flow.savingsDeposit, 1000000);
+  assert.strictEqual(flow.savingsWithdrawal, 0);
+  assert.strictEqual(flow.netSavingsAllocation, 1000000);
+
+  const summary = computePeriodFinancialSummary({
+    period: "2026-11",
+    salesTransactions: [],
+    dailySalesRecaps: [],
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    cashAccounts: financeTestAccounts,
+  });
+  assert.strictEqual(summary.savingsDeposit, 1000000);
+  assert.strictEqual(summary.netProfit, 3000000);
+});
+
+test("24e. Rekap 5 Kanal Bayar (termasuk Ojol ke Bank), Diskon, Refund, MDR & Settlement H+1 Pending", () => {
+  const recaps: any[] = [
+    {
+      id: "rec-ojol",
+      date: "2026-11-20",
+      shift: "ALL",
+      cashAmount: 500000,
+      qrisAmount: 400000,
+      edcAmount: 300000,
+      transferAmount: 200000,
+      onlineDeliveryAmount: 600000, // Ojol masuk Bank non-tunai
+      discountAmount: 50000,
+      refundAmount: 25000,
+      mdrFeeAmount: 15000,
+      totalAmount: 2000000, // Omzet bersih (net sales)
+      nonCashSettlementStatus: "PENDING",
+      recordedBy: "kasir",
+    },
+  ];
+  const cashTransactions: any[] = [
+    { id: "c-cash", accountId: "acc-cash", type: "CASH_IN", date: "2026-11-20", amount: 500000, description: "Rekap Tunai", category: "Penjualan", categoryId: "cat-penjualan", referenceId: "recap-cash:rec-ojol" },
+    { id: "c-mdr", accountId: "acc-bank", type: "CASH_OUT", date: "2026-11-20", amount: 15000, description: "Potongan MDR QRIS & EDC", category: "Biaya Admin Bank & MDR", categoryId: "cat-admin-bank", referenceId: "recap-mdr:rec-ojol" },
+  ];
+
+  assert.strictEqual(isAdminBankOrMdrTransaction(cashTransactions[1], financeTestCategories), true);
+
+  const summary = computePeriodFinancialSummary({
+    period: "2026-11",
+    salesTransactions: [],
+    dailySalesRecaps: recaps,
+    cashTransactions,
+    expenseCategories: financeTestCategories,
+    cashAccounts: financeTestAccounts,
+  });
+
+  assert.strictEqual(summary.paymentBreakdown.onlineDelivery, 600000);
+  assert.strictEqual(summary.netSales, 2000000);
+  assert.strictEqual(summary.grossSales, 2075000); // 2.000.000 + diskon 50.000 + refund 25.000
+  assert.strictEqual(summary.totalMdrFee, 15000);
+  assert.strictEqual(summary.totalAdminBankExpense, 15000);
+  assert.strictEqual(summary.totalOPEX, 15000);
+  assert.strictEqual(summary.pendingNonCashSettlement, 1500000); // 400k + 300k + 200k + 600k
+  assert.strictEqual(summary.dailyBreakdown[0].pendingNonCash, 1500000);
+  assert.strictEqual(summary.netProfit, 1985000); // 2.000.000 - MDR 15.000
 });
 
 // -------------------------------------------------------------

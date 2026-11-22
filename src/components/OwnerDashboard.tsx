@@ -4,10 +4,12 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
 import {
+  computeCashLiquidityBreakdown,
   computePeriodFinancialSummary,
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
+import { classifyDailyAttendanceStatus } from "../utils/attendanceRecap";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ViewState, ManagerApprovalRequest } from "../types";
@@ -37,6 +39,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Wallet,
+  PiggyBank,
   Clock,
   Target,
   FileSpreadsheet,
@@ -79,6 +82,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     cashAccounts,
     ingredients,
     stockMovements,
+    stockOpnames = [],
+    stockOpnameItems = [],
+    purchaseOrders = [],
     shifts,
     settings,
     employees,
@@ -219,19 +225,24 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
     const sales = salesTransactions.filter((s) => matchesPeriodFilter(s.date));
     const recaps = (dailySalesRecaps || []).filter((r) => matchesPeriodFilter(r.date));
-    const cash = cashTransactions.filter(
-      (c) => matchesPeriodFilter(c.date) && !isNonOperationalCashTransaction(c)
-    );
+    const cashForPeriod = cashTransactions.filter((c) => matchesPeriodFilter(c.date));
+    const cash = cashForPeriod.filter((c) => !isNonOperationalCashTransaction(c));
+    const pos = purchaseOrders.filter((p) => matchesPeriodFilter(p.date));
+    const periodKey = period === "this_month" ? getLocalDateString(now).slice(0, 7) : "ALL";
 
     const summary = computePeriodFinancialSummary({
-      period: "ALL",
+      period: periodKey,
       salesTransactions: sales,
       dailySalesRecaps: recaps,
-      cashTransactions: cash,
+      cashTransactions: cashForPeriod,
       expenseCategories: store.expenseCategories || [],
       recipes: recipes || [],
       ingredients,
       products: products || [],
+      stockOpnames,
+      stockOpnameItems,
+      purchaseOrders: periodKey === "ALL" ? pos : purchaseOrders,
+      cashAccounts,
     });
 
     return {
@@ -249,6 +260,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
     period,
     currentMonth,
     currentYear,
@@ -256,14 +271,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
   // ─── The Big 4 Executive KPIs ─────────────────────────────────────────────
   // 1. Total Omzet (Terkoneksi ke Rekap Harian, Sales/POS, & Kas Penjualan bebas duplikasi)
-  const totalRevenue = periodSummary.recognizedRevenue > 0
-    ? periodSummary.recognizedRevenue
-    : filteredCashIn;
+  const totalRevenue =
+    periodSummary.netSales > 0
+      ? periodSummary.netSales
+      : periodSummary.recognizedRevenue > 0
+      ? periodSummary.recognizedRevenue
+      : filteredCashIn;
 
-  // 2. Laba Bersih & Profit Margin
-  const totalExpenses = filteredCashOut;
-  const netProfit = totalRevenue - totalExpenses;
-  const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  // 2. Laba Bersih & Profit Margin (Formula akrual terpusat bebas CapEx/Mutasi/Tabungan)
+  const totalExpenses = periodSummary.effectiveCOGS + periodSummary.totalOPEX;
+  const netProfit = periodSummary.netProfit;
+  const netProfitMargin = periodSummary.netMarginPercent;
 
   // 3. Average Ticket Value (ATV / Basket Size) & Transaction Count
   const transactionCount = filteredSales.length > 0
@@ -289,18 +307,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // Target Run Rate Progress
   const targetProgress = Math.min(100, Math.round((totalRevenue / monthlyTarget) * 100));
   
-  // Total Likuiditas Kas Bersih (Semua Bank & Kas Fisik)
-  const totalCashLiquidity = useMemo(() => {
-    return cashTransactions.reduce((acc, t) => {
-      if ((t.type as string) === "IN" || t.type === "CASH_IN") return acc + t.amount;
-      if ((t.type as string) === "OUT" || t.type === "CASH_OUT") return acc - t.amount;
-      return acc;
-    }, 0);
-  }, [cashTransactions]);
+  // Total Likuiditas Kas Bersih (Memisahkan Kas Operasional vs Tabungan/Dana Cadangan)
+  const liquidityBreakdown = useMemo(
+    () => computeCashLiquidityBreakdown(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
+  const operationalLiquidity = liquidityBreakdown.operationalBalance;
+  const savingsLiquidity = liquidityBreakdown.savingsBalance;
+  const totalCashLiquidity = liquidityBreakdown.totalLiquidity;
 
-  // Cash Runway (Berapa bulan kas bisa bertahan berdasarkan rata-rata pengeluaran bulanan)
+  // Cash Runway (Menggunakan kas operasional siap pakai agar tabungan tidak tercampur modal kerja harian)
   const averageMonthlyBurn = Math.max(1, totalExpenses > 0 ? totalExpenses : 25000000);
-  const rawMonths = totalCashLiquidity > 0 ? totalCashLiquidity / averageMonthlyBurn : 0;
+  const rawMonths = operationalLiquidity > 0 ? operationalLiquidity / averageMonthlyBurn : 0;
   const cashRunwayMonths = isNaN(rawMonths) ? "0.0" : rawMonths.toFixed(1);
 
   // ─── Unit Economics: 3 Rasio Emas Kafe ─────────────────────────────────────
@@ -312,8 +330,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const laborExpenses = periodSummary.totalHrdExpense;
   const laborRatio = totalRevenue > 0 ? (laborExpenses / totalRevenue) * 100 : 0;
 
-  // 3. Operating Expense Ratio (Sewa, Utilitas, Listrik / Omzet) - Target Sehat: 12% - 18%
-  const opexExpenses = periodSummary.totalUtilityExpense + periodSummary.totalGeneralOpsExpense;
+  // 3. Operating Expense Ratio (Sewa, Utilitas, Listrik, Admin Bank/MDR / Omzet) - Target Sehat: 12% - 18%
+  const opexExpenses =
+    periodSummary.totalUtilityExpense +
+    periodSummary.totalGeneralOpsExpense +
+    periodSummary.totalAdminBankExpense;
   const opexRatio = totalRevenue > 0 ? (opexExpenses / totalRevenue) * 100 : 0;
 
   // ─── Early Warning & Loss Prevention (Deteksi Dini Kebocoran) ──────────────
@@ -344,13 +365,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
   // Total Diskon yang keluar
   const totalDiscounts = useMemo(() => {
-    return filteredSales.reduce((acc, s: any) => {
+    const fromSales = filteredSales.reduce((acc, s: any) => {
       const saleAmt = getSaleTransactionAmount(s);
       const subtotal = s.subtotal || saleAmt;
       const disc = Math.max(0, subtotal - saleAmt);
       return acc + disc;
     }, 0);
-  }, [filteredSales]);
+    return Math.max(periodSummary.totalDiscountAmount, fromSales);
+  }, [filteredSales, periodSummary.totalDiscountAmount]);
 
   // ─── Tren 6 Bulan: Omzet vs Laba ──────────────────────────────────────────
   const trendData = useMemo(() => {
@@ -372,10 +394,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         recipes: recipes || [],
         ingredients,
         products: products || [],
+        stockOpnames,
+        stockOpnameItems,
+        purchaseOrders,
+        cashAccounts,
       });
 
-      const rev = mSum.recognizedRevenue > 0 ? mSum.recognizedRevenue : mSum.totalOperationalCashIn;
-      const profit = Math.max(0, rev - mSum.totalOperationalCashOut);
+      const rev =
+        mSum.netSales > 0
+          ? mSum.netSales
+          : mSum.recognizedRevenue > 0
+          ? mSum.recognizedRevenue
+          : mSum.totalOperationalCashIn;
+      const profit = Math.max(0, mSum.netProfit);
 
       months.push({
         month: monthNames[mIdx],
@@ -394,6 +425,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     recipes,
     ingredients,
     products,
+    stockOpnames,
+    stockOpnameItems,
+    purchaseOrders,
+    cashAccounts,
     currentMonth,
     currentYear,
   ]);
@@ -495,9 +530,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       const d = a.date || "";
       return d.startsWith(currentPeriodStr);
     });
-    const presentCount = periodAttendances.filter((a) =>
-      ["HADIR", "TERLAMBAT", "PRESENT", "ON_TIME", "LATE", "APPROVED"].includes(a.status || a.approvalStatus)
-    ).length;
+    const presentCount = periodAttendances.filter((a) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      return cls === "HADIR" || cls === "TERLAMBAT";
+    }).length;
     const attendanceRate = periodAttendances.length > 0
       ? Math.round((presentCount / periodAttendances.length) * 100)
       : 96;
@@ -795,8 +831,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             </div>
             <div className="h-6 w-px bg-slate-200" />
             <div>
-              <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Kas Runway</span>
-              <span className="font-bold text-emerald-600">
+              <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Kas Runway (Ops)</span>
+              <span className="font-bold text-emerald-600 tabular-nums">
                 {cashRunwayMonths} Bulan Aman
               </span>
             </div>
@@ -842,7 +878,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 tabular-nums">
               {formatCurrency(totalRevenue)}
             </div>
             <div className="flex items-center gap-1.5 mt-2.5 text-xs">
@@ -859,23 +895,39 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", damping: 26, stiffness: 340, delay: 0.06 }}
-          className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
+          className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:-translate-y-1 hover:shadow-lg hover:border-slate-300 transition-all duration-200 ease-out flex flex-col justify-between group"
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Laba Bersih Riil</span>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50/80 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+            <div
+              className={`w-11 h-11 rounded-2xl border flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform ${
+                netProfit >= 0
+                  ? "bg-emerald-50/80 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-500/30"
+                  : "bg-rose-50/80 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-200/60 dark:border-rose-500/30"
+              }`}
+            >
               <RupiahSign className="w-5 h-5 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+            <div
+              className={`text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums ${
+                netProfit >= 0 ? "text-slate-900 dark:text-slate-100" : "text-rose-600 dark:text-rose-300"
+              }`}
+            >
               {formatCurrency(netProfit)}
             </div>
             <div className="flex items-center gap-1.5 mt-2.5 text-xs">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200/60 text-[11px]">
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold border text-[11px] ${
+                  netProfit >= 0
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/60 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                    : "bg-rose-50 text-rose-700 border-rose-200/60 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
+                }`}
+              >
                 {netProfitMargin.toFixed(1)}% Margin
               </span>
-              <span className="text-slate-400 text-[11px]">setelah HPP & opex</span>
+              <span className="text-slate-400 text-[11px]">setelah HPP &amp; opex</span>
             </div>
           </div>
         </motion.div>
@@ -1079,7 +1131,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           </div>
         </div>
 
-        {/* Kebocoran 4: Total Likuiditas Kas */}
+        {/* Kebocoran 4: Total Likuiditas Kas (Ops vs Tabungan) */}
         <div className="bg-gradient-to-br from-emerald-50/60 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 p-5 rounded-3xl border border-emerald-200/70 dark:border-emerald-500/30 shadow-coffee-sm hover:-translate-y-0.5 hover:shadow-coffee transition-all duration-200 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Likuiditas Kas</span>
@@ -1091,9 +1143,21 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
             <div className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300 tracking-tight tabular-nums">
               {formatCurrency(totalCashLiquidity)}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Saldo riil siap pakai di kas & bank
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px] tabular-nums">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 font-semibold">
+                Ops: {formatCurrency(operationalLiquidity)}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100/80 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 font-semibold inline-flex items-center gap-1">
+                <PiggyBank className="w-3 h-3" />
+                {formatCurrency(savingsLiquidity)}
+              </span>
+            </div>
+            {periodSummary.netSavingsAllocation !== 0 && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 tabular-nums">
+                Sisihan periode: {periodSummary.netSavingsAllocation > 0 ? "+" : ""}
+                {formatCurrency(periodSummary.netSavingsAllocation)}
+              </p>
+            )}
           </div>
         </div>
       </div>
