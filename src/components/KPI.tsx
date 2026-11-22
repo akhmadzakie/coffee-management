@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import { computePeriodFinancialSummary } from "../utils/financeMetrics";
 import { DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 
 export const KPI: React.FC = () => {
@@ -18,6 +19,12 @@ export const KPI: React.FC = () => {
     settings,
     updateSettings,
     salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
     contracts,
     dailyChecklists,
     users
@@ -41,10 +48,26 @@ export const KPI: React.FC = () => {
   }, []);
 
   const currentMonthSales = useMemo(() => {
-    return (salesTransactions || [])
-      .filter((s: any) => s.date && s.date.startsWith(currentPeriod))
-      .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
-  }, [salesTransactions, currentPeriod]);
+    return computePeriodFinancialSummary({
+      period: currentPeriod,
+      salesTransactions: salesTransactions || [],
+      dailySalesRecaps: dailySalesRecaps || [],
+      cashTransactions: cashTransactions || [],
+      expenseCategories: expenseCategories || [],
+      recipes: recipes || [],
+      ingredients: ingredients || [],
+      products: products || [],
+    }).recognizedRevenue;
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    currentPeriod,
+  ]);
 
   const isOperationalStaff = (emp: any): boolean => {
     const dept = (emp.department || "").toUpperCase();

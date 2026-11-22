@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { CustomSelect } from "./common/CustomSelect";
 import { formatCurrency } from "../utils/format";
+import { computePeriodFinancialSummary } from "../utils/financeMetrics";
 import { PayrollRecord, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import {
   Calculator,
@@ -63,6 +64,11 @@ export function Payroll() {
     settings,
     updateSettings,
     salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    recipes,
+    ingredients,
+    products,
   } = (useStore() as any);
 
   const [period, setPeriod] = useState(
@@ -129,10 +135,26 @@ export function Payroll() {
 
   // Store Revenue Target & Target Bonus Calculation
   const periodSales = useMemo(() => {
-    return (salesTransactions || [])
-      .filter((s: any) => s.date && s.date.startsWith(period))
-      .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
-  }, [salesTransactions, period]);
+    return computePeriodFinancialSummary({
+      period,
+      salesTransactions: salesTransactions || [],
+      dailySalesRecaps: dailySalesRecaps || [],
+      cashTransactions: cashTransactions || [],
+      expenseCategories: expenseCategories || [],
+      recipes: recipes || [],
+      ingredients: ingredients || [],
+      products: products || [],
+    }).recognizedRevenue;
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    period,
+  ]);
 
   const monthlyTarget = settings?.monthlyRevenueTarget || 0;
   const isTargetAchieved = monthlyTarget > 0 && periodSales >= monthlyTarget;

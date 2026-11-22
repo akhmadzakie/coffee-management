@@ -729,7 +729,10 @@ export function calculateCashFlowHppSync(params: {
         (sum, ri) => sum + ri.quantity * (effectiveCostMap.get(ri.ingredientId) ?? 0),
         0
       );
-      const newEstimatedHpp = Math.round(rawCost + Number(v.packagingCost || 0));
+      const baseCost = rawCost + Number(v.packagingCost || 0);
+      const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
+      const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
+      const newEstimatedHpp = Math.round(baseCost + wastageCost + overheadCost);
       const oldHpp = Math.round(Number(v.estimatedHpp || 0));
 
       affectedVariantPreviews.push({

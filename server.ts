@@ -1053,6 +1053,15 @@ async function startServer() {
     if (st?.shiftDefinitions && Array.isArray(st.shiftDefinitions)) {
       divTarget.__shiftDefinitions = st.shiftDefinitions;
     }
+    if (st?.ingredientCategories && Array.isArray(st.ingredientCategories)) {
+      divTarget.__ingredientCategories = st.ingredientCategories;
+    }
+    if (st?.dailySalesRecaps && Array.isArray(st.dailySalesRecaps)) {
+      divTarget.__dailySalesRecaps = st.dailySalesRecaps;
+    }
+    if (st?.defaultOverheadPercent !== undefined && st?.defaultOverheadPercent !== null) {
+      divTarget.__defaultOverheadPercent = Number(st.defaultOverheadPercent);
+    }
 
     const incomingKey = st?.gemini_api_key ?? st?.geminiApiKey;
     const isMaskedKey = typeof incomingKey === "string" && incomingKey.startsWith("••");
@@ -1938,6 +1947,22 @@ async function startServer() {
         : (Array.isArray(rawSettings.shiftDefinitions) ? rawSettings.shiftDefinitions : []);
       delete rawDivTarget.__shiftDefinitions;
 
+      const ingredientCategories = Array.isArray(rawDivTarget.__ingredientCategories)
+        ? rawDivTarget.__ingredientCategories
+        : (Array.isArray(rawSettings.ingredientCategories) ? rawSettings.ingredientCategories : undefined);
+      delete rawDivTarget.__ingredientCategories;
+
+      const dailySalesRecaps = Array.isArray(rawDivTarget.__dailySalesRecaps)
+        ? rawDivTarget.__dailySalesRecaps
+        : (Array.isArray(rawSettings.dailySalesRecaps) ? rawSettings.dailySalesRecaps : undefined);
+      delete rawDivTarget.__dailySalesRecaps;
+
+      const defaultOverheadPercent =
+        rawDivTarget.__defaultOverheadPercent !== undefined
+          ? Number(rawDivTarget.__defaultOverheadPercent)
+          : (rawSettings.defaultOverheadPercent !== undefined ? Number(rawSettings.defaultOverheadPercent) : undefined);
+      delete rawDivTarget.__defaultOverheadPercent;
+
       const formattedSettings = {
         ...rawSettings,
         hasGeminiApiKey: Boolean(effectiveApiKey),
@@ -1951,6 +1976,11 @@ async function startServer() {
         managerTasks: parseTasksJson(rawSettings.managerTasks),
         leaderJobdeskAllowanceRules: allowanceRules,
         shiftDefinitions: shiftDefs,
+        ...(ingredientCategories ? { ingredientCategories } : {}),
+        ...(dailySalesRecaps ? { dailySalesRecaps } : {}),
+        ...(defaultOverheadPercent !== undefined && !isNaN(defaultOverheadPercent)
+          ? { defaultOverheadPercent }
+          : {}),
         monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
         divisionKpiBonusTarget: rawDivTarget,
@@ -2836,6 +2866,7 @@ async function startServer() {
               yieldQuantity: Number(bp.yieldQuantity || 0),
               yieldUnit: String(bp.yieldUnit || "ml"),
               ingredients: Array.isArray(bp.ingredients) ? bp.ingredients : [],
+              division: String(bp.division || "BAR"),
               notes: bp.notes || null,
               lastPreparedDate: bp.lastPreparedDate || null,
             })));

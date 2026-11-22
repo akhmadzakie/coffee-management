@@ -37,6 +37,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { DEFAULT_BAR_CATEGORIES, DEFAULT_KITCHEN_CATEGORIES, DEFAULT_BAKER_CATEGORIES, ensureCategoryArray, normalizeTaskItem } from "./LeaderChecklist";
 import { PayrollRecord } from "../types";
 import { formatCurrency } from "../utils/format";
+import { computePeriodFinancialSummary } from "../utils/financeMetrics";
 import { PayslipModal } from "./PayslipModal";
 
 interface EmployeeDashboardProps {
@@ -56,6 +57,12 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     payrollRecords,
     employeeShifts,
     salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
   } = useStore();
 
   const [showKpiDetails, setShowKpiDetails] = useState(false);
@@ -422,10 +429,26 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
   // ─── 12. STORE REVENUE & TEAM BONUS REALIZATION ───
   const periodSales = useMemo(() => {
-    return (salesTransactions || [])
-      .filter((s: any) => s.date && s.date.startsWith(currentMonthStr))
-      .reduce((sum: number, s: any) => sum + (s.finalAmount || s.totalAmount || 0), 0);
-  }, [salesTransactions, currentMonthStr]);
+    return computePeriodFinancialSummary({
+      period: currentMonthStr,
+      salesTransactions: salesTransactions || [],
+      dailySalesRecaps: dailySalesRecaps || [],
+      cashTransactions: cashTransactions || [],
+      expenseCategories: expenseCategories || [],
+      recipes: recipes || [],
+      ingredients: ingredients || [],
+      products: products || [],
+    }).recognizedRevenue;
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    currentMonthStr,
+  ]);
 
   const monthlyRevenueTarget = settings?.monthlyRevenueTarget || 0;
   const storeBonusAmount = settings?.targetBonusAmount || 0;

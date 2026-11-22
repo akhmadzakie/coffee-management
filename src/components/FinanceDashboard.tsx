@@ -2,6 +2,10 @@ import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import {
+  computePeriodFinancialSummary,
+  isNonOperationalCashTransaction,
+} from "../utils/financeMetrics";
 import { ViewState } from "../types";
 import {
   Wallet,
@@ -60,6 +64,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     cashAccounts,
     cashTransactions,
     salesTransactions,
+    dailySalesRecaps,
+    recipes,
+    ingredients,
+    products,
     expenseCategories,
     purchaseOrders,
     suppliers,
@@ -98,15 +106,20 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
 
   // Helper date filter
   const isDateInFilter = (dateStr: string) => {
-    if (filterMonth === -1) return true;
     const d = new Date(dateStr);
+    if (filterMonth === -1) return d.getFullYear() === filterYear;
     return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
   };
 
-  const filteredFinance = cashTransactions.filter((f) => isDateInFilter(f.date));
-  const filteredSales = salesTransactions.filter((s) => isDateInFilter(s.date));
+  const filteredFinance = useMemo(
+    () =>
+      cashTransactions.filter(
+        (f) => isDateInFilter(f.date) && !isNonOperationalCashTransaction(f)
+      ),
+    [cashTransactions, filterMonth, filterYear]
+  );
 
-  // Hitung Saldo Tiap Akun Kas & Bank
+  // Hitung Saldo Tiap Akun Kas & Bank (memperhitungkan mutasi & saldo awal agar saldo riil rekening akurat)
   const accountBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     cashAccounts.forEach((acc) => (balances[acc.id] = 0));
@@ -124,40 +137,55 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     return (Object.values(accountBalances) as number[]).reduce((sum, val) => sum + val, 0);
   }, [accountBalances]);
 
-  // Arus Kas Periode Ini
-  const totalCashIn = useMemo(() => {
-    return filteredFinance
-      .filter((f) => f.type === "CASH_IN")
-      .reduce((sum, f) => sum + f.amount, 0);
-  }, [filteredFinance]);
+  // Ringkasan Terpusat Penjualan, Omzet & Arus Kas Operasional (Bebas Mutasi Internal / Saldo Awal)
+  const periodSummary = useMemo(() => {
+    if (filterMonth !== -1) {
+      const pStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
+      return computePeriodFinancialSummary({
+        period: pStr,
+        salesTransactions,
+        dailySalesRecaps,
+        cashTransactions,
+        expenseCategories,
+        recipes,
+        ingredients,
+        products,
+      });
+    }
+    const yearStr = `${filterYear}-`;
+    return computePeriodFinancialSummary({
+      period: "ALL",
+      salesTransactions: salesTransactions.filter((s) => String(s.date).startsWith(yearStr)),
+      dailySalesRecaps: dailySalesRecaps.filter((r) => String(r.date).startsWith(yearStr)),
+      cashTransactions: cashTransactions.filter((c) => String(c.date).startsWith(yearStr)),
+      expenseCategories,
+      recipes,
+      ingredients,
+      products,
+    });
+  }, [
+    filterMonth,
+    filterYear,
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+  ]);
 
-  const totalCashOut = useMemo(() => {
-    return filteredFinance
-      .filter((f) => f.type === "CASH_OUT")
-      .reduce((sum, f) => sum + f.amount, 0);
-  }, [filteredFinance]);
+  const totalCashIn = periodSummary.totalOperationalCashIn;
+  const totalCashOut = periodSummary.totalOperationalCashOut;
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
 
-  // Hitung HPP Bahan Baku Riil
-  const totalHpp = useMemo(() => {
-    return filteredFinance
-      .filter((t) => {
-        if (t.type !== "CASH_OUT") return false;
-        const cat = expenseCategories.find((c) => c.id === t.categoryId);
-        return (
-          cat?.type === "BAHAN_BAKU" ||
-          cat?.parentId === "cat-bahan-baku" ||
-          t.categoryId === "cat-bahan-baku" ||
-          (t.category && t.category.toLowerCase().includes("bahan"))
-        );
-      })
-      .reduce((sum, f) => sum + f.amount, 0);
-  }, [filteredFinance, expenseCategories]);
+  // Hitung HPP Bahan Baku Riil (Aktual kas bahan baku atau fallback HPP teoretis resep terjual)
+  const totalHpp = periodSummary.effectiveCOGS;
 
-  const netProfit = totalCashIn - totalCashOut;
-  const totalSalesRevenue = filteredSales.reduce((sum, s) => sum + s.totalPrice, 0);
-  const netSalesRevenue = totalSalesRevenue > 0 ? totalSalesRevenue : totalCashIn;
+  const netSalesRevenue =
+    periodSummary.recognizedRevenue > 0 ? periodSummary.recognizedRevenue : totalCashIn;
+  const netProfit = netSalesRevenue - totalCashOut;
 
   // Food Cost & Margin
   const foodCostPercent = netSalesRevenue > 0 ? ((totalHpp / netSalesRevenue) * 100).toFixed(1) : "0.0";
@@ -172,56 +200,65 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       ? ((netProfit / totalCashIn) * 100).toFixed(1)
       : "0.0";
 
-  // Data Grafik Arus Masuk vs Arus Keluar
+  // Data Grafik Omzet & Kas Masuk Operasional vs Arus Keluar
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
   const daysInMonth = filterMonth === -1 ? 30 : getDaysInMonth(filterMonth, filterYear);
 
   const chartData = useMemo(() => {
     if (filterMonth === -1) {
       return Array.from({ length: 12 }, (_, i) => {
-        const monthCashIn = cashTransactions
-          .filter((c) => {
-            if (c.type !== "CASH_IN") return false;
-            const d = new Date(c.date);
-            return d.getMonth() === i && d.getFullYear() === filterYear;
-          })
-          .reduce((sum, c) => sum + c.amount, 0);
-
-        const monthExpense = cashTransactions
-          .filter((c) => {
-            if (c.type !== "CASH_OUT") return false;
-            const d = new Date(c.date);
-            return d.getMonth() === i && d.getFullYear() === filterYear;
-          })
-          .reduce((sum, c) => sum + c.amount, 0);
+        const pStr = `${filterYear}-${String(i + 1).padStart(2, "0")}`;
+        const mSum = computePeriodFinancialSummary({
+          period: pStr,
+          salesTransactions,
+          dailySalesRecaps,
+          cashTransactions,
+          expenseCategories,
+          recipes,
+          ingredients,
+          products,
+        });
 
         return {
           name: new Date(0, i).toLocaleString("id-ID", { month: "short" }),
-          masuk: monthCashIn,
-          keluar: monthExpense,
+          masuk: Math.max(mSum.recognizedRevenue, mSum.totalOperationalCashIn),
+          keluar: mSum.totalOperationalCashOut,
         };
       });
     } else {
+      const byDayMap = new Map<string, (typeof periodSummary.dailyBreakdown)[number]>(
+        periodSummary.dailyBreakdown.map((d) => [d.date, d])
+      );
       return Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
         const dayStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dayEntry = byDayMap.get(dayStr);
 
-        const dayCashIn = filteredFinance
-          .filter((c) => c.type === "CASH_IN" && c.date.startsWith(dayStr))
-          .reduce((sum, c) => sum + c.amount, 0);
-
-        const dayExpense = filteredFinance
-          .filter((c) => c.type === "CASH_OUT" && c.date.startsWith(dayStr))
-          .reduce((sum, c) => sum + c.amount, 0);
+        const dayIn = dayEntry
+          ? Math.max(dayEntry.recognizedRevenue, dayEntry.operationalCashIn)
+          : 0;
+        const dayOut = dayEntry ? dayEntry.operationalCashOut : 0;
 
         return {
           name: `${day}`,
-          masuk: dayCashIn,
-          keluar: dayExpense,
+          masuk: dayIn,
+          keluar: dayOut,
         };
       });
     }
-  }, [filterMonth, filterYear, filteredFinance, cashTransactions, daysInMonth]);
+  }, [
+    filterMonth,
+    filterYear,
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    periodSummary,
+    daysInMonth,
+  ]);
 
   // Donut Chart: Pengeluaran per Kategori
   const expenseByCategory = useMemo(() => {
@@ -265,7 +302,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
   }, [contracts, employees]);
 
   const estimatedMonthlyPayroll = useMemo(() => {
-    return activeContracts.reduce((sum, c) => sum + (c.baseSalary || 0), 0);
+    return activeContracts.reduce((sum, c) => sum + (c.basicSalary || 0), 0);
   }, [activeContracts]);
 
   // Status Rekonsiliasi Bank Terakhir
@@ -525,7 +562,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               {formatCurrency(totalCashIn)}
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Omzet penjualan: {formatCurrency(totalSalesRevenue)}
+              Omzet penjualan: {formatCurrency(netSalesRevenue)}
             </p>
           </div>
         </motion.div>

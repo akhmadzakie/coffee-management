@@ -47,6 +47,7 @@ import {
   getIngredientPackagingChoices,
   getPackagingSelectValue,
 } from "../utils/posDomainLogic";
+import { computePeriodFinancialSummary } from "../utils/financeMetrics";
 import { CsvImportExport } from "./common/CsvImportExport";
 
 interface CashFlowProps {
@@ -126,7 +127,40 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     updateProduct,
     recipes,
     batchPreparations,
+    dailySalesRecaps,
+    syncMissingSalesToCashFlow,
   } = useStore();
+
+  const unsyncedSalesStats = useMemo(() => {
+    const summary = computePeriodFinancialSummary({
+      period: "ALL",
+      salesTransactions,
+      dailySalesRecaps,
+      cashTransactions,
+      expenseCategories,
+      recipes,
+      ingredients,
+      products,
+    });
+    let missingDays = 0;
+    let missingAmount = 0;
+    summary.dailyBreakdown.forEach((day) => {
+      const gap = Math.round(day.recognizedRevenue - day.cashSalesInflow);
+      if (gap > 0) {
+        missingDays++;
+        missingAmount += gap;
+      }
+    });
+    return { missingDays, missingAmount };
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+  ]);
 
   // ─── Filter States ──────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState("");
@@ -1468,6 +1502,50 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
             )}
           </div>
         </div>
+
+        {/* ─── Banner Sinkronisasi Omzet Penjualan yang Belum Masuk Buku Kas ──── */}
+        {unsyncedSalesStats.missingAmount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-500/15 border border-amber-200/80 dark:border-amber-500/30 shadow-2xs"
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-500/20 border border-amber-200 dark:border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0">
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Ditemukan {formatCurrency(unsyncedSalesStats.missingAmount)} omzet penjualan ({unsyncedSalesStats.missingDays} hari) yang belum tercatat ke Buku Arus Kas
+                </p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                  Sinkronkan sekarang agar saldo kas &amp; pemasukan Arus Kas terhubung penuh dengan Penjualan.
+                </p>
+              </div>
+            </div>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  const res = syncMissingSalesToCashFlow(
+                    selectedAccountId !== "all" ? selectedAccountId : undefined
+                  );
+                  if (res.syncedCount > 0) {
+                    toast.success(
+                      `${res.syncedCount} hari omzet (${formatCurrency(res.syncedAmount)}) berhasil disinkronkan ke Arus Kas!`
+                    );
+                  } else {
+                    toast.error("Tidak ada pos kas yang tersedia atau seluruh omzet sudah sinkron.");
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sinkronkan ke Arus Kas</span>
+              </button>
+            )}
+          </motion.div>
+        )}
 
         {/* ─── 4 Executive Bento KPI Cards ───────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

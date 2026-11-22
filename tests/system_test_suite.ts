@@ -1499,6 +1499,166 @@ test("calculateFnbHealthMetrics menghitung Food/Labor/Prime Cost % dan BEP Omzet
 });
 
 // -------------------------------------------------------------
+// 19. PENGUJIAN HPP DENGAN OVERHEAD PERSENTASE MASUK TOTAL HPP
+// -------------------------------------------------------------
+console.log("\n=========================================================");
+console.log("MEMULAI PENGUJIAN OVERHEAD PERSENTASE MASUK TOTAL HPP");
+console.log("=========================================================");
+
+test("calculateHppWithOverheadPercentage: Overhead (%) dan Wastage (%) masuk ke Total HPP integer", async () => {
+  const { calculateHppWithOverheadPercentage } = await import("../src/utils/financeMetrics");
+
+  const res = calculateHppWithOverheadPercentage({
+    rawMaterialCost: 8000,
+    packagingCost: 2000,
+    wastagePercent: 5,
+    overheadPercent: 10,
+  });
+
+  assert.strictEqual(res.baseCostBeforePercentage, 10000);
+  assert.strictEqual(res.wastageCost, 500);
+  assert.strictEqual(res.overheadCost, 1000);
+  assert.strictEqual(res.totalHpp, 11500);
+
+  // Nol overhead -> hanya bahan + kemasan + wastage
+  const zeroOh = calculateHppWithOverheadPercentage({
+    rawMaterialCost: 7500,
+    packagingCost: 1500,
+    wastagePercent: 0,
+    overheadPercent: 0,
+  });
+  assert.strictEqual(zeroOh.overheadCost, 0);
+  assert.strictEqual(zeroOh.totalHpp, 9000);
+});
+
+test("calculateCashFlowHppSync: Mempertahankan wastagePercent dan overheadPercent varian saat sinkronisasi harga bahan", async () => {
+  const { calculateCashFlowHppSync } = await import("../src/utils/posDomainLogic");
+
+  const syncRes = calculateCashFlowHppSync({
+    itemRows: [
+      { ingredientId: "ing-bean", qty: 1, totalPrice: 300000, unitMode: "PURCHASE", conversionFactor: 1000 },
+    ],
+    ingredients: [
+      { id: "ing-bean", name: "Espresso Beans", unit: "gr", currentStock: 2000, minStock: 500, category: "Biji Kopi", costPerUnit: 200, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 200000 },
+    ],
+    batchPreparations: [],
+    products: [
+      {
+        id: "prod-1",
+        name: "Americano",
+        category: "COFFEE",
+        division: "BAR",
+        isActive: true,
+        createdAt: "2026-11-01T00:00:00Z",
+        variants: [
+          {
+            id: "var-1",
+            productId: "prod-1",
+            name: "Iced 16oz",
+            price: 22000,
+            packagingCost: 1500,
+            wastagePercent: 5,
+            overheadPercent: 10,
+            estimatedHpp: 5500,
+            isAvailable: true,
+            recipe: [{ ingredientId: "ing-bean", quantity: 20 }],
+          },
+        ],
+      },
+    ],
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+
+  // Harga baru bean = 300/gr -> raw = 20 * 300 = 6000, pack = 1500, base = 7500
+  // wastage 5% = 375, overhead 10% = 750 -> total = 8625
+  assert.strictEqual(syncRes.productsToUpdate.length, 1);
+  assert.strictEqual(syncRes.productsToUpdate[0].variants[0].estimatedHpp, 8625);
+});
+
+// -------------------------------------------------------------
+// 20. PENGUJIAN KONEKSI PENJUALAN, REKAP, & ARUS KAS TERPUSAT
+// -------------------------------------------------------------
+console.log("\n=========================================================");
+console.log("MEMULAI PENGUJIAN KONEKSI PENJUALAN, REKAP & ARUS KAS");
+console.log("=========================================================");
+
+test("computePeriodFinancialSummary: Menggabungkan Sales, Rekap, dan Kas tanpa double-counting & mengecualikan TRANSFER/OPENING", async () => {
+  const {
+    computePeriodFinancialSummary,
+    isNonOperationalCashTransaction,
+    getSaleTransactionAmount,
+  } = await import("../src/utils/financeMetrics");
+
+  assert.strictEqual(
+    isNonOperationalCashTransaction({ category: "Transfer", description: "TRANSFER: Laci -> BCA", referenceId: "TRF-1" }),
+    true
+  );
+  assert.strictEqual(
+    isNonOperationalCashTransaction({ category: "Penjualan", description: "OPENING: Modal awal kas", referenceId: "OPENING-1" }),
+    true
+  );
+  assert.strictEqual(
+    isNonOperationalCashTransaction({ category: "Penjualan Menu & Kasir", description: "Omzet Harian", referenceId: "recap-1" }),
+    false
+  );
+
+  assert.strictEqual(
+    getSaleTransactionAmount({ id: "s1", date: "2026-11-10", menuName: "Latte", quantitySold: 2, totalPrice: 56000, importLogId: "log1" }),
+    56000
+  );
+
+  const summary = computePeriodFinancialSummary({
+    period: "2026-11",
+    dailySalesRecaps: [
+      { id: "rec-1", date: "2026-11-01", cashAmount: 400000, qrisAmount: 600000, edcAmount: 0, transferAmount: 0, totalAmount: 1000000, recordedBy: "Kasir", createdAt: "2026-11-01T22:00:00Z" },
+    ],
+    salesTransactions: [
+      // Hari 1 punya recap 1jt & salesTx 950rb -> diambil max 1jt (tanpa double count)
+      { id: "s-1", date: "2026-11-01", menuName: "Latte", quantitySold: 19, totalPrice: 950000, importLogId: "log-1" },
+      // Hari 2 hanya punya item sales 500rb (belum masuk recap/cash) -> tetap diakui di omzet!
+      { id: "s-2", date: "2026-11-02", menuName: "Americano", quantitySold: 20, totalPrice: 500000, importLogId: "log-2" },
+    ],
+    cashTransactions: [
+      // Kas masuk dari recap hari 1 = 1jt
+      { id: "c-1", accountId: "acc-1", type: "CASH_IN", amount: 1000000, category: "Penjualan Menu & Kasir", categoryId: "cat-penjualan", description: "Omzet Harian", date: "2026-11-01", referenceId: "rec-1", createdBy: "Kasir" },
+      // Transfer internal 2jt dan saldo awal 5jt harus DIABAIKAN
+      { id: "c-trf", accountId: "acc-2", type: "CASH_IN", amount: 2000000, category: "Transfer", description: "TRANSFER: Setor Bank", date: "2026-11-01", referenceId: "TRF-123", createdBy: "Admin" },
+      { id: "c-open", accountId: "acc-1", type: "CASH_IN", amount: 5000000, category: "Saldo Awal", description: "OPENING: Modal Kasir", date: "2026-11-01", referenceId: "OPENING-1", createdBy: "Admin" },
+      // Pengeluaran operasional bahan baku & gaji
+      { id: "c-out1", accountId: "acc-1", type: "CASH_OUT", amount: 300000, category: "Bahan Baku", categoryId: "cat-bahan-baku", description: "Beli susu", date: "2026-11-02", createdBy: "Purchasing" },
+    ],
+    expenseCategories: [
+      { id: "cat-penjualan", name: "Penjualan Menu & Kasir", type: "PENDAPATAN", parentId: null, color: "#1b2cc0", icon: "Wallet", isActive: true, sortOrder: 1 },
+      { id: "cat-bahan-baku", name: "Bahan Baku", type: "BAHAN_BAKU", parentId: null, color: "#059669", icon: "Package", isActive: true, sortOrder: 2 },
+    ],
+  });
+
+  // Hari 1 (1.000.000) + Hari 2 (500.000) = 1.500.000
+  assert.strictEqual(summary.recognizedRevenue, 1500000);
+  // Kas masuk operasional hanya 1.000.000 (transfer & opening dikeluarkan)
+  assert.strictEqual(summary.totalOperationalCashIn, 1000000);
+  assert.strictEqual(summary.cashSalesInflow, 1000000);
+  assert.strictEqual(summary.totalOperationalCashOut, 300000);
+  assert.strictEqual(summary.effectiveCOGS, 300000);
+  assert.strictEqual(summary.grossProfit, 1200000);
+});
+
+// -------------------------------------------------------------
+// 21. PENGUJIAN KATEGORI BAHAN & BAHAN OLAHAN
+// -------------------------------------------------------------
+test("matchesIngredientCategory & normalizeIngredientCategoryName: Mendukung kategori Bahan Olahan & alias lama", async () => {
+  const { matchesIngredientCategory, normalizeIngredientCategoryName } = await import("../src/utils/financeMetrics");
+
+  assert.strictEqual(normalizeIngredientCategoryName("Kondimen Olahan"), "Bahan Olahan");
+  assert.strictEqual(normalizeIngredientCategoryName("Coffee"), "Biji Kopi");
+  assert.strictEqual(matchesIngredientCategory("Kondimen Olahan", "Bahan Olahan"), true);
+  assert.strictEqual(matchesIngredientCategory("Bahan Olahan", "Bahan Olahan"), true);
+  assert.strictEqual(matchesIngredientCategory("Dairy", "Susu & Dairy"), true);
+  assert.strictEqual(matchesIngredientCategory("Biji Kopi", "Bahan Olahan"), false);
+});
+
+// -------------------------------------------------------------
 // HASIL AKHIR
 // -------------------------------------------------------------
 console.log("\n=========================================================");

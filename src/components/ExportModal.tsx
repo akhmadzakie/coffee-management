@@ -21,6 +21,10 @@ import {
 import { getLocalDateString } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import {
+  getSaleTransactionAmount,
+  isNonOperationalCashTransaction,
+} from "../utils/financeMetrics";
+import {
   exportSalesToCSV,
   exportSalesToPDF,
   exportInventoryToCSV,
@@ -271,12 +275,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const handleExportCSV = () => {
     if (activeModule === "all_in_one") {
-      const totalGrossSales = filteredSales.reduce((sum, s) => sum + (s.subtotal || s.total || 0), 0);
-      const totalNetSales = filteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
-      const totalCashIn = filteredFinance
+      const totalGrossSales = filteredSales.reduce((sum, s) => sum + getSaleTransactionAmount(s), 0);
+      const totalNetSales = totalGrossSales;
+      const operationalFinance = filteredFinance.filter((f) => !isNonOperationalCashTransaction(f));
+      const totalCashIn = operationalFinance
         .filter((f) => f.type === "CASH_IN" || (f as any).type === "IN")
         .reduce((sum, f) => sum + (f.amount || 0), 0);
-      const totalCashOut = filteredFinance
+      const totalCashOut = operationalFinance
         .filter((f) => f.type === "CASH_OUT" || (f as any).type === "OUT")
         .reduce((sum, f) => sum + (f.amount || 0), 0);
       const totalPayroll = filteredPayroll.reduce((sum, p) => sum + (p.netPay || 0), 0);

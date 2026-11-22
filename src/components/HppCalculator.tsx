@@ -4,11 +4,7 @@ import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
 import { CustomSelect } from "./common/CustomSelect";
-import {
-  computeAutoOverheadBaseline,
-  calculateHppOverheadSimulation,
-} from "../utils/financeMetrics";
-import { getLocalPeriodString } from "../utils/dateUtils";
+import { calculateHppWithOverheadPercentage } from "../utils/financeMetrics";
 import {
   ViewState,
   Recipe,
@@ -37,8 +33,6 @@ import {
   RefreshCw,
   Copy,
   Check,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
   UtensilsCrossed,
   Cake,
@@ -49,9 +43,6 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Search,
-  Users,
-  Building2,
-  Target,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -324,10 +315,9 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     addBatchPreparation,
     cashTransactions,
     expenseCategories,
-    payrollRecords,
-    employees,
-    contracts,
     salesTransactions,
+    settings,
+    updateSettings,
     currentUser,
   } = useStore();
 
@@ -479,54 +469,16 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setTimeout(() => setSaveSuccessMessage(null), 3000);
   };
 
-  // Buffer Wastage & Purge (%)
+  // Buffer Wastage & Overhead (%) — keduanya masuk ke dalam Total HPP Pokok
   const [wastagePercent, setWastagePercent] = useState<number>(5);
+  const [overheadPercent, setOverheadPercent] = useState<number>(
+    () => Number(settings.defaultOverheadPercent ?? 10)
+  );
 
   // Pricing & Margin Simulation
   const [targetSellingPrice, setTargetSellingPrice] = useState<number>(22000);
   const [targetFoodCostPercent, setTargetFoodCostPercent] = useState<number>(30);
   const [dailyVolume, setDailyVolume] = useState<number>(65);
-
-  // Simulasi Overhead & BEP (Non-HPP, otomatis tarik data aktual tapi bisa diedit manual)
-  const autoOverheadBaseline = useMemo(() => {
-    return computeAutoOverheadBaseline({
-      cashTransactions,
-      expenseCategories,
-      payrollRecords,
-      employees,
-      contracts,
-      salesTransactions,
-      currentPeriod: getLocalPeriodString(),
-    });
-  }, [
-    cashTransactions,
-    expenseCategories,
-    payrollRecords,
-    employees,
-    contracts,
-    salesTransactions,
-  ]);
-
-  const [isOverheadManual, setIsOverheadManual] = useState<boolean>(false);
-  const [simMonthlyPayroll, setSimMonthlyPayroll] = useState<number>(0);
-  const [simMonthlyOperational, setSimMonthlyOperational] = useState<number>(0);
-  const [simMonthlyStorePortions, setSimMonthlyStorePortions] = useState<number>(1500);
-  const [isOverheadPanelOpen, setIsOverheadPanelOpen] = useState<boolean>(true);
-
-  useEffect(() => {
-    if (!isOverheadManual) {
-      setSimMonthlyPayroll(autoOverheadBaseline.monthlyPayroll);
-      setSimMonthlyOperational(autoOverheadBaseline.monthlyOperational);
-      setSimMonthlyStorePortions(autoOverheadBaseline.monthlyStorePortions);
-    }
-  }, [autoOverheadBaseline, isOverheadManual]);
-
-  const handleResetOverheadToActual = () => {
-    setIsOverheadManual(false);
-    setSimMonthlyPayroll(autoOverheadBaseline.monthlyPayroll);
-    setSimMonthlyOperational(autoOverheadBaseline.monthlyOperational);
-    setSimMonthlyStorePortions(autoOverheadBaseline.monthlyStorePortions);
-  };
 
   // Search filter for catalog tab
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -555,6 +507,14 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       if (variant) {
         setServingNote(variant.name || "Reguler");
         if (variant.price > 0) setTargetSellingPrice(variant.price);
+        setWastagePercent(
+          variant.wastagePercent !== undefined ? Number(variant.wastagePercent) : 5
+        );
+        setOverheadPercent(
+          variant.overheadPercent !== undefined
+            ? Number(variant.overheadPercent)
+            : Number(settings.defaultOverheadPercent ?? 10)
+        );
         if (Array.isArray(variant.recipe) && variant.recipe.length > 0) {
           const mappedItems: RecipeIngredientItem[] = variant.recipe.map((ri, idx) => {
             const ing = ingredients.find((i) => i.id === ri.ingredientId);
@@ -705,13 +665,18 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
 
   const baseHppBeforeWastage = rawMaterialCost + packagingCost;
 
-  const wastageCost = useMemo(() => {
-    return Math.round(baseHppBeforeWastage * (wastagePercent / 100));
-  }, [baseHppBeforeWastage, wastagePercent]);
+  const hppCalculation = useMemo(() => {
+    return calculateHppWithOverheadPercentage({
+      rawMaterialCost,
+      packagingCost,
+      wastagePercent,
+      overheadPercent,
+    });
+  }, [rawMaterialCost, packagingCost, wastagePercent, overheadPercent]);
 
-  const totalHpp = useMemo(() => {
-    return Math.round(baseHppBeforeWastage + wastageCost);
-  }, [baseHppBeforeWastage, wastageCost]);
+  const wastageCost = hppCalculation.wastageCost;
+  const overheadCost = hppCalculation.overheadCost;
+  const totalHpp = hppCalculation.totalHpp;
 
   // Margin & Food Cost
   const grossProfit = Math.max(0, targetSellingPrice - totalHpp);
@@ -728,25 +693,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   // Proyeksi Volume
   const dailyGrossProfit = grossProfit * dailyVolume;
   const monthlyGrossProfit = dailyGrossProfit * 30;
-
-  // Simulasi Alokasi Overhead, Full Cost, & BEP (tidak mengubah HPP resmi resep/produk)
-  const overheadSim = useMemo(() => {
-    return calculateHppOverheadSimulation({
-      totalHpp,
-      targetSellingPrice,
-      monthlyPayroll: simMonthlyPayroll,
-      monthlyOperational: simMonthlyOperational,
-      monthlyStorePortions: simMonthlyStorePortions,
-      menuDailyVolume: dailyVolume,
-    });
-  }, [
-    totalHpp,
-    targetSellingPrice,
-    simMonthlyPayroll,
-    simMonthlyOperational,
-    simMonthlyStorePortions,
-    dailyVolume,
-  ]);
 
   // Status Kesehatan Food Cost
   const healthStatus = useMemo(() => {
@@ -931,6 +877,8 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
           estimatedHpp: totalHpp,
           packagingCost: packagingCost,
           packagingNotes,
+          wastagePercent,
+          overheadPercent,
           recipe: validIngredients,
         };
       } else {
@@ -942,6 +890,8 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
           estimatedHpp: totalHpp,
           packagingCost: packagingCost,
           packagingNotes,
+          wastagePercent,
+          overheadPercent,
           recipe: validIngredients,
           isAvailable: true,
         });
@@ -952,6 +902,9 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         category: publishCategory,
         variants: updatedVariants,
       });
+      if (overheadPercent !== Number(settings.defaultOverheadPercent ?? 10)) {
+        updateSettings({ ...settings, defaultOverheadPercent: overheadPercent });
+      }
       setSaveSuccessMessage(`Varian "${variantName}" untuk produk "${menuName}" berhasil diterbitkan ke Katalog Toko!`);
     } else {
       addProduct({
@@ -969,11 +922,16 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
             estimatedHpp: totalHpp,
             packagingCost: packagingCost,
             packagingNotes,
+            wastagePercent,
+            overheadPercent,
             recipe: validIngredients,
             isAvailable: true,
           },
         ],
       });
+      if (overheadPercent !== Number(settings.defaultOverheadPercent ?? 10)) {
+        updateSettings({ ...settings, defaultOverheadPercent: overheadPercent });
+      }
       setSaveSuccessMessage(`Produk baru "${menuName}" berhasil diterbitkan ke Katalog Menu Toko!`);
     }
 
@@ -1048,19 +1006,6 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         .map((p) => `- ${p.name}: Rp ${p.cost}`)
         .join("\n");
 
-      const overheadContextText =
-        overheadSim.monthlyTotalOpex > 0
-          ? `\nSimulasi Overhead & BEP (Non-HPP):
-- Beban Gaji Bulanan: Rp ${Math.round(simMonthlyPayroll).toLocaleString("id-ID")}
-- Beban Operasional & Utilitas Bulanan: Rp ${Math.round(simMonthlyOperational).toLocaleString("id-ID")}
-- Total OPEX Bulanan: Rp ${Math.round(overheadSim.monthlyTotalOpex).toLocaleString("id-ID")}
-- Estimasi Total Porsi Toko/Bulan: ${simMonthlyStorePortions} porsi
-- Alokasi Overhead per Porsi: Rp ${Math.round(overheadSim.overheadPerPortion).toLocaleString("id-ID")}
-- Biaya Penuh (Full Cost = HPP + Overhead): Rp ${Math.round(overheadSim.fullCostPerPortion).toLocaleString("id-ID")}
-- Estimasi Laba Bersih per Porsi: Rp ${Math.round(overheadSim.estimatedNetProfitPerPortion).toLocaleString("id-ID")} (${overheadSim.estimatedNetMarginPercent.toFixed(1)}%)
-- Target BEP Total OPEX: ${overheadSim.bepDailyPortions !== null ? `${overheadSim.bepDailyPortions} porsi/hari (${overheadSim.bepMonthlyPortions} porsi/bulan)` : "Margin kotor <= 0, BEP belum tercapai"}`
-          : "";
-
       const prompt = `Halo Julia AI Copilot! Saya sedang membuat simulasi HPP & harga jual menu kopi di kafe kami dengan rincian berikut:
 
 Nama Menu: ${menuName} (${servingNote})
@@ -1073,14 +1018,15 @@ ${packDetail || "- Tanpa kemasan khusus"}
 Subtotal Kemasan: Rp ${Math.round(packagingCost).toLocaleString("id-ID")}
 
 Buffer Wastage/Penyusutan: ${wastagePercent}% (Rp ${Math.round(wastageCost).toLocaleString("id-ID")})
-TOTAL HPP RIIL PER CUP: Rp ${Math.round(totalHpp).toLocaleString("id-ID")}
+Biaya Overhead Operasional (masuk HPP): ${overheadPercent}% (Rp ${Math.round(overheadCost).toLocaleString("id-ID")})
+TOTAL HPP RIIL PER CUP (Sudah termasuk Wastage & Overhead ${overheadPercent}%): Rp ${Math.round(totalHpp).toLocaleString("id-ID")}
 
 Rencana Harga Jual: Rp ${Math.round(targetSellingPrice).toLocaleString("id-ID")}
 Food Cost: ${foodCostPercent.toFixed(1)}%
-Gross Margin: ${grossMarginPercent.toFixed(1)}% (Laba Kotor Rp ${Math.round(grossProfit).toLocaleString("id-ID")})${overheadContextText}
+Gross Margin: ${grossMarginPercent.toFixed(1)}% (Laba Kotor Rp ${Math.round(grossProfit).toLocaleString("id-ID")})
 
 Tolong berikan analisis singkat dan tajam (3-4 poin padat):
-1. Evaluasi apakah proporsi HPP & margin ini sudah ideal untuk standar coffee shop Indonesia${overheadSim.monthlyTotalOpex > 0 ? " serta apakah sudah cukup aman menutup alokasi gaji & operasional di atas" : ""}?
+1. Evaluasi apakah proporsi HPP (termasuk alokasi overhead ${overheadPercent}%) & margin ini sudah ideal untuk standar coffee shop Indonesia?
 2. Komponen bahan mana yang paling menyerap biaya dan bagaimana saran efisiensi porsi/takarannya tanpa menurunkan kualitas rasa?
 3. Rekomendasi pricing kompetitif dan strategi upselling atau bundling (misal pairing pastry) agar omset kafe maksimal.
 Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
@@ -1101,20 +1047,8 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
             grossMarginPercent,
             packagingCost,
             wastagePercent,
-            overheadSimulation:
-              overheadSim.monthlyTotalOpex > 0
-                ? {
-                    monthlyPayroll: simMonthlyPayroll,
-                    monthlyOperational: simMonthlyOperational,
-                    monthlyStorePortions: simMonthlyStorePortions,
-                    overheadPerPortion: overheadSim.overheadPerPortion,
-                    fullCostPerPortion: overheadSim.fullCostPerPortion,
-                    estimatedNetProfitPerPortion: overheadSim.estimatedNetProfitPerPortion,
-                    estimatedNetMarginPercent: overheadSim.estimatedNetMarginPercent,
-                    bepDailyPortions: overheadSim.bepDailyPortions,
-                    bepMonthlyPortions: overheadSim.bepMonthlyPortions,
-                  }
-                : null,
+            overheadPercent,
+            overheadCost,
             items: items.map((it) => ({
               name: it.name,
               quantity: it.quantity,
@@ -1750,6 +1684,73 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 </span>
               </div>
             </div>
+
+            {/* Card 5: Biaya Overhead Operasional (%) - Langsung Masuk HPP */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex justify-between items-start gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-black flex items-center justify-center border border-brand-100">
+                      5
+                    </span>
+                    Biaya Overhead Operasional (%)
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Listrik, air, gas, internet &amp; overhead bar/dapur dalam persentase — otomatis ditambahkan ke Total HPP.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 bg-brand-50 border border-brand-200/70 rounded-xl px-2.5 py-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    aria-label="Persentase Overhead HPP"
+                    value={overheadPercent}
+                    onChange={(e) => setOverheadPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    className="w-12 bg-transparent text-right text-xs font-black font-mono text-brand-900 focus:outline-none tabular-nums"
+                  />
+                  <span className="text-xs font-black text-brand-700">%</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="35"
+                  step="1"
+                  value={Math.min(35, overheadPercent)}
+                  onChange={(e) => setOverheadPercent(Number(e.target.value))}
+                  className="w-full accent-brand-600 cursor-pointer"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {[0, 5, 10, 15, 20].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setOverheadPercent(pct)}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                        overheadPercent === pct
+                          ? "bg-brand-600 text-white border-brand-600 shadow-2xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">
+                  Alokasi Overhead (+{overheadPercent}% ke HPP):
+                </span>
+                <span className="font-bold font-mono text-sm text-brand-900">
+                  +{formatCurrency(overheadCost)}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* KOLOM KANAN (5/12): EXECUTIVE SUMMARY & SIMULATOR MARGIN */}
@@ -1764,7 +1765,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   HPP Riil Per Porsi
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Bahan baku + kemasan + cadangan penyusutan.
+                  Bahan baku + kemasan + penyusutan + overhead (%).
                 </p>
               </div>
 
@@ -1789,6 +1790,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <div className="flex justify-between">
                     <span className="text-slate-400">• Wastage ({wastagePercent}%):</span>
                     <span className="font-mono font-medium text-amber-200">+{formatCurrency(wastageCost)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">• Overhead ({overheadPercent}%):</span>
+                    <span className="font-mono font-medium text-brand-200">+{formatCurrency(overheadCost)}</span>
                   </div>
                 </div>
               </div>
@@ -1955,233 +1960,20 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   </div>
                 </div>
 
-                {/* Simulasi Overhead & BEP (Non-HPP) */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <Target className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-                          Simulasi Overhead &amp; BEP (Non-HPP)
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            isOverheadManual
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-brand-50 text-brand-700 border-brand-200/80"
-                          }`}
-                        >
-                          {isOverheadManual ? "Diedit Manual" : autoOverheadBaseline.sourceLabel}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 leading-snug">
-                        Gaji (barista, kasir, kitchen, baker) &amp; operasional tetap dicatat di OPEX P&amp;L dan tidak mengubah HPP resmi resep.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isOverheadManual && (
-                        <button
-                          type="button"
-                          onClick={handleResetOverheadToActual}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Kembalikan angka simulasi ke data aktual toko"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Reset ke Aktual</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setIsOverheadPanelOpen((prev) => !prev)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors cursor-pointer"
-                        aria-label={
-                          isOverheadPanelOpen
-                            ? "Tutup simulasi overhead dan BEP"
-                            : "Buka simulasi overhead dan BEP"
-                        }
-                      >
-                        {isOverheadPanelOpen ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
+                {/* Ringkasan Alokasi Overhead Masuk HPP */}
+                <div className="p-3.5 rounded-2xl bg-brand-50/50 border border-brand-200/70 flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-brand-950 flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                      <span>Overhead Operasional ({overheadPercent}%)</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      Alokasi overhead sudah dihitung langsung ke dalam Total HPP Riil di atas.
+                    </p>
                   </div>
-
-                  <AnimatePresence initial={false}>
-                    {isOverheadPanelOpen && (
-                      <motion.div
-                        key="hpp-overhead-panel-body"
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.18, ease: "easeOut" }}
-                        className="overflow-hidden"
-                      >
-                        <div className="space-y-3 pt-1 border-t border-slate-100">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 mb-1">
-                            <Users className="w-3 h-3 text-slate-500" />
-                            <span>Beban Gaji &amp; SDM / Bln (Rp)</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="100000"
-                            value={simMonthlyPayroll}
-                            onChange={(e) => {
-                              setIsOverheadManual(true);
-                              setSimMonthlyPayroll(
-                                Math.max(0, Math.round(Number(e.target.value) || 0))
-                              );
-                            }}
-                            className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 mb-1">
-                            <Building2 className="w-3 h-3 text-slate-500" />
-                            <span>Operasional &amp; Utilitas / Bln (Rp)</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="100000"
-                            value={simMonthlyOperational}
-                            onChange={(e) => {
-                              setIsOverheadManual(true);
-                              setSimMonthlyOperational(
-                                Math.max(0, Math.round(Number(e.target.value) || 0))
-                              );
-                            }}
-                            className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <label className="text-[11px] font-semibold text-slate-700">
-                            Estimasi Total Porsi Toko / Bulan (Semua Menu)
-                          </label>
-                          {!autoOverheadBaseline.hasActualPortions && !isOverheadManual && (
-                            <span className="text-[10px] text-slate-400">
-                              Default asumsi (belum ada data jual)
-                            </span>
-                          )}
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          step="50"
-                          value={simMonthlyStorePortions}
-                          onChange={(e) => {
-                            setIsOverheadManual(true);
-                            setSimMonthlyStorePortions(
-                              Math.max(0, Math.round(Number(e.target.value) || 0))
-                            );
-                          }}
-                          className="w-full px-3 py-2 text-xs font-bold font-mono tabular-nums bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                        />
-                      </div>
-
-                      {overheadSim.monthlyTotalOpex === 0 ? (
-                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600">
-                          Belum ada beban gaji atau operasional yang terisi. Masukkan estimasi OPEX di atas untuk melihat <strong>Full Cost</strong>, estimasi laba bersih per porsi, dan target <strong>BEP</strong>.
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {simMonthlyStorePortions <= 0 && (
-                            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
-                              Isi estimasi total porsi toko/bulan (&gt; 0) untuk menghitung alokasi overhead per porsi.
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                              <p className="text-[10px] text-slate-500">Alokasi Overhead / Porsi:</p>
-                              <p className="font-bold font-mono tabular-nums text-slate-900 mt-0.5">
-                                {formatCurrency(overheadSim.overheadPerPortion)}
-                              </p>
-                            </div>
-                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                              <p className="text-[10px] text-slate-500">Biaya Penuh (Full Cost):</p>
-                              <p className="font-bold font-mono tabular-nums text-slate-900 mt-0.5">
-                                {formatCurrency(overheadSim.fullCostPerPortion)}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div
-                            className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
-                              overheadSim.status === "LOSS"
-                                ? "bg-rose-50/80 border-rose-200 text-rose-900"
-                                : overheadSim.status === "THIN"
-                                ? "bg-amber-50/80 border-amber-200 text-amber-900"
-                                : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
-                            }`}
-                          >
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                                Estimasi Laba Bersih / Porsi
-                              </p>
-                              <p className="text-base font-black font-mono tabular-nums mt-0.5">
-                                {overheadSim.estimatedNetProfitPerPortion >= 0 ? "+" : ""}
-                                {formatCurrency(overheadSim.estimatedNetProfitPerPortion)}
-                                <span className="text-xs font-bold ml-1.5">
-                                  ({overheadSim.estimatedNetMarginPercent.toFixed(1)}%)
-                                </span>
-                              </p>
-                            </div>
-                            <span
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${
-                                overheadSim.status === "LOSS"
-                                  ? "bg-white text-rose-700 border-rose-200"
-                                  : overheadSim.status === "THIN"
-                                  ? "bg-white text-amber-800 border-amber-200"
-                                  : "bg-white text-emerald-700 border-emerald-200"
-                              }`}
-                            >
-                              {overheadSim.status === "LOSS"
-                                ? "Di Bawah Full Cost"
-                                : overheadSim.status === "THIN"
-                                ? "Margin Bersih Tipis"
-                                : "Sehat"}
-                            </span>
-                          </div>
-
-                          <div className="p-3 rounded-xl bg-brand-50/50 border border-brand-200/70 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-brand-950">
-                                Target BEP (Tutup OPEX {formatCurrency(overheadSim.monthlyTotalOpex)}):
-                              </span>
-                              <span className="font-black font-mono tabular-nums text-brand-900">
-                                {overheadSim.bepDailyPortions !== null
-                                  ? `${overheadSim.bepDailyPortions} porsi/hari`
-                                  : "Belum tercapai"}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
-                              <span>
-                                {overheadSim.bepMonthlyPortions !== null
-                                  ? `Setara ${overheadSim.bepMonthlyPortions.toLocaleString("id-ID")} porsi/bulan`
-                                  : "Laba kotor per porsi harus > Rp 0 untuk BEP"}
-                              </span>
-                              <span className="font-semibold text-brand-800 font-mono tabular-nums">
-                                Kontribusi menu ini: {overheadSim.menuOpexCoveragePercent.toFixed(1)}% OPEX
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <span className="font-mono font-black text-xs text-brand-900 bg-white px-2.5 py-1.5 rounded-xl border border-brand-200/80 tabular-nums shrink-0">
+                    +{formatCurrency(overheadCost)}
+                  </span>
                 </div>
 
                 {/* Action Buttons: Terbitkan Produk, Kondimen Olahan, Simpan Resep & Konsultasi AI */}

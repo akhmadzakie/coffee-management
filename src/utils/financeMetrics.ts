@@ -1,12 +1,16 @@
 import {
   CashTransaction,
+  DailySalesRecap,
   Employee,
   EmployeeContract,
   ExpenseCategory,
+  Ingredient,
   PayrollRecord,
+  Product,
+  Recipe,
   SalesTransaction,
 } from "../types";
-import { getLocalPeriodString } from "./dateUtils";
+import { getLocalDateString, getLocalPeriodString } from "./dateUtils";
 
 const HRD_KEYWORDS = [
   "gaji",
@@ -526,5 +530,476 @@ export function calculateFnbHealthMetrics(
     bepGapAmount,
     bepProgressPercent,
     isAboveBep,
+  };
+}
+
+// ─── Kategori Bahan Baku & Helper Normalisasi ────────────────────────────────
+
+export const DEFAULT_INGREDIENT_CATEGORIES: string[] = [
+  "Biji Kopi",
+  "Susu & Dairy",
+  "Sirup & Pemanis",
+  "Bahan Olahan",
+  "Bahan Kitchen",
+  "Bahan Bakery",
+  "Packaging & Cup",
+  "Lainnya",
+];
+
+const INGREDIENT_CATEGORY_ALIASES: Record<string, string[]> = {
+  "biji kopi": ["coffee", "biji kopi", "espresso", "bean"],
+  "susu & dairy": ["dairy", "susu & dairy", "susu", "milk"],
+  "sirup & pemanis": ["pemanis", "sirup & pemanis", "syrup", "sirup", "gula"],
+  "bahan olahan": ["kondimen olahan", "bahan olahan", "olahan", "batch prep", "sub-recipe"],
+  "bahan kitchen": ["kitchen", "bahan kitchen", "dapur"],
+  "bahan bakery": ["bakery", "bahan bakery", "pastry", "roti"],
+  "packaging & cup": ["packaging", "packaging & cup", "kemasan", "cup"],
+};
+
+/** Normalisasi nama kategori bahan baku lama ke label kategori kanonik. */
+export function normalizeIngredientCategoryName(category?: string | null): string {
+  const raw = String(category || "").trim();
+  const lower = raw.toLowerCase();
+  if (!lower) return "Lainnya";
+  if (["coffee", "espresso", "bean"].includes(lower)) return "Biji Kopi";
+  if (["dairy", "susu"].includes(lower)) return "Susu & Dairy";
+  if (["pemanis", "sirup", "syrup"].includes(lower)) return "Sirup & Pemanis";
+  if (["kondimen olahan", "bahan olahan", "olahan", "batch prep", "sub-recipe"].includes(lower)) {
+    return "Bahan Olahan";
+  }
+  if (["kitchen", "dapur"].includes(lower)) return "Bahan Kitchen";
+  if (["bakery", "pastry", "roti"].includes(lower)) return "Bahan Bakery";
+  if (["packaging", "kemasan", "cup"].includes(lower)) return "Packaging & Cup";
+  return raw;
+}
+
+/** Mengecek apakah kategori bahan cocok dengan filter kategori (mendukung alias lama). */
+export function matchesIngredientCategory(
+  ingredientCategory: string | undefined | null,
+  selectedCategory: string
+): boolean {
+  if (!selectedCategory || selectedCategory === "ALL") return true;
+  const normalizedTarget = selectedCategory.trim().toLowerCase();
+  const normalizedIng = String(ingredientCategory || "").trim().toLowerCase();
+  if (normalizedIng === normalizedTarget) return true;
+  if (normalizeIngredientCategoryName(ingredientCategory).toLowerCase() === normalizedTarget) {
+    return true;
+  }
+  const aliases = INGREDIENT_CATEGORY_ALIASES[normalizedTarget];
+  return aliases ? aliases.includes(normalizedIng) : false;
+}
+
+// ─── Kalkulasi HPP + Overhead Persentase ─────────────────────────────────────
+
+export interface HppWithOverheadParams {
+  rawMaterialCost: number;
+  packagingCost?: number;
+  wastagePercent?: number;
+  overheadPercent?: number;
+}
+
+export interface HppWithOverheadResult {
+  rawMaterialCost: number;
+  packagingCost: number;
+  baseCostBeforePercentage: number;
+  wastagePercent: number;
+  wastageCost: number;
+  overheadPercent: number;
+  overheadCost: number;
+  totalHpp: number;
+}
+
+/** Menghitung Total HPP per porsi dengan memasukkan Wastage (%) dan Overhead (%). */
+export function calculateHppWithOverheadPercentage(
+  params: HppWithOverheadParams
+): HppWithOverheadResult {
+  const rawMaterialCost = Number.isFinite(params.rawMaterialCost)
+    ? Math.max(0, Math.round(params.rawMaterialCost))
+    : 0;
+  const packagingCost = Number.isFinite(params.packagingCost)
+    ? Math.max(0, Math.round(params.packagingCost || 0))
+    : 0;
+  const baseCostBeforePercentage = rawMaterialCost + packagingCost;
+  const wastagePercent = Number.isFinite(params.wastagePercent)
+    ? Math.max(0, Number(params.wastagePercent || 0))
+    : 0;
+  const overheadPercent = Number.isFinite(params.overheadPercent)
+    ? Math.max(0, Number(params.overheadPercent || 0))
+    : 0;
+
+  const wastageCost = Math.round(baseCostBeforePercentage * (wastagePercent / 100));
+  const overheadCost = Math.round(baseCostBeforePercentage * (overheadPercent / 100));
+  const totalHpp = Math.round(baseCostBeforePercentage + wastageCost + overheadCost);
+
+  return {
+    rawMaterialCost,
+    packagingCost,
+    baseCostBeforePercentage,
+    wastagePercent,
+    wastageCost,
+    overheadPercent,
+    overheadCost,
+    totalHpp,
+  };
+}
+
+// ─── Rekonsiliasi Penjualan, Omzet, & Arus Kas Terpusat ─────────────────────
+
+/** Mengecek apakah transaksi kas adalah mutasi internal atau saldo awal (non-operasional). */
+export function isNonOperationalCashTransaction(
+  t: Pick<CashTransaction, "category" | "description" | "referenceId">
+): boolean {
+  const cat = String(t.category || "").trim().toLowerCase();
+  const desc = String(t.description || "").trim().toUpperCase();
+  const ref = String(t.referenceId || "").trim().toUpperCase();
+
+  return (
+    cat === "transfer" ||
+    cat === "mutasi" ||
+    cat === "mutasi kas" ||
+    cat.includes("transfer kas") ||
+    cat.includes("mutasi kas") ||
+    cat === "saldo awal" ||
+    desc.startsWith("TRANSFER:") ||
+    desc.startsWith("OPENING:") ||
+    ref.startsWith("TRF-") ||
+    ref.startsWith("OPENING-")
+  );
+}
+
+/** Mengecek apakah transaksi kas masuk berasal dari penjualan / omzet kasir. */
+export function isSalesCashTransaction(
+  t: Pick<CashTransaction, "type" | "category" | "categoryId" | "description" | "referenceId">,
+  expenseCategories: ExpenseCategory[] = []
+): boolean {
+  if (t.type !== "CASH_IN") return false;
+  if (isNonOperationalCashTransaction(t)) return false;
+
+  const catId = String(t.categoryId || "").trim().toLowerCase();
+  const catName = String(t.category || "").trim().toLowerCase();
+  const desc = String(t.description || "").trim().toLowerCase();
+  const ref = String(t.referenceId || "").trim().toLowerCase();
+
+  if (catId === "cat-penjualan" || catName === "cat-penjualan") return true;
+  if (ref.startsWith("pos-") || ref.startsWith("recap-") || ref.startsWith("sales-log-")) {
+    return true;
+  }
+
+  const matchedCat = expenseCategories.find(
+    (c) => c.id === t.categoryId || c.name === t.category
+  );
+  const resolvedName = (matchedCat?.name || t.category || "").toLowerCase();
+
+  return (
+    resolvedName.includes("penjualan") ||
+    resolvedName.includes("omzet") ||
+    resolvedName.includes("kasir") ||
+    resolvedName.includes("pos") ||
+    desc.includes("penjualan") ||
+    desc.includes("rekap omzet")
+  );
+}
+
+/** Mengambil nominal transaksi penjualan secara aman dari field kanonik totalPrice (plus fallback). */
+export function getSaleTransactionAmount(s: SalesTransaction | Record<string, any>): number {
+  const val =
+    (s as any).totalPrice ??
+    (s as any).finalAmount ??
+    (s as any).totalAmount ??
+    (s as any).total ??
+    (s as any).subtotal ??
+    0;
+  const num = Number(val);
+  return Number.isFinite(num) ? Math.round(num) : 0;
+}
+
+export interface ComputePeriodFinancialSummaryParams {
+  period: string; // "YYYY-MM" or "ALL"
+  salesTransactions: SalesTransaction[];
+  dailySalesRecaps?: DailySalesRecap[];
+  cashTransactions: CashTransaction[];
+  expenseCategories: ExpenseCategory[];
+  payrollRecords?: PayrollRecord[];
+  recipes?: Recipe[];
+  ingredients?: Ingredient[];
+  products?: Product[];
+}
+
+export interface DailyFinancialBreakdownRow {
+  date: string;
+  recapRevenue: number;
+  salesTxRevenue: number;
+  cashSalesInflow: number;
+  recognizedRevenue: number;
+  operationalCashIn: number;
+  operationalCashOut: number;
+}
+
+export interface PeriodFinancialSummaryResult {
+  period: string;
+  recognizedRevenue: number;
+  recapRevenue: number;
+  salesTxRevenue: number;
+  cashSalesInflow: number;
+  otherCashInflow: number;
+  totalOperationalCashIn: number;
+  totalOperationalCashOut: number;
+  netOperationalCashFlow: number;
+  theoreticalCOGS: number;
+  actualCogsExpense: number;
+  effectiveCOGS: number;
+  totalHrdExpense: number;
+  totalUtilityExpense: number;
+  totalGeneralOpsExpense: number;
+  totalOPEX: number;
+  grossProfit: number;
+  netProfit: number;
+  netMarginPercent: number;
+  salesCogsMatchedCount: number;
+  totalSalesQty: number;
+  dailyBreakdown: DailyFinancialBreakdownRow[];
+}
+
+/**
+ * Menghitung ringkasan penjualan, arus kas operasional, HPP/COGS, dan laba rugi periode
+ * secara terpusat tanpa double-counting antar Rekap Harian, Import/POS Sales, dan Arus Kas.
+ */
+export function computePeriodFinancialSummary(
+  params: ComputePeriodFinancialSummaryParams
+): PeriodFinancialSummaryResult {
+  const {
+    period,
+    salesTransactions,
+    dailySalesRecaps = [],
+    cashTransactions,
+    expenseCategories,
+    recipes = [],
+    ingredients = [],
+    products = [],
+  } = params;
+
+  const toLocalDateKey = (raw: string | undefined | null): string | null => {
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    if (!trimmed) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : null;
+    }
+    return getLocalDateString(parsed);
+  };
+
+  const matchesPeriod = (rawDate: string | undefined | null) => {
+    if (!period || period === "ALL") return true;
+    const dayKey = toLocalDateKey(rawDate);
+    if (dayKey) return dayKey.slice(0, 7) === period;
+    return extractValidPeriod(rawDate) === period;
+  };
+
+  const dailyMap = new Map<
+    string,
+    {
+      recapRevenue: number;
+      salesTxRevenue: number;
+      cashSalesInflow: number;
+      operationalCashIn: number;
+      operationalCashOut: number;
+    }
+  >();
+
+  const getOrCreateDay = (dateStr: string) => {
+    const existing = dailyMap.get(dateStr);
+    if (existing) return existing;
+    const blank = {
+      recapRevenue: 0,
+      salesTxRevenue: 0,
+      cashSalesInflow: 0,
+      operationalCashIn: 0,
+      operationalCashOut: 0,
+    };
+    dailyMap.set(dateStr, blank);
+    return blank;
+  };
+
+  let recapRevenue = 0;
+  for (const r of dailySalesRecaps) {
+    if (!matchesPeriod(r.date)) continue;
+    const amt = Math.max(0, Math.round(Number(r.totalAmount) || 0));
+    recapRevenue += amt;
+    const dayKey = toLocalDateKey(r.date);
+    if (dayKey) {
+      getOrCreateDay(dayKey).recapRevenue += amt;
+    }
+  }
+
+  let salesTxRevenue = 0;
+  let theoreticalCOGS = 0;
+  let salesCogsMatchedCount = 0;
+  let totalSalesQty = 0;
+
+  for (const s of salesTransactions) {
+    if (!matchesPeriod(s.date)) continue;
+    const amt = Math.max(0, getSaleTransactionAmount(s));
+    const qty = Number(s.quantitySold) || 0;
+    salesTxRevenue += amt;
+    totalSalesQty += qty;
+
+    const dayKey = toLocalDateKey(s.date);
+    if (dayKey) {
+      getOrCreateDay(dayKey).salesTxRevenue += amt;
+    }
+
+    if (qty > 0 && s.menuName) {
+      const normalizedMenu = s.menuName.trim().toLowerCase();
+      const recipe = recipes.find(
+        (r) => r.menuName.trim().toLowerCase() === normalizedMenu
+      );
+      if (recipe && Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+        const unitCost = recipe.ingredients.reduce((sum, ri) => {
+          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+          return sum + (ing ? (Number(ing.costPerUnit) || 0) * ri.quantity : 0);
+        }, 0);
+        theoreticalCOGS += unitCost * qty;
+        salesCogsMatchedCount++;
+      } else if (products.length > 0) {
+        let matchedUnitHpp = 0;
+        let foundVariant = false;
+        for (const p of products) {
+          for (const v of p.variants || []) {
+            const fullName = `${p.name} - ${v.name}`.trim().toLowerCase();
+            if (
+              fullName === normalizedMenu ||
+              p.name.trim().toLowerCase() === normalizedMenu
+            ) {
+              if (Number(v.estimatedHpp) > 0) {
+                matchedUnitHpp = Number(v.estimatedHpp);
+                foundVariant = true;
+                break;
+              }
+            }
+          }
+          if (foundVariant) break;
+        }
+        if (foundVariant) {
+          theoreticalCOGS += matchedUnitHpp * qty;
+          salesCogsMatchedCount++;
+        }
+      }
+    }
+  }
+  theoreticalCOGS = Math.round(theoreticalCOGS);
+
+  let cashSalesInflow = 0;
+  let otherCashInflow = 0;
+  let totalOperationalCashIn = 0;
+  let totalOperationalCashOut = 0;
+  let actualCogsExpense = 0;
+  let totalHrdExpense = 0;
+  let totalUtilityExpense = 0;
+  let totalGeneralOpsExpense = 0;
+
+  for (const t of cashTransactions) {
+    if (!matchesPeriod(t.date)) continue;
+    if (isNonOperationalCashTransaction(t)) continue;
+
+    const amt = Math.max(0, Math.round(Number(t.amount) || 0));
+    const dayKey = toLocalDateKey(t.date);
+
+    if (t.type === "CASH_IN") {
+      totalOperationalCashIn += amt;
+      if (isSalesCashTransaction(t, expenseCategories)) {
+        cashSalesInflow += amt;
+        if (dayKey) getOrCreateDay(dayKey).cashSalesInflow += amt;
+      } else {
+        otherCashInflow += amt;
+      }
+      if (dayKey) getOrCreateDay(dayKey).operationalCashIn += amt;
+    } else if (t.type === "CASH_OUT") {
+      totalOperationalCashOut += amt;
+      if (dayKey) getOrCreateDay(dayKey).operationalCashOut += amt;
+
+      const catType = resolveCategoryType(expenseCategories, t.categoryId);
+      const catText = String(t.category || "").toLowerCase();
+      if (
+        catType === "BAHAN_BAKU" ||
+        t.categoryId === "cat-bahan-baku" ||
+        catText.includes("bahan") ||
+        catText.includes("cogs")
+      ) {
+        actualCogsExpense += amt;
+      } else if (
+        catType === "HRD" ||
+        t.categoryId === "cat-hrd" ||
+        (!t.categoryId && HRD_KEYWORDS.some((kw) => catText.includes(kw)))
+      ) {
+        totalHrdExpense += amt;
+      } else if (
+        catType === "UTILITAS" ||
+        t.categoryId === "cat-utilitas" ||
+        catText.includes("listrik") ||
+        catText.includes("air") ||
+        catText.includes("internet") ||
+        catText.includes("utilitas")
+      ) {
+        totalUtilityExpense += amt;
+      } else {
+        totalGeneralOpsExpense += amt;
+      }
+    }
+  }
+
+  const dailyBreakdown: DailyFinancialBreakdownRow[] = Array.from(dailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, d]) => ({
+      date,
+      recapRevenue: d.recapRevenue,
+      salesTxRevenue: d.salesTxRevenue,
+      cashSalesInflow: d.cashSalesInflow,
+      recognizedRevenue: Math.max(
+        d.recapRevenue,
+        d.salesTxRevenue,
+        d.cashSalesInflow
+      ),
+      operationalCashIn: d.operationalCashIn,
+      operationalCashOut: d.operationalCashOut,
+    }));
+
+  const recognizedRevenue = dailyBreakdown.reduce(
+    (sum, d) => sum + d.recognizedRevenue,
+    0
+  );
+
+  const netOperationalCashFlow = totalOperationalCashIn - totalOperationalCashOut;
+  const effectiveCOGS = theoreticalCOGS > 0 ? theoreticalCOGS : actualCogsExpense;
+  const totalOPEX = totalHrdExpense + totalUtilityExpense + totalGeneralOpsExpense;
+  const grossProfit = Math.round(recognizedRevenue - effectiveCOGS);
+  const netProfit = Math.round(recognizedRevenue - effectiveCOGS - totalOPEX);
+  const netMarginPercent =
+    recognizedRevenue > 0 ? (netProfit / recognizedRevenue) * 100 : 0;
+
+  return {
+    period,
+    recognizedRevenue,
+    recapRevenue,
+    salesTxRevenue,
+    cashSalesInflow,
+    otherCashInflow,
+    totalOperationalCashIn,
+    totalOperationalCashOut,
+    netOperationalCashFlow,
+    theoreticalCOGS,
+    actualCogsExpense,
+    effectiveCOGS,
+    totalHrdExpense,
+    totalUtilityExpense,
+    totalGeneralOpsExpense,
+    totalOPEX,
+    grossProfit,
+    netProfit,
+    netMarginPercent,
+    salesCogsMatchedCount,
+    totalSalesQty,
+    dailyBreakdown,
   };
 }

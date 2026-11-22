@@ -2,6 +2,10 @@ import React, { useState, useMemo } from "react";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import {
+  computePeriodFinancialSummary,
+  isNonOperationalCashTransaction,
+} from "../utils/financeMetrics";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -44,6 +48,9 @@ import { FEATURES } from "../config/features";
 export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const {
     salesTransactions,
+    dailySalesRecaps,
+    recipes,
+    products,
     ingredients,
     stockMovements,
     cashTransactions,
@@ -85,13 +92,13 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   };
 
   const isDateInFilter = (dateStr: string) => {
-    if (filterMonth === -1) return true;
     const d = new Date(dateStr);
+    if (filterMonth === -1) return d.getFullYear() === filterYear;
     return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
   };
 
-  const filteredFinance = cashTransactions.filter((f) =>
-    isDateInFilter(f.date),
+  const filteredFinance = cashTransactions.filter(
+    (f) => isDateInFilter(f.date) && !isNonOperationalCashTransaction(f),
   );
   const filteredSales = salesTransactions.filter((s) => isDateInFilter(s.date));
 
@@ -100,18 +107,48 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     (i) => i.currentStock <= i.minStock,
   );
 
-  // Cashflow
-  const totalCashIn = filteredFinance
-    .filter((f) => f.type === "CASH_IN")
-    .reduce((sum, f) => sum + f.amount, 0);
-  const totalCashOut = filteredFinance
-    .filter((f) => f.type === "CASH_OUT")
-    .reduce((sum, f) => sum + f.amount, 0);
-  const netProfit = totalCashIn - totalCashOut;
-  const totalSalesRevenue = filteredSales.reduce(
-    (sum, s) => sum + s.totalPrice,
-    0,
-  );
+  // Terpusat: Cashflow Operasional & Omzet Penjualan Bebas Double-Count
+  const periodSummary = useMemo(() => {
+    if (filterMonth !== -1) {
+      const pStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
+      return computePeriodFinancialSummary({
+        period: pStr,
+        salesTransactions,
+        dailySalesRecaps,
+        cashTransactions,
+        expenseCategories,
+        recipes,
+        ingredients,
+        products,
+      });
+    }
+    const yearStr = `${filterYear}-`;
+    return computePeriodFinancialSummary({
+      period: "ALL",
+      salesTransactions: salesTransactions.filter((s) => String(s.date).startsWith(yearStr)),
+      dailySalesRecaps: dailySalesRecaps.filter((r) => String(r.date).startsWith(yearStr)),
+      cashTransactions: cashTransactions.filter((c) => String(c.date).startsWith(yearStr)),
+      expenseCategories,
+      recipes,
+      ingredients,
+      products,
+    });
+  }, [
+    filterMonth,
+    filterYear,
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+  ]);
+
+  const totalCashIn = periodSummary.totalOperationalCashIn;
+  const totalCashOut = periodSummary.totalOperationalCashOut;
+  const totalSalesRevenue = periodSummary.recognizedRevenue;
+  const netProfit = Math.max(totalCashIn, totalSalesRevenue) - totalCashOut;
 
   // Account Balances
   const accountBalances = useMemo(() => {
@@ -138,8 +175,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     .slice(0, 5)
     .map(([menuName, quantity]) => ({ menuName, quantity }));
 
-  // Chart Data (Last 7 days or based on month)
-  // Simple monthly aggregation for the chart
+  // Chart Data (Bulanan atau Harian terhubung Rekap, Sales, dan Arus Kas)
   const getDaysInMonth = (month: number, year: number) =>
     new Date(year, month + 1, 0).getDate();
   const daysInMonth =
@@ -147,52 +183,57 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
 
   const chartData = useMemo(() => {
     if (filterMonth === -1) {
-      // Aggregate by month for the whole year
       const monthlyData = Array.from({ length: 12 }, (_, i) => {
-        const monthSales = salesTransactions
-          .filter((s) => {
-            const d = new Date(s.date);
-            return d.getMonth() === i && d.getFullYear() === filterYear;
-          })
-          .reduce((sum, s) => sum + s.totalPrice, 0);
-
-        const monthExpense = cashTransactions
-          .filter((c) => {
-            if (c.type !== 'CASH_OUT') return false;
-            const d = new Date(c.date);
-            return d.getMonth() === i && d.getFullYear() === filterYear;
-          })
-          .reduce((sum, c) => sum + c.amount, 0);
+        const pStr = `${filterYear}-${String(i + 1).padStart(2, "0")}`;
+        const mSum = computePeriodFinancialSummary({
+          period: pStr,
+          salesTransactions,
+          dailySalesRecaps,
+          cashTransactions,
+          expenseCategories,
+          recipes,
+          ingredients,
+          products,
+        });
 
         return {
           name: new Date(filterYear, i).toLocaleString("default", {
             month: "short",
           }),
-          sales: monthSales,
-          expense: monthExpense,
+          sales: Math.max(mSum.recognizedRevenue, mSum.totalOperationalCashIn),
+          expense: mSum.totalOperationalCashOut,
         };
       });
       return monthlyData;
     } else {
-      // Aggregate by day for the selected month
+      const byDayMap = new Map<string, (typeof periodSummary.dailyBreakdown)[number]>(
+        periodSummary.dailyBreakdown.map((d) => [d.date, d])
+      );
       const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
-        const daySales = filteredSales
-          .filter((s) => new Date(s.date).getDate() === i + 1)
-          .reduce((sum, s) => sum + s.totalPrice, 0);
-
-        const dayExpense = filteredFinance
-          .filter((c) => c.type === 'CASH_OUT' && new Date(c.date).getDate() === i + 1)
-          .reduce((sum, c) => sum + c.amount, 0);
+        const dayStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
+        const dayEntry = byDayMap.get(dayStr);
 
         return {
           name: `${i + 1}`,
-          sales: daySales,
-          expense: dayExpense,
+          sales: dayEntry ? Math.max(dayEntry.recognizedRevenue, dayEntry.operationalCashIn) : 0,
+          expense: dayEntry ? dayEntry.operationalCashOut : 0,
         };
       });
       return dailyData;
     }
-  }, [filterMonth, filterYear, filteredSales, salesTransactions, filteredFinance, cashTransactions, daysInMonth]);
+  }, [
+    filterMonth,
+    filterYear,
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    periodSummary,
+    daysInMonth,
+  ]);
 
   // Inventory Valuation
   const totalInventoryValue = ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);

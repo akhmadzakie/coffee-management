@@ -417,7 +417,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   const expiringContracts = useMemo(() => {
     return contracts.filter((c) => {
       const emp = employees.find((e) => e.id === c.employeeId);
-      if (!emp || emp.status !== "AKTIF" || c.status !== "ACTIVE" || !c.endDate) return false;
+      const isAktif = !emp ? false : emp.status === "AKTIF" || (emp.status as any) === "ACTIVE";
+      if (!isAktif || c.status !== "ACTIVE" || !c.endDate) return false;
       const end = new Date(c.endDate);
       return end >= todayDate && end <= thirtyDaysLater;
     });
@@ -426,7 +427,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   const expiredContracts = useMemo(() => {
     return contracts.filter((c) => {
       const emp = employees.find((e) => e.id === c.employeeId);
-      if (!emp || emp.status !== "AKTIF" || c.status !== "ACTIVE" || !c.endDate) return false;
+      const isAktif = !emp ? false : emp.status === "AKTIF" || (emp.status as any) === "ACTIVE";
+      if (!isAktif || c.status !== "ACTIVE" || !c.endDate) return false;
       const end = new Date(c.endDate);
       return end < todayDate;
     });

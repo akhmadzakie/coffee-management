@@ -3,6 +3,11 @@ import { FEATURES } from "../config/features";
 import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
+import {
+  computePeriodFinancialSummary,
+  getSaleTransactionAmount,
+  isNonOperationalCashTransaction,
+} from "../utils/financeMetrics";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ViewState, ManagerApprovalRequest } from "../types";
@@ -67,6 +72,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const store = useStore();
   const {
     salesTransactions,
+    dailySalesRecaps,
+    recipes,
+    products,
     cashTransactions,
     cashAccounts,
     ingredients,
@@ -181,50 +189,76 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  // ─── Filter Data Penjualan & Kas Berdasarkan Periode ───────────────────────
-  const { filteredSales, filteredCashIn, filteredCashOut, filteredTransactions } = useMemo(() => {
-    let sales = [...salesTransactions];
-    let cash = [...cashTransactions];
-
-    if (period === "today") {
-      const todayStr = getLocalDateString(now);
-      sales = sales.filter((s) => s.date.startsWith(todayStr));
-      cash = cash.filter((c) => c.date.startsWith(todayStr));
-    } else if (period === "this_month") {
-      sales = sales.filter((s) => {
-        const d = new Date(s.date);
+  // ─── Filter Data Penjualan, Rekap & Kas Operasional Berdasarkan Periode ─────
+  const {
+    filteredSales,
+    filteredCashIn,
+    filteredCashOut,
+    filteredTransactions,
+    periodSummary,
+  } = useMemo(() => {
+    const matchesPeriodFilter = (dateStr: string) => {
+      if (!dateStr) return false;
+      if (period === "today") {
+        const todayStr = getLocalDateString(now);
+        return dateStr.startsWith(todayStr);
+      }
+      if (period === "this_month") {
+        const d = new Date(dateStr);
         return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-      });
-      cash = cash.filter((c) => {
-        const d = new Date(c.date);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-      });
-    } else if (period === "last_30_days") {
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      sales = sales.filter((s) => new Date(s.date) >= thirtyDaysAgo);
-      cash = cash.filter((c) => new Date(c.date) >= thirtyDaysAgo);
-    } else if (period === "this_year") {
-      sales = sales.filter((s) => new Date(s.date).getFullYear() === currentYear);
-      cash = cash.filter((c) => new Date(c.date).getFullYear() === currentYear);
-    }
+      }
+      if (period === "last_30_days") {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return new Date(dateStr) >= thirtyDaysAgo;
+      }
+      if (period === "this_year") {
+        return new Date(dateStr).getFullYear() === currentYear;
+      }
+      return true;
+    };
 
-    const cashIn = cash.filter((c) => c.type === "IN" || c.type === "CASH_IN").reduce((acc, c) => acc + c.amount, 0);
-    const cashOut = cash.filter((c) => c.type === "OUT" || c.type === "CASH_OUT").reduce((acc, c) => acc + c.amount, 0);
+    const sales = salesTransactions.filter((s) => matchesPeriodFilter(s.date));
+    const recaps = (dailySalesRecaps || []).filter((r) => matchesPeriodFilter(r.date));
+    const cash = cashTransactions.filter(
+      (c) => matchesPeriodFilter(c.date) && !isNonOperationalCashTransaction(c)
+    );
+
+    const summary = computePeriodFinancialSummary({
+      period: "ALL",
+      salesTransactions: sales,
+      dailySalesRecaps: recaps,
+      cashTransactions: cash,
+      expenseCategories: store.expenseCategories || [],
+      recipes: recipes || [],
+      ingredients,
+      products: products || [],
+    });
 
     return {
       filteredSales: sales,
-      filteredCashIn: cashIn,
-      filteredCashOut: cashOut,
+      filteredCashIn: summary.totalOperationalCashIn,
+      filteredCashOut: summary.totalOperationalCashOut,
       filteredTransactions: cash,
+      periodSummary: summary,
     };
-  }, [salesTransactions, cashTransactions, period, currentMonth, currentYear]);
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    store.expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    period,
+    currentMonth,
+    currentYear,
+  ]);
 
   // ─── The Big 4 Executive KPIs ─────────────────────────────────────────────
-  // 1. Total Omzet
-  const totalRevenue = useMemo(() => {
-    const fromSales = filteredSales.reduce((sum, s) => sum + s.totalAmount, 0);
-    return fromSales > 0 ? fromSales : filteredCashIn;
-  }, [filteredSales, filteredCashIn]);
+  // 1. Total Omzet (Terkoneksi ke Rekap Harian, Sales/POS, & Kas Penjualan bebas duplikasi)
+  const totalRevenue = periodSummary.recognizedRevenue > 0
+    ? periodSummary.recognizedRevenue
+    : filteredCashIn;
 
   // 2. Laba Bersih & Profit Margin
   const totalExpenses = filteredCashOut;
@@ -232,18 +266,24 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
   // 3. Average Ticket Value (ATV / Basket Size) & Transaction Count
-  const transactionCount = filteredSales.length > 0 ? filteredSales.length : (filteredTransactions.filter(c => c.type === "IN" || c.type === "CASH_IN").length || 1);
+  const transactionCount = filteredSales.length > 0
+    ? filteredSales.length
+    : (filteredTransactions.filter((c) => (c.type as string) === "IN" || c.type === "CASH_IN").length || 1);
   const averageTicketValue = totalRevenue > 0 ? Math.round(totalRevenue / Math.max(1, transactionCount)) : 0;
 
   // 4. Total Volume Cup / Produk Terjual
   const totalCupsSold = useMemo(() => {
     let count = 0;
-    filteredSales.forEach((s) => {
-      s.items?.forEach((item) => {
-        count += item.quantity || 1;
-      });
+    filteredSales.forEach((s: any) => {
+      if (Array.isArray(s.items) && s.items.length > 0) {
+        s.items.forEach((item: any) => {
+          count += item.quantity || 1;
+        });
+      } else {
+        count += Number(s.quantitySold) || 1;
+      }
     });
-    return count > 0 ? count : Math.round(totalRevenue / 32000); // Estimasi jika belum ada breakdown item
+    return count > 0 ? count : Math.round(totalRevenue / 32000); // Estimasi jika baru input rekap omzet tanpa item
   }, [filteredSales, totalRevenue]);
 
   // Target Run Rate Progress
@@ -252,8 +292,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // Total Likuiditas Kas Bersih (Semua Bank & Kas Fisik)
   const totalCashLiquidity = useMemo(() => {
     return cashTransactions.reduce((acc, t) => {
-      if (t.type === "IN" || t.type === "CASH_IN") return acc + t.amount;
-      if (t.type === "OUT" || t.type === "CASH_OUT") return acc - t.amount;
+      if ((t.type as string) === "IN" || t.type === "CASH_IN") return acc + t.amount;
+      if ((t.type as string) === "OUT" || t.type === "CASH_OUT") return acc - t.amount;
       return acc;
     }, 0);
   }, [cashTransactions]);
@@ -265,31 +305,23 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
   // ─── Unit Economics: 3 Rasio Emas Kafe ─────────────────────────────────────
   // 1. HPP / COGS Ratio (Bahan Baku / Omzet) - Target Sehat: 28% - 35%
-  const cogsExpenses = useMemo(() => {
-    return filteredTransactions
-      .filter((c) => (c.type === "OUT" || c.type === "CASH_OUT") && (c.category?.toLowerCase().includes("bahan") || c.category?.toLowerCase().includes("cogs") || c.category?.toLowerCase().includes("kulakan")))
-      .reduce((sum, c) => sum + c.amount, 0);
-  }, [filteredTransactions]);
+  const cogsExpenses = periodSummary.effectiveCOGS;
   const cogsRatio = totalRevenue > 0 ? (cogsExpenses / totalRevenue) * 100 : 0;
 
   // 2. Labor Cost Ratio (Gaji & Upah / Omzet) - Target Sehat: 15% - 22%
-  const laborExpenses = useMemo(() => {
-    return filteredTransactions
-      .filter((c) => (c.type === "OUT" || c.type === "CASH_OUT") && (c.category?.toLowerCase().includes("gaji") || c.category?.toLowerCase().includes("payroll") || c.category?.toLowerCase().includes("sdm")))
-      .reduce((sum, c) => sum + c.amount, 0);
-  }, [filteredTransactions]);
+  const laborExpenses = periodSummary.totalHrdExpense;
   const laborRatio = totalRevenue > 0 ? (laborExpenses / totalRevenue) * 100 : 0;
 
   // 3. Operating Expense Ratio (Sewa, Utilitas, Listrik / Omzet) - Target Sehat: 12% - 18%
-  const opexExpenses = Math.max(0, totalExpenses - cogsExpenses - laborExpenses);
+  const opexExpenses = periodSummary.totalUtilityExpense + periodSummary.totalGeneralOpsExpense;
   const opexRatio = totalRevenue > 0 ? (opexExpenses / totalRevenue) * 100 : 0;
 
   // ─── Early Warning & Loss Prevention (Deteksi Dini Kebocoran) ──────────────
   // Void / Pembatalan Kasir
   const voidSummary = useMemo(() => {
     const closedShifts = shifts.filter((s) => s.status === "CLOSED");
-    const totalDiscrepancies = closedShifts.reduce((acc, s) => {
-      const diff = Math.abs((s.actualCash || 0) - (s.expectedCash || 0));
+    const totalDiscrepancies = closedShifts.reduce((acc, s: any) => {
+      const diff = Math.abs((s.actualCash ?? s.actualEndingCash ?? 0) - (s.expectedCash ?? s.expectedEndingCash ?? 0));
       return acc + diff;
     }, 0);
     return {
@@ -301,19 +333,21 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   // Waste Cost (Bahan Terbuang)
   const wasteCost = useMemo(() => {
     return stockMovements
-      .filter((m) => m.type === "WASTE" || m.notes?.toLowerCase().includes("waste") || m.notes?.toLowerCase().includes("rusak") || m.notes?.toLowerCase().includes("basi"))
-      .reduce((sum, m) => {
+      .filter((m: any) => m.type === "WASTE" || (m.note || m.notes || "").toLowerCase().includes("waste") || (m.note || m.notes || "").toLowerCase().includes("rusak") || (m.note || m.notes || "").toLowerCase().includes("basi"))
+      .reduce((sum, m: any) => {
         const ing = ingredients.find((i) => i.id === m.ingredientId);
         const costPerUnit = ing?.costPerUnit || 150;
-        return sum + Math.abs(m.amount) * costPerUnit;
+        const qty = Math.abs(Number(m.quantity ?? m.amount ?? 0));
+        return sum + (m.totalCost > 0 ? m.totalCost : qty * costPerUnit);
       }, 0);
   }, [stockMovements, ingredients]);
 
   // Total Diskon yang keluar
   const totalDiscounts = useMemo(() => {
-    return filteredSales.reduce((acc, s) => {
-      const subtotal = s.subtotal || s.totalAmount;
-      const disc = Math.max(0, subtotal - s.totalAmount);
+    return filteredSales.reduce((acc, s: any) => {
+      const saleAmt = getSaleTransactionAmount(s);
+      const subtotal = s.subtotal || saleAmt;
+      const disc = Math.max(0, subtotal - saleAmt);
       return acc + disc;
     }, 0);
   }, [filteredSales]);
@@ -327,41 +361,42 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       const targetDate = new Date(currentYear, currentMonth - i, 1);
       const mIdx = targetDate.getMonth();
       const yIdx = targetDate.getFullYear();
+      const mPeriodStr = `${yIdx}-${String(mIdx + 1).padStart(2, "0")}`;
 
-      const mSales = salesTransactions
-        .filter((s) => {
-          const d = new Date(s.date);
-          return d.getMonth() === mIdx && d.getFullYear() === yIdx;
-        })
-        .reduce((sum, s) => sum + s.totalAmount, 0);
+      const mSum = computePeriodFinancialSummary({
+        period: mPeriodStr,
+        salesTransactions,
+        dailySalesRecaps: dailySalesRecaps || [],
+        cashTransactions,
+        expenseCategories: store.expenseCategories || [],
+        recipes: recipes || [],
+        ingredients,
+        products: products || [],
+      });
 
-      const mCashIn = cashTransactions
-        .filter((c) => {
-          const d = new Date(c.date);
-          return (c.type === "IN" || c.type === "CASH_IN") && d.getMonth() === mIdx && d.getFullYear() === yIdx;
-        })
-        .reduce((sum, c) => sum + c.amount, 0);
-
-      const mCashOut = cashTransactions
-        .filter((c) => {
-          const d = new Date(c.date);
-          return (c.type === "OUT" || c.type === "CASH_OUT") && d.getMonth() === mIdx && d.getFullYear() === yIdx;
-        })
-        .reduce((sum, c) => sum + c.amount, 0);
-
-      const rev = mSales > 0 ? mSales : mCashIn;
-      const profit = Math.max(0, rev - mCashOut);
+      const rev = mSum.recognizedRevenue > 0 ? mSum.recognizedRevenue : mSum.totalOperationalCashIn;
+      const profit = Math.max(0, rev - mSum.totalOperationalCashOut);
 
       months.push({
         month: monthNames[mIdx],
         revenue: rev,
         profit: profit,
-        cogs: 0,
+        cogs: mSum.effectiveCOGS,
       });
     }
 
     return months;
-  }, [salesTransactions, cashTransactions, currentMonth, currentYear]);
+  }, [
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    store.expenseCategories,
+    recipes,
+    ingredients,
+    products,
+    currentMonth,
+    currentYear,
+  ]);
 
   // ─── Peta Jam Sibuk (Peak Hours Analysis) ─────────────────────────────────
   const peakHourData = useMemo(() => {
@@ -373,21 +408,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     ];
 
     filteredSales.forEach((s) => {
+      const amt = getSaleTransactionAmount(s);
       const d = new Date(s.date);
       const h = d.getHours();
 
       if (h >= 7 && h < 11) {
         hourSlots[0].count += 1;
-        hourSlots[0].revenue += s.totalAmount;
+        hourSlots[0].revenue += amt;
       } else if (h >= 11 && h < 15) {
         hourSlots[1].count += 1;
-        hourSlots[1].revenue += s.totalAmount;
+        hourSlots[1].revenue += amt;
       } else if (h >= 15 && h < 19) {
         hourSlots[2].count += 1;
-        hourSlots[2].revenue += s.totalAmount;
+        hourSlots[2].revenue += amt;
       } else {
         hourSlots[3].count += 1;
-        hourSlots[3].revenue += s.totalAmount;
+        hourSlots[3].revenue += amt;
       }
     });
 
@@ -409,13 +445,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const topProducts = useMemo(() => {
     const itemMap = new Map<string, { name: string; qty: number; rev: number }>();
 
-    filteredSales.forEach((s) => {
-      s.items?.forEach((item) => {
-        const existing = itemMap.get(item.name) || { name: item.name, qty: 0, rev: 0 };
-        existing.qty += item.quantity || 1;
-        existing.rev += (item.quantity || 1) * (item.price || 0);
-        itemMap.set(item.name, existing);
-      });
+    filteredSales.forEach((s: any) => {
+      if (Array.isArray(s.items) && s.items.length > 0) {
+        s.items.forEach((item: any) => {
+          const existing = itemMap.get(item.name) || { name: item.name, qty: 0, rev: 0 };
+          existing.qty += item.quantity || 1;
+          existing.rev += (item.quantity || 1) * (item.price || 0);
+          itemMap.set(item.name, existing);
+        });
+      } else if (s.menuName) {
+        const existing = itemMap.get(s.menuName) || { name: s.menuName, qty: 0, rev: 0 };
+        existing.qty += Number(s.quantitySold) || 1;
+        existing.rev += getSaleTransactionAmount(s);
+        itemMap.set(s.menuName, existing);
+      }
     });
 
     return Array.from(itemMap.values()).sort((a, b) => b.rev - a.rev).slice(0, 5);
@@ -431,16 +474,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
   const sdmMetrics = useMemo(() => {
     const currentPeriodStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
-    const activeStaff = employees.filter((e) => e.status === "ACTIVE" || !e.status);
+    const activeStaff = employees.filter(
+      (e) => e.status === "AKTIF" || (e.status as any) === "ACTIVE" || !e.status
+    );
 
     // 1. Total Payroll bulan ini (atau periode terakhir)
     const periodPayrolls = payrollRecords.filter((p) => p.period === currentPeriodStr);
+    const getPayrollVal = (p: any) =>
+      Number(p.netPay) || Number(p.grossPay) || Number(p.netSalary) || Number(p.totalAmount) || 0;
     const totalPayrollAmount = periodPayrolls.length > 0
-      ? periodPayrolls.reduce((sum, p) => sum + (Number(p.netSalary) || Number(p.totalAmount) || 0), 0)
+      ? periodPayrolls.reduce((sum, p) => sum + getPayrollVal(p), 0)
       : payrollRecords.length > 0
       ? payrollRecords
           .slice(-Math.max(1, employees.length))
-          .reduce((sum, p) => sum + (Number(p.netSalary) || Number(p.totalAmount) || 0), 0)
+          .reduce((sum, p) => sum + getPayrollVal(p), 0)
       : 0;
 
     // 2. Tingkat kehadiran presensi
@@ -449,7 +496,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       return d.startsWith(currentPeriodStr);
     });
     const presentCount = periodAttendances.filter((a) =>
-      ["PRESENT", "ON_TIME", "LATE", "APPROVED"].includes(a.status || a.approvalStatus)
+      ["HADIR", "TERLAMBAT", "PRESENT", "ON_TIME", "LATE", "APPROVED"].includes(a.status || a.approvalStatus)
     ).length;
     const attendanceRate = periodAttendances.length > 0
       ? Math.round((presentCount / periodAttendances.length) * 100)
@@ -467,8 +514,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       periodChecklists.forEach((chk) => {
         if (chk.completedTasks && typeof chk.completedTasks === "object") {
           totalCheckedItems += Object.keys(chk.completedTasks).length;
+          totalPossibleItems += chk.totalTasksCount || 15;
+        } else {
+          const cleanCount = Array.isArray(chk.cleaningDone) ? chk.cleaningDone.length : 0;
+          const equipCount = Array.isArray(chk.equipmentChecked) ? chk.equipmentChecked.length : 0;
+          const leaderCount = Array.isArray(chk.leaderTasks) ? chk.leaderTasks.length : 0;
+          const checkedHere = cleanCount + equipCount + leaderCount;
+          totalCheckedItems += checkedHere;
+          totalPossibleItems += Math.max(checkedHere, chk.totalTasksCount || 10);
         }
-        totalPossibleItems += chk.totalTasksCount || 15;
       });
     }
 

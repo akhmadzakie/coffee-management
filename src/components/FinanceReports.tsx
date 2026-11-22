@@ -3,7 +3,11 @@ import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ConfirmModal } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
-import { calculateFnbHealthMetrics } from "../utils/financeMetrics";
+import {
+  calculateFnbHealthMetrics,
+  computePeriodFinancialSummary,
+  isNonOperationalCashTransaction,
+} from "../utils/financeMetrics";
 import {
   Lock,
   Unlock,
@@ -67,6 +71,7 @@ const FinanceReports: React.FC = () => {
     salesTransactions,
     recipes,
     ingredients,
+    products,
     bankReconciliations,
     bankStatementLines,
     budgets,
@@ -116,10 +121,7 @@ const FinanceReports: React.FC = () => {
   const periodTransactions = useMemo(() => {
     return cashTransactions.filter((t) => {
       if (!t.date.startsWith(period)) return false;
-      const ref = String(t.referenceId || "");
-      const cat = String(t.category || "").toLowerCase();
-      if (t.type === "TRANSFER" || ref.startsWith("TRANSFER:") || ref.startsWith("OPENING:")) return false;
-      if (cat === "transfer antar kas" || cat === "saldo awal") return false;
+      if (isNonOperationalCashTransaction(t)) return false;
       return true;
     });
   }, [cashTransactions, period]);
@@ -144,27 +146,37 @@ const FinanceReports: React.FC = () => {
     return bankReconciliations.find((r) => r.period === period) || null;
   }, [bankReconciliations, period]);
 
-  // ─── I. PENDAPATAN OPERASIONAL (REVENUE) ──────────────────────────────────
-  const totalRecapAmount = useMemo(() => {
-    return periodRecaps.reduce((sum, r) => sum + r.totalAmount, 0);
-  }, [periodRecaps]);
+  // ─── I. PENDAPATAN OPERASIONAL (REVENUE) TERPUSAT ───────────────────────────
+  const unifiedPeriodSummary = useMemo(() => {
+    return computePeriodFinancialSummary({
+      period,
+      salesTransactions,
+      dailySalesRecaps,
+      cashTransactions,
+      expenseCategories,
+      payrollRecords,
+      recipes,
+      ingredients,
+      products,
+    });
+  }, [
+    period,
+    salesTransactions,
+    dailySalesRecaps,
+    cashTransactions,
+    expenseCategories,
+    payrollRecords,
+    recipes,
+    ingredients,
+    products,
+  ]);
 
-  const totalSalesAmount = useMemo(() => {
-    return periodSales.reduce((sum, s) => sum + s.totalPrice, 0);
-  }, [periodSales]);
+  const totalRecapAmount = unifiedPeriodSummary.recapRevenue;
+  const totalSalesAmount = unifiedPeriodSummary.salesTxRevenue;
+  const totalCashIn = unifiedPeriodSummary.totalOperationalCashIn;
 
-  const totalCashIn = useMemo(() => {
-    return periodTransactions
-      .filter((t) => t.type === "CASH_IN")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [periodTransactions]);
-
-  // Penjualan Kotor (Gross Sales)
-  const grossSales = useMemo(() => {
-    if (totalRecapAmount > 0) return totalRecapAmount;
-    if (totalSalesAmount > 0) return totalSalesAmount;
-    return totalCashIn;
-  }, [totalRecapAmount, totalSalesAmount, totalCashIn]);
+  // Penjualan Kotor (Gross Sales) menggabungkan Rekap Harian, Item/POS Sales, dan Kas Masuk Penjualan per hari tanpa double-count
+  const grossSales = unifiedPeriodSummary.recognizedRevenue;
 
   const totalDiscountAmount = 0; // Potongan diskon promo
   const totalRefundAmount = 0; // Pengembalian dana / void
@@ -208,23 +220,8 @@ const FinanceReports: React.FC = () => {
       .sort((a, b) => b.amount - a.amount);
   }, [ingredientTransactions, expenseCategories]);
 
-  // HPP Teoretis Berdasarkan Resep (BOM) & Menu Terjual
-  const theoreticalCOGS = useMemo(() => {
-    let total = 0;
-    periodSales.forEach((sale) => {
-      const recipe = recipes.find(
-        (r) => r.menuName.toLowerCase() === sale.menuName.toLowerCase()
-      );
-      if (recipe && recipe.ingredients) {
-        const unitCost = recipe.ingredients.reduce((acc, item) => {
-          const ing = ingredients.find((i) => i.id === item.ingredientId);
-          return acc + (ing ? (ing.costPerUnit || 0) * item.quantity : 0);
-        }, 0);
-        total += unitCost * sale.quantitySold;
-      }
-    });
-    return total;
-  }, [periodSales, recipes, ingredients]);
+  // HPP Teoretis Berdasarkan Resep (BOM) & Katalog Menu Terjual
+  const theoreticalCOGS = unifiedPeriodSummary.theoreticalCOGS;
 
   const effectiveCOGS = totalActualCOGS > 0 ? totalActualCOGS : theoreticalCOGS;
   const foodCostPercentage = netSales > 0 ? (effectiveCOGS / netSales) * 100 : 0;

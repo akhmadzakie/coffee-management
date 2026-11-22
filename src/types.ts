@@ -399,6 +399,9 @@ export interface Settings {
   hasPosSupervisorPin?: boolean;
   autoDeductStockOnSale?: boolean;
   allowNegativeStockSale?: boolean;
+  ingredientCategories?: string[];
+  dailySalesRecaps?: DailySalesRecap[];
+  defaultOverheadPercent?: number;
 }
 
 export interface CashAccount {
@@ -525,6 +528,8 @@ export interface ProductVariant {
   recipe?: RecipeIngredient[]; // Takaran bahan spesifik varian ini
   packagingCost?: number;
   packagingNotes?: string;
+  overheadPercent?: number;
+  wastagePercent?: number;
   estimatedHpp?: number;
   isAvailable: boolean;
 }

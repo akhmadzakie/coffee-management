@@ -12,6 +12,10 @@ import {
   Employee,
   DailySalesRecap,
 } from "../types";
+import {
+  getSaleTransactionAmount,
+  isNonOperationalCashTransaction,
+} from "./financeMetrics";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -727,16 +731,17 @@ export const exportMasterExecutiveReportXlsx = ({
   const wb = XLSX.utils.book_new();
 
   // ─── 1. SHEET 1: RINGKASAN EKSEKUTIF (EXECUTIVE SUMMARY) ──────────────────────
-  const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || (s as any).total || s.totalPrice || 0), 0);
+  const totalGrossSales = sales.reduce((sum, s) => sum + ((s as any).subtotal || getSaleTransactionAmount(s)), 0);
   const totalDiscount = sales.reduce((sum, s) => sum + ((s as any).discount || 0), 0);
-  const totalNetSales = sales.reduce((sum, s) => sum + ((s as any).total || s.totalPrice || 0), 0);
+  const totalNetSales = sales.reduce((sum, s) => sum + getSaleTransactionAmount(s), 0);
   const totalSalesTransactions = sales.length;
   const aov = totalSalesTransactions > 0 ? Math.round(totalNetSales / totalSalesTransactions) : 0;
 
-  const totalCashIn = finance
+  const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
+  const totalCashIn = operationalFinance
     .filter((f) => (f.type as string) === "IN" || (f as any).type === "INCOME" || f.type === "CASH_IN")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
-  const totalCashOut = finance
+  const totalCashOut = operationalFinance
     .filter((f) => (f.type as string) === "OUT" || (f as any).type === "EXPENSE" || f.type === "CASH_OUT")
     .reduce((sum, f) => sum + (f.amount || 0), 0);
 

@@ -274,7 +274,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
           }
         }
 
-        const newEstimatedHpp = Math.round(rawCost + Number(v.packagingCost || 0));
+        const baseCost = rawCost + Number(v.packagingCost || 0);
+        const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
+        const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
+        const newEstimatedHpp = Math.round(baseCost + wastageCost + overheadCost);
         if (newEstimatedHpp !== v.estimatedHpp || (!v.recipe?.length && effectiveRecipe.length > 0)) {
           isProductChanged = true;
           updatedVariantsCount++;
@@ -1548,12 +1551,78 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                               if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
                             });
                           }
+                          const baseCost = rawCost + newPackCost;
+                          const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
+                          const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
                           handleUpdateVariant(idx, {
                             packagingCost: newPackCost,
-                            estimatedHpp: rawCost > 0 ? Math.round(rawCost + newPackCost) : v.estimatedHpp,
+                            estimatedHpp: rawCost > 0 ? Math.round(baseCost + wastageCost + overheadCost) : v.estimatedHpp,
                           });
                         }}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-mono font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
+                        Penyusutan / Wastage (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={v.wastagePercent ?? 0}
+                        onChange={(e) => {
+                          const newWastage = Math.max(0, Number(e.target.value) || 0);
+                          let rawCost = 0;
+                          if (v.recipe && v.recipe.length > 0) {
+                            v.recipe.forEach((ri) => {
+                              const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                              if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
+                            });
+                          }
+                          const baseCost = rawCost + Number(v.packagingCost || 0);
+                          const wastageCost = Math.round(baseCost * (newWastage / 100));
+                          const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
+                          handleUpdateVariant(idx, {
+                            wastagePercent: newWastage,
+                            estimatedHpp: rawCost > 0 ? Math.round(baseCost + wastageCost + overheadCost) : v.estimatedHpp,
+                          });
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-mono font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
+                        Overhead Operasional (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={v.overheadPercent ?? 0}
+                        onChange={(e) => {
+                          const newOverhead = Math.max(0, Number(e.target.value) || 0);
+                          let rawCost = 0;
+                          if (v.recipe && v.recipe.length > 0) {
+                            v.recipe.forEach((ri) => {
+                              const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                              if (ing && ing.costPerUnit) rawCost += ri.quantity * Number(ing.costPerUnit);
+                            });
+                          }
+                          const baseCost = rawCost + Number(v.packagingCost || 0);
+                          const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
+                          const overheadCost = Math.round(baseCost * (newOverhead / 100));
+                          handleUpdateVariant(idx, {
+                            overheadPercent: newOverhead,
+                            estimatedHpp: rawCost > 0 ? Math.round(baseCost + wastageCost + overheadCost) : v.estimatedHpp,
+                          });
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-mono font-bold text-brand-700"
                       />
                     </div>
                   </div>
@@ -1585,9 +1654,12 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                               const ing = ingredients.find((i) => i.id === ri.ingredientId);
                               if (ing && ing.costPerUnit) rawCost += Number(ri.quantity || 0) * Number(ing.costPerUnit);
                             });
+                            const baseCost = rawCost + Number(v.packagingCost || 0);
+                            const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
+                            const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
                             handleUpdateVariant(idx, {
                               recipe: validList,
-                              estimatedHpp: Math.round(rawCost + Number(v.packagingCost || 0)),
+                              estimatedHpp: Math.round(baseCost + wastageCost + overheadCost),
                             });
                           }
                         }}

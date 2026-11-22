@@ -50,7 +50,14 @@ import {
   Promotion,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
-import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
+import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
+import { getLocalDateString } from "../utils/dateUtils";
+import {
+  computePeriodFinancialSummary,
+  DEFAULT_INGREDIENT_CATEGORIES,
+  getSaleTransactionAmount,
+  isSalesCashTransaction,
+} from "../utils/financeMetrics";
 import { get, set, del } from "idb-keyval";
 
 const generateId = () => {
@@ -73,23 +80,23 @@ export const normalizeCashTrxType = (type: any): "CASH_IN" | "CASH_OUT" | "TRANS
 };
 
 export const DEFAULT_INITIAL_INGREDIENTS: Ingredient[] = [
-  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Coffee", costPerUnit: 250, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 250000, storageLocation: "BAR" },
-  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Dairy", costPerUnit: 18.5, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 18500, storageLocation: "CHILLER" },
-  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Pemanis", costPerUnit: 35, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 35000, storageLocation: "DRY_STORAGE" },
+  { id: "ing-coffee-beans", name: "House Blend Espresso Beans", unit: "gr", currentStock: 4500, minStock: 1000, category: "Biji Kopi", costPerUnit: 250, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 250000, storageLocation: "BAR" },
+  { id: "ing-fresh-milk", name: "Fresh Milk UHT Greenfields", unit: "ml", currentStock: 18000, minStock: 5000, category: "Susu & Dairy", costPerUnit: 18.5, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 18500, storageLocation: "CHILLER" },
+  { id: "ing-aren-padat", name: "Gula Aren Batok Organik", unit: "gr", currentStock: 8000, minStock: 2000, category: "Sirup & Pemanis", costPerUnit: 35, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 35000, storageLocation: "DRY_STORAGE" },
   { id: "ing-air", name: "Air Bersih Galon RO", unit: "ml", currentStock: 50000, minStock: 10000, category: "Air & Es", costPerUnit: 0.5, purchaseUnit: "Galon (19L)", conversionFactor: 19000, purchasePrice: 9500, storageLocation: "BAR" },
-  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Pemanis", costPerUnit: 16, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 16000, storageLocation: "DRY_STORAGE" },
-  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Kondimen Olahan", costPerUnit: 38, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "BAR" },
-  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Kondimen Olahan", costPerUnit: 12, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 12000, storageLocation: "BAR" },
+  { id: "ing-gula-pasir", name: "Gula Pasir Kristal Putih", unit: "gr", currentStock: 12000, minStock: 3000, category: "Sirup & Pemanis", costPerUnit: 16, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 16000, storageLocation: "DRY_STORAGE" },
+  { id: "ing-aren-cair", name: "Gula Aren Cair Racikan", unit: "ml", currentStock: 2400, minStock: 800, category: "Bahan Olahan", costPerUnit: 38, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "BAR" },
+  { id: "ing-simple-syrup", name: "Simple Syrup (1:1)", unit: "ml", currentStock: 3200, minStock: 1000, category: "Bahan Olahan", costPerUnit: 12, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 12000, storageLocation: "BAR" },
   { id: "ing-ice-cube", name: "Es Batu Kristal Tube", unit: "gr", currentStock: 25000, minStock: 5000, category: "Air & Es", costPerUnit: 2, purchaseUnit: "Plastik (10Kg)", conversionFactor: 10000, purchasePrice: 20000, storageLocation: "BAR" },
-  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Kitchen", costPerUnit: 16, purchaseUnit: "Karung (25Kg)", conversionFactor: 25000, purchasePrice: 400000, storageLocation: "KITCHEN" },
-  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Kitchen", costPerUnit: 58, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 58000, storageLocation: "KITCHEN" },
-  { id: "ing-bawang-merah", name: "Bawang Merah Kupas", unit: "gr", currentStock: 3000, minStock: 1000, category: "Kitchen", costPerUnit: 38, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "KITCHEN" },
-  { id: "ing-cabai-rawit", name: "Cabai Rawit Merah Segar", unit: "gr", currentStock: 2000, minStock: 800, category: "Kitchen", costPerUnit: 60, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 60000, storageLocation: "KITCHEN" },
-  { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Kitchen", costPerUnit: 32, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 32000, storageLocation: "KITCHEN" },
-  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Kondimen Olahan", costPerUnit: 48, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 48000, storageLocation: "KITCHEN" },
-  { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Kitchen", costPerUnit: 18, purchaseUnit: "Jerigen (5L)", conversionFactor: 5000, purchasePrice: 90000, storageLocation: "KITCHEN" },
-  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bakery", costPerUnit: 6500, purchaseUnit: "Dus (20pcs)", conversionFactor: 20, purchasePrice: 130000, storageLocation: "BAKERY" },
-  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bakery", costPerUnit: 140, purchaseUnit: "Pack (250g)", conversionFactor: 250, purchasePrice: 35000, storageLocation: "CHILLER" },
+  { id: "ing-beras", name: "Beras Pulen Pandan Wangi", unit: "gr", currentStock: 15000, minStock: 5000, category: "Bahan Kitchen", costPerUnit: 16, purchaseUnit: "Karung (25Kg)", conversionFactor: 25000, purchasePrice: 400000, storageLocation: "KITCHEN" },
+  { id: "ing-ayam-fillet", name: "Daging Ayam Fillet Paha", unit: "gr", currentStock: 4800, minStock: 1500, category: "Bahan Kitchen", costPerUnit: 58, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 58000, storageLocation: "KITCHEN" },
+  { id: "ing-bawang-merah", name: "Bawang Merah Kupas", unit: "gr", currentStock: 3000, minStock: 1000, category: "Bahan Kitchen", costPerUnit: 38, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 38000, storageLocation: "KITCHEN" },
+  { id: "ing-cabai-rawit", name: "Cabai Rawit Merah Segar", unit: "gr", currentStock: 2000, minStock: 800, category: "Bahan Kitchen", costPerUnit: 60, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 60000, storageLocation: "KITCHEN" },
+  { id: "ing-minyak-kelapa", name: "Minyak Kelapa Asli", unit: "ml", currentStock: 4000, minStock: 1000, category: "Bahan Kitchen", costPerUnit: 32, purchaseUnit: "Liter", conversionFactor: 1000, purchasePrice: 32000, storageLocation: "KITCHEN" },
+  { id: "ing-sambal-matah", name: "Sambal Matah Matang", unit: "gr", currentStock: 1800, minStock: 500, category: "Bahan Olahan", costPerUnit: 48, purchaseUnit: "Kg", conversionFactor: 1000, purchasePrice: 48000, storageLocation: "KITCHEN" },
+  { id: "ing-minyak-goreng", name: "Minyak Goreng Sawit", unit: "ml", currentStock: 10000, minStock: 3000, category: "Bahan Kitchen", costPerUnit: 18, purchaseUnit: "Jerigen (5L)", conversionFactor: 5000, purchasePrice: 90000, storageLocation: "KITCHEN" },
+  { id: "ing-adonan-croissant", name: "Dough Croissant Butter 70g", unit: "pcs", currentStock: 40, minStock: 15, category: "Bahan Bakery", costPerUnit: 6500, purchaseUnit: "Dus (20pcs)", conversionFactor: 20, purchasePrice: 130000, storageLocation: "BAKERY" },
+  { id: "ing-butter", name: "French Pure Butter Elle & Vire", unit: "gr", currentStock: 2500, minStock: 500, category: "Bahan Bakery", costPerUnit: 140, purchaseUnit: "Pack (250g)", conversionFactor: 250, purchasePrice: 35000, storageLocation: "CHILLER" },
   { id: "ing-sabun-cuci", name: "Sunlight Sabun Cuci Piring (Jerigen 5L)", unit: "jerigen", currentStock: 2, minStock: 1, category: "Kebersihan & Operasional", costPerUnit: 45000, purchaseUnit: "Jerigen (5L)", conversionFactor: 1, purchasePrice: 45000, storageLocation: "OPERATIONAL" },
   { id: "ing-plastik-sampah", name: "Plastik Sampah Hitam 80x100 (Pack)", unit: "pack", currentStock: 5, minStock: 2, category: "Kebersihan & Operasional", costPerUnit: 18000, purchaseUnit: "Pack", conversionFactor: 1, purchasePrice: 18000, storageLocation: "OPERATIONAL" },
 ];
@@ -129,7 +136,7 @@ export const DEFAULT_BATCH_PREPARATIONS: BatchPreparation[] = [
     id: "bp-cold-brew",
     name: "Cold Brew Concentrate",
     division: "BAR",
-    targetIngredientId: "ing-coffee-beans",
+    targetIngredientId: "ing-cold-brew",
     targetIngredientName: "Cold Brew Concentrate",
     yieldQuantity: 1200,
     yieldUnit: "ml",
@@ -410,6 +417,7 @@ interface StoreContextType {
   dailySalesRecaps: DailySalesRecap[];
   addDailySalesRecap: (recap: Omit<DailySalesRecap, "id" | "createdAt">) => void;
   deleteDailySalesRecap: (id: string) => void;
+  syncMissingSalesToCashFlow: (targetAccountId?: string) => { syncedCount: number; syncedAmount: number };
   salesImportLogs: SalesImportLog[];
   auditLogs: AuditLog[];
 
@@ -568,7 +576,11 @@ interface StoreContextType {
   executeBatchCook: (batchPrepId: string, multiplier?: number, notes?: string) => { success: boolean; message: string };
 
   addStockMovement: (movement: Omit<StockMovement, "id">) => void;
-  addSalesTransactions: (transactions: Omit<SalesTransaction, "id">[], fileName?: string) => void;
+  addSalesTransactions: (
+    transactions: Omit<SalesTransaction, "id">[],
+    fileName?: string,
+    targetCashAccountId?: string
+  ) => { count: number; cashSyncedAmount: number; stockDeductedCount: number };
 
   // Sync Status
   isSyncing: boolean;
@@ -1174,6 +1186,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               : (settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
                   ? settings.shiftDefinitions
                   : DEFAULT_SHIFT_DEFINITIONS),
+            ingredientCategories: Array.isArray(s.ingredientCategories) && s.ingredientCategories.length > 0
+              ? s.ingredientCategories
+              : (settings?.ingredientCategories && settings.ingredientCategories.length > 0
+                  ? settings.ingredientCategories
+                  : DEFAULT_INGREDIENT_CATEGORIES),
+            dailySalesRecaps: Array.isArray(s.dailySalesRecaps)
+              ? s.dailySalesRecaps
+              : settings?.dailySalesRecaps,
+            defaultOverheadPercent: s.defaultOverheadPercent !== undefined
+              ? Number(s.defaultOverheadPercent)
+              : (settings?.defaultOverheadPercent ?? 10),
             enableStoreSalesBonus: s.enableStoreSalesBonus !== false,
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
             enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),
@@ -1182,6 +1205,22 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             allowNegativeStockSale: s.allowNegativeStockSale !== false,
           };
           setSettings(newSettings);
+          if (Array.isArray(s.dailySalesRecaps) && s.dailySalesRecaps.length > 0) {
+            setDailySalesRecaps((prev) => {
+              const byId = new Map<string, DailySalesRecap>();
+              s.dailySalesRecaps.forEach((r: DailySalesRecap) => byId.set(r.id, r));
+              prev.forEach((r) => {
+                if (!byId.has(r.id)) byId.set(r.id, r);
+              });
+              const merged = Array.from(byId.values()).sort((a, b) =>
+                b.date.localeCompare(a.date)
+              );
+              try {
+                localStorage.setItem("app_daily_sales_recaps", JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
           try {
             localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
           } catch {}
@@ -2320,9 +2359,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         id: newIngId,
         name: bp.targetIngredientName || bp.name,
         unit: bp.yieldUnit,
-        currentStock: yieldedQty,
+        // Stok diisi oleh addStockMovement("IN", yieldedQty) di bawah agar tidak terhitung 2x
+        currentStock: 0,
         minStock: Math.round(bp.yieldQuantity * 0.5),
-        category: "Kondimen Olahan",
+        category: "Bahan Olahan",
         costPerUnit: batchUnitCost,
       };
       setIngredients((prev) => [...prev, newIng]);
@@ -2817,7 +2857,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addSalesTransactions = (
     transactions: Omit<SalesTransaction, "id">[],
-    fileName: string = "Import Penjualan Excel"
+    fileName: string = "Import Penjualan Excel",
+    targetCashAccountId?: string
   ) => {
     const logId = generateId();
     const newTxs: SalesTransaction[] = transactions.map((t) => ({
@@ -2837,8 +2878,135 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     setSalesTransactions((prev) => [...newTxs, ...prev]);
     setSalesImportLogs((prev) => [newLog, ...prev]);
+
+    const changedDomains: string[] = ["sales_transactions", "sales_import_logs"];
+
+    // 1. Sinkronkan ke Arus Kas per tanggal (cegah duplikasi bila tanggal tsb sudah punya rekap/POS cash-in)
+    const toDateKey = (raw: string | undefined | null): string => {
+      const s = String(raw || "").trim();
+      if (!s) return "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      const parsed = new Date(s);
+      return Number.isNaN(parsed.getTime()) ? s.slice(0, 10) : getLocalDateString(parsed);
+    };
+
+    const revenueByDate = new Map<string, number>();
+    newTxs.forEach((tx) => {
+      const dayKey = toDateKey(tx.date);
+      if (!dayKey) return;
+      const amt = Math.max(0, getSaleTransactionAmount(tx));
+      if (amt > 0) {
+        revenueByDate.set(dayKey, (revenueByDate.get(dayKey) || 0) + amt);
+      }
+    });
+
+    const existingRecapDates = new Set(
+      dailySalesRecaps.map((r) => toDateKey(r.date)).filter(Boolean)
+    );
+    const existingCashSalesDates = new Set(
+      cashTransactions
+        .filter((c) => isSalesCashTransaction(c, expenseCategories))
+        .map((c) => toDateKey(c.date))
+        .filter(Boolean)
+    );
+
+    const targetAccount =
+      (targetCashAccountId && cashAccounts.find((a) => a.id === targetCashAccountId)) ||
+      cashAccounts.find((a) => a.isDefault) ||
+      cashAccounts.find((a) => a.type === "CASH") ||
+      cashAccounts[0];
+
+    let cashSyncedAmount = 0;
+    const cashEntriesToAdd: CashTransaction[] = [];
+    if (targetAccount && revenueByDate.size > 0) {
+      revenueByDate.forEach((dayAmount, dayKey) => {
+        if (!existingRecapDates.has(dayKey) && !existingCashSalesDates.has(dayKey)) {
+          const roundedAmt = Math.round(dayAmount);
+          cashSyncedAmount += roundedAmt;
+          cashEntriesToAdd.push({
+            id: generateId(),
+            accountId: targetAccount.id,
+            type: "CASH_IN",
+            amount: roundedAmt,
+            category: "Penjualan Menu & Kasir",
+            categoryId: "cat-penjualan",
+            description: `Omzet Penjualan (${fileName} • ${dayKey})`,
+            date: dayKey,
+            referenceId: `sales-log-${logId}-${dayKey}`,
+            createdBy: currentUser?.name || "Finance",
+          });
+        }
+      });
+    }
+
+    if (cashEntriesToAdd.length > 0) {
+      setCashTransactions((prev) => [...prev, ...cashEntriesToAdd]);
+      changedDomains.push("cash_transactions");
+    }
+
+    // 2. Potong stok bahan baku otomatis sesuai resep produk bila diaktifkan
+    let stockDeductedCount = 0;
+    if (settings.autoDeductStockOnSale !== false) {
+      const usageByIng = new Map<string, { qty: number; menus: Set<string> }>();
+      newTxs.forEach((tx) => {
+        const qtySold = Number(tx.quantitySold) || 0;
+        if (qtySold <= 0 || !tx.menuName) return;
+        const usages = resolveOrderItemIngredients(
+          { menuName: tx.menuName, quantity: qtySold },
+          recipes,
+          products,
+          ingredients
+        );
+        usages.forEach((u) => {
+          if (!u.ingredientId || u.totalQuantity <= 0) return;
+          const cur = usageByIng.get(u.ingredientId) || { qty: 0, menus: new Set<string>() };
+          cur.qty += u.totalQuantity;
+          cur.menus.add(tx.menuName);
+          usageByIng.set(u.ingredientId, cur);
+        });
+      });
+
+      if (usageByIng.size > 0) {
+        const nowIso = new Date().toISOString();
+        const movementsToAdd: StockMovement[] = [];
+        usageByIng.forEach((info, ingId) => {
+          const ing = ingredients.find((i) => i.id === ingId);
+          if (!ing) return;
+          stockDeductedCount++;
+          const sampleMenus = Array.from(info.menus).slice(0, 3).join(", ");
+          movementsToAdd.push({
+            id: generateId(),
+            ingredientId: ingId,
+            type: "OUT",
+            quantity: Number(info.qty.toFixed(2)),
+            unitCost: ing.costPerUnit || 0,
+            totalCost: Math.round((ing.costPerUnit || 0) * info.qty),
+            date: nowIso,
+            note: `Penjualan (${fileName}): ${sampleMenus}${info.menus.size > 3 ? ", ..." : ""}`,
+            createdBy: currentUser?.name || "System Import",
+          } as any);
+        });
+
+        if (movementsToAdd.length > 0) {
+          setStockMovements((prev) => [...prev, ...movementsToAdd]);
+          setIngredients((prev) =>
+            prev.map((ing) => {
+              const info = usageByIng.get(ing.id);
+              if (!info) return ing;
+              return {
+                ...ing,
+                currentStock: Math.max(0, Number((ing.currentStock - info.qty).toFixed(2))),
+              };
+            })
+          );
+          changedDomains.push("ingredients", "stock_movements");
+        }
+      }
+    }
+
     writeAuditLog("CREATE", "sales_transactions", logId);
-    markChanged("sales_transactions", "sales_import_logs");
+    markChanged(...changedDomains);
+    return { count: newTxs.length, cashSyncedAmount, stockDeductedCount };
   };
 
   const addDailySalesRecap = (recap: Omit<DailySalesRecap, "id" | "createdAt">) => {
@@ -2853,6 +3021,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try {
         localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
       } catch {}
+      setSettings((sPrev) => {
+        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
+        try {
+          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
+        } catch {}
+        return nextSettings;
+      });
       return updated;
     });
 
@@ -2863,8 +3038,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addCashTransaction({
           accountId: cashAcc.id,
           type: "CASH_IN",
-          amount: newRecord.cashAmount,
-          category: "cat-penjualan",
+          amount: Math.round(newRecord.cashAmount),
+          category: "Penjualan Menu & Kasir",
+          categoryId: "cat-penjualan",
           description: `Omzet Penjualan Tunai (${newRecord.date})${newRecord.notes ? ` - ${newRecord.notes}` : ""}`,
           date: newRecord.date,
           referenceId: newId,
@@ -2885,8 +3061,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         addCashTransaction({
           accountId: bankAcc.id,
           type: "CASH_IN",
-          amount: nonCashTotal,
-          category: "cat-penjualan",
+          amount: Math.round(nonCashTotal),
+          category: "Penjualan Menu & Kasir",
+          categoryId: "cat-penjualan",
           description: `Omzet Non-Tunai (${parts}) - ${newRecord.date}`,
           date: newRecord.date,
           referenceId: newId,
@@ -2895,7 +3072,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     writeAuditLog("CREATE", "daily_sales_recap", newId);
-    markChanged("cash_transactions");
+    markChanged("cash_transactions", "settings");
   };
 
   const deleteDailySalesRecap = (id: string) => {
@@ -2904,10 +3081,66 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try {
         localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
       } catch {}
+      setSettings((sPrev) => {
+        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
+        try {
+          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
+        } catch {}
+        return nextSettings;
+      });
       return updated;
     });
+    setCashTransactions((prev) => prev.filter((t) => t.referenceId !== id));
     writeAuditLog("DELETE", "daily_sales_recap", id);
-    markChanged();
+    markChanged("cash_transactions", "settings");
+  };
+
+  const syncMissingSalesToCashFlow = (targetAccountId?: string) => {
+    const summary = computePeriodFinancialSummary({
+      period: "ALL",
+      salesTransactions,
+      dailySalesRecaps,
+      cashTransactions,
+      expenseCategories,
+      recipes,
+      ingredients,
+      products,
+    });
+    const targetAcc =
+      (targetAccountId && cashAccounts.find((a) => a.id === targetAccountId)) ||
+      cashAccounts.find((a) => a.isDefault) ||
+      cashAccounts.find((a) => a.type === "CASH") ||
+      cashAccounts[0];
+    if (!targetAcc) return { syncedCount: 0, syncedAmount: 0 };
+
+    const toCreate: CashTransaction[] = [];
+    let syncedAmount = 0;
+
+    summary.dailyBreakdown.forEach((day) => {
+      const gap = Math.round(day.recognizedRevenue - day.cashSalesInflow);
+      if (gap > 0) {
+        syncedAmount += gap;
+        toCreate.push({
+          id: generateId(),
+          accountId: targetAcc.id,
+          type: "CASH_IN",
+          amount: gap,
+          category: "Penjualan Menu & Kasir",
+          categoryId: "cat-penjualan",
+          description: `Sinkronisasi Omzet Penjualan (${day.date})`,
+          date: day.date,
+          referenceId: `sync-sales-${day.date}`,
+          createdBy: currentUser?.name || "System Sync",
+        });
+      }
+    });
+
+    if (toCreate.length > 0) {
+      setCashTransactions((prev) => [...prev, ...toCreate]);
+      writeAuditLog("CREATE", "cash_transactions", `sync-sales-${toCreate.length}`);
+      markChanged("cash_transactions");
+    }
+    return { syncedCount: toCreate.length, syncedAmount };
   };
 
   if (!isAuthLoaded) {
@@ -2934,6 +3167,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         dailySalesRecaps,
         addDailySalesRecap,
         deleteDailySalesRecap,
+        syncMissingSalesToCashFlow,
         salesImportLogs,
         auditLogs,
         suppliers,
