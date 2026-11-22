@@ -43,6 +43,7 @@ import { formatCurrency } from "../utils/format";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportXlsx";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CurrencyInput } from "./common/CurrencyInput";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomSelect } from "./common/CustomSelect";
 import { PosManagerPinModal } from "./pos/PosManagerPinModal";
@@ -2553,12 +2554,10 @@ export const Sales = () => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <input
-                          type="number"
-                          min="0"
+                        <CurrencyInput
                           placeholder="0"
                           value={recapForm.cashAmount}
-                          onChange={(e) => setRecapForm({ ...recapForm, cashAmount: e.target.value })}
+                          onValueChange={(raw) => setRecapForm({ ...recapForm, cashAmount: raw })}
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
                         />
                       </div>
@@ -2571,12 +2570,10 @@ export const Sales = () => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <input
-                          type="number"
-                          min="0"
+                        <CurrencyInput
                           placeholder="0"
                           value={recapForm.qrisAmount}
-                          onChange={(e) => setRecapForm({ ...recapForm, qrisAmount: e.target.value })}
+                          onValueChange={(raw) => setRecapForm({ ...recapForm, qrisAmount: raw })}
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
                         />
                       </div>
@@ -2589,12 +2586,10 @@ export const Sales = () => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <input
-                          type="number"
-                          min="0"
+                        <CurrencyInput
                           placeholder="0"
                           value={recapForm.edcAmount}
-                          onChange={(e) => setRecapForm({ ...recapForm, edcAmount: e.target.value })}
+                          onValueChange={(raw) => setRecapForm({ ...recapForm, edcAmount: raw })}
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
                         />
                       </div>
@@ -2607,12 +2602,10 @@ export const Sales = () => {
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rp</span>
-                        <input
-                          type="number"
-                          min="0"
+                        <CurrencyInput
                           placeholder="0"
                           value={recapForm.transferAmount}
-                          onChange={(e) => setRecapForm({ ...recapForm, transferAmount: e.target.value })}
+                          onValueChange={(raw) => setRecapForm({ ...recapForm, transferAmount: raw })}
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-900 text-base sm:text-xs"
                         />
                       </div>

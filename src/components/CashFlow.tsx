@@ -9,6 +9,7 @@ import { CustomSelect } from "./common/CustomSelect";
 import { motion, AnimatePresence } from "motion/react";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CurrencyInput } from "./common/CurrencyInput";
 import {
   TrendingUp,
   TrendingDown,
@@ -118,6 +119,7 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
     isReadOnly,
     expenseCategories,
     restoreDefaultExpenseCategories,
+    restoreMissingCashPositions,
     salesTransactions,
     salesImportLogs,
     closedPeriods,
@@ -1669,13 +1671,37 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               </div>
             </div>
             {!isReadOnly && (
-              <button
-                onClick={openAddAccountModal}
-                className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Pos Kas</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const posRes = restoreMissingCashPositions();
+                    const defaultCatCount = restoreDefaultExpenseCategories ? restoreDefaultExpenseCategories() : 0;
+                    const totalRecoveredPos = posRes.addedAccountCount;
+                    const totalRecoveredCats = posRes.addedCategoryCount + defaultCatCount;
+                    if (totalRecoveredPos > 0 || totalRecoveredCats > 0) {
+                      toast.success(
+                        `Berhasil memulihkan ${totalRecoveredPos} Pos Kas dan ${totalRecoveredCats} Pos Kategori.`
+                      );
+                    } else {
+                      toast.info("Semua Pos Kas & Pos Kategori yang tercatat di transaksi sudah lengkap.");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200/80 active:scale-95 text-amber-800 transition-all cursor-pointer"
+                  title="Cek dan pulihkan pos kas atau pos kategori yang hilang dari riwayat transaksi"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Pulihkan Pos</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openAddAccountModal}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Pos Kas</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -1684,16 +1710,29 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
               <div>
                 <p className="font-bold text-sm">Belum Ada Pos Kas Terdaftar</p>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  Buat minimal satu pos kas (contoh: "Kas Tunai Operasional" atau "Bank BCA") untuk mulai mencatat buku kas.
+                  Buat minimal satu pos kas (contoh: "Kas Tunai Operasional" atau "Bank BCA") atau pulihkan dari transaksi sebelumnya.
                 </p>
               </div>
               {!isReadOnly && (
-                <button
-                  onClick={openAddAccountModal}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
-                >
-                  Buat Pos Kas Baru
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const posRes = restoreMissingCashPositions();
+                      toast.success(`Berhasil memulihkan ${posRes.addedAccountCount} Pos Kas.`);
+                    }}
+                    className="px-3.5 py-2 bg-white hover:bg-amber-100 active:scale-95 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Pulihkan Pos Kas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openAddAccountModal}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    Buat Pos Kas Baru
+                  </button>
+                </div>
               )}
             </div>
           ) : (
@@ -2663,12 +2702,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                             Rp
                           </span>
-                          <input
-                            type="number"
+                          <CurrencyInput
                             value={formAmount}
-                            onChange={(e) => setFormAmount(e.target.value)}
+                            onValueChange={(raw) => setFormAmount(raw)}
                             required
-                            min="1"
                             placeholder="0"
                             className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
                           />
@@ -3044,13 +3081,11 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                         >
                                           Harga / {row.unit} (Rp)
                                         </label>
-                                        <input
-                                          type="number"
-                                          step="any"
-                                          min="0"
+                                        <CurrencyInput
+                                          allowDecimals
                                           value={row.unitPrice}
-                                          onChange={(e) =>
-                                            handleItemRowChange(row.id, "unitPrice", e.target.value)
+                                          onValueChange={(raw) =>
+                                            handleItemRowChange(row.id, "unitPrice", raw)
                                           }
                                           placeholder="0"
                                           className="w-full px-2.5 py-2 text-sm sm:text-xs font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -3062,12 +3097,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                                         <label className="block text-[10px] font-bold text-brand-700 mb-1 truncate">
                                           Harga Total Item (Rp)
                                         </label>
-                                        <input
-                                          type="number"
-                                          min="0"
+                                        <CurrencyInput
                                           value={row.totalPrice}
-                                          onChange={(e) =>
-                                            handleItemRowChange(row.id, "totalPrice", e.target.value)
+                                          onValueChange={(raw) =>
+                                            handleItemRowChange(row.id, "totalPrice", raw)
                                           }
                                           placeholder="0"
                                           className="w-full px-2.5 py-2 text-sm sm:text-xs font-extrabold font-mono border border-brand-300 bg-brand-50/40 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -3439,12 +3472,10 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                             Rp
                           </span>
-                          <input
-                            type="number"
+                          <CurrencyInput
                             value={formAmount}
-                            onChange={(e) => setFormAmount(e.target.value)}
+                            onValueChange={(raw) => setFormAmount(raw)}
                             required
-                            min="1"
                             placeholder="0"
                             className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white transition-all"
                           />
@@ -3653,11 +3684,9 @@ export const CashFlow: React.FC<CashFlowProps> = ({ onNavigate }) => {
                             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
                               Rp
                             </span>
-                            <input
-                              type="number"
-                              min="0"
+                            <CurrencyInput
                               value={accOpeningBalance}
-                              onChange={(e) => setAccOpeningBalance(e.target.value)}
+                              onValueChange={(raw) => setAccOpeningBalance(raw)}
                               placeholder="0 (Kosongkan jika mulai dari Rp 0)"
                               className="w-full pl-9 pr-3.5 py-2.5 text-sm sm:text-xs font-extrabold font-mono border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50 focus:bg-white"
                             />

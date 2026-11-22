@@ -4,6 +4,7 @@ import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
 import { CustomSelect } from "./common/CustomSelect";
+import { CurrencyInput } from "./common/CurrencyInput";
 import { calculateHppWithOverheadPercentage } from "../utils/financeMetrics";
 import {
   ViewState,
@@ -1613,13 +1614,11 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-slate-500">Biaya: Rp</span>
-                      <input
-                        type="number"
-                        min="0"
+                      <CurrencyInput
                         value={pack.cost}
                         disabled={!pack.isIncluded}
-                        onChange={(e) => handleUpdatePackagingCost(pack.id, Number(e.target.value))}
-                        className={`w-20 px-2 py-1 text-base sm:text-xs font-bold font-mono rounded-lg border text-right focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+                        onValueChange={(_, num) => handleUpdatePackagingCost(pack.id, num)}
+                        className={`w-24 px-2 py-1 text-base sm:text-xs font-bold font-mono rounded-lg border text-right focus:outline-none focus:ring-1 focus:ring-brand-500 ${
                           pack.isIncluded
                             ? "bg-white border-brand-300 text-brand-950"
                             : "bg-slate-100 border-slate-200 text-slate-400"
@@ -1812,12 +1811,9 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">
                       Rp
                     </span>
-                    <input
-                      type="number"
-                      step="500"
-                      min="1000"
+                    <CurrencyInput
                       value={targetSellingPrice}
-                      onChange={(e) => setTargetSellingPrice(Math.max(0, Number(e.target.value)))}
+                      onValueChange={(_, num) => setTargetSellingPrice(Math.max(0, num))}
                       className="w-full pl-11 pr-4 py-3 text-base sm:text-lg font-black font-mono bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                   </div>

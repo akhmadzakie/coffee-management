@@ -51,11 +51,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
 import { CustomSelect } from "./common/CustomSelect";
+import { CurrencyInput } from "./common/CurrencyInput";
 import { Recipe, RecipeIngredient, Ingredient, ViewState, StockOpname, StockOpnameItem } from "../types";
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
-  initialTab?: "ingredients" | "movements" | "opnames" | "recipes" | "waste";
+  initialTab?: "ingredients" | "categories" | "movements" | "opnames" | "recipes" | "waste";
 }
 
 export const getIngredientCategoryIcon = (categoryName: string) => {
@@ -367,7 +368,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     return "ALL";
   }, [userDivision]);
 
-  const [activeTab, setActiveTab] = useState<"ingredients" | "movements" | "opnames" | "recipes" | "waste">(
+  const [activeTab, setActiveTab] = useState<"ingredients" | "categories" | "movements" | "opnames" | "recipes" | "waste">(
     initialTab || "ingredients"
   );
   const [searchTerm, setSearchTerm] = useState("");
@@ -622,7 +623,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   const latestDraft = activeDrafts.length > 0 ? activeDrafts[activeDrafts.length - 1] : null;
 
   // Open Modal for New Ingredient (Bahan Baku Mentah atau Bahan Olahan)
-  const handleOpenAddIngredient = (mode: "MENTAH" | "OLAHAN" = "MENTAH") => {
+  const handleOpenAddIngredient = (mode: "MENTAH" | "OLAHAN" = "MENTAH", presetCat?: string) => {
     setEditingIngredient(null);
     setIngredientEntryMode(mode);
     setIsInlineNewCatOpen(false);
@@ -634,7 +635,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       setIngredientForm({
         code: `OLH-${Math.floor(100 + Math.random() * 900)}`,
         name: "",
-        category: "Bahan Olahan",
+        category: presetCat || "Bahan Olahan",
         storageLocation: defaultLoc,
         unit: "ml",
         usePurchaseUnit: false,
@@ -651,7 +652,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       setIngredientForm({
         code: `BB-${Math.floor(100 + Math.random() * 900)}`,
         name: "",
-        category: selectedCategory !== "ALL" ? selectedCategory : "Biji Kopi",
+        category: presetCat || (selectedCategory !== "ALL" ? selectedCategory : "Biji Kopi"),
         storageLocation: defaultLoc,
         unit: "gr",
         usePurchaseUnit: true,
@@ -1548,6 +1549,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full xl:w-auto">
           {[
             { id: "ingredients", label: `Daftar Bahan Baku (${ingredients.length})` },
+            { id: "categories", label: `Kategori Bahan (${ingredientCategoriesList.length})` },
             { id: "movements", label: "Mutasi & Pemakaian" },
             { id: "opnames", label: "Stok Opname" },
             { id: "recipes", label: `Resep Baku (${recipes.length})` },
@@ -1577,8 +1579,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 w-full xl:w-auto xl:justify-end overflow-x-auto no-scrollbar shrink-0">
-          {activeTab === "ingredients" && !isReadOnly && currentUser?.role !== "LEADER" && (
+          {activeTab === "ingredients" && !isReadOnly && (
             <>
+              {currentUser?.role !== "LEADER" && (
               <CsvImportExport
                 onImport={handleImportIngredients}
                 templateFilename="Template_Master_Bahan_Baku.xlsx"
@@ -1671,6 +1674,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   "Catatan Tambahan": i.notes || "",
                 }))}
               />
+              )}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -1693,6 +1697,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>+ Bahan Olahan</span>
               </motion.button>
+              {currentUser?.role !== "LEADER" && (
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -1704,6 +1709,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <ArrowRight className="w-4 h-4 text-brand-600 shrink-0" />
                 <span>Ambil ke Bar / Dapur</span>
               </motion.button>
+              )}
+              {currentUser?.role !== "LEADER" && (
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -1714,7 +1721,35 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Tambah Bahan Baku</span>
               </motion.button>
+              )}
             </>
+          )}
+
+          {activeTab === "categories" && !isReadOnly && (
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
+                onClick={() => handleOpenAddIngredient("OLAHAN", "Bahan Olahan")}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>+ Bahan Olahan</span>
+              </motion.button>
+              {currentUser?.role !== "LEADER" && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  type="button"
+                  onClick={() => handleOpenAddIngredient("MENTAH")}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Plus className="w-4 h-4 shrink-0" />
+                  <span>Tambah Bahan Baku</span>
+                </motion.button>
+              )}
+            </div>
           )}
 
           {activeTab === "movements" && !isReadOnly && (
@@ -1900,8 +1935,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </div>
             </div>
 
-            {/* Row 2: Category Horizontal Scrolling Pills */}
+            {/* Row 2: Category Horizontal Scrolling Pills (Atur Kategori selalu terlihat di kiri) */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("categories")}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/25 shadow-2xs"
+                  title="Buka pengaturan kategori bahan baku & olahan"
+                >
+                  <Sliders className="w-3.5 h-3.5 shrink-0" />
+                  <span>Atur Kategori</span>
+                </button>
+              )}
               {[{ id: "ALL", name: "Semua Kategori" }, ...ingredientCategoriesList.map((c) => ({ id: c, name: c }))].map((cat) => {
                 const IconComponent = cat.id === "ALL" ? Package : getIngredientCategoryIcon(cat.id);
                 const isSelected = selectedCategory === cat.id;
@@ -1930,17 +1976,6 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   </button>
                 );
               })}
-              {!isReadOnly && (
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border border-dashed border-brand-300 bg-brand-50/40 text-brand-700 hover:bg-brand-50"
-                  title="Kelola daftar kategori bahan baku & olahan"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Atur Kategori</span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -2122,6 +2157,199 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 1B: PENGATURAN KATEGORI BAHAN BAKU & BAHAN OLAHAN ────────── */}
+      {activeTab === "categories" && (
+        <div className="space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs p-5 sm:p-6 space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-200/70 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                    Pengaturan Kategori Bahan Baku &amp; Bahan Olahan
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Kelola pengelompokan stok seperti <strong className="text-slate-700 dark:text-slate-200">Bahan Olahan</strong>, <strong className="text-slate-700 dark:text-slate-200">Biji Kopi</strong>, <strong className="text-slate-700 dark:text-slate-200">Topping</strong>, dan kategori khusus lainnya agar tertata rapi.
+                  </p>
+                </div>
+              </div>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddIngredient("OLAHAN", "Bahan Olahan")}
+                  className="self-start lg:self-auto flex items-center gap-1.5 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-500/30 rounded-2xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                >
+                  <Flame className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Input Bahan Olahan Baru</span>
+                </button>
+              )}
+            </div>
+
+            {!isReadOnly && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const added = handleAddCategory(newCategoryName);
+                  if (added) setNewCategoryName("");
+                }}
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700"
+              >
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Tambah kategori baru (mis. Topping & Jelly, Sauce Racikan, Frozen Food)..."
+                  className="flex-1 px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Kategori</span>
+                </button>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {ingredientCategoriesList.map((catName) => {
+                const CatIcon = getIngredientCategoryIcon(catName);
+                const itemCount = ingredients.filter((i) =>
+                  matchesIngredientCategory(i.category, catName)
+                ).length;
+                const isEditing = editingCatOld === catName;
+                const isProtected = catName.toLowerCase() === "lainnya";
+                const isOlahan = catName.toLowerCase().includes("olahan");
+
+                return (
+                  <div
+                    key={catName}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                      isOlahan
+                        ? "bg-gradient-to-br from-amber-50/70 via-white to-white dark:from-amber-500/10 dark:via-slate-900 dark:to-slate-900 border-amber-200/80 dark:border-amber-500/30"
+                        : "bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/90 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div className="space-y-2.5">
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                          Ubah Nama Kategori
+                        </label>
+                        <input
+                          type="text"
+                          value={editingCatNew}
+                          onChange={(e) => setEditingCatNew(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 rounded-xl border border-brand-300 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none"
+                          autoFocus
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCatOld(null);
+                              setEditingCatNew("");
+                            }}
+                            className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveRenameCategory(catName)}
+                            className="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs cursor-pointer"
+                          >
+                            Simpan
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                                isOlahan
+                                  ? "bg-amber-100/80 dark:bg-amber-500/20 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300"
+                                  : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-700 text-brand-600 dark:text-brand-300"
+                              }`}
+                            >
+                              <CatIcon className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-extrabold text-sm text-slate-900 dark:text-slate-100 truncate">
+                                {catName}
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
+                                {itemCount} bahan terdaftar
+                              </p>
+                            </div>
+                          </div>
+                          {!isReadOnly && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCatOld(catName);
+                                  setEditingCatNew(catName);
+                                }}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                title="Ubah nama kategori"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              {!isProtected && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCatToDelete(catName)}
+                                  className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                  title="Hapus kategori"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategory(catName);
+                              setActiveTab("ingredients");
+                            }}
+                            className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-300 transition-colors cursor-pointer"
+                          >
+                            Lihat Bahan &rarr;
+                          </button>
+                          {!isReadOnly && (isOlahan || currentUser?.role !== "LEADER") && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleOpenAddIngredient(
+                                  isOlahan ? "OLAHAN" : "MENTAH",
+                                  catName
+                                )
+                              }
+                              className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-brand-300 text-[11px] font-bold text-brand-700 dark:text-brand-300 transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>{isOlahan ? "Buat Olahan" : "Tambah Bahan"}</span>
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -3705,13 +3933,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-bold text-slate-700">Kategori</label>
                     {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={() => setIsInlineNewCatOpen((v) => !v)}
-                        className="text-[11px] font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
-                      >
-                        {isInlineNewCatOpen ? "Tutup" : "+ Kategori Baru"}
-                      </button>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryModalOpen(true)}
+                          className="text-[11px] font-bold text-slate-500 hover:text-brand-700 cursor-pointer"
+                        >
+                          Atur Kategori
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsInlineNewCatOpen((v) => !v)}
+                          className="text-[11px] font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
+                        >
+                          {isInlineNewCatOpen ? "Tutup" : "+ Kategori Baru"}
+                        </button>
+                      </div>
                     )}
                   </div>
                   <CustomSelect
@@ -3789,11 +4026,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
                         Total Biaya 1 Batch (Rp)
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <CurrencyInput
                         value={batchTotalCost}
-                        onChange={(e) => setBatchTotalCost(Math.max(0, Number(e.target.value) || 0))}
+                        onValueChange={(_, num) => setBatchTotalCost(Math.max(0, num))}
                         className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
@@ -3933,12 +4168,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
                             Rp
                           </span>
-                          <input
-                            type="number"
+                          <CurrencyInput
                             required
-                            min="0"
                             value={ingredientForm.purchasePrice}
-                            onChange={(e) => setIngredientForm({ ...ingredientForm, purchasePrice: Number(e.target.value) })}
+                            onValueChange={(_, num) => setIngredientForm({ ...ingredientForm, purchasePrice: num })}
                             className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
                         </div>
@@ -3980,12 +4213,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <label className="block text-[11px] font-bold text-slate-800 mb-1">
                         Harga Modal Satuan (Rp/{ingredientForm.unit})
                       </label>
-                      <input
-                        type="number"
+                      <CurrencyInput
+                        allowDecimals
                         required
-                        min="0"
                         value={ingredientForm.costPerUnit}
-                        onChange={(e) => setIngredientForm({ ...ingredientForm, costPerUnit: Number(e.target.value) })}
+                        onValueChange={(_, num) => setIngredientForm({ ...ingredientForm, costPerUnit: num })}
                         className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>

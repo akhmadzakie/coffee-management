@@ -57,6 +57,7 @@ import {
   DEFAULT_INGREDIENT_CATEGORIES,
   getSaleTransactionAmount,
   isSalesCashTransaction,
+  recoverOrphanCashAccountsAndCategories,
 } from "../utils/financeMetrics";
 import { get, set, del } from "idb-keyval";
 
@@ -437,12 +438,16 @@ interface StoreContextType {
   setEmployeeShifts: (shifts: EmployeeShift[]) => void;
   kpiRecords: KPIRecord[];
 
-  // Fase 1: Expense Categories
+  // Fase 1: Expense Categories & Pos Kas Recovery
   expenseCategories: ExpenseCategory[];
   addExpenseCategory: (cat: ExpenseCategory) => void;
   updateExpenseCategory: (cat: ExpenseCategory) => void;
   deleteExpenseCategory: (id: string) => void;
   restoreDefaultExpenseCategories: () => number;
+  restoreMissingCashPositions: () => {
+    addedAccountCount: number;
+    addedCategoryCount: number;
+  };
 
   // Fase 2: Finance
   budgets: Budget[];
@@ -673,10 +678,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     return defaultSettings;
   });
 
-  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
-  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(
-    [],
-  );
+  const [cashAccounts, setCashAccounts] = useState<CashAccount[]>(() => {
+    try {
+      const cached = localStorage.getItem("app_cash_accounts_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() => {
+    try {
+      const cached = localStorage.getItem("app_cash_transactions_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
     try {
       const saved = localStorage.getItem("app_ingredients_cache");
@@ -1071,6 +1092,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (isSyncingRef.current && !isManual) return;
     if (hasLocalChanges.current && !isManual) return;
 
+    let didLoadAuthenticatedData = false;
     try {
       if (isManual) setIsSyncing(true);
       const { sessionKey } = getAuthStorageKeys();
@@ -1115,21 +1137,23 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
         // Jika server melaporkan data tidak berubah sejak sync terakhir, selesai seketika (35 byte)!
         if (data.notModified) {
+          didLoadAuthenticatedData = true;
           setLastSyncTime(new Date());
           return;
         }
 
+        didLoadAuthenticatedData = true;
         if (data.v) {
           serverVersionRef.current = data.v;
         }
 
         isApplyingServerUpdate.current = true;
 
-        if (Array.isArray(data.cash_accounts))
-          setCashAccounts(data.cash_accounts);
-        if (Array.isArray(data.cash_transactions))
-          setCashTransactions(
-            data.cash_transactions.map((tx: any) => {
+        const incomingAccounts: CashAccount[] = Array.isArray(data.cash_accounts)
+          ? data.cash_accounts
+          : cashAccounts;
+        const normalizedTransactions: CashTransaction[] = Array.isArray(data.cash_transactions)
+          ? data.cash_transactions.map((tx: any) => {
               let parsedItems = Array.isArray(tx.items) ? tx.items : undefined;
               if (!parsedItems && typeof tx.itemsJson === "string" && tx.itemsJson.trim()) {
                 try {
@@ -1143,7 +1167,44 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                 items: parsedItems,
               };
             })
-          );
+          : cashTransactions;
+
+        let loadedCategories: ExpenseCategory[] =
+          Array.isArray(data.expense_categories) && data.expense_categories.length > 0
+            ? data.expense_categories
+            : expenseCategories;
+
+        try {
+          const restoredOnce = localStorage.getItem("julia_restored_default_cats_v2");
+          if (!restoredOnce) {
+            const existingIds = new Set(loadedCategories.map((c: any) => c.id));
+            const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id));
+            if (missingDefaults.length > 0) {
+              loadedCategories = [...loadedCategories, ...missingDefaults];
+            }
+            localStorage.setItem("julia_restored_default_cats_v2", "1");
+          }
+        } catch {}
+
+        // Pulihkan otomatis Pos Kas dan Pos Kategori kustom jika ada transaksi yang kehilangan induknya
+        const recovery = recoverOrphanCashAccountsAndCategories({
+          cashAccounts: incomingAccounts,
+          cashTransactions: normalizedTransactions,
+          expenseCategories: loadedCategories,
+        });
+
+        setCashAccounts(recovery.recoveredAccounts);
+        setCashTransactions(normalizedTransactions);
+        setExpenseCategories(recovery.recoveredCategories);
+        try {
+          if (recovery.recoveredAccounts.length > 0) {
+            localStorage.setItem("app_cash_accounts_cache", JSON.stringify(recovery.recoveredAccounts));
+          }
+          localStorage.setItem("app_cash_transactions_cache", JSON.stringify(normalizedTransactions));
+          if (recovery.recoveredCategories.length > 0) {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(recovery.recoveredCategories));
+          }
+        } catch {}
         if (data.settings) {
           const s = data.settings;
           const parseArr = (v: any) => {
@@ -1257,27 +1318,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
         if (Array.isArray(data.employeeShifts)) setEmployeeShifts(data.employeeShifts);
         if (Array.isArray(data.kpiRecords)) setKpiRecords(data.kpiRecords);
-        // Fase 1-4
-        if (Array.isArray(data.expense_categories) && data.expense_categories.length > 0) {
-          let loadedCategories: ExpenseCategory[] = data.expense_categories;
-          try {
-            const restoredOnce = localStorage.getItem("julia_restored_default_cats_v2");
-            if (!restoredOnce) {
-              const existingIds = new Set(loadedCategories.map((c: any) => c.id));
-              const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id));
-              if (missingDefaults.length > 0) {
-                loadedCategories = [...loadedCategories, ...missingDefaults];
-                dirtyTablesRef.current.add("expense_categories");
-                hasLocalChanges.current = true;
-              }
-              localStorage.setItem("julia_restored_default_cats_v2", "1");
-            }
-          } catch {}
-          setExpenseCategories(loadedCategories);
-          try {
-            localStorage.setItem("app_expense_categories_cache", JSON.stringify(loadedCategories));
-          } catch {}
-        }
+        // Fase 1-4 (expense_categories sudah di-set dan dipulihkan bersama cash_accounts di atas)
         if (Array.isArray(data.budgets)) setBudgets(data.budgets);
         if (Array.isArray(data.bank_reconciliations)) setBankReconciliations(data.bank_reconciliations);
         if (Array.isArray(data.bank_statement_lines)) setBankStatementLines(data.bank_statement_lines);
@@ -1330,10 +1371,30 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       );
       isApplyingServerUpdate.current = false;
     } finally {
-      setIsLoaded(true);
+      if (didLoadAuthenticatedData) {
+        setIsLoaded(true);
+      }
       if (isManual) setIsSyncing(false);
     }
   };
+
+  // Sinkronisasi ulang begitu status autentikasi selesai dimuat dan pengguna terautentikasi
+  useEffect(() => {
+    if (isAuthLoaded && currentUser?.id) {
+      fetchFromServer(true);
+    }
+  }, [isAuthLoaded, currentUser?.id]);
+
+  // Simpan cache lokal pos kas & transaksi kas hanya setelah data terautentikasi dimuat
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      if (cashAccounts.length > 0) {
+        localStorage.setItem("app_cash_accounts_cache", JSON.stringify(cashAccounts));
+      }
+      localStorage.setItem("app_cash_transactions_cache", JSON.stringify(cashTransactions));
+    } catch {}
+  }, [isLoaded, cashAccounts, cashTransactions]);
 
   useEffect(() => {
     fetchFromServer(false);
@@ -3264,6 +3325,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           const missingCount = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id)).length;
           dispatch({ type: "RESTORE_DEFAULT_EXPENSE_CATEGORIES" });
           return missingCount;
+        },
+        restoreMissingCashPositions: () => {
+          const existingCatIds = new Set(expenseCategories.map((c) => c.id));
+          const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingCatIds.has(d.id));
+          const baseCats = [...expenseCategories, ...missingDefaults];
+          const recovery = recoverOrphanCashAccountsAndCategories({
+            cashAccounts,
+            cashTransactions,
+            expenseCategories: baseCats,
+          });
+          if (recovery.addedAccounts.length > 0) {
+            setCashAccounts(recovery.recoveredAccounts);
+            markChanged("cash_accounts");
+          }
+          if (recovery.addedCategories.length > 0 || missingDefaults.length > 0) {
+            setExpenseCategories(recovery.recoveredCategories);
+            markChanged("expense_categories");
+          }
+          return {
+            addedAccountCount: recovery.addedAccountCount,
+            addedCategoryCount: recovery.addedCategoryCount + missingDefaults.length,
+          };
         },
         budgets,
         addBudget: (b: Budget) => dispatch({ type: "ADD_BUDGET", payload: b }),

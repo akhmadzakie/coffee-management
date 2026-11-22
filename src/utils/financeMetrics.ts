@@ -1,4 +1,5 @@
 import {
+  CashAccount,
   CashTransaction,
   DailySalesRecap,
   Employee,
@@ -1001,5 +1002,263 @@ export function computePeriodFinancialSummary(
     salesCogsMatchedCount,
     totalSalesQty,
     dailyBreakdown,
+  };
+}
+
+export interface RecoverCashPositionsParams {
+  cashAccounts: CashAccount[];
+  cashTransactions: CashTransaction[];
+  expenseCategories: ExpenseCategory[];
+}
+
+export interface RecoverCashPositionsResult {
+  recoveredAccounts: CashAccount[];
+  recoveredCategories: ExpenseCategory[];
+  addedAccounts: CashAccount[];
+  addedCategories: ExpenseCategory[];
+  addedAccountCount: number;
+  addedCategoryCount: number;
+}
+
+const SYSTEM_TX_CATEGORY_SKIP = new Set([
+  "",
+  "-",
+  "lainnya",
+  "lain-lain",
+  "penjualan",
+  "penjualan toko",
+  "penjualan menu & kasir",
+  "saldo awal",
+  "transfer",
+  "transfer kas",
+  "transfer internal",
+  "transfer internal kas",
+  "transfer antar kas",
+  "mutasi saldo",
+]);
+
+function inferRecoveredAccountType(
+  name: string,
+  paymentMethod: string,
+  accountId: string
+): CashAccount["type"] {
+  const combined = `${name} ${paymentMethod} ${accountId}`.toLowerCase();
+  if (
+    combined.includes("tabungan") ||
+    combined.includes("cadangan") ||
+    combined.includes("saving")
+  ) {
+    return "SAVINGS";
+  }
+  if (
+    combined.includes("qris") ||
+    combined.includes("gopay") ||
+    combined.includes("ovo") ||
+    combined.includes("dana") ||
+    combined.includes("shopeepay") ||
+    combined.includes("e-wallet") ||
+    combined.includes("ewallet") ||
+    combined.includes("dompet digital")
+  ) {
+    return "E_WALLET";
+  }
+  if (
+    (combined.includes("tunai") ||
+      combined.includes("petty") ||
+      combined.includes("laci") ||
+      combined.includes("drawer") ||
+      combined.includes("cash") ||
+      combined.includes("kas kecil") ||
+      combined.includes("kas operasional")) &&
+    !combined.includes("bank") &&
+    !combined.includes("rekening") &&
+    !combined.includes("bca") &&
+    !combined.includes("mandiri") &&
+    !combined.includes("bri") &&
+    !combined.includes("bni")
+  ) {
+    return "CASH";
+  }
+  return "BANK";
+}
+
+function extractRecoveredAccountName(
+  accountId: string,
+  relatedTransactions: CashTransaction[]
+): string | null {
+  for (const tx of relatedTransactions) {
+    const desc = String(tx.description || "").trim();
+    const ref = String(tx.referenceId || "").trim();
+
+    // Pola Saldo Awal Pembukaan Pos Kas (Nama Pos)
+    const openMatch = /Saldo Awal(?: Pembukaan)? Pos Kas\s*\(([^)]+)\)/i.exec(desc);
+    if (openMatch?.[1]?.trim()) {
+      return openMatch[1].trim();
+    }
+
+    // Pola Rekap Penjualan / Deskripsi POS yang mencantumkan nama rekening
+    if (ref.startsWith("OPENING:") && desc) {
+      const paren = /\(([^)]+)\)/.exec(desc);
+      if (paren?.[1]?.trim()) return paren[1].trim();
+    }
+
+    // Pola Transfer: "Transfer ke Rekening BCA (dari Laci Kasir)" atau "Transfer dari Kas -> Bank BCA"
+    const arrowMatch = /Transfer[^:]*:\s*([^(\n]+?)\s*(?:->|→|ke)\s*([^(\n]+)/i.exec(desc);
+    if (arrowMatch) {
+      if (tx.type === "CASH_OUT" && arrowMatch[1]?.trim()) return arrowMatch[1].trim();
+      if (tx.type === "CASH_IN" && arrowMatch[2]?.trim()) return arrowMatch[2].trim();
+    }
+
+    const transferTargetMatch = /Transfer\s+(?:ke|dari)\s+([^\(\[\-:]+?)(?:\s*[\(\[]|$)/i.exec(desc);
+    if (transferTargetMatch?.[1]?.trim() && relatedTransactions.length === 1) {
+      const candidate = transferTargetMatch[1].trim();
+      // Jika transaksi tunggal keluar "Transfer ke Tujuan", nama rekening ini adalah pengirimnya bukan tujuan
+      if (tx.type === "CASH_IN" && /Transfer dari/i.test(desc)) return candidate;
+      if (tx.type === "CASH_OUT" && /Transfer ke/i.test(desc)) continue;
+    }
+  }
+
+  // Fallback deskriptif berdasarkan paymentMethod atau ID rekening
+  const firstPm = relatedTransactions
+    .map((t) => String(t.paymentMethod || "").trim())
+    .find(Boolean) || "";
+  const pmLower = firstPm.toLowerCase();
+  const idLower = accountId.toLowerCase();
+
+  if (idLower === "cash-drawer-main" || idLower.includes("cash-drawer")) {
+    return "Laci Kasir Utama";
+  }
+  if (idLower === "bank-bca-main") {
+    return "Rekening Bank / QRIS Utama";
+  }
+
+  const shortTag = accountId.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase() || "POS";
+  if (pmLower.includes("tunai") || pmLower.includes("cash") || idLower.includes("cash")) {
+    return `Pos Kas Tunai (${shortTag})`;
+  }
+  if (pmLower.includes("qris") || pmLower.includes("wallet")) {
+    return `Pos QRIS / Dompet (${shortTag})`;
+  }
+  if (firstPm) {
+    return `Pos ${firstPm} (${shortTag})`;
+  }
+  return `Pos Kas Terpulihkan (${shortTag})`;
+}
+
+/**
+ * Memulihkan secara otomatis Pos Kas (`cash_accounts`) dan Pos Kategori (`expense_categories`)
+ * yang hilang/terhapus dari daftar master namun masih direferensikan oleh transaksi arus kas.
+ */
+export function recoverOrphanCashAccountsAndCategories(
+  params: RecoverCashPositionsParams
+): RecoverCashPositionsResult {
+  const existingAccounts = Array.isArray(params.cashAccounts) ? params.cashAccounts : [];
+  const transactions = Array.isArray(params.cashTransactions) ? params.cashTransactions : [];
+  const existingCategories = Array.isArray(params.expenseCategories) ? params.expenseCategories : [];
+
+  const recoveredAccounts: CashAccount[] = [];
+  const accountIdSet = new Set<string>();
+  const addedAccounts: CashAccount[] = [];
+
+  for (const acc of existingAccounts) {
+    if (!acc?.id || accountIdSet.has(acc.id)) continue;
+    accountIdSet.add(acc.id);
+    recoveredAccounts.push(acc);
+  }
+
+  // Kumpulkan transaksi per accountId yang hilang dari daftar master cashAccounts
+  const orphanTxByAccount = new Map<string, CashTransaction[]>();
+  for (const tx of transactions) {
+    const accId = String(tx?.accountId || "").trim();
+    if (!accId || accountIdSet.has(accId)) continue;
+    const list = orphanTxByAccount.get(accId) || [];
+    list.push(tx);
+    orphanTxByAccount.set(accId, list);
+  }
+
+  for (const [accId, relatedTxs] of orphanTxByAccount.entries()) {
+    const firstPm = relatedTxs.map((t) => String(t.paymentMethod || "")).find(Boolean) || "";
+    const inferredName = extractRecoveredAccountName(accId, relatedTxs) || "Pos Kas Terpulihkan";
+    const inferredType = inferRecoveredAccountType(inferredName, firstPm, accId);
+    const restored: CashAccount = {
+      id: accId,
+      name: inferredName,
+      type: inferredType,
+      isDefault: accId === "cash-drawer-main" || recoveredAccounts.length === 0,
+    };
+    accountIdSet.add(accId);
+    recoveredAccounts.push(restored);
+    addedAccounts.push(restored);
+  }
+
+  // Pastikan selalu ada pos kas dasar bila database benar-benar kosong
+  if (recoveredAccounts.length === 0) {
+    const defaults: CashAccount[] = [
+      { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true },
+      { id: "bank-bca-main", name: "Rekening Bank / QRIS Utama", type: "BANK", isDefault: false },
+    ];
+    for (const def of defaults) {
+      accountIdSet.add(def.id);
+      recoveredAccounts.push(def);
+      addedAccounts.push(def);
+    }
+  }
+
+  // Pulihkan custom ExpenseCategory (Pos Pengeluaran / Pemasukan) yang hilang
+  const recoveredCategories: ExpenseCategory[] = [];
+  const catIdSet = new Set<string>();
+  const catNameSet = new Set<string>();
+  const addedCategories: ExpenseCategory[] = [];
+
+  for (const cat of existingCategories) {
+    if (!cat?.id || catIdSet.has(cat.id)) continue;
+    catIdSet.add(cat.id);
+    catNameSet.add(String(cat.name || "").trim().toLowerCase());
+    recoveredCategories.push(cat);
+  }
+
+  for (const tx of transactions) {
+    if (isNonOperationalCashTransaction(tx)) continue;
+    const rawCatStr = String(tx.category || "").trim();
+    const parts = rawCatStr.split(">").map((p) => p.trim()).filter(Boolean);
+    const leafName = parts.length > 0 ? parts[parts.length - 1] : rawCatStr;
+    const leafLower = leafName.toLowerCase();
+    const txCatId = tx.categoryId ? String(tx.categoryId).trim() : "";
+
+    if (txCatId && catIdSet.has(txCatId)) continue;
+    if (leafName && catNameSet.has(leafLower)) continue;
+    if (!txCatId && (!leafName || SYSTEM_TX_CATEGORY_SKIP.has(leafLower))) continue;
+    if (leafName && SYSTEM_TX_CATEGORY_SKIP.has(leafLower) && !txCatId) continue;
+
+    const newCatId =
+      txCatId ||
+      `cat-recovered-${leafLower.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "custom"}`;
+    if (catIdSet.has(newCatId)) continue;
+
+    const catName = leafName || "Pos Terpulihkan";
+    const isIncome = tx.type === "CASH_IN";
+    const restoredCat: ExpenseCategory = {
+      id: newCatId,
+      name: catName,
+      type: isIncome ? "PENDAPATAN" : "PENGELUARAN",
+      parentId: null,
+      color: isIncome ? "#059669" : "#1b2cc0",
+      icon: "tag",
+      isActive: true,
+      sortOrder: 90,
+    };
+    catIdSet.add(newCatId);
+    catNameSet.add(catName.toLowerCase());
+    recoveredCategories.push(restoredCat);
+    addedCategories.push(restoredCat);
+  }
+
+  return {
+    recoveredAccounts,
+    recoveredCategories,
+    addedAccounts,
+    addedCategories,
+    addedAccountCount: addedAccounts.length,
+    addedCategoryCount: addedCategories.length,
   };
 }

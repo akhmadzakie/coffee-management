@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { CustomSelect } from "./common/CustomSelect";
+import { CurrencyInput } from "./common/CurrencyInput";
 import { formatCurrency } from "../utils/format";
 import {
   ViewState,
@@ -1495,12 +1496,9 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Harga Jual Resmi (Rp)
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="500"
+                      <CurrencyInput
                         value={v.price}
-                        onChange={(e) => handleUpdateVariant(idx, { price: Number(e.target.value) })}
+                        onValueChange={(_, num) => handleUpdateVariant(idx, { price: num })}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
                     </div>
@@ -1508,12 +1506,10 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Estimasi Total HPP (Rp)
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <CurrencyInput
                         value={v.estimatedHpp || 0}
-                        onChange={(e) =>
-                          handleUpdateVariant(idx, { estimatedHpp: Number(e.target.value) })
+                        onValueChange={(_, num) =>
+                          handleUpdateVariant(idx, { estimatedHpp: num })
                         }
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                       />
@@ -1537,12 +1533,9 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
                         Biaya Kemasan (Rp)
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <CurrencyInput
                         value={v.packagingCost || 0}
-                        onChange={(e) => {
-                          const newPackCost = Number(e.target.value);
+                        onValueChange={(_, newPackCost) => {
                           // Recalculate HPP if recipe exists
                           let rawCost = 0;
                           if (v.recipe && v.recipe.length > 0) {

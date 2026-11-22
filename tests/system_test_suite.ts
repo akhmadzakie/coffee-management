@@ -1659,6 +1659,72 @@ test("matchesIngredientCategory & normalizeIngredientCategoryName: Mendukung kat
 });
 
 // -------------------------------------------------------------
+// 22. PENGUJIAN PEMULIHAN POS KAS / KATEGORI & FORMAT NOMINAL TITIK
+// -------------------------------------------------------------
+test("recoverOrphanCashAccountsAndCategories: Memulihkan Pos Kas & Pos Kategori kustom dari transaksi yatim", async () => {
+  const { recoverOrphanCashAccountsAndCategories } = await import("../src/utils/financeMetrics");
+
+  const sampleTxs: CashTransaction[] = [
+    {
+      id: "tx-open-1",
+      accountId: "acc-bca-cabang",
+      type: "CASH_IN",
+      date: "2026-11-20T08:00:00Z",
+      amount: 5000000,
+      description: "Saldo Awal Pembukaan Pos Kas (Rekening BCA Operasional)",
+      category: "Saldo Awal",
+      referenceId: "OPENING:acc-bca-cabang",
+      paymentMethod: "Transfer Bank",
+      createdBy: "Admin",
+    },
+    {
+      id: "tx-out-1",
+      accountId: "acc-bca-cabang",
+      type: "CASH_OUT",
+      date: "2026-11-21T10:00:00Z",
+      amount: 350000,
+      description: "Beli Gelas Cup Custom",
+      category: "Packaging > Cup Sablon Khusus",
+      categoryId: "cat-cup-sablon",
+      paymentMethod: "Transfer Bank",
+      createdBy: "Finance",
+    },
+  ];
+
+  const recovery = recoverOrphanCashAccountsAndCategories({
+    cashAccounts: [{ id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true }],
+    cashTransactions: sampleTxs,
+    expenseCategories: [],
+  });
+
+  assert.strictEqual(recovery.addedAccountCount, 1);
+  const restoredAcc = recovery.recoveredAccounts.find((a) => a.id === "acc-bca-cabang");
+  assert.ok(restoredAcc, "Pos kas BCA yang terhapus harus dipulihkan kembali");
+  assert.strictEqual(restoredAcc.name, "Rekening BCA Operasional");
+  assert.strictEqual(restoredAcc.type, "BANK");
+
+  assert.strictEqual(recovery.addedCategoryCount, 1);
+  const restoredCat = recovery.recoveredCategories.find((c) => c.id === "cat-cup-sablon");
+  assert.ok(restoredCat, "Pos kategori kustom harus dipulihkan dari transaksi");
+  assert.strictEqual(restoredCat.name, "Cup Sablon Khusus");
+});
+
+test("formatThousandInput & parseThousandInput: Memformat pemisah ribuan titik & membaca desimal koma", async () => {
+  const { formatThousandInput, parseThousandInput } = await import("../src/components/common/CurrencyInput");
+
+  assert.strictEqual(formatThousandInput(1500000), "1.500.000");
+  assert.strictEqual(formatThousandInput("25000"), "25.000");
+  assert.strictEqual(formatThousandInput("18.5", true), "18,5");
+  assert.strictEqual(formatThousandInput(12500.75, true), "12.500,75");
+  assert.strictEqual(formatThousandInput(""), "");
+
+  assert.strictEqual(parseThousandInput("1.500.000"), "1500000");
+  assert.strictEqual(parseThousandInput("Rp 250.000"), "250000");
+  assert.strictEqual(parseThousandInput("12.500,75", true), "12500.75");
+  assert.strictEqual(parseThousandInput("18,", true), "18.");
+});
+
+// -------------------------------------------------------------
 // HASIL AKHIR
 // -------------------------------------------------------------
 console.log("\n=========================================================");

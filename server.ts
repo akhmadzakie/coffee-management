@@ -25,6 +25,7 @@ import {
   enrichParsedTransactionWithStore,
   parseSmartCoffeeTextEntry,
 } from "./src/utils/posDomainLogic.ts";
+import { recoverOrphanCashAccountsAndCategories } from "./src/utils/financeMetrics.ts";
 
 const initialSettings = {
   id: "1",
@@ -1167,16 +1168,19 @@ async function startServer() {
 
   const ensureDefaultUsers = async (targetDb: any, existingUsers: any[]) => {
     if (!existingUsers) return initialUsers;
+    const existingIds = new Set(existingUsers.map((u: any) => String(u.id || "")));
     const existingUsernames = new Set(
       existingUsers.map((u: any) => String(u.username || "").toLowerCase())
     );
     const missing = initialUsers.filter(
-      (u: any) => !existingUsernames.has(String(u.username || "").toLowerCase())
+      (u: any) =>
+        !existingIds.has(String(u.id || "")) &&
+        !existingUsernames.has(String(u.username || "").toLowerCase())
     );
     if (missing.length > 0 && targetDb) {
       try {
         const sanitized = missing.map((u: any) => sanitizeUserForInsert(u, u.pin));
-        await targetDb.insert(schema.users).values(sanitized);
+        await targetDb.insert(schema.users).values(sanitized).onConflictDoNothing();
         console.log(`[AutoSeed] Injected ${missing.length} missing default users into database.`);
         return [...existingUsers, ...sanitized];
       } catch (err) {
@@ -1810,7 +1814,7 @@ async function startServer() {
         // Seed default promotions if empty
         if (promotions.length === 0) {
           try {
-            await db.insert(schema.promotions).values(initialPromotions);
+            await db.insert(schema.promotions).values(initialPromotions).onConflictDoNothing();
             promotions = initialPromotions;
           } catch (seedErr) {
             console.warn("Could not seed default promotions:", seedErr);
@@ -1820,7 +1824,7 @@ async function startServer() {
         // Seed default expense categories if empty
         if (expense_categories.length === 0) {
           try {
-            await db.insert(schema.expenseCategories).values(defaultCategories.map(sanitizeExpenseCategory));
+            await db.insert(schema.expenseCategories).values(defaultCategories.map(sanitizeExpenseCategory)).onConflictDoNothing();
             expense_categories = defaultCategories as any;
           } catch (seedErr) {
             console.warn("Expense category seed skipped:", seedErr);
@@ -1833,10 +1837,12 @@ async function startServer() {
             await db.transaction(async (tx) => {
               await tx
                 .insert(schema.users)
-                .values(initialUsers.map((u: any) => sanitizeUserForInsert(u, u.pin)));
+                .values(initialUsers.map((u: any) => sanitizeUserForInsert(u, u.pin)))
+                .onConflictDoNothing();
               await tx
                 .insert(schema.settings)
-                .values([sanitizeSettings(initialSettings)]);
+                .values([sanitizeSettings(initialSettings)])
+                .onConflictDoNothing();
             });
             users = initialUsers as any;
             settings = [initialSettings] as any;
@@ -1847,17 +1853,36 @@ async function startServer() {
           users = (await ensureDefaultUsers(db, users)) as any;
         }
 
-        // Auto seed default cash drawer & bank/QRIS accounts if empty
-        if (cash_accounts.length === 0) {
+        // Auto seed default cash accounts & pulihkan Pos Kas / Pos Kategori yang masih direferensikan cash_transactions
+        const cashRecovery = recoverOrphanCashAccountsAndCategories({
+          cashAccounts: cash_accounts as any[],
+          cashTransactions: cash_transactions as any[],
+          expenseCategories: expense_categories as any[],
+        });
+        if (cashRecovery.addedAccounts.length > 0) {
           try {
-            const defaultAccounts = [
-              { id: "cash-drawer-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true },
-              { id: "bank-bca-main", name: "Rekening Bank / QRIS Utama", type: "BANK", isDefault: false },
-            ];
-            await db.insert(schema.cashAccounts).values(defaultAccounts.map(sanitizeCashAccount));
-            cash_accounts = defaultAccounts as any;
+            await db
+              .insert(schema.cashAccounts)
+              .values(cashRecovery.addedAccounts.map(sanitizeCashAccount))
+              .onConflictDoNothing();
+            cash_accounts = cashRecovery.recoveredAccounts as any;
+            console.log(`[AutoRecover] Memulihkan ${cashRecovery.addedAccounts.length} Pos Kas ke database.`);
           } catch (seedErr) {
-            console.warn("Cash accounts seed skipped:", seedErr);
+            console.warn("Cash accounts recovery/seed skipped:", seedErr);
+            cash_accounts = cashRecovery.recoveredAccounts as any;
+          }
+        }
+        if (cashRecovery.addedCategories.length > 0) {
+          try {
+            await db
+              .insert(schema.expenseCategories)
+              .values(cashRecovery.addedCategories.map(sanitizeExpenseCategory))
+              .onConflictDoNothing();
+            expense_categories = cashRecovery.recoveredCategories as any;
+            console.log(`[AutoRecover] Memulihkan ${cashRecovery.addedCategories.length} Pos Kategori ke database.`);
+          } catch (seedErr) {
+            console.warn("Expense categories recovery skipped:", seedErr);
+            expense_categories = cashRecovery.recoveredCategories as any;
           }
         }
 
@@ -2373,6 +2398,8 @@ async function startServer() {
         bank_statement_lines = undefined;
         closed_periods = undefined;
         expense_categories = undefined;
+        cash_accounts = undefined;
+        cash_transactions = undefined;
         promotions = undefined;
         employees = undefined;
         contracts = undefined;
@@ -2429,7 +2456,9 @@ async function startServer() {
         if (ingredients !== undefined) offlineState.ingredients = ingredients;
         if (recipes !== undefined) offlineState.recipes = recipes;
         if (products !== undefined) offlineState.products = products;
-        if (cash_accounts !== undefined) offlineState.cash_accounts = cash_accounts;
+        if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
+          offlineState.cash_accounts = cash_accounts;
+        }
         if (cash_transactions !== undefined && Array.isArray(cash_transactions)) {
           const protectedPosCash = (offlineState.cash_transactions || []).filter(
             (ct: any) => ct.referenceId && offlineOrderIds.has(String(ct.referenceId))
@@ -2482,7 +2511,7 @@ async function startServer() {
       }
 
       await db.transaction(async (tx) => {
-        // --- SNAPSHOT DATA TRANSAKSIONAL POS & SESI AKTIF AGAR TIDAK TERHAPUS MULTI-DEVICE ---
+        // --- SNAPSHOT DATA TRANSAKSIONAL POS, REKENING KAS & KATEGORI AGAR TIDAK TERHAPUS MULTI-DEVICE ---
         let existingPaidIds = new Set<string>();
         let existingSettingsRow: any = null;
         let protectedPosSales: any[] = [];
@@ -2490,13 +2519,33 @@ async function startServer() {
         let protectedPosMovements: any[] = [];
         let protectedAuditLogs: any[] = [];
         let protectedActiveSessions: any[] = [];
+        let protectedDbAllCashTx: any[] = [];
+        let protectedDbCashAccounts: any[] = [];
+        let protectedDbExpenseCategories: any[] = [];
 
         const needPosOrdersCheck =
           cash_transactions !== undefined ||
           stock_movements !== undefined ||
           sales_transactions !== undefined;
 
+        const needCashSafetySnapshot =
+          needPosOrdersCheck ||
+          cash_accounts !== undefined ||
+          expense_categories !== undefined;
+
         let posOrderIds = new Set<string>();
+        if (needCashSafetySnapshot) {
+          if (cash_transactions !== undefined || cash_accounts !== undefined || expense_categories !== undefined) {
+            protectedDbAllCashTx = await tx.select().from(schema.cashTransactions);
+          }
+          if (cash_accounts !== undefined) {
+            protectedDbCashAccounts = await tx.select().from(schema.cashAccounts);
+          }
+          if (expense_categories !== undefined) {
+            protectedDbExpenseCategories = await tx.select().from(schema.expenseCategories);
+          }
+        }
+
         if (needPosOrdersCheck) {
           const ordRows = await tx.select({ id: schema.orders.id, status: schema.orders.status, receiptNo: schema.orders.receiptNo }).from(schema.orders);
           const voidReceipts = new Set<string>();
@@ -2514,8 +2563,7 @@ async function startServer() {
             protectedPosSales = dbPosSales.filter((s) => !voidReceipts.has(String(s.importLogId)));
           }
           if (cash_transactions !== undefined) {
-            const dbCash = await tx.select().from(schema.cashTransactions);
-            protectedPosCash = dbCash.filter((ct) => ct.referenceId && posOrderIds.has(String(ct.referenceId)));
+            protectedPosCash = protectedDbAllCashTx.filter((ct) => ct.referenceId && posOrderIds.has(String(ct.referenceId)));
           }
           if (stock_movements !== undefined) {
             const dbMoves = await tx.select().from(schema.stockMovements);
@@ -2613,7 +2661,13 @@ async function startServer() {
         if (budgets !== undefined) {
           await tx.delete(schema.budgets);
         }
-        if (expense_categories !== undefined) {
+        // Jangan pernah hapus seluruh kategori atau pos kas jika payload kosong ([]) atau null
+        const hasValidExpenseCategories =
+          Array.isArray(expense_categories) && expense_categories.length > 0;
+        const hasValidCashAccounts =
+          Array.isArray(cash_accounts) && cash_accounts.length > 0;
+
+        if (hasValidExpenseCategories) {
           await tx.delete(schema.expenseCategories);
         }
         if (users !== undefined) {
@@ -2622,7 +2676,7 @@ async function startServer() {
           }
           await tx.delete(schema.users);
         }
-        if (cash_accounts !== undefined) {
+        if (hasValidCashAccounts) {
           await tx.delete(schema.cashAccounts);
         }
         if (settings !== undefined && settings !== null) {
@@ -2633,6 +2687,21 @@ async function startServer() {
         }
 
         // --- PHASE 2: INSERTS (Parent -> Child) ---
+        const effectiveCashTxForRecovery =
+          cash_transactions !== undefined
+            ? mergeByIdPreservingExisting(
+                Array.isArray(cash_transactions) ? cash_transactions : [],
+                protectedPosCash
+              )
+            : protectedDbAllCashTx;
+
+        const referencedAccountIds = new Set(
+          (effectiveCashTxForRecovery || []).map((t: any) => String(t?.accountId || "")).filter(Boolean)
+        );
+        const referencedCategoryIds = new Set(
+          (effectiveCashTxForRecovery || []).map((t: any) => String(t?.categoryId || "")).filter(Boolean)
+        );
+
         let validUserIds: Set<string> | null = null;
         if (users !== undefined && Array.isArray(users)) {
           validUserIds = new Set(users.map((u: any) => String(u.id)));
@@ -2642,9 +2711,18 @@ async function startServer() {
           const incomingSt = Array.isArray(settings) ? settings[0] : settings;
           await tx.insert(schema.settings).values([sanitizeSettings(incomingSt, existingSettingsRow, isPrivilegedSyncUser)]);
         }
-        if (cash_accounts !== undefined) {
-          if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
-            await tx.insert(schema.cashAccounts).values(cash_accounts.map(sanitizeCashAccount));
+        if (hasValidCashAccounts) {
+          const protectedRefAccounts = protectedDbCashAccounts.filter((acc) =>
+            referencedAccountIds.has(String(acc.id))
+          );
+          const mergedCashAccounts = mergeByIdPreservingExisting(cash_accounts, protectedRefAccounts);
+          const { recoveredAccounts } = recoverOrphanCashAccountsAndCategories({
+            cashAccounts: mergedCashAccounts as any[],
+            cashTransactions: effectiveCashTxForRecovery as any[],
+            expenseCategories: (hasValidExpenseCategories ? expense_categories : protectedDbExpenseCategories) as any[],
+          });
+          if (recoveredAccounts.length > 0) {
+            await tx.insert(schema.cashAccounts).values(recoveredAccounts.map(sanitizeCashAccount)).onConflictDoNothing();
           }
         }
         if (users !== undefined) {
@@ -2657,9 +2735,21 @@ async function startServer() {
             );
           }
         }
-        if (expense_categories !== undefined) {
-          if (Array.isArray(expense_categories) && expense_categories.length > 0) {
-            await tx.insert(schema.expenseCategories).values(expense_categories.map(sanitizeExpenseCategory));
+        if (hasValidExpenseCategories) {
+          const protectedRefCategories = protectedDbExpenseCategories.filter((cat) =>
+            referencedCategoryIds.has(String(cat.id))
+          );
+          const mergedCategories = mergeByIdPreservingExisting(expense_categories, protectedRefCategories);
+          const { recoveredCategories } = recoverOrphanCashAccountsAndCategories({
+            cashAccounts: (hasValidCashAccounts ? cash_accounts : protectedDbCashAccounts) as any[],
+            cashTransactions: effectiveCashTxForRecovery as any[],
+            expenseCategories: mergedCategories as any[],
+          });
+          const sortedCategories = [...recoveredCategories].sort((a, b) =>
+            a.parentId && !b.parentId ? 1 : !a.parentId && b.parentId ? -1 : 0
+          );
+          if (sortedCategories.length > 0) {
+            await tx.insert(schema.expenseCategories).values(sortedCategories.map(sanitizeExpenseCategory)).onConflictDoNothing();
           }
         }
         if (budgets !== undefined) {
