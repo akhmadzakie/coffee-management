@@ -394,6 +394,27 @@ async function ensureTables() {
         unit_cost NUMERIC NOT NULL DEFAULT 0,
         notes TEXT
       )`,
+    `CREATE TABLE IF NOT EXISTS daily_sales_recaps (
+        id TEXT PRIMARY KEY,
+        date VARCHAR(50) NOT NULL,
+        shift VARCHAR(50) DEFAULT 'ALL',
+        cash_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        qris_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        edc_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        transfer_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        online_delivery_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        discount_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        refund_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        mdr_fee_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        cash_account_id VARCHAR(255),
+        bank_account_id VARCHAR(255),
+        non_cash_settlement_status VARCHAR(50) DEFAULT 'SETTLED',
+        non_cash_settled_at VARCHAR(100),
+        notes TEXT,
+        recorded_by VARCHAR(255) DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      )`,
     `CREATE TABLE IF NOT EXISTS employees (
         id TEXT PRIMARY KEY,
         username TEXT NOT NULL,
@@ -779,6 +800,8 @@ async function startServer() {
         return schema.stockMovements;
       case "sales_transactions":
         return schema.salesTransactions;
+      case "daily_sales_recaps":
+        return schema.dailySalesRecaps;
       case "sales_import_logs":
         return schema.salesImportLogs;
       case "recipes":
@@ -909,6 +932,28 @@ async function startServer() {
     importLogId: String(s.importLogId || ""),
     paymentMethod: s.paymentMethod ? String(s.paymentMethod) : "CASH",
     orderId: s.orderId ? String(s.orderId) : null,
+  });
+
+  const sanitizeDailySalesRecap = (r: any) => ({
+    id: String(r.id || crypto.randomUUID()),
+    date: String(r.date || new Date().toISOString().slice(0, 10)),
+    shift: String(r.shift || "ALL"),
+    cashAmount: Math.round(Number(r.cashAmount) || 0),
+    qrisAmount: Math.round(Number(r.qrisAmount) || 0),
+    edcAmount: Math.round(Number(r.edcAmount) || 0),
+    transferAmount: Math.round(Number(r.transferAmount) || 0),
+    onlineDeliveryAmount: Math.round(Number(r.onlineDeliveryAmount) || 0),
+    discountAmount: Math.round(Number(r.discountAmount) || 0),
+    refundAmount: Math.round(Number(r.refundAmount) || 0),
+    mdrFeeAmount: Math.round(Number(r.mdrFeeAmount) || 0),
+    totalAmount: Math.round(Number(r.totalAmount) || 0),
+    cashAccountId: r.cashAccountId ? String(r.cashAccountId) : null,
+    bankAccountId: r.bankAccountId ? String(r.bankAccountId) : null,
+    nonCashSettlementStatus: r.nonCashSettlementStatus === "PENDING" ? "PENDING" : "SETTLED",
+    nonCashSettledAt: r.nonCashSettledAt ? String(r.nonCashSettledAt) : null,
+    notes: r.notes ? String(r.notes) : null,
+    recordedBy: String(r.recordedBy || ""),
+    createdAt: String(r.createdAt || new Date().toISOString()),
   });
 
   const sanitizeSalesImportLog = (l: any) => ({
@@ -1418,6 +1463,7 @@ async function startServer() {
     ],
     stock_movements: [],
     sales_transactions: [],
+    daily_sales_recaps: [],
     orders: [],
     order_items: [],
     payments: [],
@@ -1726,6 +1772,7 @@ async function startServer() {
       let ingredients: any[] = [];
       let stock_movements: any[] = [];
       let sales_transactions: any[] = [];
+      let daily_sales_recaps: any[] = [];
       let sales_import_logs: any[] = [];
       let recipes: any[] = [];
       let audit_logs: any[] = [];
@@ -1762,6 +1809,7 @@ async function startServer() {
           ingredients,
           stock_movements,
           sales_transactions,
+          daily_sales_recaps,
           sales_import_logs,
           recipes,
           audit_logs,
@@ -1795,6 +1843,7 @@ async function startServer() {
           db.select().from(schema.ingredients),
           db.select().from(schema.stockMovements),
           db.select().from(schema.salesTransactions),
+          db.select().from(schema.dailySalesRecaps),
           db.select().from(schema.salesImportLogs),
           db.select().from(schema.recipes),
           db.select().from(schema.auditLogs),
@@ -1972,6 +2021,7 @@ async function startServer() {
       };
 
       const rawDivTarget = parseObjSafe(rawSettings.divisionKpiBonusTarget);
+      const cleanDivForMigration = { ...rawDivTarget };
       const allowanceRules = Array.isArray(rawDivTarget.__leaderAllowanceRules)
         ? rawDivTarget.__leaderAllowanceRules
         : (Array.isArray(rawSettings.leaderJobdeskAllowanceRules) ? rawSettings.leaderJobdeskAllowanceRules : []);
@@ -1987,10 +2037,34 @@ async function startServer() {
         : (Array.isArray(rawSettings.ingredientCategories) ? rawSettings.ingredientCategories : undefined);
       delete rawDivTarget.__ingredientCategories;
 
-      const dailySalesRecaps = Array.isArray(rawDivTarget.__dailySalesRecaps)
+      const legacyDailySalesRecaps = Array.isArray(rawDivTarget.__dailySalesRecaps)
         ? rawDivTarget.__dailySalesRecaps
         : (Array.isArray(rawSettings.dailySalesRecaps) ? rawSettings.dailySalesRecaps : undefined);
       delete rawDivTarget.__dailySalesRecaps;
+      delete cleanDivForMigration.__dailySalesRecaps;
+
+      // Migrasi aman data rekap lama dari settings ke tabel relasional daily_sales_recaps (sekali jalan tanpa kehilangan data)
+      if (
+        daily_sales_recaps.length === 0 &&
+        Array.isArray(legacyDailySalesRecaps) &&
+        legacyDailySalesRecaps.length > 0
+      ) {
+        const migratedRecaps = legacyDailySalesRecaps.map(sanitizeDailySalesRecap);
+        try {
+          await db
+            .insert(schema.dailySalesRecaps)
+            .values(migratedRecaps)
+            .onConflictDoNothing();
+          await db
+            .update(schema.settings)
+            .set({ divisionKpiBonusTarget: cleanDivForMigration })
+            .where(eq(schema.settings.id, String(rawSettings.id || "1")));
+          daily_sales_recaps = migratedRecaps;
+        } catch (migErr) {
+          console.warn("Migrasi daily_sales_recaps ditunda:", migErr);
+          daily_sales_recaps = migratedRecaps;
+        }
+      }
 
       const defaultOverheadPercent =
         rawDivTarget.__defaultOverheadPercent !== undefined
@@ -2012,7 +2086,6 @@ async function startServer() {
         leaderJobdeskAllowanceRules: allowanceRules,
         shiftDefinitions: shiftDefs,
         ...(ingredientCategories ? { ingredientCategories } : {}),
-        ...(dailySalesRecaps ? { dailySalesRecaps } : {}),
         ...(defaultOverheadPercent !== undefined && !isNaN(defaultOverheadPercent)
           ? { defaultOverheadPercent }
           : {}),
@@ -2038,6 +2111,7 @@ async function startServer() {
         ingredients,
         stock_movements,
         sales_transactions,
+        daily_sales_recaps,
         sales_import_logs,
         recipes: formatRecipesForClient(recipes),
         audit_logs,
@@ -2369,6 +2443,7 @@ async function startServer() {
         ingredients,
         stock_movements,
         sales_transactions,
+        daily_sales_recaps,
         sales_import_logs,
         recipes,
         audit_logs,
@@ -2402,6 +2477,7 @@ async function startServer() {
         // Cegah tablet kasir menimpa tabel master, payroll, keuangan, atau pengaturan
         users = undefined;
         settings = undefined;
+        daily_sales_recaps = undefined;
         payroll_records = undefined;
         budgets = undefined;
         bank_reconciliations = undefined;
@@ -2435,6 +2511,7 @@ async function startServer() {
         // Staff operasional hanya boleh checklist, absensi, dan sesi
         users = undefined;
         settings = undefined;
+        daily_sales_recaps = undefined;
         payroll_records = undefined;
         budgets = undefined;
         bank_reconciliations = undefined;
@@ -2486,6 +2563,11 @@ async function startServer() {
             String(st.importLogId || "").startsWith("POS-")
           );
           offlineState.sales_transactions = mergeByIdPreservingExisting(sales_transactions, protectedPosSales);
+        }
+        if (daily_sales_recaps !== undefined) {
+          offlineState.daily_sales_recaps = Array.isArray(daily_sales_recaps)
+            ? daily_sales_recaps.map(sanitizeDailySalesRecap)
+            : [];
         }
         if (shifts !== undefined) offlineState.shifts = shifts;
         if (users !== undefined && Array.isArray(users)) {
@@ -2632,6 +2714,9 @@ async function startServer() {
         }
         if (sales_transactions !== undefined) {
           await tx.delete(schema.salesTransactions);
+        }
+        if (daily_sales_recaps !== undefined) {
+          await tx.delete(schema.dailySalesRecaps);
         }
         if (stock_movements !== undefined) {
           await tx.delete(schema.stockMovements);
@@ -2861,6 +2946,14 @@ async function startServer() {
           );
           if (mergedSales.length > 0) {
             await tx.insert(schema.salesTransactions).values(mergedSales.map(sanitizeSalesTransaction));
+          }
+        }
+        if (daily_sales_recaps !== undefined) {
+          if (Array.isArray(daily_sales_recaps) && daily_sales_recaps.length > 0) {
+            await tx
+              .insert(schema.dailySalesRecaps)
+              .values(daily_sales_recaps.map(sanitizeDailySalesRecap))
+              .onConflictDoNothing();
           }
         }
         if (recipes !== undefined) {
@@ -7138,6 +7231,7 @@ ${
         offlineState.order_items = [];
         offlineState.payments = [];
         offlineState.sales_transactions = [];
+        offlineState.daily_sales_recaps = [];
         offlineState.sales_import_logs = [];
         offlineState.shifts = [];
         offlineState.cash_transactions = [];
@@ -7163,6 +7257,7 @@ ${
 
         // Hapus penjualan & mutasi kas
         await tx.delete(schema.salesTransactions);
+        await tx.delete(schema.dailySalesRecaps);
         await tx.delete(schema.salesImportLogs);
         await tx.delete(schema.cashTransactions);
         await tx.delete(schema.shifts);

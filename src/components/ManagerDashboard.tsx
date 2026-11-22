@@ -777,7 +777,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
             <button
               onClick={() => handleOpenCopilot("insights")}
-              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-stone-900 hover:bg-stone-100 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-amber-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent dark:border-amber-400/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
               <span>Buka Copilot Penuh →</span>

@@ -1512,7 +1512,7 @@ export const Sales = () => {
           </div>
 
           {/* Banner Sinkronisasi Otomatis */}
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-50 via-sky-50/60 to-amber-50/50 border border-brand-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-50 via-sky-50/60 to-amber-50/50 dark:from-brand-500/15 dark:via-slate-900 dark:to-amber-500/10 border border-brand-200/80 dark:border-brand-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-brand-600 text-white shadow-xs shrink-0">
                 <RupiahSign className="w-5 h-5" />

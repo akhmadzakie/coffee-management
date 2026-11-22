@@ -1258,7 +1258,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               : (settings?.ingredientCategories && settings.ingredientCategories.length > 0
                   ? settings.ingredientCategories
                   : DEFAULT_INGREDIENT_CATEGORIES),
-            dailySalesRecaps: Array.isArray(s.dailySalesRecaps)
+            dailySalesRecaps: Array.isArray(data.daily_sales_recaps)
+              ? data.daily_sales_recaps
+              : Array.isArray(s.dailySalesRecaps)
               ? s.dailySalesRecaps
               : settings?.dailySalesRecaps,
             defaultOverheadPercent: s.defaultOverheadPercent !== undefined
@@ -1272,21 +1274,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             allowNegativeStockSale: s.allowNegativeStockSale !== false,
           };
           setSettings(newSettings);
-          if (Array.isArray(s.dailySalesRecaps) && s.dailySalesRecaps.length > 0) {
-            setDailySalesRecaps((prev) => {
-              const byId = new Map<string, DailySalesRecap>();
-              s.dailySalesRecaps.forEach((r: DailySalesRecap) => byId.set(r.id, r));
-              prev.forEach((r) => {
-                if (!byId.has(r.id)) byId.set(r.id, r);
-              });
-              const merged = Array.from(byId.values()).sort((a, b) =>
-                b.date.localeCompare(a.date)
-              );
-              try {
-                localStorage.setItem("app_daily_sales_recaps", JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
+          if (!Array.isArray(data.daily_sales_recaps) && Array.isArray(s.dailySalesRecaps)) {
+            const sortedLegacy = [...s.dailySalesRecaps].sort((a: DailySalesRecap, b: DailySalesRecap) =>
+              b.date.localeCompare(a.date)
+            );
+            setDailySalesRecaps(sortedLegacy);
+            try {
+              localStorage.setItem("app_daily_sales_recaps", JSON.stringify(sortedLegacy));
+            } catch {}
           }
           try {
             localStorage.setItem("app_settings_cache", JSON.stringify(newSettings));
@@ -1304,6 +1299,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setStockMovements(data.stock_movements);
         if (Array.isArray(data.sales_transactions))
           setSalesTransactions(data.sales_transactions);
+        if (Array.isArray(data.daily_sales_recaps)) {
+          const sortedRecaps = [...data.daily_sales_recaps].sort(
+            (a: DailySalesRecap, b: DailySalesRecap) => b.date.localeCompare(a.date)
+          );
+          setDailySalesRecaps(sortedRecaps);
+          try {
+            localStorage.setItem("app_daily_sales_recaps", JSON.stringify(sortedRecaps));
+          } catch {}
+        }
         if (Array.isArray(data.sales_import_logs))
           setSalesImportLogs(data.sales_import_logs);
 
@@ -1625,6 +1629,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         recipes: recipes,
         stock_movements: stockMovements,
         sales_transactions: salesTransactions,
+        daily_sales_recaps: dailySalesRecaps,
         sales_import_logs: salesImportLogs,
         audit_logs: auditLogs,
         suppliers,
@@ -1673,6 +1678,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           body: JSON.stringify(payload),
         });
         if (res.ok) {
+          const resData = await res.json().catch(() => null);
+          if (resData?.v) {
+            serverVersionRef.current = resData.v;
+          }
           sentKeys.forEach((k) => dirtyTablesRef.current.delete(k));
           hasLocalChanges.current = dirtyTablesRef.current.size > 0;
           setLastSyncTime(new Date());
@@ -1704,6 +1713,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     batchPreparations,
     stockMovements,
     salesTransactions,
+    dailySalesRecaps,
     salesImportLogs,
     auditLogs,
     suppliers,
@@ -3242,13 +3252,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try {
         localStorage.setItem("app_daily_sales_recaps", JSON.stringify(updated));
       } catch {}
-      setSettings((sPrev) => {
-        const nextSettings = { ...sPrev, dailySalesRecaps: updated };
-        try {
-          localStorage.setItem("app_settings_cache", JSON.stringify(nextSettings));
-        } catch {}
-        return nextSettings;
-      });
       return updated;
     });
   };
@@ -3267,7 +3270,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       setCashTransactions((prev) => [...prev, ...generatedCash]);
     }
     writeAuditLog("CREATE", "daily_sales_recap", newId);
-    markChanged("cash_transactions", "settings");
+    markChanged("cash_transactions", "daily_sales_recaps");
   };
 
   const updateDailySalesRecap = (recap: DailySalesRecap) => {
@@ -3280,7 +3283,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       ...regenerated,
     ]);
     writeAuditLog("UPDATE", "daily_sales_recap", recap.id);
-    markChanged("cash_transactions", "settings");
+    markChanged("cash_transactions", "daily_sales_recaps");
   };
 
   const settleDailySalesRecapNonCash = (
@@ -3306,7 +3309,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     persistDailySalesRecaps((prev) => prev.filter((r) => r.id !== id));
     setCashTransactions((prev) => prev.filter((t) => !isRecapCashRef(t.referenceId, id)));
     writeAuditLog("DELETE", "daily_sales_recap", id);
-    markChanged("cash_transactions", "settings");
+    markChanged("cash_transactions", "daily_sales_recaps");
   };
 
   const syncMissingSalesToCashFlow = (targetAccountId?: string) => {

@@ -282,6 +282,14 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
     /\bborder(-[^\s]+)?\b/.test(buttonClassName) && !/\bborder-none\b/.test(buttonClassName);
   const hasCustomRounded = /\brounded(-[^\s]+)?\b/.test(buttonClassName);
   const hasCustomPadding = /\bp[xy]?-[^\s]+/.test(buttonClassName);
+  const hasCustomTextColor =
+    /\btext-(slate|gray|zinc|neutral|stone|red|rose|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|brand|white|black)(?:-[0-9]+)?(?:\/[0-9]+)?\b/.test(
+      buttonClassName
+    );
+  const isDarkTrigger =
+    /\b(bg-(?:slate|gray|zinc|neutral|stone)-(?:700|800|900|950)|bg-brand-(?:600|700|800|900|950)|bg-brand-gradient|bg-black)\b/.test(
+      buttonClassName
+    ) || /\btext-white\b/.test(buttonClassName);
 
   const wrapperClasses = `${isFullWidth ? "relative block w-full" : "relative inline-block"} ${className}`;
 
@@ -290,14 +298,14 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
     isFullWidth ? "w-full" : "",
     hasCustomPadding ? "" : "px-3.5 py-2",
     hasCustomRounded ? "" : "rounded-2xl",
-    hasCustomBg ? "" : "bg-white hover:bg-slate-50/50",
+    hasCustomBg ? "" : "bg-white dark:bg-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-800",
     hasCustomBorder
       ? ""
       : isOpen
       ? "border border-brand-500 shadow-xs"
-      : "border border-slate-200/90 hover:border-slate-300 shadow-2xs",
+      : "border border-slate-200/90 dark:border-slate-700 hover:border-slate-300 shadow-2xs",
     isOpen ? "ring-2 ring-brand-500/15" : "",
-    disabled ? "opacity-55 cursor-not-allowed bg-slate-100" : "",
+    disabled ? "opacity-55 cursor-not-allowed bg-slate-100 dark:bg-slate-800" : "",
     buttonClassName,
   ]
     .filter(Boolean)
@@ -330,21 +338,21 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                     ? { top: popoverPos.top }
                     : { bottom: popoverPos.bottom }),
                 }}
-                className="z-[9999] bg-white rounded-3xl border border-slate-200/95 shadow-xl p-4.5 space-y-3.5"
+                className="z-[9999] bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/95 dark:border-slate-700 shadow-xl p-4.5 space-y-3.5"
               >
                 {/* Header: Bulan, Tahun & Navigasi */}
                 <div className="flex items-center justify-between px-1">
                   <button
                     type="button"
                     onClick={handlePrevMonth}
-                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                     title="Bulan Sebelumnya"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-slate-900 tracking-tight">
+                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                       {currentMonthLabel} {viewYear}
                     </span>
                   </div>
@@ -352,7 +360,7 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                   <button
                     type="button"
                     onClick={handleNextMonth}
-                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                     title="Bulan Berikutnya"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -384,34 +392,34 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                         cell.isSelected
                           ? "bg-brand-600 text-white font-bold shadow-xs shadow-brand-500/25 scale-[1.05]"
                           : cell.isToday
-                          ? "bg-brand-50 text-brand-700 font-bold border border-brand-200 hover:bg-brand-100"
+                          ? "bg-brand-50 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-bold border border-brand-200 dark:border-brand-500/30 hover:bg-brand-100"
                           : !cell.isCurrentMonth
-                          ? "text-slate-300 hover:bg-slate-50"
-                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                          ? "text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
                       {cell.day}
                       {cell.isToday && !cell.isSelected && (
-                        <span className="absolute bottom-1 w-1 h-1 rounded-full bg-brand-600" />
+                        <span className="absolute bottom-1 w-1 h-1 rounded-full bg-brand-600 dark:bg-brand-300" />
                       )}
                     </button>
                   ))}
                 </div>
 
                 {/* Quick Actions Footer */}
-                <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 text-xs">
+                <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs">
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={handleSelectToday}
-                      className="text-brand-600 hover:text-brand-700 font-bold text-xs py-1 px-2 rounded-lg hover:bg-brand-50 transition-colors cursor-pointer"
+                      className="text-brand-600 dark:text-brand-300 hover:text-brand-700 font-bold text-xs py-1 px-2 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-500/20 transition-colors cursor-pointer"
                     >
                       Hari Ini
                     </button>
                     <button
                       type="button"
                       onClick={handleSelectYesterday}
-                      className="text-slate-600 hover:text-slate-800 font-semibold text-xs py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                      className="text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white font-semibold text-xs py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     >
                       Kemarin
                     </button>
@@ -421,7 +429,7 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
                     <button
                       type="button"
                       onClick={handleClear}
-                      className="text-slate-500 hover:text-rose-600 font-medium text-xs py-1 px-2 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1"
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium text-xs py-1 px-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer flex items-center gap-1"
                     >
                       <X className="w-3 h-3" />
                       <span>Hapus</span>
@@ -461,15 +469,29 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
         className={triggerClasses}
       >
         <div className="flex items-center gap-2 truncate min-w-0">
-          <Calendar className="w-4 h-4 text-brand-600 shrink-0" />
-          <span className="text-xs font-bold text-slate-800 tracking-tight whitespace-nowrap truncate">
+          <Calendar className={`w-4 h-4 shrink-0 ${isDarkTrigger ? "text-brand-300" : "text-brand-600 dark:text-brand-300"}`} />
+          <span
+            className={`text-xs font-bold tracking-tight whitespace-nowrap truncate ${
+              hasCustomTextColor
+                ? ""
+                : isDarkTrigger
+                ? "text-white"
+                : "text-slate-800 dark:text-slate-100"
+            }`}
+          >
             {labelPrefix ? `${labelPrefix}: ` : ""}
             {parsedValue ? parsedValue.formatted : placeholder}
           </span>
         </div>
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${
-            isOpen ? "rotate-180 text-brand-600" : ""
+          className={`w-3.5 h-3.5 transition-transform duration-200 shrink-0 ${
+            isDarkTrigger
+              ? isOpen
+                ? "rotate-180 text-white"
+                : "text-slate-300"
+              : isOpen
+              ? "rotate-180 text-brand-600 dark:text-brand-300"
+              : "text-slate-400"
           }`}
         />
       </button>

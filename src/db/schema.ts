@@ -229,6 +229,28 @@ export const salesTransactions = pgTable("sales_transactions", {
   orderId: varchar("order_id", { length: 255 }),
 });
 
+export const dailySalesRecaps = pgTable("daily_sales_recaps", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  date: varchar("date", { length: 50 }).notNull(),
+  shift: varchar("shift", { length: 50 }).default("ALL"),
+  cashAmount: doublePrecision("cash_amount").default(0).notNull(),
+  qrisAmount: doublePrecision("qris_amount").default(0).notNull(),
+  edcAmount: doublePrecision("edc_amount").default(0).notNull(),
+  transferAmount: doublePrecision("transfer_amount").default(0).notNull(),
+  onlineDeliveryAmount: doublePrecision("online_delivery_amount").default(0).notNull(),
+  discountAmount: doublePrecision("discount_amount").default(0).notNull(),
+  refundAmount: doublePrecision("refund_amount").default(0).notNull(),
+  mdrFeeAmount: doublePrecision("mdr_fee_amount").default(0).notNull(),
+  totalAmount: doublePrecision("total_amount").default(0).notNull(),
+  cashAccountId: varchar("cash_account_id", { length: 255 }),
+  bankAccountId: varchar("bank_account_id", { length: 255 }),
+  nonCashSettlementStatus: varchar("non_cash_settlement_status", { length: 50 }).default("SETTLED"),
+  nonCashSettledAt: varchar("non_cash_settled_at", { length: 100 }),
+  notes: text("notes"),
+  recordedBy: varchar("recorded_by", { length: 255 }).default(""),
+  createdAt: text("created_at").notNull(),
+});
+
 export const salesImportLogs = pgTable("sales_import_logs", {
   id: varchar("id", { length: 255 }).primaryKey(),
   importDate: text("import_date").notNull(), // ISO String

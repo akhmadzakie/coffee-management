@@ -291,9 +291,13 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const hasCustomPadding = /\bp[xy]?-[^\s]+/.test(buttonClassName);
   const hasCustomTextSize = /\btext-(xs|sm|base|lg|\[)/.test(buttonClassName);
   const hasCustomTextColor =
-    /\btext-(slate|gray|zinc|neutral|stone|red|rose|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|brand|white|black)-[0-9]+/.test(
+    /\btext-(slate|gray|zinc|neutral|stone|red|rose|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|brand|white|black)(?:-[0-9]+)?(?:\/[0-9]+)?\b/.test(
       buttonClassName
-    ) || /\btext-(white|black)\b/.test(buttonClassName);
+    );
+  const isDarkTrigger =
+    /\b(bg-(?:slate|gray|zinc|neutral|stone)-(?:700|800|900|950)|bg-brand-(?:600|700|800|900|950)|bg-brand-gradient|bg-black)\b/.test(
+      buttonClassName
+    ) || /\btext-white\b/.test(buttonClassName);
 
   const wrapperClasses = `${isFullWidth ? "relative block w-full" : "relative inline-block"} ${className}`;
 
@@ -303,12 +307,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     hasCustomPadding ? "" : "px-3 py-1.5",
     hasCustomRounded ? "" : "rounded-xl",
     hasCustomTextSize ? "" : "text-xs",
-    hasCustomBg ? "" : "bg-white hover:bg-slate-50/50",
+    hasCustomBg ? "" : "bg-white dark:bg-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-800",
     hasCustomBorder
       ? ""
       : isOpen
       ? "border border-brand-500 shadow-xs"
-      : "border border-slate-200/90 hover:border-slate-300 shadow-2xs",
+      : "border border-slate-200/90 dark:border-slate-700 hover:border-slate-300 shadow-2xs",
     isOpen ? "ring-2 ring-brand-500/15" : "",
     disabled ? "opacity-55 cursor-not-allowed" : "",
     buttonClassName,
@@ -500,9 +504,13 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         className={triggerClasses}
       >
         <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
-          {icon && <span className="text-slate-500 shrink-0">{icon}</span>}
+          {icon && (
+            <span className={`shrink-0 ${isDarkTrigger ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
+              {icon}
+            </span>
+          )}
           {labelPrefix && (
-            <span className="text-slate-500 font-medium whitespace-nowrap">
+            <span className={`font-medium whitespace-nowrap ${isDarkTrigger ? "text-slate-300" : "text-slate-500 dark:text-slate-400"}`}>
               {labelPrefix}:
             </span>
           )}
@@ -510,23 +518,39 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             className={`font-semibold truncate ${
               hasCustomTextColor
                 ? ""
+                : isDarkTrigger
+                ? selectedOption
+                  ? "text-white"
+                  : "text-slate-300"
                 : selectedOption
-                ? "text-slate-800"
+                ? "text-slate-800 dark:text-slate-100"
                 : "text-slate-400"
             }`}
           >
             {selectedOption ? selectedOption.label : placeholder}
           </span>
           {selectedOption?.badge !== undefined && (
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 shrink-0">
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md shrink-0 ${
+                isDarkTrigger
+                  ? "bg-white/15 text-white"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              }`}
+            >
               {selectedOption.badge}
             </span>
           )}
         </div>
 
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${
-            isOpen ? "rotate-180 text-brand-600" : ""
+          className={`w-3.5 h-3.5 transition-transform duration-200 shrink-0 ${
+            isDarkTrigger
+              ? isOpen
+                ? "rotate-180 text-white"
+                : "text-slate-300"
+              : isOpen
+              ? "rotate-180 text-brand-600 dark:text-brand-300"
+              : "text-slate-400"
           }`}
         />
       </button>

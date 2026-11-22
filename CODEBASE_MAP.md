@@ -35,11 +35,12 @@
 | `ingredients` | `L189` | `orderItems` | `L448` |
 | `recipes` | `L199` | `payments` | `L465` |
 | `stockMovements` | `L205` | `posPrinters` | `L478` |
-| `salesTransactions` | `L220` | `products` | `L492` |
-| `salesImportLogs` | `L231` | `batchPreparations` | `L506` |
-| `auditLogs` | `L240` | `promotions` | `L520` |
-| `employees` | `L249` | `managerApprovalRequests` | `L537` |
-| `employeeContracts` | `L264` | | |
+| `salesTransactions` | `L221` | `products` | `L515` |
+| `dailySalesRecaps` | `L232` | `batchPreparations` | `L529` |
+| `salesImportLogs` | `L252` | `promotions` | `L543` |
+| `auditLogs` | `L261` | `managerApprovalRequests` | `L560` |
+| `employees` | `L270` | | |
+| `employeeContracts` | `L285` | | |
 
 ---
 
@@ -58,7 +59,7 @@
 - `initialSettings` (`L25`), `initialUsers` (`L52`), `initialIngredients` (`L127`), `initialRecipes` (`L143`), `initialProducts` (`L190`), `defaultCategories` (`L263`)
 - `ensureTables()` (`L307 - L725`) — DDL pembuatan/migrasi otomatis tabel PostgreSQL
 - `startServer()` (`L726`) & `getTable()` (`L754`)
-- **Sanitizers**: `sanitizeIngredient` (`L829`), `sanitizeRecipe` (`L839`), `sanitizeStockMovement` (`L879`), `sanitizeSalesTransaction` (`L893`), `sanitizeCashTransaction` (`L922`), `sanitizeExpenseCategory` (`L948`), `sanitizeBudget` (`L959`), `sanitizeBankReconciliation` (`L968`), `sanitizeStockOpname` (`L993`), `sanitizePayrollRecord` (`L1012`), `sanitizeCashAccount` (`L1037`), `sanitizeSettings` (`L1044`), `sanitizeUser` (`L1098`), `sanitizeEmployee` (`L1192`), `sanitizePurchaseOrder` (`L1292`), `sanitizeShift` (`L1306`), `sanitizePromotion` (`L1335`)
+- **Sanitizers**: `sanitizeIngredient` (`L829`), `sanitizeRecipe` (`L839`), `sanitizeStockMovement` (`L879`), `sanitizeSalesTransaction` (`L893`), `sanitizeDailySalesRecap`, `sanitizeCashTransaction` (`L922`), `sanitizeExpenseCategory` (`L948`), `sanitizeBudget` (`L959`), `sanitizeBankReconciliation` (`L968`), `sanitizeStockOpname` (`L993`), `sanitizePayrollRecord` (`L1012`), `sanitizeCashAccount` (`L1037`), `sanitizeSettings` (`L1044`), `sanitizeUser` (`L1098`), `sanitizeEmployee` (`L1192`), `sanitizePurchaseOrder` (`L1292`), `sanitizeShift` (`L1306`), `sanitizePromotion` (`L1335`)
 - **Auth & Security Helpers**:
   - `inMemoryState` (`L1380`)
   - `resolveAuthUser(req)` (`L1430`)

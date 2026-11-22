@@ -1103,7 +1103,7 @@ export const LeaderChecklist: React.FC = () => {
                       onChange={setSelectedDate}
                       allowClear={false}
                       placeholder="Pilih Tanggal"
-                      buttonClassName="bg-slate-800 border-slate-700 text-white hover:bg-slate-700/80 rounded-xl py-1.5 px-3"
+                      buttonClassName="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 rounded-xl py-1.5 px-3"
                     />
                     <button
                       onClick={() => {
@@ -1111,10 +1111,10 @@ export const LeaderChecklist: React.FC = () => {
                         setSelectedMonth(ym);
                         setActiveTab("monthly");
                       }}
-                      className="whitespace-nowrap shrink-0 text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-blue-400 border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="whitespace-nowrap shrink-0 text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-sky-300 hover:text-white border border-slate-600 transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Beralih ke tampilan rekapitulasi satu bulan penuh"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <TrendingUp className="w-3.5 h-3.5 text-sky-300 shrink-0" />
                       <span>Rekap 1 Bulan</span>
                     </button>
                   </div>
@@ -1399,7 +1399,7 @@ export const LeaderChecklist: React.FC = () => {
                       onChange={setSelectedMonth}
                       allowClear={false}
                       placeholder="Pilih Bulan Evaluasi"
-                      buttonClassName="bg-slate-800 border-slate-700 text-white hover:bg-slate-700/80 hover:border-slate-600 rounded-xl"
+                      buttonClassName="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 hover:border-slate-500 rounded-xl"
                     />
                   </div>
                 </div>
@@ -1411,7 +1411,7 @@ export const LeaderChecklist: React.FC = () => {
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "ALL"
                         ? "bg-blue-600 text-white shadow-xs"
-                        : "text-slate-400 hover:text-white"
+                        : "text-slate-200 hover:text-white"
                     }`}
                   >
                     Semua Divisi
@@ -1421,7 +1421,7 @@ export const LeaderChecklist: React.FC = () => {
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAR"
                         ? "bg-amber-600 text-white shadow-xs"
-                        : "text-slate-400 hover:text-white"
+                        : "text-slate-200 hover:text-white"
                     }`}
                   >
                     Bar
@@ -1431,7 +1431,7 @@ export const LeaderChecklist: React.FC = () => {
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "KITCHEN"
                         ? "bg-orange-600 text-white shadow-xs"
-                        : "text-slate-400 hover:text-white"
+                        : "text-slate-200 hover:text-white"
                     }`}
                   >
                     Kitchen
@@ -1441,7 +1441,7 @@ export const LeaderChecklist: React.FC = () => {
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAKER"
                         ? "bg-emerald-600 text-white shadow-xs"
-                        : "text-slate-400 hover:text-white"
+                        : "text-slate-200 hover:text-white"
                     }`}
                   >
                     Baker
