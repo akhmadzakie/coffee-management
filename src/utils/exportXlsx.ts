@@ -20,6 +20,10 @@ import {
   calculateWorkDurationHours,
   classifyDailyAttendanceStatus,
 } from "./attendanceRecap";
+import {
+  PRODUCT_GROUP_LABELS,
+  type ProductSalesAnalyticsResult,
+} from "./productSalesAnalytics";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1064,5 +1068,204 @@ export const exportDailySalesRecapToXlsx = ({
 
   downloadXlsx(wb, `Rekap_Penjualan_Harian_${periodLabel.replace(/\s+/g, "_")}`);
 };
+
+// ─── Export Dashboard Penjualan Produk (4 Sheet Analitik PMIX) ─────────────────
+
+export const exportProductSalesAnalyticsToXlsx = ({
+  analytics,
+  settings,
+  periodLabel,
+}: {
+  analytics: ProductSalesAnalyticsResult;
+  settings: Settings;
+  periodLabel: string;
+}) => {
+  const wb = XLSX.utils.book_new();
+  const brandName = settings.brandName || "Julia's Management System";
+  const { kpiSummary, omzetCrossCheck } = analytics;
+
+  // Sheet 1: Ringkasan & Cross-Check
+  const summaryRows: any[][] = [
+    ["Laporan Penjualan Produk (PMIX)", brandName],
+    ["Periode / Filter", periodLabel],
+    ["Dicetak", toDateIndo(new Date())],
+    [],
+    ["RINGKASAN PERFORMA PRODUK", "Nilai"],
+    ["Total Produk Terjual (Cup/Porsi)", kpiSummary.totalQty],
+    ["Rata-rata Terjual per Hari", kpiSummary.avgDailyQty],
+    ["Total Omzet Produk (Rp)", kpiSummary.totalRevenue],
+    ["Estimasi Total HPP (Rp)", kpiSummary.totalHpp],
+    ["Estimasi Laba Kotor (Rp)", kpiSummary.grossProfit],
+    ["Rata-rata Gross Margin (%)", `${kpiSummary.marginPercent}%`],
+    ["Food Cost (%)", `${kpiSummary.foodCostPercent}%`],
+    [],
+    ["CROSS-CHECK REKAP OMZET HARIAN", "Nilai"],
+    ["Total Rekap Omzet Harian (Rp)", omzetCrossCheck.totalRecapOmzet],
+    ["Total Penjualan Produk Toko (Rp)", omzetCrossCheck.totalAllProductSales],
+    ["Selisih (Produk - Rekap Omzet) (Rp)", omzetCrossCheck.difference],
+    ["Tingkat Kecocokan (%)", `${omzetCrossCheck.matchPercent}%`],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary["!cols"] = [{ wch: 36 }, { wch: 24 }];
+  [8, 9, 10, 15, 16, 17].forEach((rowIdx) => {
+    const addr = `B${rowIdx}`;
+    if (wsSummary[addr]) wsSummary[addr].z = "#,##0";
+  });
+  boldFirstRow(wsSummary, 2);
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan & Cross-Check");
+
+  // Sheet 2: Rekap Produk & Varian (PMIX)
+  const pmixHeaders = [
+    "No",
+    "Nama Produk",
+    "Rincian Varian",
+    "Divisi",
+    "Kategori Produk",
+    "Kategori Menu",
+    "Qty Terjual",
+    "% Share",
+    "Total Omzet (Rp)",
+    "Estimasi HPP (Rp)",
+    "Laba Kotor (Rp)",
+    "Margin (%)",
+    "Status Menu Engineering",
+  ];
+  const quadLabels: Record<string, string> = {
+    STAR: "Unggulan (Star)",
+    PLOWHORSE: "Populer (Plowhorse)",
+    PUZZLE: "Potensial (Puzzle)",
+    DOG: "Evaluasi (Dog)",
+  };
+  const pmixRows = analytics.productMixRows.map((row, idx) => [
+    idx + 1,
+    row.productName,
+    row.variantsBreakdown.map((v) => `${v.variantName} (${v.qtySold}x)`).join("; "),
+    row.division,
+    PRODUCT_GROUP_LABELS[row.productGroup] || row.productGroup,
+    row.menuCategory,
+    row.totalQty,
+    `${row.revenueSharePercent}%`,
+    row.totalRevenue,
+    row.totalHpp,
+    row.grossProfit,
+    `${row.marginPercent}%`,
+    quadLabels[row.quadrant] || row.quadrant,
+  ]);
+  const wsPmix = XLSX.utils.aoa_to_sheet([pmixHeaders, ...pmixRows]);
+  wsPmix["!cols"] = [
+    { wch: 6 },
+    { wch: 28 },
+    { wch: 34 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 22 },
+  ];
+  for (let i = 2; i <= pmixRows.length + 1; i++) {
+    ["I", "J", "K"].forEach((col) => {
+      if (wsPmix[`${col}${i}`]) wsPmix[`${col}${i}`].z = "#,##0";
+    });
+  }
+  boldFirstRow(wsPmix, pmixHeaders.length);
+  styleDataRows(wsPmix, 1, pmixRows.length, pmixHeaders.length);
+  XLSX.utils.book_append_sheet(wb, wsPmix, "Rekap Produk & Varian");
+
+  // Sheet 3: Pemakaian Bahan & Kemasan Teoretis
+  const ingHeaders = [
+    "No",
+    "Nama Bahan / Kemasan",
+    "Total Terpakai",
+    "Satuan",
+    "Biaya / Satuan (Rp)",
+    "Total Biaya (Rp)",
+    "Sisa Stok Gudang",
+    "Menu Pemakai",
+  ];
+  const ingRows = analytics.ingredientUsageSummary.map((ing, idx) => [
+    idx + 1,
+    ing.ingredientName,
+    ing.totalUsedQty,
+    ing.unit,
+    ing.unitCost,
+    ing.totalCost,
+    ing.currentStock,
+    ing.usedByMenus.join(", "),
+  ]);
+  const wsIng = XLSX.utils.aoa_to_sheet([ingHeaders, ...ingRows]);
+  wsIng["!cols"] = [
+    { wch: 6 },
+    { wch: 28 },
+    { wch: 15 },
+    { wch: 10 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 40 },
+  ];
+  for (let i = 2; i <= ingRows.length + 1; i++) {
+    ["E", "F"].forEach((col) => {
+      if (wsIng[`${col}${i}`]) wsIng[`${col}${i}`].z = "#,##0";
+    });
+  }
+  boldFirstRow(wsIng, ingHeaders.length);
+  styleDataRows(wsIng, 1, ingRows.length, ingHeaders.length);
+  XLSX.utils.book_append_sheet(wb, wsIng, "Pemakaian Bahan & Kemasan");
+
+  // Sheet 4: Rincian Transaksi Harian (tetap kompatibel untuk re-import)
+  const logHeaders = [
+    "Tanggal",
+    "Nama Menu",
+    "Varian",
+    "Divisi",
+    "Kategori Produk",
+    "Kategori Menu",
+    "Quantity",
+    "Total Penjualan",
+    "Est. HPP (Rp)",
+    "Laba Kotor (Rp)",
+  ];
+  const logRows = analytics.filteredTransactions.map((item) => [
+    item.localDate,
+    item.resolved.isMatched ? item.resolved.productName : item.tx.menuName,
+    item.resolved.variantName,
+    item.resolved.division,
+    PRODUCT_GROUP_LABELS[item.resolved.productGroup] || item.resolved.productGroup,
+    item.resolved.menuCategory,
+    item.quantity,
+    item.revenue,
+    item.totalHpp,
+    item.grossProfit,
+  ]);
+  const wsLog = XLSX.utils.aoa_to_sheet([logHeaders, ...logRows]);
+  wsLog["!cols"] = [
+    { wch: 14 },
+    { wch: 28 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 16 },
+  ];
+  for (let i = 2; i <= logRows.length + 1; i++) {
+    ["H", "I", "J"].forEach((col) => {
+      if (wsLog[`${col}${i}`]) wsLog[`${col}${i}`].z = "#,##0";
+    });
+  }
+  boldFirstRow(wsLog, logHeaders.length);
+  styleDataRows(wsLog, 1, logRows.length, logHeaders.length);
+  XLSX.utils.book_append_sheet(wb, wsLog, "Rincian Transaksi Harian");
+
+  downloadXlsx(wb, `Penjualan_Produk_${periodLabel.replace(/\s+/g, "_")}`);
+};
+
 
 

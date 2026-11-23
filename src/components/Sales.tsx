@@ -733,7 +733,10 @@ export const Sales = () => {
       )
     );
     const mapped = mapSalesRows(parsedData, catalogCandidates);
-    if (!mapped.mapping.mapped["Nama Menu"] || !mapped.mapping.mapped["Total Penjualan"]) {
+    if (
+      !mapped.mapping.mapped["Nama Menu"] ||
+      (!mapped.mapping.mapped["Total Penjualan"] && !mapped.mapping.mapped["Harga Satuan"])
+    ) {
       alert(
         "Kolom wajib tidak ditemukan di file.\n\n" +
           "Dibutuhkan minimal kolom nama menu dan total penjualan.\n" +

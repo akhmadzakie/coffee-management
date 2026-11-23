@@ -10,6 +10,7 @@ import {
   PRODUCT_GROUP_LABELS,
   MENU_CATEGORY_PRESETS,
   inferProductGroup,
+  isPackagingIngredient,
 } from "../utils/productSalesAnalytics";
 import {
   ViewState,
@@ -277,14 +278,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
         if (!effectiveRecipe || effectiveRecipe.length === 0) return v;
 
         let rawCost = 0;
+        let stockPackCost = 0;
         for (const ri of effectiveRecipe) {
           const ing = ingredients.find((i) => i.id === ri.ingredientId);
           if (ing && ing.costPerUnit) {
-            rawCost += ri.quantity * Number(ing.costPerUnit);
+            const lineCost = ri.quantity * Number(ing.costPerUnit);
+            if (isPackagingIngredient(ing)) {
+              stockPackCost += lineCost;
+            } else {
+              rawCost += lineCost;
+            }
           }
         }
 
-        const baseCost = rawCost + Number(v.packagingCost || 0);
+        const effectivePackCost =
+          stockPackCost > 0
+            ? Math.max(stockPackCost, Number(v.packagingCost || 0))
+            : Number(v.packagingCost || 0);
+        const baseCost = rawCost + effectivePackCost;
         const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
         const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
         const newEstimatedHpp = Math.round(baseCost + wastageCost + overheadCost);
@@ -1353,19 +1364,73 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     ];
   });
 
+  const stockPackagingIngredients = useMemo(
+    () => ingredients.filter((ing) => isPackagingIngredient(ing)),
+    [ingredients]
+  );
+
   const recalculateVariantHpp = (v: ProductVariant): number => {
     const recList = Array.isArray(v.recipe) ? v.recipe : [];
-    const rawCost = recList.reduce((sum, ri) => {
+    let rawCost = 0;
+    let stockPackCost = 0;
+    recList.forEach((ri) => {
       const ing = ingredients.find((i) => i.id === ri.ingredientId);
-      return sum + (ing && ing.costPerUnit ? Number(ri.quantity || 0) * Number(ing.costPerUnit) : 0);
-    }, 0);
-    if (rawCost <= 0 && Number(v.packagingCost || 0) <= 0) {
+      if (ing && ing.costPerUnit) {
+        const lineCost = Number(ri.quantity || 0) * Number(ing.costPerUnit);
+        if (isPackagingIngredient(ing)) {
+          stockPackCost += lineCost;
+        } else {
+          rawCost += lineCost;
+        }
+      }
+    });
+    const effectivePackCost =
+      stockPackCost > 0
+        ? Math.max(stockPackCost, Number(v.packagingCost || 0))
+        : Number(v.packagingCost || 0);
+    if (rawCost <= 0 && effectivePackCost <= 0) {
       return Math.round(Number(v.estimatedHpp) || 0);
     }
-    const baseCost = rawCost + Number(v.packagingCost || 0);
+    const baseCost = rawCost + effectivePackCost;
     const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
     const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
     return Math.round(baseCost + wastageCost + overheadCost);
+  };
+
+  const handleToggleVariantStockPackaging = (varIdx: number, packIng: Ingredient) => {
+    const curVar = variants[varIdx];
+    const currentRecipe = Array.isArray(curVar?.recipe) ? curVar.recipe : [];
+    const exists = currentRecipe.some((ri) => ri.ingredientId === packIng.id);
+    const nextRecipe = exists
+      ? currentRecipe.filter((ri) => ri.ingredientId !== packIng.id)
+      : [...currentRecipe, { ingredientId: packIng.id, quantity: 1 }];
+
+    const linkedPacks = nextRecipe
+      .map((ri) => ({
+        ri,
+        ing: ingredients.find((i) => i.id === ri.ingredientId),
+      }))
+      .filter((x): x is { ri: RecipeIngredient; ing: Ingredient } =>
+        Boolean(x.ing && isPackagingIngredient(x.ing))
+      );
+
+    const stockPackCost = Math.round(
+      linkedPacks.reduce(
+        (sum, x) => sum + Number(x.ri.quantity || 1) * Number(x.ing.costPerUnit || 0),
+        0
+      )
+    );
+    const stockPackNotes = linkedPacks.map((x) => x.ing.name).join(" + ");
+
+    handleUpdateVariant(
+      varIdx,
+      {
+        recipe: nextRecipe,
+        packagingCost: stockPackCost,
+        packagingNotes: stockPackNotes,
+      },
+      true
+    );
   };
 
   const handleAddVariant = () => {
@@ -1668,15 +1733,23 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <div className="space-y-3">
               {variants.map((v, idx) => {
                 const variantRecipes = Array.isArray(v.recipe) ? v.recipe : [];
-                const rawMaterialCost = variantRecipes.reduce((sum, ri) => {
+                let rawMaterialCost = 0;
+                let stockPackCostInRecipe = 0;
+                variantRecipes.forEach((ri) => {
                   const ing = ingredients.find((i) => i.id === ri.ingredientId);
-                  return (
-                    sum +
-                    (ing && ing.costPerUnit
-                      ? Number(ri.quantity || 0) * Number(ing.costPerUnit)
-                      : 0)
-                  );
-                }, 0);
+                  if (ing && ing.costPerUnit) {
+                    const line = Number(ri.quantity || 0) * Number(ing.costPerUnit);
+                    if (isPackagingIngredient(ing)) {
+                      stockPackCostInRecipe += line;
+                    } else {
+                      rawMaterialCost += line;
+                    }
+                  }
+                });
+                const displayPackCost =
+                  stockPackCostInRecipe > 0
+                    ? Math.max(stockPackCostInRecipe, Number(v.packagingCost || 0))
+                    : Number(v.packagingCost || 0);
                 const estHpp = Math.round(Number(v.estimatedHpp) || 0);
                 const grossProfit = Math.round((Number(v.price) || 0) - estHpp);
                 const marginPct =
@@ -1782,6 +1855,41 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Pilih Kemasan langsung dari Stok Gudang (Packaging & Cup) */}
+                    {stockPackagingIngredients.length > 0 && (
+                      <div className="p-2.5 rounded-xl bg-brand-50/40 dark:bg-brand-500/10 border border-brand-200/60 dark:border-brand-500/30 space-y-1.5">
+                        <span className="text-[10px] font-bold text-brand-800 dark:text-brand-300 block">
+                          Pilih Kemasan dari Stok Gudang (Packaging &amp; Cup — ikut terpotong saat terjual):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {stockPackagingIngredients.map((packIng) => {
+                            const isSelected = variantRecipes.some(
+                              (ri) => ri.ingredientId === packIng.id
+                            );
+                            return (
+                              <button
+                                key={packIng.id}
+                                type="button"
+                                onClick={() =>
+                                  handleToggleVariantStockPackaging(idx, packIng)
+                                }
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer tabular-nums ${
+                                  isSelected
+                                    ? "bg-brand-600 text-white border-brand-600"
+                                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-brand-300"
+                                }`}
+                              >
+                                {isSelected ? "✓ " : "+ "}
+                                {packIng.name} ({formatCurrency(packIng.costPerUnit)} • Sisa{" "}
+                                {Number(packIng.currentStock || 0).toLocaleString("id-ID")}{" "}
+                                {packIng.unit})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5">
@@ -1839,7 +1947,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             </strong>{" "}
                             + Kemasan:{" "}
                             <strong className="text-slate-800 dark:text-slate-200 tabular-nums">
-                              {formatCurrency(v.packagingCost || 0)}
+                              {formatCurrency(displayPackCost)}
                             </strong>
                           </span>
                         </div>

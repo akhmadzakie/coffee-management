@@ -6,11 +6,13 @@ import { formatCurrency } from "../utils/format";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { calculateHppWithOverheadPercentage } from "../utils/financeMetrics";
+import { isPackagingIngredient } from "../utils/productSalesAnalytics";
 import {
   ViewState,
   Recipe,
   Ingredient,
   ProductDivision,
+  PackagingOption,
   DEFAULT_DIVISION_PACKAGING,
 } from "../types";
 import {
@@ -373,18 +375,160 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     },
   ]);
 
-  // Packaging & Disposables
-  const [packagingList, setPackagingList] = useState<PackagingOption[]>(() =>
-    DEFAULT_DIVISION_PACKAGING["BAR"].map((p) => ({ ...p, isIncluded: Boolean(p.isIncluded) }))
+  const stockPackagingItems = useMemo(
+    () => ingredients.filter((ing) => isPackagingIngredient(ing)),
+    [ingredients]
   );
+
+  const buildSyncedPackagingList = (
+    div: ProductDivision,
+    currentList: PackagingOption[],
+    stockPacks: Ingredient[],
+    includePresetDefaults = false
+  ): PackagingOption[] => {
+    const presets = DEFAULT_DIVISION_PACKAGING[div] || [];
+    const usedStockIds = new Set<string>();
+    const prevById = new Map(currentList.map((p) => [p.id, p]));
+    const prevByIngId = new Map(
+      currentList
+        .filter((p) => p.ingredientId)
+        .map((p) => [p.ingredientId as string, p])
+    );
+
+    const findMatchingStockPack = (presetName: string): Ingredient | undefined => {
+      const pLower = presetName.toLowerCase();
+      const exact = stockPacks.find(
+        (ing) => !usedStockIds.has(ing.id) && ing.name.trim().toLowerCase() === pLower
+      );
+      if (exact) return exact;
+      const tokens = pLower
+        .split(/[\s+/()-]+/)
+        .filter((t) => t.length >= 3);
+      return stockPacks.find((ing) => {
+        if (usedStockIds.has(ing.id)) return false;
+        const iLower = ing.name.toLowerCase();
+        const hits = tokens.filter((tk) => iLower.includes(tk));
+        return hits.length >= Math.min(2, tokens.length);
+      });
+    };
+
+    const syncedPresets: PackagingOption[] = presets.map((preset) => {
+      const matchedStock = findMatchingStockPack(preset.name);
+      if (matchedStock) usedStockIds.add(matchedStock.id);
+      const prev =
+        prevById.get(preset.id) ||
+        (matchedStock ? prevByIngId.get(matchedStock.id) : undefined);
+
+      return {
+        ...preset,
+        ingredientId: matchedStock?.id,
+        currentStock: matchedStock ? Number(matchedStock.currentStock) || 0 : undefined,
+        cost: matchedStock
+          ? Math.round(Number(matchedStock.costPerUnit) || preset.cost)
+          : (prev ? prev.cost : preset.cost),
+        isIncluded:
+          prev !== undefined
+            ? Boolean(prev.isIncluded)
+            : includePresetDefaults
+              ? Boolean(preset.isIncluded)
+              : Boolean(preset.isIncluded),
+      };
+    });
+
+    const extraStockOptions: PackagingOption[] = stockPacks
+      .filter((ing) => !usedStockIds.has(ing.id))
+      .map((ing) => {
+        const optionId = `stock-${ing.id}`;
+        const prev = prevById.get(optionId) || prevByIngId.get(ing.id);
+        return {
+          id: optionId,
+          ingredientId: ing.id,
+          name: ing.name,
+          cost: Math.round(Number(ing.costPerUnit) || 0),
+          currentStock: Number(ing.currentStock) || 0,
+          division: div,
+          isIncluded: prev ? Boolean(prev.isIncluded) : false,
+        };
+      });
+
+    return [...syncedPresets, ...extraStockOptions];
+  };
+
+  // Packaging & Disposables (tersinkronisasi langsung dengan stok kategori Packaging & Cup)
+  const [packagingList, setPackagingList] = useState<PackagingOption[]>(() =>
+    buildSyncedPackagingList("BAR", [], stockPackagingItems, true)
+  );
+  const [newPackName, setNewPackName] = useState("");
+  const [newPackCost, setNewPackCost] = useState<number>(0);
+
+  useEffect(() => {
+    setPackagingList((prev) =>
+      buildSyncedPackagingList(selectedDivision, prev, stockPackagingItems)
+    );
+  }, [selectedDivision, stockPackagingItems]);
 
   const handleDivisionChange = (div: ProductDivision) => {
     setSelectedDivision(div);
-    if (DEFAULT_DIVISION_PACKAGING[div]) {
-      setPackagingList(
-        DEFAULT_DIVISION_PACKAGING[div].map((p) => ({ ...p, isIncluded: Boolean(p.isIncluded) }))
-      );
+    setPackagingList(
+      buildSyncedPackagingList(div, [], stockPackagingItems, true)
+    );
+  };
+
+  const handleQuickAddPackagingStock = () => {
+    const cleanName = newPackName.trim();
+    if (!cleanName) {
+      toast.warning("Masukkan nama item kemasan terlebih dahulu.");
+      return;
     }
+    const existing = ingredients.find(
+      (i) => i.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    const targetId =
+      existing?.id ||
+      addIngredient({
+        name: cleanName,
+        unit: "pcs",
+        currentStock: 0,
+        minStock: 50,
+        category: "Packaging & Cup",
+        costPerUnit: Math.max(0, Math.round(newPackCost)),
+        storageLocation:
+          selectedDivision === "KITCHEN"
+            ? "KITCHEN"
+            : selectedDivision === "BAKER"
+              ? "BAKERY"
+              : "BAR",
+      });
+
+    setPackagingList((prev) => {
+      const updated = prev.map((p) =>
+        p.ingredientId === targetId || p.id === `stock-${targetId}`
+          ? { ...p, isIncluded: true }
+          : p
+      );
+      if (
+        updated.some(
+          (p) => p.ingredientId === targetId || p.id === `stock-${targetId}`
+        )
+      ) {
+        return updated;
+      }
+      return [
+        ...updated,
+        {
+          id: `stock-${targetId}`,
+          ingredientId: targetId,
+          name: cleanName,
+          cost: Math.max(0, Math.round(newPackCost)),
+          currentStock: existing ? Number(existing.currentStock) || 0 : 0,
+          division: selectedDivision,
+          isIncluded: true,
+        },
+      ];
+    });
+    setNewPackName("");
+    setNewPackCost(0);
+    toast.success(`"${cleanName}" ditambahkan ke Stok Packaging & Cup.`);
   };
 
   // Grouped ingredients by category for clean dropdown selection
@@ -420,19 +564,22 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setTargetFoodCostPercent(preset.targetFoodCost);
     setSelectedRecipeId("");
 
-    // Setup packaging options for this division
-    const defaultPacks = DEFAULT_DIVISION_PACKAGING[preset.division] || [];
-    setPackagingList(
-      defaultPacks.map((p) => {
-        const isMatched = preset.includedPackagingKeywords.some((kw) =>
-          p.name.toLowerCase().includes(kw.toLowerCase())
-        );
-        return {
-          ...p,
-          isIncluded: isMatched,
-        };
-      })
-    );
+    // Setup packaging options for this division (termasuk item stok Packaging & Cup)
+    const syncedPacks = buildSyncedPackagingList(
+      preset.division,
+      [],
+      stockPackagingItems,
+      false
+    ).map((p) => {
+      const isMatched = preset.includedPackagingKeywords.some((kw) =>
+        p.name.toLowerCase().includes(kw.toLowerCase())
+      );
+      return {
+        ...p,
+        isIncluded: isMatched,
+      };
+    });
+    setPackagingList(syncedPacks);
 
     // Map ingredients from store matching keywords
     const mappedItems: RecipeIngredientItem[] = preset.ingredients.map((item, idx) => {
@@ -516,41 +663,52 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
             ? Number(variant.overheadPercent)
             : Number(settings.defaultOverheadPercent ?? 10)
         );
-        if (Array.isArray(variant.recipe) && variant.recipe.length > 0) {
-          const mappedItems: RecipeIngredientItem[] = variant.recipe.map((ri, idx) => {
-            const ing = ingredients.find((i) => i.id === ri.ingredientId);
-            return {
+        const rawRecipeList =
+          Array.isArray(variant.recipe) && variant.recipe.length > 0
+            ? variant.recipe
+            : getSafeRecipeIngredients(
+                recipes.find(
+                  (r) =>
+                    r.menuName.trim().toLowerCase() === prod.name.trim().toLowerCase()
+                )
+              );
+
+        const packIngIdsInRecipe = new Set<string>();
+        const nonPackItems: RecipeIngredientItem[] = [];
+        rawRecipeList.forEach((ri: any, idx: number) => {
+          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+          if (ing && isPackagingIngredient(ing)) {
+            packIngIdsInRecipe.add(ing.id);
+          } else {
+            nonPackItems.push({
               id: `item-${Date.now()}-${idx}`,
               ingredientId: ri.ingredientId,
               name: ing ? ing.name : "Bahan Resep",
               quantity: ri.quantity,
-              unit: ing ? ing.unit : "gr",
+              unit: ing ? ing.unit : "satuan",
               costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
-            };
-          });
-          setItems(mappedItems);
-        } else {
-          // Coba cari di tabel recipes berdasarkan nama menu
-          const fallbackRec = recipes.find(
-            (r) => r.menuName.trim().toLowerCase() === prod.name.trim().toLowerCase()
-          );
-          if (fallbackRec) {
-            const safeIngs = getSafeRecipeIngredients(fallbackRec);
-            setItems(
-              safeIngs.map((ri, idx) => {
-                const ing = ingredients.find((i) => i.id === ri.ingredientId);
-                return {
-                  id: `item-${Date.now()}-${idx}`,
-                  ingredientId: ri.ingredientId,
-                  name: ing ? ing.name : "Bahan Resep",
-                  quantity: ri.quantity,
-                  unit: ing ? ing.unit : "gr",
-                  costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
-                };
-              })
-            );
+            });
           }
+        });
+        if (nonPackItems.length > 0) {
+          setItems(nonPackItems);
         }
+
+        const notesLower = String(variant.packagingNotes || "").toLowerCase();
+        setPackagingList(
+          buildSyncedPackagingList(
+            prod.division || "BAR",
+            [],
+            stockPackagingItems,
+            false
+          ).map((p) => ({
+            ...p,
+            isIncluded: Boolean(
+              (p.ingredientId && packIngIdsInRecipe.has(p.ingredientId)) ||
+                (notesLower && notesLower.includes(p.name.toLowerCase()))
+            ),
+          }))
+        );
       }
       setSaveSuccessMessage(
         `Berhasil memuat produk "${prod.name}${variant ? ` (${variant.name})` : ""}" dari Database Menu`
@@ -808,6 +966,45 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     return resolvedList;
   };
 
+  // Pastikan item kemasan tercentang ikut tersambung ke Stok Packaging & Cup agar stok cup/botol/lid ikut terpotong saat terjual
+  const resolveIncludedPackagingIngredients = (
+    alreadyIncludedIds: Set<string>
+  ): { ingredientId: string; quantity: number }[] => {
+    const res: { ingredientId: string; quantity: number }[] = [];
+    packagingList
+      .filter((p) => p.isIncluded)
+      .forEach((p) => {
+        let targetId = p.ingredientId;
+        if (!targetId) {
+          const matchByName = ingredients.find(
+            (i) => i.name.trim().toLowerCase() === p.name.trim().toLowerCase()
+          );
+          targetId = matchByName?.id;
+        }
+        if (!targetId) {
+          targetId = addIngredient({
+            name: p.name.trim(),
+            unit: "pcs",
+            currentStock: 0,
+            minStock: 100,
+            category: "Packaging & Cup",
+            costPerUnit: Math.max(0, Math.round(p.cost || 0)),
+            storageLocation:
+              selectedDivision === "KITCHEN"
+                ? "KITCHEN"
+                : selectedDivision === "BAKER"
+                  ? "BAKERY"
+                  : "BAR",
+          });
+        }
+        if (targetId && !alreadyIncludedIds.has(targetId)) {
+          alreadyIncludedIds.add(targetId);
+          res.push({ ingredientId: targetId, quantity: 1 });
+        }
+      });
+    return res;
+  };
+
   // Simpan ke Master Resep Toko
   const handleSaveToStoreRecipes = () => {
     if (!menuName.trim()) {
@@ -819,7 +1016,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
       return;
     }
 
-    const validIngredients = ensureRecipeIngredientsRegistered();
+    const baseIngredients = ensureRecipeIngredientsRegistered();
+    const seenIds = new Set(baseIngredients.map((i) => i.ingredientId));
+    const packIngredients = resolveIncludedPackagingIngredients(seenIds);
+    const validIngredients = [...baseIngredients, ...packIngredients];
 
     if (validIngredients.length === 0) {
       toast.warning("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
@@ -848,13 +1048,16 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
-  // Terbitkan Langsung ke Katalog Produk Toko (Database Menu + Master Resep + Bahan Kustom)
+  // Terbitkan Langsung ke Katalog Produk Toko (Database Menu + Master Resep + Bahan & Kemasan Stok)
   const handlePublishToProductCatalog = () => {
     if (!menuName.trim()) {
       toast.warning("Nama menu tidak boleh kosong.");
       return;
     }
-    const validIngredients = ensureRecipeIngredientsRegistered();
+    const baseIngredients = ensureRecipeIngredientsRegistered();
+    const seenIds = new Set(baseIngredients.map((i) => i.ingredientId));
+    const packIngredients = resolveIncludedPackagingIngredients(seenIds);
+    const validIngredients = [...baseIngredients, ...packIngredients];
 
     const existingProd = products.find(
       (p) => p.name.trim().toLowerCase() === menuName.trim().toLowerCase()
@@ -1590,25 +1793,36 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 {packagingList.map((pack) => (
                   <div
                     key={pack.id}
-                    className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-colors ${
+                    className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors ${
                       pack.isIncluded
                         ? "bg-brand-50/40 border-brand-200/80 text-slate-900"
                         : "bg-slate-50/60 border-slate-200 text-slate-400"
                     }`}
                   >
-                    <label className="flex items-center gap-3 cursor-pointer flex-1">
+                    <label className="flex items-start sm:items-center gap-3 cursor-pointer flex-1 min-w-0">
                       <input
                         type="checkbox"
                         checked={pack.isIncluded}
                         onChange={() => handleTogglePackaging(pack.id)}
-                        className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500/20"
+                        className="w-4 h-4 mt-0.5 sm:mt-0 rounded text-brand-600 focus:ring-brand-500/20 shrink-0"
                       />
-                      <span className={`font-semibold ${pack.isIncluded ? "text-slate-900" : "text-slate-500"}`}>
-                        {pack.name}
-                      </span>
+                      <div className="min-w-0">
+                        <span className={`font-semibold block truncate ${pack.isIncluded ? "text-slate-900" : "text-slate-500"}`}>
+                          {pack.name}
+                        </span>
+                        {pack.ingredientId ? (
+                          <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">
+                            Stok Gudang • Sisa {Number(pack.currentStock || 0).toLocaleString("id-ID")} pcs
+                          </span>
+                        ) : (
+                          <span className="inline-block mt-0.5 text-[10px] text-slate-400">
+                            Preset bawaan (otomatis masuk Stok Packaging &amp; Cup saat diterbitkan)
+                          </span>
+                        )}
+                      </div>
                     </label>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                       <span className="text-[11px] text-slate-500">Biaya: Rp</span>
                       <CurrencyInput
                         value={pack.cost}
@@ -1623,6 +1837,43 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Tambah Item Kemasan Baru Langsung ke Stok Packaging & Cup */}
+              <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">
+                  + Tambah Kemasan Baru ke Stok Gudang (Packaging &amp; Cup)
+                </span>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={newPackName}
+                    onChange={(e) => setNewPackName(e.target.value)}
+                    placeholder="Contoh: Cup Oval 14oz + Logo / Paper Bowl 500ml"
+                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-brand-500"
+                  />
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-28">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                        Rp
+                      </span>
+                      <CurrencyInput
+                        emptyWhenZero
+                        value={newPackCost}
+                        onValueChange={(_, num) => setNewPackCost(Math.max(0, Math.round(num)))}
+                        placeholder="0"
+                        className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-right text-slate-900"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleQuickAddPackagingStock}
+                      className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
+                    >
+                      + Tambah
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">

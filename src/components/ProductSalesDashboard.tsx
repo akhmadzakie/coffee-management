@@ -44,7 +44,7 @@ import type {
   Settings,
 } from "../types";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
-import { exportSalesToXlsx } from "../utils/exportXlsx";
+import { exportProductSalesAnalyticsToXlsx } from "../utils/exportXlsx";
 import { formatCurrency } from "../utils/format";
 import {
   computeProductSalesAnalytics,
@@ -469,12 +469,12 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   };
 
   const handleExportFiltered = () => {
-    exportSalesToXlsx({
-      sales: analytics.filteredTransactions.map((f) => f.tx),
+    exportProductSalesAnalyticsToXlsx({
+      analytics,
       settings,
-      periodLabel: `Produk_${activePeriodLabel}`,
+      periodLabel: activePeriodLabel,
     });
-    toast.success("Laporan penjualan produk berhasil diekspor ke Excel.");
+    toast.success("Laporan Penjualan Produk (4 sheet analitik) berhasil diekspor ke Excel.");
   };
 
   // Charts Data

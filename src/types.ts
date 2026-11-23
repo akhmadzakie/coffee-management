@@ -525,6 +525,8 @@ export interface PackagingOption {
   cost: number;
   division?: ProductDivision | "ALL";
   isIncluded?: boolean;
+  ingredientId?: string;
+  currentStock?: number;
 }
 
 export interface ProductVariant {

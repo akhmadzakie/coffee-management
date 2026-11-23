@@ -1,4 +1,5 @@
 import type { BatchPreparation, Ingredient, Product, Recipe } from "../types";
+import { matchesIngredientCategory } from "./financeMetrics";
 
 export interface RecipeIngredientRef {
   ingredientId: string;
@@ -770,15 +771,31 @@ export function calculateCashFlowHppSync(params: {
       );
       if (!usesChanged) return v;
 
-      const rawCost = effectiveRecipe.reduce(
-        (sum, ri) => sum + ri.quantity * (effectiveCostMap.get(ri.ingredientId) ?? 0),
-        0
-      );
-      const baseCost = rawCost + Number(v.packagingCost || 0);
+      const ingById = new Map(ingredients.map((i) => [i.id, i]));
+      let rawCost = 0;
+      let stockPackagingCost = 0;
+      effectiveRecipe.forEach((ri) => {
+        const lineCost = ri.quantity * (effectiveCostMap.get(ri.ingredientId) ?? 0);
+        const ingObj = ingById.get(ri.ingredientId);
+        if (ingObj && matchesIngredientCategory(ingObj.category, "Packaging & Cup")) {
+          stockPackagingCost += lineCost;
+        } else {
+          rawCost += lineCost;
+        }
+      });
+
+      const manualPackCost = Number(v.packagingCost || 0);
+      const effectivePackagingCost =
+        stockPackagingCost > 0
+          ? Math.max(stockPackagingCost, manualPackCost)
+          : manualPackCost;
+      const baseCost = rawCost + effectivePackagingCost;
       const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
       const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
       const newEstimatedHpp = Math.round(baseCost + wastageCost + overheadCost);
       const oldHpp = Math.round(Number(v.estimatedHpp || 0));
+      const nextPackagingCost =
+        stockPackagingCost > manualPackCost ? Math.round(stockPackagingCost) : v.packagingCost;
 
       affectedVariantPreviews.push({
         productId: p.id,
@@ -790,12 +807,14 @@ export function calculateCashFlowHppSync(params: {
 
       if (
         newEstimatedHpp !== v.estimatedHpp ||
+        nextPackagingCost !== v.packagingCost ||
         (!v.recipe?.length && effectiveRecipe.length > 0)
       ) {
         isProductChanged = true;
         return {
           ...v,
           recipe: v.recipe?.length ? v.recipe : effectiveRecipe,
+          packagingCost: nextPackagingCost,
           estimatedHpp: newEstimatedHpp,
         };
       }

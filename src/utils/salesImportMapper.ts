@@ -7,7 +7,13 @@
  * serta mencocokkan nama menu dengan katalog produk agar pemotongan stok/HPP akurat.
  */
 
-export type CanonicalField = "Tanggal" | "Nama Menu" | "Quantity" | "Total Penjualan";
+export type CanonicalField =
+  | "Tanggal"
+  | "Nama Menu"
+  | "Varian"
+  | "Quantity"
+  | "Harga Satuan"
+  | "Total Penjualan";
 
 const ALIASES: Record<CanonicalField, string[]> = {
   Tanggal: [
@@ -18,9 +24,15 @@ const ALIASES: Record<CanonicalField, string[]> = {
     "nama menu", "menu", "item", "item name", "nama item", "product", "product name",
     "nama produk", "produk", "nama barang", "barang", "menu item", "description", "deskripsi",
   ],
+  Varian: [
+    "varian", "variant", "variant name", "nama varian", "ukuran", "size", "tipe",
+  ],
   Quantity: [
     "quantity", "qty", "jumlah", "jml", "terjual", "qty sold", "item sold", "items sold",
     "jumlah terjual", "total qty", "unit terjual", "kuantitas",
+  ],
+  "Harga Satuan": [
+    "harga satuan", "harga", "unit price", "price", "harga jual",
   ],
   "Total Penjualan": [
     "total penjualan", "total", "subtotal", "sub total", "net sales", "gross sales", "sales",
@@ -147,25 +159,40 @@ export const mapSalesRows = (
   };
 
   rawRows.forEach((row) => {
-    const rawName = String(col(row, "Nama Menu") ?? "").trim();
+    const rawMenuBase = String(col(row, "Nama Menu") ?? "").trim();
+    const rawVariant = String(col(row, "Varian") ?? "").trim();
+    const rawCombined =
+      rawVariant &&
+      rawMenuBase &&
+      !rawMenuBase.toLowerCase().includes(rawVariant.toLowerCase())
+        ? `${rawMenuBase} - ${rawVariant}`
+        : rawMenuBase;
     const date = parseDateToIso(col(row, "Tanggal")) ?? parseDateToIso(new Date());
-    if (!rawName || !date) {
+    if (!rawMenuBase || !date) {
       skipped++;
       return;
     }
 
-    let menuName = rawName;
-    const hit = catalog.get(norm(rawName));
+    let menuName = rawCombined;
+    const hitCombined = catalog.get(norm(rawCombined));
+    const hitBase = catalog.get(norm(rawMenuBase));
+    const hit = hitCombined || hitBase;
     if (hit) {
-      if (hit !== rawName) autoMatched++;
+      if (hit !== rawCombined) autoMatched++;
       menuName = hit;
     } else if (productNames.length > 0) {
-      unmatched.add(rawName);
+      unmatched.add(rawCombined);
     }
 
     const qtyRaw = col(row, "Quantity");
     const quantitySold = Math.max(1, Math.round(parseMoney(qtyRaw))) || 1;
-    const totalPrice = Math.max(0, parseMoney(col(row, "Total Penjualan")));
+    let totalPrice = Math.max(0, Math.round(parseMoney(col(row, "Total Penjualan"))));
+    if (totalPrice <= 0) {
+      const unitPrice = Math.max(0, parseMoney(col(row, "Harga Satuan")));
+      if (unitPrice > 0) {
+        totalPrice = Math.round(quantitySold * unitPrice);
+      }
+    }
 
     rows.push({ date, menuName, quantitySold, totalPrice });
   });

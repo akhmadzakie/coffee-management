@@ -9,7 +9,10 @@ import type {
   SalesTransaction,
 } from "../types";
 import { getLocalDateString } from "./dateUtils";
-import { getSaleTransactionAmount } from "./financeMetrics";
+import {
+  getSaleTransactionAmount,
+  matchesIngredientCategory,
+} from "./financeMetrics";
 import { resolveOrderItemIngredients } from "./posDomainLogic";
 
 export const PRODUCT_GROUP_OPTIONS = [
@@ -183,6 +186,13 @@ export function extractDetectedNameAndVariant(rawMenuName: string): {
   return { productName: clean, variantName: "Reguler" };
 }
 
+export function isPackagingIngredient(
+  ing?: Pick<Ingredient, "category" | "name"> | null
+): boolean {
+  if (!ing) return false;
+  return matchesIngredientCategory(ing.category, "Packaging & Cup");
+}
+
 export function calculateVariantUnitHpp(
   variant: ProductVariant | null | undefined,
   product: Product | null | undefined,
@@ -216,16 +226,28 @@ export function calculateVariantUnitHpp(
     }
   }
 
-  let rawCost = 0;
+  let rawMaterialCost = 0;
+  let stockPackagingCost = 0;
   for (const ri of recipeList) {
     const ing = ingMap.get(ri.ingredientId);
     if (ing && Number(ing.costPerUnit) > 0 && Number(ri.quantity) > 0) {
-      rawCost += Number(ri.quantity) * Number(ing.costPerUnit);
+      const lineCost = Number(ri.quantity) * Number(ing.costPerUnit);
+      if (isPackagingIngredient(ing)) {
+        stockPackagingCost += lineCost;
+      } else {
+        rawMaterialCost += lineCost;
+      }
     }
   }
 
-  if (rawCost > 0) {
-    const baseCost = rawCost + (Number(variant?.packagingCost) || 0);
+  const manualPackCost = Number(variant?.packagingCost) || 0;
+  const effectivePackagingCost =
+    stockPackagingCost > 0
+      ? Math.max(stockPackagingCost, manualPackCost)
+      : manualPackCost;
+
+  if (rawMaterialCost > 0 || stockPackagingCost > 0) {
+    const baseCost = rawMaterialCost + effectivePackagingCost;
     const wastageCost = Math.round(
       baseCost * ((Number(variant?.wastagePercent) || 0) / 100)
     );

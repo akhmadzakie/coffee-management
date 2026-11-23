@@ -2579,6 +2579,107 @@ test("25b. computeProductSalesAnalytics: Filter Hari/Rentang, Kategori, Cross-Ch
   assert.strictEqual(allDivRange.zeroSalesProducts[0].productName, "Butter Croissant");
 });
 
+test("25c. Kemasan Stok (Packaging & Cup) di Resep Varian: Anti-Double-Count HPP & Ikut Terpotong Saat Penjualan", async () => {
+  const { resolveProductAndVariant } = await import("../src/utils/productSalesAnalytics");
+
+  const stockIngredients: any[] = [
+    { id: "ing-bean", name: "Espresso Beans", category: "Biji Kopi", unit: "gr", costPerUnit: 250, currentStock: 5000 },
+    { id: "ing-cup", name: "Cup Plastik 16oz", category: "Packaging & Cup", unit: "pcs", costPerUnit: 650, currentStock: 100 },
+    { id: "ing-lid", name: "Flat Lid", category: "Packaging & Cup", unit: "pcs", costPerUnit: 200, currentStock: 100 },
+  ];
+
+  const prodList: any[] = [
+    {
+      id: "prod-latte",
+      name: "Cafe Latte",
+      category: "COFFEE",
+      productGroup: "MINUMAN",
+      division: "BAR",
+      isActive: true,
+      variants: [
+        {
+          id: "var-iced",
+          productId: "prod-latte",
+          name: "Iced 16oz",
+          price: 25000,
+          packagingCost: 850, // catatan biaya kemasan tetap 850 (sama dgn cup 650 + lid 200)
+          estimatedHpp: 5350,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 18 },
+            { ingredientId: "ing-cup", quantity: 1 },
+            { ingredientId: "ing-lid", quantity: 1 },
+          ],
+        },
+      ],
+    },
+  ];
+
+  // 1. resolveProductAndVariant tidak boleh menggandakan packagingCost 850 + (cup 650 + lid 200)
+  const resolved = resolveProductAndVariant("Cafe Latte - Iced 16oz", 25000, prodList as any, [], stockIngredients as any);
+  // Beans (18 * 250 = 4500) + Packaging max(850, 850) = 5350 (bukan 6200)
+  assert.strictEqual(resolved.unitHpp, 5350);
+
+  // 2. Saat pembelian cup baru (harga naik 650 -> 750), HPP sync juga bebas double count
+  const sync = calculateCashFlowHppSync({
+    itemRows: [
+      { ingredientId: "ing-cup", unitMode: "BASE", conversionFactor: 1, qty: 100, unitPrice: 850, totalPrice: 85000 },
+    ],
+    ingredients: stockIngredients,
+    batchPreparations: [],
+    products: prodList,
+    recipes: [],
+    priceSyncMethod: "LAST_PRICE",
+  });
+  // Cup baru 850 + Lid 200 = packagingCost baru 1050; Beans 4500 + 1050 = 5550
+  assert.strictEqual(sync.productsToUpdate.length, 1);
+  assert.strictEqual(sync.productsToUpdate[0].variants[0].packagingCost, 1050);
+  assert.strictEqual(sync.productsToUpdate[0].variants[0].estimatedHpp, 5550);
+
+  // 3. Penjualan Cafe Latte - Iced 16oz x 5 otomatis memotong stok cup & lid sebanyak 5 pcs
+  const usages = resolveOrderItemIngredients(
+    { menuName: "Cafe Latte - Iced 16oz", quantity: 5 },
+    [],
+    prodList,
+    stockIngredients
+  );
+  assert.strictEqual(usages.find((u) => u.ingredientId === "ing-cup")?.totalQuantity, 5);
+  assert.strictEqual(usages.find((u) => u.ingredientId === "ing-lid")?.totalQuantity, 5);
+});
+
+test("25d. Import Excel mapSalesRows: Kolom Varian Terpisah & Harga Satuan", async () => {
+  const { mapSalesRows } = await import("../src/utils/salesImportMapper");
+
+  const rawRows = [
+    {
+      Date: "2026-11-23",
+      "Product Name": "Kopi Susu Gula Aren",
+      Variant: "Iced 16oz",
+      Qty: 10,
+      "Unit Price": 22000,
+    },
+    {
+      Date: "2026-11-23",
+      "Product Name": "Kopi Susu Gula Aren (Botol 1 Liter)",
+      Variant: "",
+      Qty: 2,
+      "Net Sales": 170000,
+    },
+  ];
+
+  const mapped = mapSalesRows(rawRows, [
+    "Kopi Susu Gula Aren",
+    "Kopi Susu Gula Aren - Iced 16oz",
+    "Kopi Susu Gula Aren - Botol 1 Liter",
+  ]);
+
+  assert.strictEqual(mapped.rows.length, 2);
+  assert.strictEqual(mapped.rows[0].menuName, "Kopi Susu Gula Aren - Iced 16oz");
+  assert.strictEqual(mapped.rows[0].totalPrice, 220000);
+  assert.strictEqual(mapped.rows[1].menuName, "Kopi Susu Gula Aren - Botol 1 Liter");
+  assert.strictEqual(mapped.rows[1].totalPrice, 170000);
+});
+
 // -------------------------------------------------------------
 // HASIL AKHIR
 // -------------------------------------------------------------
