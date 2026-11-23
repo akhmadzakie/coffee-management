@@ -759,6 +759,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     }
 
     const usePurchase = ingredientEntryMode === "MENTAH" && ingredientForm.usePurchaseUnit;
+    if (ingredientEntryMode === "OLAHAN" && !(batchYieldOutput > 0)) {
+      toast.error("Total hasil jadi (yield) harus lebih dari 0.");
+      return;
+    }
+    if (usePurchase && !(Number(ingredientForm.conversionFactor) > 0)) {
+      toast.error("Isi per kemasan harus lebih dari 0.");
+      return;
+    }
     const calculatedStock =
       ingredientForm.initialStockUnit === "PURCHASE" && usePurchase
         ? Number(ingredientForm.stockInput) * Number(ingredientForm.conversionFactor)
@@ -2844,13 +2852,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                 return (
                                   <div className="flex flex-col items-center gap-1">
                                     <div className="inline-flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 shadow-inner">
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
+                                      <CurrencyInput
+                                        allowDecimals
                                         placeholder="0"
-                                        className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
+                                        className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
                                         value={currentDraft}
-                                        onChange={(e) => handleOpnameInputChange(item.ingredientId, e.target.value, isRowPurchase, factor)}
+                                        onValueChange={(raw) => handleOpnameInputChange(item.ingredientId, raw, isRowPurchase, factor)}
                                       />
                                       {conv.hasConversion ? (
                                         <button
@@ -2987,13 +2994,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
                           <div className="flex-1 flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                             <span className="text-[10px] text-slate-400 font-bold px-1.5">Fisik:</span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
+                            <CurrencyInput
+                              allowDecimals
                               placeholder="0"
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-center text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-center text-base font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-2xs"
                               value={currentDraft}
-                              onChange={(e) => handleOpnameInputChange(item.ingredientId, e.target.value, isRowPurchase, factor)}
+                              onValueChange={(raw) => handleOpnameInputChange(item.ingredientId, raw, isRowPurchase, factor)}
                             />
                             {conv.hasConversion ? (
                               <button
@@ -4108,16 +4114,23 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
                         Total Hasil Jadi (Yield)
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="any"
+                      <CurrencyInput
+                        allowDecimals
+                        emptyWhenZero
                         value={batchYieldOutput}
-                        onChange={(e) => {
-                          const qty = Math.max(1, Number(e.target.value) || 1);
+                        onValueChange={(_, num) => {
+                          const qty = Math.max(0, num);
                           setBatchYieldOutput(qty);
                           if (!editingIngredient) {
                             setIngredientForm((prev) => ({ ...prev, stockInput: qty }));
+                          }
+                        }}
+                        onBlur={() => {
+                          if (batchYieldOutput <= 0) {
+                            setBatchYieldOutput(1);
+                            if (!editingIngredient) {
+                              setIngredientForm((prev) => ({ ...prev, stockInput: 1 }));
+                            }
                           }
                         }}
                         className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
@@ -4218,12 +4231,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           Isi per Kemasan
                         </label>
                         <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
+                          <CurrencyInput
+                            allowDecimals
+                            emptyWhenZero
                             required
-                            min="1"
                             value={ingredientForm.conversionFactor}
-                            onChange={(e) => setIngredientForm({ ...ingredientForm, conversionFactor: Number(e.target.value) })}
+                            onValueChange={(_, num) => setIngredientForm({ ...ingredientForm, conversionFactor: Math.max(0, num) })}
                             className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 font-bold font-mono text-base sm:text-xs text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
                           <span className="text-xs font-bold text-brand-700 shrink-0">
@@ -4329,13 +4342,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
+                    <CurrencyInput
+                      allowDecimals
                       required
-                      min="0"
-                      step="any"
                       value={ingredientForm.stockInput}
-                      onChange={(e) => setIngredientForm({ ...ingredientForm, stockInput: Number(e.target.value) })}
+                      onValueChange={(_, num) => setIngredientForm({ ...ingredientForm, stockInput: Math.max(0, num) })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                     />
                     <span className="font-bold text-slate-500 shrink-0 text-xs">
@@ -4354,13 +4365,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     Batas Minimum Aman (Alert Reorder)
                   </label>
                   <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
+                    <CurrencyInput
+                      allowDecimals
                       required
-                      min="0"
-                      step="any"
                       value={ingredientForm.minStock}
-                      onChange={(e) => setIngredientForm({ ...ingredientForm, minStock: Number(e.target.value) })}
+                      onValueChange={(_, num) => setIngredientForm({ ...ingredientForm, minStock: Math.max(0, num) })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                     />
                     <span className="font-bold text-slate-500 shrink-0 text-xs">
@@ -4628,13 +4637,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <input
-                        type="number"
+                      <CurrencyInput
+                        allowDecimals
+                        emptyWhenZero
                         required
-                        min="0.01"
-                        step="any"
-                        value={movementQuantity || ""}
-                        onChange={(e) => setMovementQuantity(Number(e.target.value))}
+                        value={movementQuantity}
+                        onValueChange={(_, num) => setMovementQuantity(Math.max(0, num))}
                         className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                         placeholder="0"
                       />
@@ -4648,7 +4656,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex justify-between items-center">
                         <span>Konversi Satuan:</span>
                         <span className="font-mono font-bold text-brand-700">
-                          {movementQuantity} {conv.purchaseUnit} = {(movementQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
+                          {movementQuantity.toLocaleString("id-ID")} {conv.purchaseUnit} = {(movementQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
                         </span>
                       </div>
                     )}
@@ -5035,13 +5043,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <input
-                        type="number"
+                      <CurrencyInput
+                        allowDecimals
+                        emptyWhenZero
                         required
-                        min="0.01"
-                        step="any"
-                        value={wasteQuantity || ""}
-                        onChange={(e) => setWasteQuantity(Number(e.target.value))}
+                        value={wasteQuantity}
+                        onValueChange={(_, num) => setWasteQuantity(Math.max(0, num))}
                         className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                         placeholder="0"
                       />
@@ -5054,7 +5061,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex justify-between items-center">
                         <span>Konversi Satuan:</span>
                         <span className="font-mono font-bold text-brand-700">
-                          {wasteQuantity} {conv.purchaseUnit} = {(wasteQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
+                          {wasteQuantity.toLocaleString("id-ID")} {conv.purchaseUnit} = {(wasteQuantity * conv.conversionFactor).toLocaleString("id-ID")} {currentIng?.unit}
                         </span>
                       </div>
                     )}

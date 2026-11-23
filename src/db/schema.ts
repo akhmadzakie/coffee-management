@@ -520,6 +520,7 @@ export const products = pgTable("products", {
   id: varchar("id", { length: 255 }).primaryKey(),
   name: text("name").notNull(),
   category: text("category").notNull(),
+  productGroup: text("product_group"),
   division: varchar("division", { length: 50 }).default("BAR").notNull(), // 'BAR' | 'KITCHEN' | 'BAKER'
   description: text("description"),
   imageUrl: text("image_url"),

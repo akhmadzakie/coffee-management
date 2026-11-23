@@ -47,14 +47,15 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatCurrency } from "../utils/format";
-import { CsvImportExport } from "./common/CsvImportExport";
 import { ConfirmModal } from "./common/ConfirmModal";
-import { exportDailySalesRecapToXlsx, exportSalesToXlsx } from "../utils/exportXlsx";
+import { exportDailySalesRecapToXlsx } from "../utils/exportXlsx";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CustomSelect } from "./common/CustomSelect";
 import { PosManagerPinModal } from "./pos/PosManagerPinModal";
+import { ProductSalesDashboard } from "./ProductSalesDashboard";
+import { formatCatalogMenuVariantLabel } from "../utils/productSalesAnalytics";
 
 interface PosOrderDetail {
   id: string;
@@ -110,6 +111,11 @@ export const Sales = () => {
     currentUser,
     settings,
     products,
+    recipes,
+    ingredients,
+    addProduct,
+    updateProduct,
+    addRecipe,
     addSalesTransactions,
     isReadOnly,
     closedPeriods = [],
@@ -124,7 +130,6 @@ export const Sales = () => {
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
   const [activeTab, setActiveTab] = useState<"cashier_analytics" | "daily_recap" | "pos_orders" | "sales" | "logs">(FEATURES.POS ? "cashier_analytics" : "daily_recap");
-  const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     type: "success" | "error";
@@ -690,10 +695,6 @@ export const Sales = () => {
     );
   }, [posOrders, posSearchQuery]);
 
-  const filteredSales = salesTransactions
-    .filter((s) => s.menuName.toLowerCase().includes(searchTerm.toLowerCase()))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
   const filteredLogs = salesImportLogs.sort(
     (a, b) =>
       new Date(b.importDate).getTime() - new Date(a.importDate).getTime()
@@ -716,11 +717,22 @@ export const Sales = () => {
     }
 
     // Pemetaan kolom fleksibel: mendukung ekspor dari aplikasi POS lain
-    // (mis. "Date/Item/Qty/Net Sales") dan menyamakan nama menu dengan katalog.
-    const mapped = mapSalesRows(
-      parsedData,
-      (products || []).map((p: any) => p.name)
+    // (mis. "Date/Item/Qty/Net Sales") dan menyamakan nama menu + varian dengan katalog.
+    const catalogCandidates: string[] = Array.from(
+      new Set<string>(
+        (products || []).flatMap((p) => {
+          const vars = Array.isArray(p?.variants) ? p.variants : [];
+          return [
+            String(p.name || ""),
+            ...vars.map((v) =>
+              formatCatalogMenuVariantLabel(p.name, v.name, vars.length)
+            ),
+            ...vars.map((v) => `${p.name} - ${v.name}`),
+          ].filter(Boolean);
+        })
+      )
     );
+    const mapped = mapSalesRows(parsedData, catalogCandidates);
     if (!mapped.mapping.mapped["Nama Menu"] || !mapped.mapping.mapped["Total Penjualan"]) {
       alert(
         "Kolom wajib tidak ditemukan di file.\n\n" +
@@ -819,14 +831,6 @@ export const Sales = () => {
       recaps: filteredRecaps,
       settings,
       periodLabel: recapDateFilter || "Semua_Tanggal",
-    });
-  };
-
-  const handleExportSales = () => {
-    exportSalesToXlsx({
-      sales: filteredSales,
-      settings,
-      periodLabel: "Item_Penjualan",
     });
   };
 
@@ -940,7 +944,7 @@ export const Sales = () => {
                 />
               )}
               <FileSpreadsheet className="w-4 h-4 text-brand-600 relative z-10" />
-              <span className="relative z-10">Item Terjual</span>
+              <span className="relative z-10">Penjualan Produk</span>
               {salesTransactions.length > 0 && (
                 <span className="relative z-10 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
                   {salesTransactions.length}
@@ -2225,185 +2229,29 @@ export const Sales = () => {
         </div>
       )}
 
-      {/* ── TAB 3: DATA ITEM PENJUALAN ───────────────────────────────────── */}
+      {/* ── TAB 3: DASHBOARD PENJUALAN PRODUK & VARIAN ──────────────────────── */}
       {activeTab === "sales" && (
-        <div className="space-y-6">
-          {/* Top Actions for Sales Item Tab */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari Menu Terjual..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-base sm:text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 focus:bg-white transition"
-              />
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
-              <button
-                onClick={handleExportSales}
-                className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
-                title="Unduh Data Penjualan Menu ke Excel (.xlsx)"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                <span>Ekspor Excel (.xlsx)</span>
-              </button>
-
-              {!isReadOnly && (
-                <div className="flex items-center shrink-0">
-                  <CsvImportExport
-                    onImport={handleSalesImport}
-                    templateHeaders={["Tanggal", "Nama Menu", "Quantity", "Total Penjualan"]}
-                    templateExampleRow={[
-                      new Date().toISOString().slice(0, 10),
-                      products && products.length > 0 ? products[0].name : "Kopi Susu Gula Aren",
-                      "45",
-                      "990000",
-                    ]}
-                    templateFilename="Template_Import_Penjualan_Menu.xlsx"
-                    buttonLabel="Import Excel / CSV Penjualan"
-                    currentData={salesTransactions.slice(0, 50).map((s) => ({
-                      id: s.id,
-                      Tanggal: s.date.slice(0, 10),
-                      "Nama Menu": s.menuName,
-                      Quantity: s.quantitySold,
-                      "Total Penjualan": s.totalPrice,
-                    }))}
-                    templateDropdowns={{
-                      "Nama Menu":
-                        products && products.length > 0
-                          ? Array.from(new Set(products.map((p) => p.name)))
-                          : ["Kopi Susu Gula Aren", "Cafe Latte", "Iced Americano", "Butter Croissant"],
-                    }}
-                    templateColumnTypes={{
-                      Tanggal: "date",
-                      Quantity: "integer",
-                      "Total Penjualan": "number",
-                    }}
-                    templateHints={{
-                      Tanggal: "Format tanggal penjualan: YYYY-MM-DD (contoh: 2026-10-18)",
-                      "Nama Menu": "Pilih menu kopi atau makanan dari dropdown produk",
-                      Quantity: "Jumlah cup / porsi yang terjual",
-                      "Total Penjualan": "Total nominal uang penjualan (angka bulat tanpa titik/koma)",
-                    }}
-                    templateInstructions={[
-                      "Gunakan template ini untuk merekap penjualan jika coffee shop menggunakan POS eksternal atau catatan harian.",
-                      "Kolom 'Nama Menu' sudah dilengkapi dropdown pilihan produk kafe.",
-                      "Kolom 'Total Penjualan' diisi total omzet rupiah dari menu tersebut.",
-                      "Setelah disimpan, data akan otomatis masuk ke Laporan Penjualan dan Laba Rugi Finance.",
-                    ]}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Dual-View Data: Item Penjualan */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-brand-600" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Daftar Mutasi Item Penjualan
-                </h3>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                Total <strong>{filteredSales.length}</strong> baris penjualan
-              </span>
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                    <th className="p-3.5">Tanggal</th>
-                    <th className="p-3.5">Nama Menu</th>
-                    <th className="p-3.5 text-right">Quantity Terjual</th>
-                    <th className="p-3.5 text-right">Total Penjualan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredSales.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-10 text-center text-slate-400">
-                        <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="font-bold text-slate-700">Tidak ada data penjualan menu</p>
-                        <p className="text-xs text-slate-400 mt-1">Silakan gunakan Terminal POS atau import file Excel penjualan.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredSales.map((sale) => (
-                      <tr key={sale.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3.5 text-slate-700 font-medium whitespace-nowrap">
-                          {new Date(sale.date).toLocaleDateString("id-ID", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </td>
-                        <td className="p-3.5 font-bold text-slate-900">
-                          {sale.menuName}
-                        </td>
-                        <td className="p-3.5 text-right font-bold text-brand-700">
-                          <span className="px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200/70">
-                            {sale.quantitySold} porsi
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-slate-900 text-sm">
-                          {formatCurrency(sale.totalPrice)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Card Feed View */}
-            <div className="block md:hidden divide-y divide-slate-100 p-3 space-y-3">
-              {filteredSales.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 space-y-1">
-                  <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto mb-1" />
-                  <p className="font-bold text-slate-700 text-xs">Belum ada item terjual</p>
-                </div>
-              ) : (
-                filteredSales.map((sale) => (
-                  <div
-                    key={sale.id}
-                    className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-2"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-bold text-sm text-slate-900">
-                          {sale.menuName}
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {new Date(sale.date).toLocaleDateString("id-ID", {
-                            weekday: "short",
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-black text-slate-900">
-                          {formatCurrency(sale.totalPrice)}
-                        </p>
-                        <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-bold border border-brand-200/70">
-                          {sale.quantitySold} porsi
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        <ProductSalesDashboard
+          salesTransactions={salesTransactions}
+          dailySalesRecaps={dailySalesRecaps}
+          products={products}
+          recipes={recipes}
+          ingredients={ingredients}
+          settings={settings}
+          cashAccounts={cashAccounts}
+          isReadOnly={isReadOnly}
+          onImportSales={handleSalesImport}
+          onAddManualSales={addSalesTransactions}
+          onSaveProduct={(prodData, existingProduct) => {
+            if (existingProduct) {
+              updateProduct({ ...existingProduct, ...prodData });
+            } else {
+              addProduct(prodData);
+            }
+          }}
+          onSaveRecipe={addRecipe}
+          isPeriodClosed={isPeriodClosed}
+        />
       )}
 
       {/* ── TAB 4: RIWAYAT IMPORT CSV ─────────────────────────────────────── */}

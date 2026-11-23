@@ -9,6 +9,7 @@ import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import { Trash2, Coffee, AlertTriangle, X, Check, Scale } from "lucide-react";
 import { CustomSelect } from "../common/CustomSelect";
+import { CurrencyInput } from "../common/CurrencyInput";
 
 interface PosQuickWasteModalProps {
   isOpen: boolean;
@@ -145,13 +146,11 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Jumlah Terbuang ({currentIng?.unit || "unit"})
               </label>
-              <input
-                type="number"
-                step="any"
-                min="0.001"
+              <CurrencyInput
+                allowDecimals
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onValueChange={(raw) => setQuantity(raw)}
                 placeholder="Misal 36"
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
               />

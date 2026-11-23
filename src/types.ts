@@ -563,6 +563,7 @@ export interface Product {
   id: string;
   name: string; // e.g. "Kopi Susu Gula Aren", "Cafe Latte"
   category: string; // "COFFEE" | "NON-COFFEE" | "FOOD" | "BAKERY" | "TEA" | "SNACK"
+  productGroup?: string; // "MINUMAN" | "MAKANAN" | "PASTRY & BAKERY" | "KEMASAN & RETAIL"
   division: ProductDivision;
   description?: string;
   imageUrl?: string;

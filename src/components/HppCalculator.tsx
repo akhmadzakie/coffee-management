@@ -1489,12 +1489,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                             <label className="block text-[10px] font-bold text-slate-500 mb-1">
                               Takaran
                             </label>
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
+                            <CurrencyInput
+                              allowDecimals
                               value={item.quantity}
-                              onChange={(e) => handleUpdateItem(item.id, { quantity: Number(e.target.value) })}
+                              onValueChange={(_, num) => handleUpdateItem(item.id, { quantity: Math.max(0, num) })}
                               className="w-full text-base sm:text-xs font-bold font-mono px-2 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
                             />
                           </div>
@@ -1523,12 +1521,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                           <label className="block text-[10px] font-bold text-slate-500 mb-1">
                             Biaya/{item.unit} (Rp)
                           </label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
+                          <CurrencyInput
+                            allowDecimals
                             value={item.costPerUnit}
-                            onChange={(e) => handleUpdateItem(item.id, { costPerUnit: Number(e.target.value) })}
+                            onValueChange={(_, num) => handleUpdateItem(item.id, { costPerUnit: Math.max(0, num) })}
                             className="w-full text-base sm:text-xs font-semibold font-mono px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-right focus:outline-none focus:ring-1 focus:ring-brand-500"
                           />
                         </div>
@@ -2441,11 +2437,14 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   <label className="block text-slate-700 font-bold mb-1">
                     Hasil Jadi (Yield Qty)
                   </label>
-                  <input
-                    type="number"
-                    min="1"
+                  <CurrencyInput
+                    allowDecimals
+                    emptyWhenZero
                     value={batchYieldQty}
-                    onChange={(e) => setBatchYieldQty(Math.max(1, Number(e.target.value)))}
+                    onValueChange={(_, num) => setBatchYieldQty(Math.max(0, num))}
+                    onBlur={() => {
+                      if (batchYieldQty <= 0) setBatchYieldQty(1);
+                    }}
                     className="w-full text-base sm:text-xs font-bold font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>

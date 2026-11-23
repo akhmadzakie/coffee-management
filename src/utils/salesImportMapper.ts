@@ -32,7 +32,7 @@ const ALIASES: Record<CanonicalField, string[]> = {
 const norm = (s: string) =>
   String(s ?? "")
     .toLowerCase()
-    .replace(/[_\-./]+/g, " ")
+    .replace(/[_\-./()]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 

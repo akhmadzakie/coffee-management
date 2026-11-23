@@ -4,6 +4,7 @@ import { Plus, Trash2, X, Check, UtensilsCrossed } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Recipe, RecipeIngredient, Ingredient } from "../types";
 import { CustomSelect } from "./common/CustomSelect";
+import { CurrencyInput } from "./common/CurrencyInput";
 
 interface RecipeModalProps {
   isOpen: boolean;
@@ -188,12 +189,11 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                           {/* Quantity & Unit & Delete row on mobile, inline on tablet/desktop */}
                           <div className="flex items-center gap-2">
                             <div className="w-28 sm:w-28">
-                              <input
-                                type="number"
-                                min="0.001"
-                                step="any"
+                              <CurrencyInput
+                                allowDecimals
+                                emptyWhenZero
                                 value={ri.quantity}
-                                onChange={(e) => handleIngredientChange(idx, "quantity", Number(e.target.value))}
+                                onValueChange={(_, num) => handleIngredientChange(idx, "quantity", Math.max(0, num))}
                                 className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-base sm:text-xs font-mono font-bold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                                 placeholder="Takaran"
                               />

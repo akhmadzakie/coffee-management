@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Menghilangkan tanda pemisah ribuan (.) dari string input dan mengembalikan
@@ -22,7 +22,7 @@ export function parseThousandInput(raw: string, allowDecimals = false): string {
   if (parts.length === 1) {
     return parts[0];
   }
-  const intPart = parts[0];
+  const intPart = parts[0] || "0";
   const decPart = parts.slice(1).join("");
   return `${intPart}.${decPart}`;
 }
@@ -45,7 +45,7 @@ export function formatThousandInput(
 
   const str = String(val);
   if (!str) return "";
-  if (emptyWhenZero && (str === "0" || str === "0.0")) return "";
+  if (emptyWhenZero && (str === "0" || (!allowDecimals && str === "0.0"))) return "";
 
   if (!allowDecimals) {
     const digitsOnly = str.replace(/\D/g, "");
@@ -92,17 +92,27 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
   allowDecimals = false,
   emptyWhenZero = false,
   onChange,
+  onBlur,
   className = "",
   placeholder = "0",
   ...rest
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const nextCursorDigitsRef = useRef<number | null>(null);
+  const [editingDraft, setEditingDraft] = useState<string | null>(null);
+
+  const isDraftSyncedWithNumberValue =
+    editingDraft !== null &&
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    (editingDraft === "" ? value === 0 : Number(editingDraft) === value);
+  const effectiveValue = isDraftSyncedWithNumberValue ? editingDraft : value;
+  const effectiveEmptyWhenZero = isDraftSyncedWithNumberValue ? false : emptyWhenZero;
 
   const formattedValue = formatThousandInput(
-    value,
+    effectiveValue,
     allowDecimals,
-    emptyWhenZero
+    effectiveEmptyWhenZero
   );
 
   useLayoutEffect(() => {
@@ -138,12 +148,31 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
     const beforeCursor = rawText.slice(0, selStart);
     const meaningfulRegex = allowDecimals ? /[0-9,]/g : /\d/g;
     const meaningfulMatches = beforeCursor.match(meaningfulRegex);
-    nextCursorDigitsRef.current = meaningfulMatches ? meaningfulMatches.length : 0;
+    let cursorDigits = meaningfulMatches ? meaningfulMatches.length : 0;
+    if (allowDecimals && beforeCursor.trim().startsWith(",")) {
+      cursorDigits += 1;
+    }
+    nextCursorDigitsRef.current = cursorDigits;
 
     // Izinkan pengguna mengetik titik pada mode non-decimal hanya jika merupakan separator atau ketik baru:
     // parseThousandInput menghapus semua non-digit (pada non-decimal), jadi mengetik digit berjalan normal.
     const cleanString = parseThousandInput(rawText, allowDecimals);
     const numericValue = cleanString ? Number(cleanString) || 0 : 0;
+
+    if (typeof value !== "string") {
+      if (cleanString === "") {
+        setEditingDraft("");
+      } else if (
+        allowDecimals &&
+        (cleanString === "0" || cleanString.endsWith(".") || /\.\d*0$/.test(cleanString))
+      ) {
+        setEditingDraft(cleanString);
+      } else {
+        setEditingDraft(null);
+      }
+    } else {
+      setEditingDraft(null);
+    }
 
     onValueChange(cleanString, numericValue);
     if (onChange) {
@@ -161,6 +190,11 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
     }
   };
 
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setEditingDraft(null);
+    onBlur?.(e);
+  };
+
   return (
     <input
       ref={inputRef}
@@ -168,6 +202,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
       inputMode={allowDecimals ? "decimal" : "numeric"}
       value={formattedValue}
       onChange={handleInputChange}
+      onBlur={handleBlur}
       placeholder={placeholder}
       className={`tabular-nums ${className}`}
       {...rest}

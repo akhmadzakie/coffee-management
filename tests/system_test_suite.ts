@@ -1740,6 +1740,13 @@ test("formatThousandInput & parseThousandInput: Memformat pemisah ribuan titik &
   assert.strictEqual(parseThousandInput("Rp 250.000"), "250000");
   assert.strictEqual(parseThousandInput("12.500,75", true), "12500.75");
   assert.strictEqual(parseThousandInput("18,", true), "18.");
+  assert.strictEqual(parseThousandInput(",", true), "0.");
+  assert.strictEqual(parseThousandInput(",5", true), "0.5");
+
+  assert.strictEqual(formatThousandInput("0.", true, true), "0,");
+  assert.strictEqual(formatThousandInput("0.0", true, true), "0,0");
+  assert.strictEqual(formatThousandInput("1250.", true), "1.250,");
+  assert.strictEqual(formatThousandInput(0, true, true), "");
 });
 
 // -------------------------------------------------------------
@@ -2307,6 +2314,269 @@ test("24e. Rekap 5 Kanal Bayar (termasuk Ojol ke Bank), Diskon, Refund, MDR & Se
   assert.strictEqual(summary.pendingNonCashSettlement, 1500000); // 400k + 300k + 200k + 600k
   assert.strictEqual(summary.dailyBreakdown[0].pendingNonCash, 1500000);
   assert.strictEqual(summary.netProfit, 1985000); // 2.000.000 - MDR 15.000
+});
+
+// -------------------------------------------------------------
+// 25. PENGUJIAN REKAP PENJUALAN PRODUK, VARIAN & CROSS-CHECK OMZET
+// -------------------------------------------------------------
+console.log("\n25. Pengujian Dashboard Penjualan Produk (PMIX) & Integrasi Katalog Menu:");
+
+test("25a. Resolusi Produk, Varian Spesifik ('- Iced 16oz' vs '- Botol 1 Liter'), Resep & Kategori 3 Tingkat", async () => {
+  const {
+    resolveProductAndVariant,
+    inferProductGroup,
+    formatCatalogMenuVariantLabel,
+  } = await import("../src/utils/productSalesAnalytics");
+
+  const testIngredients: any[] = [
+    { id: "ing-bean", name: "Espresso Beans", unit: "gr", costPerUnit: 250, currentStock: 5000 },
+    { id: "ing-milk", name: "Fresh Milk", unit: "ml", costPerUnit: 22, currentStock: 10000 },
+    { id: "ing-chx", name: "Ayam Fillet", unit: "gr", costPerUnit: 65, currentStock: 3000 },
+  ];
+
+  const testProducts: any[] = [
+    {
+      id: "prod-kopsu",
+      name: "Kopi Susu Gula Aren",
+      category: "SIGNATURE COFFEE",
+      productGroup: "MINUMAN",
+      division: "BAR",
+      isActive: true,
+      variants: [
+        {
+          id: "var-iced",
+          productId: "prod-kopsu",
+          name: "Iced 16oz",
+          price: 22000,
+          packagingCost: 1000,
+          estimatedHpp: 7000,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 18 },
+            { ingredientId: "ing-milk", quantity: 120 },
+          ],
+        },
+        {
+          id: "var-1l",
+          productId: "prod-kopsu",
+          name: "Botol 1 Liter",
+          price: 85000,
+          packagingCost: 3000,
+          estimatedHpp: 30000,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 90 },
+            { ingredientId: "ing-milk", quantity: 650 },
+          ],
+        },
+      ],
+    },
+    {
+      id: "prod-ayam",
+      name: "Nasi Ayam Sambal Matah",
+      category: "MAIN COURSE",
+      division: "KITCHEN",
+      isActive: true,
+      variants: [
+        {
+          id: "var-reg",
+          productId: "prod-ayam",
+          name: "Reguler",
+          price: 35000,
+          packagingCost: 1500,
+          estimatedHpp: 12000,
+          isAvailable: true,
+          recipe: [{ ingredientId: "ing-chx", quantity: 120 }],
+        },
+      ],
+    },
+  ];
+
+  assert.strictEqual(
+    formatCatalogMenuVariantLabel("Kopi Susu Gula Aren", "Botol 1 Liter", 2),
+    "Kopi Susu Gula Aren - Botol 1 Liter"
+  );
+  assert.strictEqual(
+    formatCatalogMenuVariantLabel("Nasi Ayam Sambal Matah", "Reguler", 1),
+    "Nasi Ayam Sambal Matah"
+  );
+  assert.strictEqual(inferProductGroup("BAR", "BOTOL 1 LITER", undefined, "Botol 1 Liter"), "KEMASAN & RETAIL");
+  assert.strictEqual(inferProductGroup("KITCHEN", "MAIN COURSE"), "MAKANAN");
+
+  // Resolusi varian spesifik Iced 16oz
+  const resIced = resolveProductAndVariant(
+    "Kopi Susu Gula Aren - Iced 16oz",
+    22000,
+    testProducts as any,
+    [],
+    testIngredients as any
+  );
+  assert.strictEqual(resIced.isMatched, true);
+  assert.strictEqual(resIced.variantName, "Iced 16oz");
+  assert.strictEqual(resIced.division, "BAR");
+  // HPP: (18*250) + (120*22) + 1000 packaging = 4500 + 2640 + 1000 = 8140
+  assert.strictEqual(resIced.unitHpp, 8140);
+
+  // Resolusi varian spesifik Botol 1 Liter -> otomatis masuk KEMASAN & RETAIL bila productGroup produk tidak mengikat atau via inferensi
+  const resBottle = resolveProductAndVariant(
+    "Kopi Susu Gula Aren (Botol 1 Liter)",
+    85000,
+    testProducts as any,
+    [],
+    testIngredients as any
+  );
+  assert.strictEqual(resBottle.isMatched, true);
+  assert.strictEqual(resBottle.variantName, "Botol 1 Liter");
+  // HPP: (90*250) + (650*22) + 3000 = 22500 + 14300 + 3000 = 39800
+  assert.strictEqual(resBottle.unitHpp, 39800);
+
+  // resolveOrderItemIngredients juga memotong stok 90g beans untuk Botol 1L saat input penjualan
+  const stockDeductBottle = resolveOrderItemIngredients(
+    { menuName: "Kopi Susu Gula Aren - Botol 1 Liter", quantity: 2 },
+    [],
+    testProducts,
+    testIngredients
+  );
+  const beanUsage = stockDeductBottle.find((u) => u.ingredientId === "ing-bean");
+  assert.strictEqual(beanUsage?.totalQuantity, 180); // 2 * 90g
+});
+
+test("25b. computeProductSalesAnalytics: Filter Hari/Rentang, Kategori, Cross-Check Omzet, Menu 0 Terjual & Bahan Terpakai", async () => {
+  const { computeProductSalesAnalytics } = await import(
+    "../src/utils/productSalesAnalytics"
+  );
+
+  const testIngredients: any[] = [
+    { id: "ing-bean", name: "Espresso Beans", unit: "gr", costPerUnit: 250, currentStock: 5000 },
+    { id: "ing-milk", name: "Fresh Milk", unit: "ml", costPerUnit: 22, currentStock: 10000 },
+    { id: "ing-crois", name: "Dough Croissant", unit: "pcs", costPerUnit: 7000, currentStock: 20 },
+  ];
+
+  const testProducts: any[] = [
+    {
+      id: "prod-kopsu",
+      name: "Kopi Susu Gula Aren",
+      category: "COFFEE",
+      productGroup: "MINUMAN",
+      division: "BAR",
+      isActive: true,
+      variants: [
+        {
+          id: "var-iced",
+          productId: "prod-kopsu",
+          name: "Iced 16oz",
+          price: 22000,
+          packagingCost: 1000,
+          estimatedHpp: 8140,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 18 },
+            { ingredientId: "ing-milk", quantity: 120 },
+          ],
+        },
+        {
+          id: "var-hot",
+          productId: "prod-kopsu",
+          name: "Hot 8oz",
+          price: 20000,
+          packagingCost: 850,
+          estimatedHpp: 8000,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 18 },
+            { ingredientId: "ing-milk", quantity: 140 },
+          ],
+        },
+      ],
+    },
+    {
+      id: "prod-crois",
+      name: "Butter Croissant",
+      category: "BAKERY",
+      productGroup: "PASTRY & BAKERY",
+      division: "BAKER",
+      isActive: true,
+      variants: [
+        {
+          id: "var-crois",
+          productId: "prod-crois",
+          name: "Single Piece",
+          price: 24000,
+          packagingCost: 500,
+          estimatedHpp: 7500,
+          isAvailable: true,
+          recipe: [{ ingredientId: "ing-crois", quantity: 1 }],
+        },
+      ],
+    },
+  ];
+
+  const salesTx: any[] = [
+    { id: "s1", date: "2026-11-20", menuName: "Kopi Susu Gula Aren - Iced 16oz", quantitySold: 10, totalPrice: 220000, importLogId: "l1" },
+    { id: "s2", date: "2026-11-21", menuName: "Kopi Susu Gula Aren - Hot 8oz", quantitySold: 5, totalPrice: 100000, importLogId: "l1" },
+    { id: "s3", date: "2026-11-21", menuName: "Matcha Seasonal Baru", quantitySold: 2, totalPrice: 60000, importLogId: "l1" },
+    { id: "s4", date: "2026-10-15", menuName: "Butter Croissant", quantitySold: 8, totalPrice: 192000, importLogId: "l0" },
+  ];
+
+  const recaps: any[] = [
+    { id: "r1", date: "2026-11-20", totalAmount: 220000, cashAmount: 220000, qrisAmount: 0, edcAmount: 0, transferAmount: 0, recordedBy: "kasir" },
+    { id: "r2", date: "2026-11-22", totalAmount: 350000, cashAmount: 350000, qrisAmount: 0, edcAmount: 0, transferAmount: 0, recordedBy: "kasir" },
+  ];
+
+  // Filter rentang 20-23 Nov + Divisi BAR -> hanya s1 & s2 masuk ke PMIX BAR, tapi crossCheck melihat seluruh toko di rentang tanggal tsb
+  const barRange = computeProductSalesAnalytics({
+    salesTransactions: salesTx,
+    dailySalesRecaps: recaps,
+    products: testProducts,
+    recipes: [],
+    ingredients: testIngredients,
+    dateMode: "DATE_RANGE",
+    singleDate: "2026-11-21",
+    startDate: "2026-11-20",
+    endDate: "2026-11-23",
+    division: "BAR",
+    productGroup: "ALL",
+    menuCategory: "ALL",
+  });
+
+  assert.strictEqual(barRange.productMixRows.length, 1);
+  assert.strictEqual(barRange.productMixRows[0].productName, "Kopi Susu Gula Aren");
+  assert.strictEqual(barRange.productMixRows[0].totalQty, 15);
+  assert.strictEqual(barRange.productMixRows[0].totalRevenue, 320000);
+  assert.strictEqual(barRange.productMixRows[0].variantsBreakdown.length, 2);
+
+  // Pemakaian bahan teoretis BAR: 15 * 18g bean = 270g, Milk = (10*120) + (5*140) = 1900ml
+  const usedBeans = barRange.ingredientUsageSummary.find((u) => u.ingredientId === "ing-bean");
+  const usedMilk = barRange.ingredientUsageSummary.find((u) => u.ingredientId === "ing-milk");
+  assert.strictEqual(usedBeans?.totalUsedQty, 270);
+  assert.strictEqual(usedMilk?.totalUsedQty, 1900);
+
+  // Unmatched menus pada rentang tanggal tsb mendeteksi Matcha Seasonal Baru (untuk didaftarkan ke Katalog)
+  assert.strictEqual(barRange.unmatchedMenuSummaries.length, 1);
+  assert.strictEqual(barRange.unmatchedMenuSummaries[0].rawMenuName, "Matcha Seasonal Baru");
+  assert.strictEqual(barRange.unmatchedMenuSummaries[0].avgUnitPrice, 30000);
+
+  // Cross-check mendeteksi tanggal 2026-11-22 sudah ada Rekap Omzet Rp 350.000 tapi belum ada penjualan produknya
+  assert.strictEqual(barRange.omzetCrossCheck.totalRecapOmzet, 570000);
+  assert.strictEqual(barRange.omzetCrossCheck.totalAllProductSales, 380000);
+  assert.strictEqual(barRange.omzetCrossCheck.datesWithRecapButNoProducts.length, 1);
+  assert.strictEqual(barRange.omzetCrossCheck.datesWithRecapButNoProducts[0].date, "2026-11-22");
+
+  // Filter ALL pada rentang 20-23 Nov -> Butter Croissant aktif namun 0 terjual (terjual hanya di Oktober)
+  const allDivRange = computeProductSalesAnalytics({
+    salesTransactions: salesTx,
+    dailySalesRecaps: recaps,
+    products: testProducts,
+    recipes: [],
+    ingredients: testIngredients,
+    dateMode: "DATE_RANGE",
+    singleDate: "2026-11-21",
+    startDate: "2026-11-20",
+    endDate: "2026-11-23",
+    division: "ALL",
+  });
+  assert.strictEqual(allDivRange.zeroSalesProducts.length, 1);
+  assert.strictEqual(allDivRange.zeroSalesProducts[0].productName, "Butter Croissant");
 });
 
 // -------------------------------------------------------------

@@ -178,15 +178,14 @@
 - Task Category & Subtask Config (`L917 - L1055`)
 - Tab `monitoring` (`L1091`), Tab `monthly` (`L1385`), Tab `settings` (`L1700+`)
 
-### [`src/components/Sales.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Sales.tsx) (2.673 Baris)
-- Daily Recap Save/Delete (`L185 - L293`)
-- Sales Import & Export (`L480 - L640`)
+### [`src/components/Sales.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Sales.tsx) & [`src/components/ProductSalesDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ProductSalesDashboard.tsx)
+- Daily Recap Save/Delete, Import & Export
 - **Tab Views**:
-  - Tab `cashier_analytics` (`L787 - L1154`)
-  - Tab `daily_recap` (`L1155 - L1552`)
-  - Tab `pos_orders` (`L1553 - L1922`)
-  - Tab `sales` (`L1923 - L2103`)
-  - Tab `logs` (`L2104 - L2534`)
+  - Tab `cashier_analytics`
+  - Tab `daily_recap`
+  - Tab `pos_orders`
+  - Tab `sales` — Dashboard **Penjualan Produk** ([`ProductSalesDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ProductSalesDashboard.tsx)) dengan filter Hari/Rentang, hirarki 3 tingkat (Divisi -> Kategori Produk -> Kategori Menu), rincian Varian, Cross-Check Omzet, Menu 0 Terjual, Pemakaian Bahan Resep, Input Manual, & Daftarkan/Edit Menu 1-klik
+  - Tab `logs`
 
 ### [`src/components/ManagerDashboard.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ManagerDashboard.tsx) (2.243 Baris)
 - AI Copilot & Quick Schedule Approval (`L126 - L300`)
@@ -245,7 +244,8 @@
 - [`src/utils/financeMetrics.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/financeMetrics.ts) — Baseline otomatis overhead & BEP (`computeAutoOverheadBaseline`, `calculateHppOverheadSimulation`, `getPreviousPeriodString`), kalkulasi HPP + Overhead persentase (`calculateHppWithOverheadPercentage`), HPP periodik Opname Opsi A (`computePeriodicOpnameCogs`), pemisahan kas operasional vs tabungan (`computeCashLiquidityBreakdown`, `computePeriodSavingsFlow`), helper klasifikasi biaya (`isCapexCashTransaction`, `isAdminBankOrMdrTransaction`), agregasi & rekonsiliasi terpusat Penjualan/Rekap/Arus Kas (`computePeriodFinancialSummary`, `isNonOperationalCashTransaction`, `isSalesCashTransaction`, `getSaleTransactionAmount`), helper kategori bahan baku (`DEFAULT_INGREDIENT_CATEGORIES`, `matchesIngredientCategory`, `normalizeIngredientCategoryName`), serta indikator kesehatan biaya F&B (`calculateFnbHealthMetrics`)
 - [`src/utils/escpos.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/escpos.ts) (289 baris) — Thermal printer ESC/POS formatter
 - [`src/utils/excelTemplate.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/excelTemplate.ts) (199 baris) — Template import Excel
-- [`src/utils/salesImportMapper.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/salesImportMapper.ts) (157 baris) — Mapper import data penjualan eksternal
+- [`src/utils/salesImportMapper.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/salesImportMapper.ts) — Mapper import data penjualan eksternal (mendukung matching produk & varian)
+- [`src/utils/productSalesAnalytics.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/productSalesAnalytics.ts) — Analitik Penjualan Produk (PMIX), resolusi varian (`resolveProductAndVariant`), taksonomi 3 tingkat (`Divisi -> Kategori Produk -> Kategori Menu`), Menu Engineering, Cross-Check Omzet Harian, Menu 0 Terjual, & Pemakaian Bahan Baku Teoretis
 - [`src/utils/imageCompressor.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/imageCompressor.ts) (134 baris) — Kompresi foto/bukti
 - [`src/utils/posOfflineQueue.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/posOfflineQueue.ts) (106 baris) — Antrean transaksi offline POS
 - [`src/utils/genericImport.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/genericImport.ts) (105 baris) — Parser CSV/Excel generik

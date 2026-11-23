@@ -30,6 +30,8 @@ import {
 import { PurchaseOrderItem } from "../types";
 import { CustomSelect } from "./common/CustomSelect";
 import { CustomDatePicker } from "./common/CustomDatePicker";
+import { CurrencyInput } from "./common/CurrencyInput";
+import { toast } from "../context/ToastContext";
 import { exportToCSV } from "../utils/export";
 import {
   calculateCashFlowHppSync,
@@ -349,8 +351,9 @@ export const Purchases = () => {
       cart.map((item) => {
         if (item.productId === productId) {
           const updated = { ...item, ...updates };
-          updated.subtotal =
-            Math.max(1, updated.quantity) * Math.max(0, updated.unitPrice);
+          updated.subtotal = Math.round(
+            Math.max(0, updated.quantity) * Math.max(0, updated.unitPrice)
+          );
           return updated;
         }
         return item;
@@ -395,6 +398,10 @@ export const Purchases = () => {
 
   const handleCheckout = (status: "PAID" | "UNPAID") => {
     if (cart.length === 0) return;
+    if (cart.some((it) => !(it.quantity > 0))) {
+      toast.error("Pastikan jumlah seluruh item pembelian lebih dari 0.");
+      return;
+    }
 
     const currentPeriod = new Date().toISOString().substring(0, 7);
     if (isPeriodClosed(currentPeriod)) {
@@ -1174,16 +1181,20 @@ export const Purchases = () => {
                               />
                               <div className="flex items-center gap-1 border border-slate-200 rounded-xl px-2 py-1 bg-slate-50 focus-within:bg-white">
                                 <span className="text-[10px] text-slate-400 shrink-0">Isi:</span>
-                                <input
-                                  type="number"
-                                  min="0.01"
-                                  step="any"
-                                  value={item.conversionFactor || ""}
-                                  onChange={(e) =>
+                                <CurrencyInput
+                                  allowDecimals
+                                  emptyWhenZero
+                                  value={item.conversionFactor || 0}
+                                  onValueChange={(_, num) =>
                                     updateCartItem(item.productId, {
-                                      conversionFactor: Math.max(0.01, Number(e.target.value)),
+                                      conversionFactor: Math.max(0, num),
                                     })
                                   }
+                                  onBlur={() => {
+                                    if (!item.conversionFactor || item.conversionFactor <= 0) {
+                                      updateCartItem(item.productId, { conversionFactor: 1 });
+                                    }
+                                  }}
                                   className="w-full text-right font-mono text-[11px] font-bold bg-transparent outline-none"
                                 />
                                 <span className="text-[10px] text-slate-500 shrink-0">
@@ -1197,32 +1208,34 @@ export const Purchases = () => {
 
                       <div className="flex items-center justify-between text-xs gap-2 pt-2 border-t border-slate-100">
                         <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            min="1"
-                            step="any"
+                          <CurrencyInput
+                            allowDecimals
+                            emptyWhenZero
                             value={item.quantity}
-                            onChange={(e) =>
+                            onValueChange={(_, num) =>
                               updateCartItem(item.productId, {
-                                quantity: Math.max(1, Number(e.target.value)),
+                                quantity: Math.max(0, num),
                               })
                             }
-                            className="w-14 border border-slate-200 rounded-xl px-2 py-1 text-center font-bold text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
+                            onBlur={() => {
+                              if (!item.quantity || item.quantity <= 0) {
+                                updateCartItem(item.productId, { quantity: 1 });
+                              }
+                            }}
+                            className="w-20 border border-slate-200 rounded-xl px-2 py-1 text-center font-bold font-mono text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
                           />
                           <span className="text-slate-500 text-[11px] font-semibold max-w-[64px] truncate">
                             {item.unit || product?.unit}
                           </span>
                           <span className="text-slate-400 text-xs">× Rp</span>
-                          <input
-                            type="number"
-                            min="0"
+                          <CurrencyInput
                             value={item.unitPrice}
-                            onChange={(e) =>
+                            onValueChange={(_, num) =>
                               updateCartItem(item.productId, {
-                                unitPrice: Math.max(0, Number(e.target.value)),
+                                unitPrice: Math.max(0, Math.round(num)),
                               })
                             }
-                            className="w-20 border border-slate-200 rounded-xl px-2 py-1 text-right font-mono text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
+                            className="w-28 border border-slate-200 rounded-xl px-2 py-1 text-right font-mono text-base sm:text-xs bg-slate-50 focus:bg-white outline-none"
                           />
                         </div>
                         <span className="font-bold font-mono text-slate-900">
@@ -2368,12 +2381,12 @@ export const Purchases = () => {
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max={remaining}
-                    value={payAmount || ""}
-                    onChange={(e) => setPayAmount(Math.min(remaining, Math.max(0, Number(e.target.value))))}
+                  <CurrencyInput
+                    emptyWhenZero
+                    value={payAmount}
+                    onValueChange={(_, num) =>
+                      setPayAmount(Math.min(remaining, Math.max(0, Math.round(num))))
+                    }
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
                     placeholder="Masukkan jumlah pembayaran..."
                   />

@@ -55,21 +55,64 @@ export function resolveOrderItemIngredients(
   if (itemQty <= 0) return [];
 
   const menuLower = String(item.menuName || "").trim().toLowerCase();
-  const variantRaw = String(item.variantName || "").trim().toLowerCase();
-  // Bersihkan info susu dalam kurung seperti "Iced (Oat Milk)" -> "iced" untuk pencocokan nama varian dasar
-  const variantClean = variantRaw.replace(/\s*\([^)]*\)\s*/g, "").trim();
+  const explicitVariantRaw = String(item.variantName || "").trim().toLowerCase();
 
-  const matchedProduct = (allProducts || []).find(
+  let matchedProduct = (allProducts || []).find(
     (p: any) => String(p?.name || "").trim().toLowerCase() === menuLower
   );
+  let matchedVariantFromMenu: any = null;
+
+  if (!matchedProduct && menuLower) {
+    for (const p of allProducts || []) {
+      const pName = String(p?.name || "").trim().toLowerCase();
+      if (!pName) continue;
+      const pVariants = parseJsonArray(p?.variants);
+      for (const v of pVariants) {
+        const vName = String(v?.name || "").trim().toLowerCase();
+        if (!vName) continue;
+        if (
+          menuLower === `${pName} - ${vName}` ||
+          menuLower === `${pName} (${vName})` ||
+          menuLower === `${pName} / ${vName}` ||
+          menuLower === `${vName} ${pName}`
+        ) {
+          matchedProduct = p;
+          matchedVariantFromMenu = v;
+          break;
+        }
+      }
+      if (matchedProduct) break;
+
+      if (
+        menuLower.startsWith(`${pName} - `) ||
+        menuLower.startsWith(`${pName} (`) ||
+        menuLower.startsWith(`${pName} / `)
+      ) {
+        matchedProduct = p;
+        break;
+      }
+    }
+  }
+
+  const variantRaw =
+    explicitVariantRaw ||
+    String(matchedVariantFromMenu?.name || "").trim().toLowerCase();
+  // Bersihkan info susu dalam kurung seperti "Iced (Oat Milk)" -> "iced" untuk pencocokan nama varian dasar
+  const variantClean = variantRaw.replace(/\s*\([^)]*\)\s*/g, "").trim();
 
   let baseRecipeList: RecipeIngredientRef[] = [];
 
   // 1. Cek resep spesifik pada Variant produk
   if (matchedProduct) {
     const variants = parseJsonArray(matchedProduct.variants);
-    if (variants.length > 0 && variantRaw && variantRaw !== "regular") {
+    if (matchedVariantFromMenu && parseJsonArray(matchedVariantFromMenu.recipe).length > 0) {
+      baseRecipeList = parseJsonArray(matchedVariantFromMenu.recipe).map((r: any) => ({
+        ingredientId: String(r.ingredientId),
+        quantity: Number(r.quantity) || Number(r.amount) || 0,
+      }));
+    } else if (variants.length > 0 && variantRaw && variantRaw !== "regular") {
       const exactVar =
+        matchedVariantFromMenu ||
         variants.find((v: any) => String(v?.name || "").trim().toLowerCase() === variantRaw) ||
         variants.find((v: any) => String(v?.name || "").trim().toLowerCase() === variantClean) ||
         variants.find((v: any) => {
@@ -113,12 +156,14 @@ export function resolveOrderItemIngredients(
 
   // 2. Fallback ke tabel Recipes utama jika belum ketemu dari Variant
   if (baseRecipeList.length === 0) {
+    const productNameLower = String(matchedProduct?.name || "").trim().toLowerCase();
     const matchedRec =
       (item.recipeId ? (allRecipes || []).find((r: any) => r.id === item.recipeId) : null) ||
       (matchedProduct
         ? (allRecipes || []).find(
             (r: any) =>
               r?.menuItemId === matchedProduct.id ||
+              String(r?.menuName || "").trim().toLowerCase() === productNameLower ||
               String(r?.menuName || "").trim().toLowerCase() === menuLower
           )
         : null) ||
