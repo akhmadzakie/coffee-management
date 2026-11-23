@@ -58,7 +58,16 @@ export interface HeaderMapping {
 }
 
 export const detectHeaderMapping = (rows: Record<string, any>[]): HeaderMapping => {
-  const detected = rows.length > 0 ? Object.keys(rows[0]).map((h) => h.trim()) : [];
+  const headerSet = new Set<string>();
+  rows.forEach((r) => {
+    if (r && typeof r === "object") {
+      Object.keys(r).forEach((k) => {
+        const clean = k.trim();
+        if (clean) headerSet.add(clean);
+      });
+    }
+  });
+  const detected = Array.from(headerSet);
   const mapped: Partial<Record<CanonicalField, string>> = {};
   const used = new Set<string>();
 

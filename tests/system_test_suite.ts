@@ -61,6 +61,13 @@ import {
   resolveCanonicalEmployeeId,
   syncAttendanceRecordsWithDaily,
 } from "../src/utils/attendanceRecap";
+import {
+  resolveProductAndVariant,
+  inferProductGroup,
+  formatCatalogMenuVariantLabel,
+  computeProductSalesAnalytics,
+} from "../src/utils/productSalesAnalytics";
+import { mapSalesRows } from "../src/utils/salesImportMapper";
 
 console.log("=========================================================");
 console.log("   TESTING & SYSTEM AUDIT SUITE: JULIA'S COFFEE ERP/POS   ");
@@ -2321,12 +2328,7 @@ test("24e. Rekap 5 Kanal Bayar (termasuk Ojol ke Bank), Diskon, Refund, MDR & Se
 // -------------------------------------------------------------
 console.log("\n25. Pengujian Dashboard Penjualan Produk (PMIX) & Integrasi Katalog Menu:");
 
-test("25a. Resolusi Produk, Varian Spesifik ('- Iced 16oz' vs '- Botol 1 Liter'), Resep & Kategori 3 Tingkat", async () => {
-  const {
-    resolveProductAndVariant,
-    inferProductGroup,
-    formatCatalogMenuVariantLabel,
-  } = await import("../src/utils/productSalesAnalytics");
+test("25a. Resolusi Produk, Varian Spesifik ('- Iced 16oz' vs '- Botol 1 Liter'), Resep & Kategori 3 Tingkat", () => {
 
   const testIngredients: any[] = [
     { id: "ing-bean", name: "Espresso Beans", unit: "gr", costPerUnit: 250, currentStock: 5000 },
@@ -2441,10 +2443,7 @@ test("25a. Resolusi Produk, Varian Spesifik ('- Iced 16oz' vs '- Botol 1 Liter')
   assert.strictEqual(beanUsage?.totalQuantity, 180); // 2 * 90g
 });
 
-test("25b. computeProductSalesAnalytics: Filter Hari/Rentang, Kategori, Cross-Check Omzet, Menu 0 Terjual & Bahan Terpakai", async () => {
-  const { computeProductSalesAnalytics } = await import(
-    "../src/utils/productSalesAnalytics"
-  );
+test("25b. computeProductSalesAnalytics: Filter Hari/Rentang, Kategori, Cross-Check Omzet, Menu 0 Terjual & Bahan Terpakai", () => {
 
   const testIngredients: any[] = [
     { id: "ing-bean", name: "Espresso Beans", unit: "gr", costPerUnit: 250, currentStock: 5000 },
@@ -2579,8 +2578,7 @@ test("25b. computeProductSalesAnalytics: Filter Hari/Rentang, Kategori, Cross-Ch
   assert.strictEqual(allDivRange.zeroSalesProducts[0].productName, "Butter Croissant");
 });
 
-test("25c. Kemasan Stok (Packaging & Cup) di Resep Varian: Anti-Double-Count HPP & Ikut Terpotong Saat Penjualan", async () => {
-  const { resolveProductAndVariant } = await import("../src/utils/productSalesAnalytics");
+test("25c. Kemasan Stok (Packaging & Cup) di Resep Varian: Anti-Double-Count HPP & Ikut Terpotong Saat Penjualan", () => {
 
   const stockIngredients: any[] = [
     { id: "ing-bean", name: "Espresso Beans", category: "Biji Kopi", unit: "gr", costPerUnit: 250, currentStock: 5000 },
@@ -2647,8 +2645,7 @@ test("25c. Kemasan Stok (Packaging & Cup) di Resep Varian: Anti-Double-Count HPP
   assert.strictEqual(usages.find((u) => u.ingredientId === "ing-lid")?.totalQuantity, 5);
 });
 
-test("25d. Import Excel mapSalesRows: Kolom Varian Terpisah & Harga Satuan", async () => {
-  const { mapSalesRows } = await import("../src/utils/salesImportMapper");
+test("25d. Import Excel mapSalesRows: Kolom Varian Terpisah & Harga Satuan", () => {
 
   const rawRows = [
     {

@@ -62,13 +62,6 @@ interface RecipeIngredientItem {
   costPerUnit: number;
 }
 
-interface PackagingOption {
-  id: string;
-  name: string;
-  cost: number;
-  isIncluded: boolean;
-}
-
 const PRICE_PRESETS = [15000, 18000, 20000, 22000, 25000, 28000, 32000, 35000];
 
 interface StandardRecipePreset {
