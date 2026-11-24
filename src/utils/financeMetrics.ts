@@ -8,6 +8,7 @@ import {
   EmployeeContract,
   ExpenseCategory,
   Ingredient,
+  IngredientCategoryDivision,
   PayrollRecord,
   Product,
   PurchaseOrder,
@@ -552,6 +553,82 @@ export const DEFAULT_INGREDIENT_CATEGORIES: string[] = [
   "Packaging & Cup",
   "Lainnya",
 ];
+
+export const DEFAULT_INGREDIENT_CATEGORY_DIVISIONS: Record<string, IngredientCategoryDivision> = {
+  "Biji Kopi": "BAR",
+  "Susu & Dairy": "BAR",
+  "Sirup & Pemanis": "BAR",
+  "Bahan Olahan": "BAR",
+  "Bahan Kitchen": "KITCHEN",
+  "Bahan Bakery": "BAKER",
+  "Packaging & Cup": "OPERATIONAL",
+  "Lainnya": "OPERATIONAL",
+};
+
+/** Menyimpulkan divisi pemilik kategori bahan baku bila belum ditetapkan eksplisit di Settings. */
+export function inferIngredientCategoryDivision(catName: string): IngredientCategoryDivision {
+  const normalized = normalizeIngredientCategoryName(catName).toLowerCase();
+  for (const [key, div] of Object.entries(DEFAULT_INGREDIENT_CATEGORY_DIVISIONS)) {
+    if (key.toLowerCase() === normalized) return div;
+  }
+  if (
+    ["kitchen", "dapur", "makanan", "daging", "ayam", "bumbu", "sayur", "beras", "minyak", "telur", "sambal"].some(
+      (kw) => normalized.includes(kw)
+    )
+  ) {
+    return "KITCHEN";
+  }
+  if (
+    ["bakery", "pastry", "roti", "dough", "butter", "tepung", "croissant", "yeast", "ragi", "keju"].some(
+      (kw) => normalized.includes(kw)
+    )
+  ) {
+    return "BAKER";
+  }
+  if (
+    ["packaging", "kemasan", "cup", "operasional", "kebersihan", "sanitasi", "lainnya", "supplies", "tissue", "plastik"].some(
+      (kw) => normalized.includes(kw)
+    )
+  ) {
+    return "OPERATIONAL";
+  }
+  return "BAR";
+}
+
+/** Mengambil divisi pemilik kategori bahan dari pengaturan kustom atau fallback inferensi. */
+export function resolveIngredientCategoryDivision(
+  catName: string,
+  configuredMap?: Record<string, IngredientCategoryDivision> | null
+): IngredientCategoryDivision {
+  const clean = String(catName || "").trim();
+  const normalized = normalizeIngredientCategoryName(clean);
+  if (configuredMap && typeof configuredMap === "object") {
+    for (const [k, v] of Object.entries(configuredMap)) {
+      const kLower = k.trim().toLowerCase();
+      if (
+        (kLower === clean.toLowerCase() || kLower === normalized.toLowerCase()) &&
+        (v === "BAR" || v === "KITCHEN" || v === "BAKER" || v === "OPERATIONAL")
+      ) {
+        return v;
+      }
+    }
+  }
+  return inferIngredientCategoryDivision(clean);
+}
+
+/** Menyaring daftar kategori bahan sesuai divisi aktif (role BAR/KITCHEN/BAKER juga melihat kategori OPERATIONAL). */
+export function filterIngredientCategoriesByDivision(
+  categories: string[],
+  division: "ALL" | IngredientCategoryDivision,
+  configuredMap?: Record<string, IngredientCategoryDivision> | null
+): string[] {
+  if (division === "ALL") return categories;
+  return categories.filter((cat) => {
+    const ownerDiv = resolveIngredientCategoryDivision(cat, configuredMap);
+    if (division === "OPERATIONAL") return ownerDiv === "OPERATIONAL";
+    return ownerDiv === division || ownerDiv === "OPERATIONAL";
+  });
+}
 
 const INGREDIENT_CATEGORY_ALIASES: Record<string, string[]> = {
   "biji kopi": ["coffee", "biji kopi", "espresso", "bean"],

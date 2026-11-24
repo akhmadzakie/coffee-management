@@ -395,6 +395,7 @@ export interface Settings {
   autoDeductStockOnSale?: boolean;
   allowNegativeStockSale?: boolean;
   ingredientCategories?: string[];
+  ingredientCategoryDivisions?: Record<string, IngredientCategoryDivision>;
   menuCategories?: Partial<Record<ProductDivision, string[]>>;
   dailySalesRecaps?: DailySalesRecap[];
   defaultOverheadPercent?: number;
@@ -439,18 +440,23 @@ export interface CashTransaction {
   createdBy?: string;
 }
 
+export type IngredientCategoryDivision = "BAR" | "KITCHEN" | "BAKER" | "OPERATIONAL";
+
 export interface Ingredient {
   id: string;
   code?: string;
   name: string;
-  unit: string; // Base unit untuk resep (gr, ml, pcs, portion)
+  unit: string; // Base unit / satuan terkecil untuk resep (gr, ml, pcs, portion)
   currentStock: number;
   minStock: number;
   category: string;
   costPerUnit: number; // Harga per base unit (Rupiah)
-  purchaseUnit?: string; // Satuan beli (Kg, Liter, Karton, Dus, Pack, Botol)
-  conversionFactor?: number; // 1 purchaseUnit = X unit (misal 1000 untuk Kg->gr)
+  purchaseUnit?: string; // Satuan menengah / beli (Kg, Liter, Botol, Pack)
+  conversionFactor?: number; // 1 purchaseUnit = X base unit (misal 1000 untuk Kg->gr)
   purchasePrice?: number; // Harga beli per purchaseUnit
+  bulkUnit?: string; // Satuan terbesar / grosir opsional (Karton, Karung, Dus, Galon)
+  bulkConversionFactor?: number; // Total base unit dalam 1 bulkUnit (misal 12000 untuk Karton 12L -> ml)
+  bulkPrice?: number; // Harga per bulkUnit
   storageLocation?: "BAR" | "CHILLER" | "DRY_STORAGE" | "KITCHEN" | "BAKERY" | string;
   notes?: string;
 }

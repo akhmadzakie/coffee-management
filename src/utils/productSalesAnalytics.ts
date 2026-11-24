@@ -7,6 +7,7 @@ import type {
   Recipe,
   RecipeIngredient,
   SalesTransaction,
+  StockMovement,
 } from "../types";
 import { getLocalDateString } from "./dateUtils";
 import {
@@ -1313,4 +1314,56 @@ export function computeProductSalesAnalytics(
       unmatchedMenuCount: unmatchedMenuSummaries.length,
     },
   };
+}
+
+export interface PhysicalStockOutSummary {
+  totalOutQty: number;
+  totalOutCost: number;
+  wasteQty: number;
+}
+
+/**
+ * Mengagregasi mutasi stok keluar fisik (OUT, USAGE, WASTE) per bahan baku dalam rentang tanggal WITA,
+ * agar dapat dibandingkan langsung dengan perkiraan pemakaian resep dari penjualan produk dan stok opname.
+ */
+export function computePhysicalStockOutByIngredient(params: {
+  stockMovements?: StockMovement[];
+  startDate?: string;
+  endDate?: string;
+}): Map<string, PhysicalStockOutSummary> {
+  const { stockMovements = [], startDate = "", endDate = "" } = params;
+  const result = new Map<string, PhysicalStockOutSummary>();
+
+  const hasRange = Boolean(startDate && endDate);
+  const normStart = hasRange ? (startDate <= endDate ? startDate : endDate) : "";
+  const normEnd = hasRange ? (startDate <= endDate ? endDate : startDate) : "";
+
+  for (const mov of stockMovements) {
+    if (!mov?.ingredientId) continue;
+    const type = String(mov.type || "").toUpperCase();
+    if (type !== "OUT" && type !== "USAGE" && type !== "WASTE") continue;
+
+    if (hasRange) {
+      const localDay = toSaleLocalDateKey(mov.date);
+      if (!localDay || localDay < normStart || localDay > normEnd) continue;
+    }
+
+    const qty = Math.abs(Number(mov.quantity) || 0);
+    if (qty <= 0) continue;
+    const cost = Math.round(Math.abs(Number(mov.totalCost) || 0));
+
+    const prev = result.get(mov.ingredientId) || {
+      totalOutQty: 0,
+      totalOutCost: 0,
+      wasteQty: 0,
+    };
+    prev.totalOutQty = Number((prev.totalOutQty + qty).toFixed(4));
+    prev.totalOutCost += cost;
+    if (type === "WASTE") {
+      prev.wasteQty = Number((prev.wasteQty + qty).toFixed(4));
+    }
+    result.set(mov.ingredientId, prev);
+  }
+
+  return result;
 }

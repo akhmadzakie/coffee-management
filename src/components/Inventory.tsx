@@ -12,15 +12,22 @@ import {
   applyRenameIngredientCategory,
   buildIngredientCategoryList,
   DEFAULT_INGREDIENT_CATEGORIES,
+  filterIngredientCategoriesByDivision,
   matchesIngredientCategory,
   normalizeIngredientCategoryName,
+  resolveIngredientCategoryDivision,
 } from "../utils/financeMetrics";
 import {
+  addDaysToLocalDate,
   recomputeOpnameItemsWithLiveStock,
   computeMovementActualQuantityAndCost,
   convertStockInputOnUnitToggle,
   resolveDefaultTransferStation,
 } from "../utils/syncSanitizers";
+import {
+  computePhysicalStockOutByIngredient,
+  computeProductSalesAnalytics,
+} from "../utils/productSalesAnalytics";
 import {
   Plus,
   Search,
@@ -63,7 +70,15 @@ import { CsvImportExport } from "./common/CsvImportExport";
 import { RecipeModal } from "./RecipeModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
-import { Recipe, RecipeIngredient, Ingredient, ViewState, StockOpname, StockOpnameItem } from "../types";
+import {
+  Recipe,
+  RecipeIngredient,
+  Ingredient,
+  IngredientCategoryDivision,
+  ViewState,
+  StockOpname,
+  StockOpnameItem,
+} from "../types";
 
 interface InventoryProps {
   onNavigate?: (view: ViewState) => void;
@@ -314,6 +329,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     currentUser,
     isReadOnly,
     recipes,
+    salesTransactions = [],
+    products = [],
     addRecipe,
     updateRecipe,
     deleteRecipe,
@@ -609,15 +626,89 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   const [batchYieldOutput, setBatchYieldOutput] = useState<number>(1000);
   const [isInlineNewCatOpen, setIsInlineNewCatOpen] = useState(false);
   const [inlineNewCatInput, setInlineNewCatInput] = useState("");
+  const [newCategoryDivision, setNewCategoryDivision] = useState<IngredientCategoryDivision>("BAR");
 
-  const persistCategories = (nextCategories: string[]) => {
+  const CATEGORY_DIVISION_OPTIONS: { value: IngredientCategoryDivision; label: string }[] = [
+    { value: "BAR", label: "Bar / Minuman" },
+    { value: "KITCHEN", label: "Kitchen / Dapur" },
+    { value: "BAKER", label: "Bakery & Pastry" },
+    { value: "OPERATIONAL", label: "Operasional / Bersama" },
+  ];
+
+  const getCategoryDivisionLabel = (catName: string) => {
+    const div = resolveIngredientCategoryDivision(catName, settings?.ingredientCategoryDivisions);
+    return (
+      CATEGORY_DIVISION_OPTIONS.find((o) => o.value === div)?.label || "Operasional / Bersama"
+    );
+  };
+
+  const toCategoryDivisionScope = (
+    rawDiv: "ALL" | "BAR" | "KITCHEN" | "BAKER" | "BAKERY" | "OPERATIONAL"
+  ): "ALL" | IngredientCategoryDivision => {
+    if (rawDiv === "BAKERY") return "BAKER";
+    return rawDiv;
+  };
+
+  const visibleCategoriesForDaftar = useMemo(() => {
+    const scope = isManagerOrAdmin
+      ? toCategoryDivisionScope(selectedDivision)
+      : userDivision;
+    return filterIngredientCategoriesByDivision(
+      ingredientCategoriesList,
+      scope,
+      settings?.ingredientCategoryDivisions
+    );
+  }, [
+    ingredientCategoriesList,
+    isManagerOrAdmin,
+    selectedDivision,
+    userDivision,
+    settings?.ingredientCategoryDivisions,
+  ]);
+
+  const visibleCategoriesForManage = useMemo(() => {
+    if (isManagerOrAdmin) return ingredientCategoriesList;
+    return filterIngredientCategoriesByDivision(
+      ingredientCategoriesList,
+      userDivision,
+      settings?.ingredientCategoryDivisions
+    );
+  }, [
+    ingredientCategoriesList,
+    isManagerOrAdmin,
+    userDivision,
+    settings?.ingredientCategoryDivisions,
+  ]);
+
+  const persistCategories = (
+    nextCategories: string[],
+    nextDivisions?: Record<string, IngredientCategoryDivision>
+  ) => {
     updateSettings({
       ...settings,
       ingredientCategories: nextCategories,
+      ingredientCategoryDivisions:
+        nextDivisions ?? settings?.ingredientCategoryDivisions,
     });
   };
 
-  const handleAddCategory = (rawName: string): string | null => {
+  const handleChangeCategoryDivision = (
+    catName: string,
+    division: IngredientCategoryDivision
+  ) => {
+    if (!canManageCategories) return;
+    const nextDivisions: Record<string, IngredientCategoryDivision> = {
+      ...(settings?.ingredientCategoryDivisions || {}),
+      [catName]: division,
+    };
+    persistCategories(ingredientCategoriesList, nextDivisions);
+    toast.success(`Kategori "${catName}" ditetapkan untuk divisi ${CATEGORY_DIVISION_OPTIONS.find((o) => o.value === division)?.label || division}.`);
+  };
+
+  const handleAddCategory = (
+    rawName: string,
+    divisionOverride?: IngredientCategoryDivision
+  ): string | null => {
     if (!canManageCategories) {
       toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori bahan.");
       return null;
@@ -643,8 +734,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     const next = hasLainnya
       ? [...baseWithoutLainnya, clean, "Lainnya"]
       : [...baseWithoutLainnya, clean];
-    persistCategories(next);
-    toast.success(`Kategori "${clean}" ditambahkan.`);
+    const targetDiv = divisionOverride || newCategoryDivision;
+    const nextDivisions: Record<string, IngredientCategoryDivision> = {
+      ...(settings?.ingredientCategoryDivisions || {}),
+      [clean]: targetDiv,
+    };
+    persistCategories(next, nextDivisions);
+    toast.success(`Kategori "${clean}" (${CATEGORY_DIVISION_OPTIONS.find((o) => o.value === targetDiv)?.label || targetDiv}) ditambahkan.`);
     return clean;
   };
 
@@ -671,7 +767,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       newName: cleanNew,
       ingredients,
     });
-    persistCategories(updatedCategories);
+    const currentDivMap = { ...(settings?.ingredientCategoryDivisions || {}) };
+    const prevOwner = resolveIngredientCategoryDivision(oldName, currentDivMap);
+    delete currentDivMap[oldName];
+    currentDivMap[cleanNew] = prevOwner;
+    persistCategories(updatedCategories, currentDivMap);
     updatedIngredients.forEach((updatedIng) => updateIngredient(updatedIng));
     if (selectedCategory === oldName) setSelectedCategory(cleanNew);
     setEditingCatOld(null);
@@ -697,7 +797,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         targetName: catToDelete,
         ingredients,
       });
-    persistCategories(updatedCategories);
+    const currentDivMap = { ...(settings?.ingredientCategoryDivisions || {}) };
+    delete currentDivMap[catToDelete];
+    persistCategories(updatedCategories, currentDivMap);
     updatedIngredients.forEach((updatedIng) => updateIngredient(updatedIng));
     if (selectedCategory === catToDelete) setSelectedCategory("ALL");
     toast.success(
@@ -717,6 +819,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     purchaseUnit: "Kg",
     conversionFactor: 1000,
     purchasePrice: 220000,
+    useBulkUnit: false,
+    bulkUnit: "Karton",
+    bulkPerPurchase: 12,
+    bulkPrice: 0,
     costPerUnit: 220,
     initialStockUnit: "BASE" as "BASE" | "PURCHASE",
     stockInput: 0,
@@ -746,6 +852,70 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     return ingredients.filter((i) => isIngredientAllowedForUser(i, userDivision));
   }, [ingredients, isManagerOrAdmin, userDivision]);
 
+  const opnameBenchmark = useMemo(() => {
+    const endDate = (isOpnameMode && opnameDate ? opnameDate : getLocalDateString()).slice(0, 10);
+    const prevFinalDates = stockOpnames
+      .filter((op) => op.status === "FINAL" && op.date && op.date.slice(0, 10) < endDate)
+      .map((op) => op.date.slice(0, 10))
+      .sort((a, b) => b.localeCompare(a));
+    const startDate =
+      prevFinalDates.length > 0
+        ? addDaysToLocalDate(prevFinalDates[0], 1)
+        : addDaysToLocalDate(endDate, -6);
+
+    const salesAnalytics = computeProductSalesAnalytics({
+      salesTransactions,
+      products,
+      recipes,
+      ingredients,
+      menuCategoriesByDivision: settings?.menuCategories,
+      dateMode: "DATE_RANGE",
+      singleDate: endDate,
+      startDate,
+      endDate,
+    });
+    const physicalOutMap = computePhysicalStockOutByIngredient({
+      stockMovements,
+      startDate,
+      endDate,
+    });
+
+    const recipeUsageByIngId = new Map(
+      salesAnalytics.ingredientUsageSummary.map((row) => [row.ingredientId, row])
+    );
+
+    let recipeCost = 0;
+    for (const row of salesAnalytics.ingredientUsageSummary) {
+      recipeCost += row.totalCost;
+    }
+    let physicalOutCost = 0;
+    for (const row of physicalOutMap.values()) {
+      physicalOutCost += row.totalOutCost;
+    }
+
+    return {
+      startDate,
+      endDate,
+      totalHpp: salesAnalytics.kpiSummary.totalHpp,
+      foodCostPercent: salesAnalytics.kpiSummary.foodCostPercent,
+      totalQtySold: salesAnalytics.kpiSummary.totalQty,
+      recipeCost: Math.round(recipeCost),
+      physicalOutCost: Math.round(physicalOutCost),
+      recipeUsageByIngId,
+      physicalOutMap,
+    };
+  }, [
+    isOpnameMode,
+    opnameDate,
+    stockOpnames,
+    salesTransactions,
+    products,
+    recipes,
+    ingredients,
+    settings?.menuCategories,
+    stockMovements,
+  ]);
+
   const activeDrafts = useMemo(() => {
     return stockOpnames.filter((op) => op.status === "DRAFT");
   }, [stockOpnames]);
@@ -772,6 +942,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         purchaseUnit: "Liter",
         conversionFactor: 1000,
         purchasePrice: 38000,
+        useBulkUnit: false,
+        bulkUnit: "Karton",
+        bulkPerPurchase: 12,
+        bulkPrice: 0,
         costPerUnit: 38,
         initialStockUnit: "BASE",
         stockInput: 1000,
@@ -782,13 +956,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       setIngredientForm({
         code: `BB-${Math.floor(100 + Math.random() * 900)}`,
         name: "",
-        category: presetCat || (selectedCategory !== "ALL" ? selectedCategory : "Biji Kopi"),
+        category: presetCat || (selectedCategory !== "ALL" ? selectedCategory : (visibleCategoriesForDaftar[0] || "Biji Kopi")),
         storageLocation: defaultLoc,
         unit: "gr",
         usePurchaseUnit: true,
         purchaseUnit: "Kg",
         conversionFactor: 1000,
         purchasePrice: 220000,
+        useBulkUnit: false,
+        bulkUnit: "Karton",
+        bulkPerPurchase: 12,
+        bulkPrice: 0,
         costPerUnit: 220,
         initialStockUnit: "BASE",
         stockInput: 1000,
@@ -815,6 +993,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     const hasPurchase = !!ing.purchaseUnit;
     const factor = ing.conversionFactor || 1000;
     const pPrice = ing.purchasePrice || (ing.costPerUnit * factor);
+    const hasBulk = Boolean(ing.bulkUnit && Number(ing.bulkConversionFactor) > 0);
+    const bulkTotalBase = Number(ing.bulkConversionFactor) || (hasPurchase ? factor * 12 : 12);
+    const computedBulkPerPurchase = hasPurchase && factor > 0
+      ? Math.max(1, Math.round((bulkTotalBase / factor) * 1000) / 1000)
+      : bulkTotalBase;
 
     setBatchYieldOutput(1000);
     setBatchTotalCost(Math.round((ing.costPerUnit || 0) * 1000));
@@ -829,6 +1012,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       purchaseUnit: ing.purchaseUnit || "Kg",
       conversionFactor: factor,
       purchasePrice: pPrice,
+      useBulkUnit: hasBulk,
+      bulkUnit: ing.bulkUnit || "Karton",
+      bulkPerPurchase: computedBulkPerPurchase,
+      bulkPrice: ing.bulkPrice || 0,
       costPerUnit: ing.costPerUnit || 0,
       initialStockUnit: "BASE",
       stockInput: ing.currentStock,
@@ -899,6 +1086,20 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         ? Number(ingredientForm.stockInput) * Number(ingredientForm.conversionFactor)
         : Number(ingredientForm.stockInput);
 
+    const hasBulk =
+      ingredientEntryMode === "MENTAH" &&
+      ingredientForm.useBulkUnit &&
+      ingredientForm.bulkUnit.trim().length > 0 &&
+      Number(ingredientForm.bulkPerPurchase) > 0;
+    const bulkTotalBase = hasBulk
+      ? Number(
+          (
+            Number(ingredientForm.bulkPerPurchase) *
+            (usePurchase ? Number(ingredientForm.conversionFactor) || 1 : 1)
+          ).toFixed(4)
+        )
+      : undefined;
+
     const payload: Omit<Ingredient, "id"> = {
       code: ingredientForm.code.trim() || undefined,
       name: ingredientForm.name.trim(),
@@ -910,6 +1111,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       purchaseUnit: usePurchase ? ingredientForm.purchaseUnit : undefined,
       conversionFactor: usePurchase ? Number(ingredientForm.conversionFactor) : undefined,
       purchasePrice: usePurchase ? Number(ingredientForm.purchasePrice) : undefined,
+      bulkUnit: hasBulk ? ingredientForm.bulkUnit.trim() : undefined,
+      bulkConversionFactor: bulkTotalBase,
+      bulkPrice: hasBulk && Number(ingredientForm.bulkPrice) > 0 ? Math.round(Number(ingredientForm.bulkPrice)) : undefined,
       storageLocation: ingredientForm.storageLocation,
       notes: ingredientForm.notes.trim() || undefined,
     };
@@ -929,6 +1133,41 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
     setIsIngredientModalOpen(false);
   };
+
+  const visibleCategoriesForOpname = useMemo(() => {
+    const scope = isManagerOrAdmin
+      ? toCategoryDivisionScope(opnameDivisionFilter)
+      : userDivision;
+    return filterIngredientCategoriesByDivision(
+      ingredientCategoriesList,
+      scope,
+      settings?.ingredientCategoryDivisions
+    );
+  }, [
+    ingredientCategoriesList,
+    isManagerOrAdmin,
+    opnameDivisionFilter,
+    userDivision,
+    settings?.ingredientCategoryDivisions,
+  ]);
+
+  useEffect(() => {
+    if (
+      selectedCategory !== "ALL" &&
+      !visibleCategoriesForDaftar.some((c) => matchesIngredientCategory(c, selectedCategory))
+    ) {
+      setSelectedCategory("ALL");
+    }
+  }, [visibleCategoriesForDaftar, selectedCategory]);
+
+  useEffect(() => {
+    if (
+      opnameCategoryFilter !== "ALL" &&
+      !visibleCategoriesForOpname.some((c) => matchesIngredientCategory(c, opnameCategoryFilter))
+    ) {
+      setOpnameCategoryFilter("ALL");
+    }
+  }, [visibleCategoriesForOpname, opnameCategoryFilter]);
 
   // Filtered ingredients
   const filteredIngredients = useMemo(() => {
@@ -1749,7 +1988,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full xl:w-auto">
           {[
             { id: "ingredients", label: `Daftar Bahan Baku (${accessibleIngredients.length})` },
-            { id: "categories", label: `Kategori Bahan (${ingredientCategoriesList.length})` },
+            { id: "categories", label: `Kategori Bahan (${visibleCategoriesForManage.length})` },
             { id: "movements", label: "Mutasi & Pemakaian" },
             { id: "opnames", label: "Stok Opname" },
             { id: "recipes", label: `Resep Baku (${recipes.length})` },
@@ -2174,7 +2413,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   <span>Atur Kategori</span>
                 </button>
               )}
-              {[{ id: "ALL", name: "Semua Kategori" }, ...ingredientCategoriesList.map((c) => ({ id: c, name: c }))].map((cat) => {
+              {[{ id: "ALL", name: "Semua Kategori" }, ...visibleCategoriesForDaftar.map((c) => ({ id: c, name: c }))].map((cat) => {
                 const IconComponent = cat.id === "ALL" ? Package : getIngredientCategoryIcon(cat.id);
                 const isSelected = selectedCategory === cat.id;
                 const count = cat.id === "ALL"
@@ -2281,12 +2520,27 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         </h3>
                       </div>
 
-                      {/* Kemasan Pembelian Badge jika ada */}
-                      {hasPurchaseConversion && (
-                        <div className="mt-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200/60 text-[11px] text-slate-600">
-                          <span className="font-semibold text-slate-800">Kemasan Beli:</span>{" "}
-                          1 {conv.purchaseUnit} = {conv.conversionFactor.toLocaleString("id-ID")} {item.unit}
-                          {item.purchasePrice ? ` (@ ${formatCurrency(item.purchasePrice)})` : ""}
+                      {/* Kemasan Pembelian / 3-Tier Unit Badge */}
+                      {(hasPurchaseConversion || (item.bulkUnit && Number(item.bulkConversionFactor) > 0)) && (
+                        <div className="mt-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200/60 text-[11px] text-slate-600 space-y-0.5">
+                          {item.bulkUnit && Number(item.bulkConversionFactor) > 0 && (
+                            <div>
+                              <span className="font-semibold text-brand-700">Grosir:</span>{" "}
+                              1 {item.bulkUnit} ={" "}
+                              {hasPurchaseConversion && conv.conversionFactor > 0
+                                ? `${(Number(item.bulkConversionFactor) / conv.conversionFactor).toLocaleString("id-ID", { maximumFractionDigits: 2 })} ${conv.purchaseUnit} = `
+                                : ""}
+                              {Number(item.bulkConversionFactor).toLocaleString("id-ID")} {item.unit}
+                              {item.bulkPrice ? ` (@ ${formatCurrency(item.bulkPrice)})` : ""}
+                            </div>
+                          )}
+                          {hasPurchaseConversion && (
+                            <div>
+                              <span className="font-semibold text-slate-800">Beli / Keluar:</span>{" "}
+                              1 {conv.purchaseUnit} = {conv.conversionFactor.toLocaleString("id-ID")} {item.unit}
+                              {item.purchasePrice ? ` (@ ${formatCurrency(item.purchasePrice)})` : ""}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2434,6 +2688,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   placeholder="Tambah kategori baru (mis. Topping & Jelly, Sauce Racikan, Frozen Food)..."
                   className="flex-1 px-3.5 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                 />
+                <div className="w-full sm:w-52">
+                  <CustomSelect
+                    value={newCategoryDivision}
+                    onChange={(val) => setNewCategoryDivision(val as IngredientCategoryDivision)}
+                    options={CATEGORY_DIVISION_OPTIONS}
+                    buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                  />
+                </div>
                 <button
                   type="submit"
                   className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
@@ -2445,7 +2707,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {ingredientCategoriesList.map((catName) => {
+              {visibleCategoriesForManage.map((catName) => {
                 const CatIcon = getIngredientCategoryIcon(catName);
                 const itemCount = accessibleIngredients.filter((i) =>
                   matchesIngredientCategory(i.category, catName)
@@ -2512,9 +2774,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                               <p className="font-extrabold text-sm text-slate-900 dark:text-slate-100 truncate">
                                 {catName}
                               </p>
-                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
-                                {itemCount} bahan terdaftar
-                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30">
+                                  {getCategoryDivisionLabel(catName)}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+                                  {itemCount} bahan
+                                </span>
+                              </div>
                             </div>
                           </div>
                           {canManageCategories && (
@@ -2544,7 +2811,25 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                          {canManageCategories ? (
+                            <div className="w-44">
+                              <CustomSelect
+                                value={resolveIngredientCategoryDivision(
+                                  catName,
+                                  settings?.ingredientCategoryDivisions
+                                )}
+                                onChange={(val) =>
+                                  handleChangeCategoryDivision(
+                                    catName,
+                                    val as IngredientCategoryDivision
+                                  )
+                                }
+                                options={CATEGORY_DIVISION_OPTIONS}
+                                buttonClassName="w-full px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] font-semibold"
+                              />
+                            </div>
+                          ) : <span />}
                           <button
                             type="button"
                             onClick={() => {
@@ -2920,7 +3205,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     >
                       Semua Kategori
                     </button>
-                    {ingredientCategoriesList.map((cat) => (
+                    {visibleCategoriesForOpname.map((cat) => (
                       <button
                         type="button"
                         key={cat}
@@ -2934,6 +3219,52 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         {cat}
                       </button>
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Pembanding Penjualan Produk (Perkiraan Resep & HPP) vs Keluar Fisik */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <Calculator className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                      Pembanding Penjualan ({opnameBenchmark.startDate} s.d. {opnameBenchmark.endDate})
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        settings?.autoDeductStockOnSale === true
+                          ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                      }`}
+                    >
+                      {settings?.autoDeductStockOnSale === true
+                        ? "Auto-Potong Stok Aktif"
+                        : "Stok Tidak Dipotong Penjualan (Mode Pembanding)"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Bandingkan perkiraan pemakaian resep ({opnameBenchmark.totalQtySold.toLocaleString("id-ID")} porsi terjual) dengan catatan mutasi keluar penyimpanan.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs shrink-0">
+                  <div className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Estimasi HPP</span>
+                    <strong className="font-mono tabular-nums text-brand-700 dark:text-brand-300">
+                      {formatCurrency(opnameBenchmark.totalHpp)}
+                    </strong>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Est. Bahan Resep</span>
+                    <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                      {formatCurrency(opnameBenchmark.recipeCost)}
+                    </strong>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Mutasi Keluar</span>
+                    <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                      {formatCurrency(opnameBenchmark.physicalOutCost)}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -2964,6 +3295,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           </button>
                         </div>
                       </th>
+                      <th className="p-3 text-center">Pembanding (Resep / Keluar)</th>
                       <th className="p-3 text-center">Selisih</th>
                       <th className="p-3">Keterangan / Alasan Selisih</th>
                     </tr>
@@ -3075,6 +3407,24 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                         )}
                                       </span>
                                     )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="p-3 text-center font-mono text-[11px] tabular-nums">
+                              {(() => {
+                                const est = opnameBenchmark.recipeUsageByIngId.get(ing.id);
+                                const phys = opnameBenchmark.physicalOutMap.get(ing.id);
+                                const estQty = est?.totalUsedQty || 0;
+                                const physQty = phys?.totalOutQty || 0;
+                                return (
+                                  <div className="space-y-0.5">
+                                    <div className="text-brand-700 font-bold">
+                                      Est: {estQty.toLocaleString("id-ID")} {ing.unit}
+                                    </div>
+                                    <div className="text-slate-500">
+                                      Keluar: {physQty.toLocaleString("id-ID")} {ing.unit}
+                                    </div>
                                   </div>
                                 );
                               })()}
@@ -3205,6 +3555,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           </div>
                         </div>
 
+                        {/* Pembanding Penjualan Resep & Keluar Fisik Mobile */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70">
+                          <span className="text-brand-700 font-bold">
+                            Est. Resep: {(opnameBenchmark.recipeUsageByIngId.get(ing.id)?.totalUsedQty || 0).toLocaleString("id-ID")} {ing.unit}
+                          </span>
+                          <span className="text-slate-600">
+                            Keluar Fisik: {(opnameBenchmark.physicalOutMap.get(ing.id)?.totalOutQty || 0).toLocaleString("id-ID")} {ing.unit}
+                          </span>
+                        </div>
+
                         {/* Difference & Note in Mobile */}
                         <div className="flex items-center justify-between gap-2 pt-1">
                           <div
@@ -3235,6 +3595,52 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Ringkasan Pembanding Penjualan Mingguan (Resep & HPP) */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <Calculator className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                      Pembanding Penjualan Sejak Opname Terakhir ({opnameBenchmark.startDate} s.d. {opnameBenchmark.endDate})
+                    </h4>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        settings?.autoDeductStockOnSale === true
+                          ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                      }`}
+                    >
+                      {settings?.autoDeductStockOnSale === true
+                        ? "Auto-Potong Stok Aktif"
+                        : "Stok Tidak Dipotong Penjualan"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Patokan cek mingguan: bandingkan estimasi bahan &amp; HPP dari {opnameBenchmark.totalQtySold.toLocaleString("id-ID")} menu terjual terhadap mutasi keluar gudang sebelum/saat melakukan Stok Opname.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs shrink-0">
+                  <div className="px-3 py-2 rounded-xl bg-brand-50/70 dark:bg-brand-500/15 border border-brand-200/70 dark:border-brand-500/30">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Estimasi HPP</span>
+                    <strong className="font-mono tabular-nums text-brand-700 dark:text-brand-300">
+                      {formatCurrency(opnameBenchmark.totalHpp)}
+                    </strong>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Est. Bahan Resep</span>
+                    <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                      {formatCurrency(opnameBenchmark.recipeCost)}
+                    </strong>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-amber-50/70 dark:bg-amber-500/15 border border-amber-200/70 dark:border-amber-500/30">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Mutasi Keluar</span>
+                    <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                      {formatCurrency(opnameBenchmark.physicalOutCost)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
               {/* Active Draft Alert Banner */}
               {activeDrafts.length > 0 && latestDraft && (
                 <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -4253,9 +4659,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   <CustomSelect
                     value={ingredientForm.category}
                     onChange={(val) => setIngredientForm({ ...ingredientForm, category: val })}
-                    options={ingredientCategoriesList.map((c) => ({
+                    options={visibleCategoriesForManage.map((c) => ({
                       value: c,
-                      label: c,
+                      label: isManagerOrAdmin ? `${c} (${getCategoryDivisionLabel(c)})` : c,
                     }))}
                     buttonClassName="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white font-medium text-base sm:text-xs text-slate-800"
                   />
@@ -4529,6 +4935,108 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
                   </div>
                 )}
+
+                {/* Tingkat 3 (Opsional): Satuan Terbesar / Grosir */}
+                <div className="pt-3 border-t border-brand-100 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-800">
+                        Tingkat 3 — Satuan Terbesar / Grosir (Opsional)
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Contoh: 1 Karton = 12 Liter = 12.000 ml (agar AI Input Pintar & PO langsung mengenali pembelian grosir).
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-brand-900 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={ingredientForm.useBulkUnit}
+                        onChange={(e) =>
+                          setIngredientForm({ ...ingredientForm, useBulkUnit: e.target.checked })
+                        }
+                        className="rounded text-brand-600 focus:ring-brand-500"
+                      />
+                      <span>Aktifkan Satuan Grosir</span>
+                    </label>
+                  </div>
+
+                  {ingredientForm.useBulkUnit && (
+                    <div className="space-y-2.5 p-3 rounded-2xl bg-white border border-brand-200/70">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Nama Satuan Terbesar
+                          </label>
+                          <input
+                            type="text"
+                            value={ingredientForm.bulkUnit}
+                            onChange={(e) =>
+                              setIngredientForm({ ...ingredientForm, bulkUnit: e.target.value })
+                            }
+                            placeholder="Karton, Karung, Dus"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-200 font-bold text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Isi per 1 {ingredientForm.bulkUnit || "Grosir"}
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <CurrencyInput
+                              allowDecimals
+                              emptyWhenZero
+                              value={ingredientForm.bulkPerPurchase}
+                              onValueChange={(_, num) =>
+                                setIngredientForm({
+                                  ...ingredientForm,
+                                  bulkPerPurchase: Math.max(0, num),
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-200 font-bold font-mono text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                            />
+                            <span className="text-[11px] font-bold text-brand-700 shrink-0">
+                              {ingredientForm.usePurchaseUnit
+                                ? ingredientForm.purchaseUnit || ingredientForm.unit
+                                : ingredientForm.unit}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                            Harga Grosir (Opsional)
+                          </label>
+                          <CurrencyInput
+                            value={ingredientForm.bulkPrice}
+                            onValueChange={(_, num) =>
+                              setIngredientForm({ ...ingredientForm, bulkPrice: Math.max(0, num) })
+                            }
+                            className="w-full px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-200 font-bold font-mono text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </div>
+                      </div>
+                      <div className="text-[11px] font-semibold text-brand-800 bg-brand-50/70 px-3 py-1.5 rounded-xl border border-brand-200/60 tabular-nums">
+                        Hierarki Satuan:{" "}
+                        <strong>1 {ingredientForm.bulkUnit || "Grosir"}</strong> ={" "}
+                        {ingredientForm.usePurchaseUnit ? (
+                          <>
+                            {ingredientForm.bulkPerPurchase.toLocaleString("id-ID")}{" "}
+                            {ingredientForm.purchaseUnit} ={" "}
+                            {(
+                              ingredientForm.bulkPerPurchase *
+                              (Number(ingredientForm.conversionFactor) || 1)
+                            ).toLocaleString("id-ID")}{" "}
+                            {ingredientForm.unit}
+                          </>
+                        ) : (
+                          <>
+                            {ingredientForm.bulkPerPurchase.toLocaleString("id-ID")}{" "}
+                            {ingredientForm.unit}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               )}
 
@@ -5503,7 +6011,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           const added = handleAddCategory(newCategoryName);
                           if (added) setNewCategoryName("");
                         }}
-                        className="flex items-center gap-2 p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30"
+                        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30"
                       >
                         <input
                           type="text"
@@ -5512,9 +6020,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                           placeholder="Nama kategori baru (mis. Topping, Frozen Food)..."
                           className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                         />
+                        <div className="w-full sm:w-44">
+                          <CustomSelect
+                            value={newCategoryDivision}
+                            onChange={(val) => setNewCategoryDivision(val as IngredientCategoryDivision)}
+                            options={CATEGORY_DIVISION_OPTIONS}
+                            buttonClassName="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold"
+                          />
+                        </div>
                         <button
                           type="submit"
-                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Tambah</span>
@@ -5524,7 +6040,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
                     {/* Daftar Kategori Eksisting */}
                     <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                      {ingredientCategoriesList.map((catName) => {
+                      {visibleCategoriesForManage.map((catName) => {
                         const CatIcon = getIngredientCategoryIcon(catName);
                         const itemCount = accessibleIngredients.filter((i) =>
                           matchesIngredientCategory(i.category, catName)
@@ -5575,7 +6091,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                       {catName}
                                     </p>
                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                                      {itemCount} bahan terdaftar
+                                      {getCategoryDivisionLabel(catName)} • {itemCount} bahan terdaftar
                                     </p>
                                   </div>
                                 </div>

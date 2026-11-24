@@ -95,7 +95,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [isSuspendedModalOpen, setIsSuspendedModalOpen] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [aiInitialTab, setAiInitialTab] = useState<
-    "quick-input" | "receipt" | "consultant" | "insights"
+    "quick-input" | "receipt" | "insights"
   >("quick-input");
   const [aiInitialPrompt, setAiInitialPrompt] = useState<string>("");
 
@@ -201,7 +201,11 @@ export const Layout: React.FC<LayoutProps> = ({
       if (isOwnerReadOnly && (!requestedTab || requestedTab === "quick-input" || requestedTab === "receipt")) {
         setAiInitialTab("insights");
       } else if (requestedTab) {
-        setAiInitialTab(requestedTab);
+        setAiInitialTab(
+          requestedTab === "quick-input" || requestedTab === "receipt" || requestedTab === "insights"
+            ? requestedTab
+            : "insights"
+        );
       }
       setAiInitialPrompt(e.detail?.prompt || "");
       setIsAIAssistantOpen(true);
@@ -1297,7 +1301,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   setAiInitialTab(isOwnerReadOnly ? "insights" : "quick-input");
                   setIsAIAssistantOpen(true);
                 }}
-                title="Julia Coffee AI Copilot & Business Consultant"
+                title="Julia Coffee AI Copilot (Input Pintar, Scan Nota & Ringkasan Toko)"
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-brand-600 stroke-[2.2]" />

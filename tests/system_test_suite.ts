@@ -17,6 +17,7 @@ import {
   calculateCashFlowHppSync,
   getIngredientPackagingChoices,
   getPackagingSelectValue,
+  resolveIngredientPackagingFromText,
   parseSmartCoffeeTextEntry,
 } from "../src/utils/posDomainLogic";
 import {
@@ -34,6 +35,8 @@ import {
   isAdminBankOrMdrTransaction,
   isNonOperationalCashTransaction,
   buildIngredientCategoryList,
+  filterIngredientCategoriesByDivision,
+  resolveIngredientCategoryDivision,
   applyRenameIngredientCategory,
   applyDeleteIngredientCategory,
   cascadeExpenseCategoryUpdate,
@@ -164,6 +167,7 @@ import {
   inferProductGroup,
   formatCatalogMenuVariantLabel,
   computeProductSalesAnalytics,
+  computePhysicalStockOutByIngredient,
   calculateVariantUnitHpp,
   getDivisionMenuCategories,
   applyRenameMenuCategory,
@@ -387,12 +391,12 @@ console.log("\n5. Pengujian Default & Sanitasi Settings:");
 test("Default Nilai Pengaturan Baru", () => {
   const defaultSettings = {
     posSupervisorPin: "1234",
-    autoDeductStockOnSale: true,
+    autoDeductStockOnSale: false,
     allowNegativeStockSale: true,
   };
 
   assert.strictEqual(defaultSettings.posSupervisorPin, "1234");
-  assert.strictEqual(defaultSettings.autoDeductStockOnSale, true);
+  assert.strictEqual(defaultSettings.autoDeductStockOnSale, false);
   assert.strictEqual(defaultSettings.allowNegativeStockSale, true);
 });
 
@@ -5522,6 +5526,265 @@ test("41d. enforceClosedPeriodDataLock mempertahankan baris eksisting pada perio
   assert.strictEqual(lockedResult.find((r: any) => r.id === "tx-locked")?.amount, 500000);
   assert.strictEqual(lockedResult.some((r: any) => r.id === "tx-new-in-closed"), false);
   assert.strictEqual(lockedResult.find((r: any) => r.id === "tx-open")?.amount, 250000);
+});
+
+// -------------------------------------------------------------
+// TEST SUITE 42: MODE PEMBANDING PENJUALAN (RESEP & HPP) VS MUTASI FISIK
+// -------------------------------------------------------------
+console.log("\n--- SUITE 42: ESTIMASI PEMAKAIAN BAHAN & HPP VS MUTASI FISIK ---");
+
+test("42a. computePhysicalStockOutByIngredient mengagregasi mutasi keluar (OUT/USAGE/WASTE) WITA tanpa menghitung IN/TRANSFER", () => {
+  const movements: StockMovement[] = [
+    {
+      id: "m-in",
+      ingredientId: "ing-milk",
+      type: "IN",
+      quantity: 5000,
+      totalCost: 100000,
+      date: "2026-11-10T09:00:00+08:00",
+    } as any,
+    {
+      id: "m-out",
+      ingredientId: "ing-milk",
+      type: "OUT",
+      quantity: 1200,
+      totalCost: 24000,
+      date: "2026-11-11T10:00:00+08:00",
+    } as any,
+    {
+      id: "m-waste",
+      ingredientId: "ing-milk",
+      type: "WASTE",
+      quantity: 300,
+      totalCost: 6000,
+      date: "2026-11-12T23:30:00+08:00",
+    } as any,
+    {
+      id: "m-transfer",
+      ingredientId: "ing-milk",
+      type: "TRANSFER",
+      quantity: 1000,
+      totalCost: 20000,
+      date: "2026-11-11T15:00:00+08:00",
+    } as any,
+    {
+      id: "m-out-range",
+      ingredientId: "ing-milk",
+      type: "OUT",
+      quantity: 999,
+      totalCost: 19980,
+      date: "2026-11-20T09:00:00+08:00",
+    } as any,
+  ];
+
+  // Reverse start/end order tetap dinormalisasi
+  const agg = computePhysicalStockOutByIngredient({
+    stockMovements: movements,
+    startDate: "2026-11-12",
+    endDate: "2026-11-10",
+  });
+
+  const milk = agg.get("ing-milk");
+  assert.ok(milk);
+  assert.strictEqual(milk!.totalOutQty, 1500);
+  assert.strictEqual(milk!.totalOutCost, 30000);
+  assert.strictEqual(milk!.wasteQty, 300);
+});
+
+test("42b. computeProductSalesAnalytics menghitung perkiraan bahan & HPP sebagai pembanding meski stok tidak dipotong", () => {
+  const ingMilk: Ingredient = {
+    id: "ing-susu",
+    name: "Fresh Milk",
+    category: "Dairy",
+    unit: "ml",
+    costPerUnit: 20,
+    currentStock: 10000,
+    minStock: 1000,
+  };
+  const recipeLatte: Recipe = {
+    id: "rec-latte",
+    menuName: "Iced Latte",
+    ingredients: [{ ingredientId: "ing-susu", quantity: 150 }],
+  };
+  const prodLatte: Product = {
+    id: "prod-latte",
+    name: "Iced Latte",
+    category: "BAR",
+    division: "BAR",
+    productGroup: "MINUMAN",
+    menuCategory: "COFFEE",
+    variants: [
+      {
+        id: "var-reg",
+        name: "Regular",
+        sellingPrice: 25000,
+        estimatedHpp: 5000,
+        recipeId: "rec-latte",
+      },
+    ],
+    isActive: true,
+    createdAt: "2026-11-01T00:00:00Z",
+  } as any;
+  const sales: SalesTransaction[] = [
+    {
+      id: "sale-1",
+      date: "2026-11-11",
+      menuName: "Iced Latte",
+      quantitySold: 8,
+      totalPrice: 200000,
+      importLogId: "log-1",
+    },
+  ];
+
+  const analytics = computeProductSalesAnalytics({
+    salesTransactions: sales,
+    products: [prodLatte],
+    recipes: [recipeLatte],
+    ingredients: [ingMilk],
+    dateMode: "DATE_RANGE",
+    singleDate: "2026-11-11",
+    startDate: "2026-11-10",
+    endDate: "2026-11-12",
+  });
+
+  // 8 cup * 150ml = 1200ml susu (Rp 24.000), HPP teoretis = 8 * 3000 (atau dari resep = 1200*20 = 24000)
+  const milkUsage = analytics.ingredientUsageSummary.find((i) => i.ingredientId === "ing-susu");
+  assert.ok(milkUsage);
+  assert.strictEqual(milkUsage!.totalUsedQty, 1200);
+  assert.strictEqual(milkUsage!.totalCost, 24000);
+  // Stok bahan tetap utuh (tidak dipotong penjualan)
+  assert.strictEqual(milkUsage!.currentStock, 10000);
+  assert.ok(analytics.kpiSummary.totalHpp > 0);
+});
+
+// -------------------------------------------------------------
+// TEST SUITE 43: KATEGORI DIVISI, 3-TIER SATUAN BAHAN & INPUT PINTAR
+// -------------------------------------------------------------
+console.log("\n--- SUITE 43: KATEGORI PER DIVISI, 3-TIER SATUAN & PARSER AI ---");
+
+test("43a. filterIngredientCategoriesByDivision & resolveIngredientCategoryDivision mengisolasi kategori divisi dan menyertakan kategori umum", () => {
+  const cats = ["Biji Kopi", "Susu & Dairy", "Bahan Kitchen", "Bahan Bakery", "Packaging & Cup", "Lainnya"];
+  const customDivs = { "Sirup Custom": "BAR" as const, "Keju Pastry": "BAKER" as const };
+
+  assert.strictEqual(resolveIngredientCategoryDivision("Sirup Custom", customDivs), "BAR");
+  assert.strictEqual(resolveIngredientCategoryDivision("Keju Pastry", customDivs), "BAKER");
+
+  const barOnly = filterIngredientCategoriesByDivision(cats, "BAR", customDivs);
+  assert.ok(barOnly.includes("Biji Kopi"));
+  assert.ok(barOnly.includes("Packaging & Cup"));
+  assert.ok(!barOnly.includes("Bahan Kitchen"));
+  assert.ok(!barOnly.includes("Bahan Bakery"));
+
+  const kitchenOnly = filterIngredientCategoriesByDivision(cats, "KITCHEN", customDivs);
+  assert.ok(kitchenOnly.includes("Bahan Kitchen"));
+  assert.ok(kitchenOnly.includes("Lainnya"));
+  assert.ok(!kitchenOnly.includes("Biji Kopi"));
+});
+
+test("43b. sanitizeIngredientRecord & getIngredientPackagingChoices mendukung hierarki 3 tingkat satuan (Grosir -> Menengah -> Terkecil)", () => {
+  const sanitized = sanitizeIngredientRecord(
+    {
+      id: "ing-milk-3t",
+      name: "Susu Fresh Milk",
+      unit: "ml",
+      currentStock: 12000,
+      minStock: 2000,
+      category: "Susu & Dairy",
+      costPerUnit: 18,
+      purchaseUnit: "Liter",
+      conversionFactor: 1000,
+      purchasePrice: 18500,
+      bulkUnit: "Karton",
+      bulkConversionFactor: 12000,
+      bulkPrice: 210000,
+    },
+    "fallback-id"
+  );
+
+  assert.strictEqual(sanitized.bulkUnit, "Karton");
+  assert.strictEqual(sanitized.bulkConversionFactor, 12000);
+  assert.strictEqual(sanitized.bulkPrice, 210000);
+
+  const choices = getIngredientPackagingChoices(sanitized as any);
+  assert.strictEqual(choices[0].unit, "Karton");
+  assert.strictEqual(choices[0].factor, 12000);
+  assert.strictEqual(choices[1].key, "PURCHASE");
+  assert.strictEqual(choices[1].factor, 1000);
+  assert.strictEqual(choices[2].key, "BASE");
+  assert.strictEqual(choices[2].factor, 1);
+});
+
+test("43c. resolveIngredientPackagingFromText memprioritaskan 3 tingkat satuan deklarasi bahan dan mengenali singkatan Indonesia", () => {
+  const cupIng: Ingredient = {
+    id: "ing-cup16",
+    name: "Cup Oval 16oz",
+    category: "Packaging & Cup",
+    unit: "pcs",
+    currentStock: 500,
+    minStock: 100,
+    costPerUnit: 500,
+    purchaseUnit: "Slop",
+    conversionFactor: 50,
+    bulkUnit: "Dus",
+    bulkConversionFactor: 1000,
+  };
+
+  const resDus = resolveIngredientPackagingFromText(cupIng, "dus", "beli 2 dus cup oval");
+  assert.strictEqual(resDus.unit, "Dus");
+  assert.strictEqual(resDus.conversionFactor, 1000);
+
+  const resSlop = resolveIngredientPackagingFromText(cupIng, "slp", "beli 3slp cup oval");
+  assert.strictEqual(resSlop.unit, "Slop");
+  assert.strictEqual(resSlop.conversionFactor, 50);
+
+  const resPcs = resolveIngredientPackagingFromText(cupIng, "bj", "ambil 15 bj cup");
+  assert.strictEqual(resPcs.unit, "pcs");
+  assert.strictEqual(resPcs.conversionFactor, 1);
+});
+
+test("43d. parseSmartCoffeeTextEntry mengenali satuan rapat (2krt, 3slp, 4btl) tanpa salah baca kuantitas sebagai harga", () => {
+  const storeCtx = {
+    ingredients: [
+      {
+        id: "ing-susu-3t",
+        name: "Fresh Milk Diamond",
+        unit: "ml",
+        purchaseUnit: "Liter",
+        conversionFactor: 1000,
+        bulkUnit: "Karton",
+        bulkConversionFactor: 12000,
+      },
+      {
+        id: "ing-cup-3t",
+        name: "Cup 16oz",
+        unit: "pcs",
+        purchaseUnit: "Slop",
+        conversionFactor: 50,
+        bulkUnit: "Karton",
+        bulkConversionFactor: 1000,
+      },
+    ],
+  };
+
+  const parsed = parseSmartCoffeeTextEntry(
+    "tf bca beli 2krt fresh milk diamond @210rb; 3slp cup 16oz @25rb",
+    storeCtx
+  );
+  assert.strictEqual(parsed.transactions.length, 2);
+
+  const milkTx = parsed.transactions[0];
+  assert.strictEqual(milkTx.ingredientId, "ing-susu-3t");
+  assert.strictEqual(milkTx.quantity, 2);
+  assert.strictEqual(milkTx.unit, "Karton");
+  assert.strictEqual(milkTx.conversionFactor, 12000);
+  assert.strictEqual(milkTx.amount, 420000);
+
+  const cupTx = parsed.transactions[1];
+  assert.strictEqual(cupTx.ingredientId, "ing-cup-3t");
+  assert.strictEqual(cupTx.quantity, 3);
+  assert.strictEqual(cupTx.unit, "Slop");
+  assert.strictEqual(cupTx.conversionFactor, 50);
+  assert.strictEqual(cupTx.amount, 75000);
 });
 
 // -------------------------------------------------------------

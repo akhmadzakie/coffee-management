@@ -656,7 +656,7 @@ const FinanceReports: React.FC = () => {
               window.dispatchEvent(
                 new CustomEvent("open-ai-assistant", {
                   detail: {
-                    tab: "consultant",
+                    tab: "insights",
                     prompt: `Analisa kondisi Laba Rugi (P&L) bulan ${period}, komposisi pengeluaran per kategori, food cost (${fnbHealth.foodCostPercent.toFixed(1)}%), labor cost (${fnbHealth.laborCostPercent.toFixed(1)}%), prime cost (${fnbHealth.primeCostPercent.toFixed(1)}%), BEP omzet (${fnbHealth.bepMonthlyRevenue !== null ? formatCurrency(fnbHealth.bepMonthlyRevenue) : "belum terhitung"}), serta tagihan PO belum lunas dan saran efisiensinya.`,
                   },
                 })
@@ -2916,10 +2916,13 @@ const FinanceReports: React.FC = () => {
                           const res = await authFetch("/api/closed-periods/verify-reopen-pin", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ pin: reopenPin.trim() }),
+                            body: JSON.stringify({
+                              pin: reopenPin.trim(),
+                              reason: reopenReason.trim(),
+                            }),
                           });
                           const data = await res.json().catch(() => ({}));
-                          if (!res.ok) {
+                          if (!res.ok || data?.valid !== true) {
                             setReopenError(data?.error || "Verifikasi PIN buka buku gagal.");
                             return;
                           }

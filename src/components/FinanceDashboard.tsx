@@ -99,7 +99,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     : false;
 
   const handleOpenCopilot = (
-    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    tab: "quick-input" | "receipt" | "insights",
     prompt?: string
   ) => {
     window.dispatchEvent(
@@ -531,10 +531,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </button>
             <button
               onClick={() =>
-                handleOpenCopilot(
-                  "consultant",
-                  "Bagaimana analisis pengeluaran terbesar toko bulan ini dan cara menghemat biaya operasional?"
-                )
+                handleOpenCopilot("insights")
               }
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >

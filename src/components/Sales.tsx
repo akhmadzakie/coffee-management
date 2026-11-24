@@ -117,6 +117,7 @@ export const Sales = () => {
     products,
     recipes,
     ingredients,
+    stockMovements = [],
     addProduct,
     updateProduct,
     addRecipe,
@@ -779,6 +780,9 @@ export const Sales = () => {
     const recapDates = new Set(dailySalesRecaps.map((r) => r.date.slice(0, 10)));
     const hasRecapOverlap = importDates.some((d) => recapDates.has(d.slice(0, 10)));
     const notes: string[] = [];
+    if (settings.autoDeductStockOnSale !== true) {
+      notes.push("Stok penyimpanan tidak dipotong (mode pembanding aktif); perkiraan pemakaian bahan & estimasi HPP tersedia di Analitik Produk & Opname");
+    }
     if (hasRecapOverlap) notes.push("Tanggal yang sudah ada Rekap Omzet tetap mengikuti Buku Kas Rekap Harian (data menu dipakai untuk analitik & HPP teoretis)");
     if (duplicateRowsCount > 0) notes.push(`${duplicateRowsCount} baris duplikat dilewati otomatis (Aturan #7)`);
     if (mapped.skippedRows > 0) notes.push(`${mapped.skippedRows} baris dilewati karena nama menu kosong/ringkasan/qty nol`);
@@ -786,7 +790,7 @@ export const Sales = () => {
     if (mapped.unmatchedMenus.length > 0) {
       const sample = mapped.unmatchedMenus.slice(0, 5).join(", ");
       notes.push(
-        `${mapped.unmatchedMenus.length} nama menu belum ada di katalog (${sample}${mapped.unmatchedMenus.length > 5 ? ", ..." : ""}) sehingga stok/HPP-nya belum terhitung. Tambahkan menu tersebut di Katalog & Menu atau samakan namanya`
+        `${mapped.unmatchedMenus.length} nama menu belum ada di katalog (${sample}${mapped.unmatchedMenus.length > 5 ? ", ..." : ""}) sehingga perkiraan bahan/HPP-nya belum terhitung. Tambahkan menu tersebut di Katalog & Menu atau samakan namanya`
       );
     }
     const msg =
@@ -809,7 +813,7 @@ export const Sales = () => {
       (l) => l.fileName === actualFileName && l.status === "SUCCESS"
     );
     if (alreadyImported) {
-      const msg = `File "${actualFileName}" sudah pernah diimpor sebelumnya. Impor dibatalkan demi mencegah pemotongan stok berulang.`;
+      const msg = `File "${actualFileName}" sudah pernah diimpor sebelumnya. Impor dibatalkan demi mencegah duplikasi data penjualan & estimasi HPP.`;
       toast.warning(msg);
       setUploadStatus({ type: "error", message: msg });
       return;
@@ -2482,6 +2486,7 @@ export const Sales = () => {
           products={products}
           recipes={recipes}
           ingredients={ingredients}
+          stockMovements={stockMovements}
           settings={settings}
           cashAccounts={cashAccounts}
           isReadOnly={isReadOnly}

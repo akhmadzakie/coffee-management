@@ -852,6 +852,26 @@ export function getIngredientPackagingChoices(ing: Ingredient): PackagingChoice[
   const masterUnit = (ing.purchaseUnit || "").trim();
   const masterFactor = Number(ing.conversionFactor) || 0;
   const hasMaster = Boolean(masterUnit && masterFactor > 0);
+  const bulkUnit = (ing.bulkUnit || "").trim();
+  const bulkFactor = Number(ing.bulkConversionFactor) || 0;
+  const hasBulk = Boolean(bulkUnit && bulkFactor > 0);
+
+  if (hasBulk) {
+    const subRatio =
+      hasMaster && masterFactor > 0
+        ? Math.round((bulkFactor / masterFactor) * 1000) / 1000
+        : null;
+    const bulkSummary = subRatio
+      ? `1 = ${subRatio.toLocaleString("id-ID")} ${masterUnit} = ${bulkFactor.toLocaleString("id-ID")} ${baseUnit}`
+      : `1 = ${bulkFactor.toLocaleString("id-ID")} ${baseUnit}`;
+    choices.push({
+      key: `PRESET:${bulkUnit}`,
+      mode: "PRESET",
+      unit: bulkUnit,
+      factor: bulkFactor,
+      label: `${bulkUnit} (Grosir • ${bulkSummary})`,
+    });
+  }
 
   if (hasMaster) {
     choices.push({
@@ -859,7 +879,7 @@ export function getIngredientPackagingChoices(ing: Ingredient): PackagingChoice[
       mode: "PURCHASE",
       unit: masterUnit,
       factor: masterFactor,
-      label: `${masterUnit} (Master • 1 = ${masterFactor.toLocaleString("id-ID")} ${baseUnit})`,
+      label: `${masterUnit} (Beli • 1 = ${masterFactor.toLocaleString("id-ID")} ${baseUnit})`,
     });
   }
 
@@ -900,9 +920,10 @@ export function getIngredientPackagingChoices(ing: Ingredient): PackagingChoice[
         ];
 
   const masterLower = masterUnit.toLowerCase();
+  const bulkLower = bulkUnit.toLowerCase();
   presets.forEach((p) => {
     const pLower = p.unit.toLowerCase();
-    if (pLower === masterLower || pLower === baseLower) return;
+    if (pLower === masterLower || pLower === baseLower || (bulkLower && pLower === bulkLower)) return;
     choices.push({
       key: `PRESET:${p.unit}`,
       mode: "PRESET",
@@ -945,7 +966,76 @@ export function getPackagingSelectValue(
 // ─── AI Smart NLP Entry, Typo/Abbreviation & Store Ingredient Matcher ────────
 
 const UNIT_REGEX_PART =
-  "(?:liter|ltr|lt|l|ml|cc|gln|galon|btl|botol|jrgn|jrg|jerigen|dirigen|krt|krtn|ctn|karton|kg|kilo|grm|gram|gr|g|krg|karung|sak|bal|ball|pak|pck|pack|pch|pouch|pcs|pc|bh|buah|lsn|lusin|dz|dus|dos|box|bks|bungkus|slop|slp|roll|iket|ikat)";
+  "(?:karton|krtn|krt|ctn|kotak|ktk|karung|krg|sak|galon|gln|jerigen|jrgn|jrg|dirigen|botol|btl|kaleng|klg|sachet|sch|sct|bungkus|bks|slop|slp|pouch|pch|tabung|tbg|pack|pak|pck|krat|tray|papan|bal|ball|dus|dos|box|lusin|lsn|dz|liter|ltr|lt|l|ml|cc|mililiter|kg|kilo|kilogram|ons|gr|grm|gram|g|butir|btr|buah|bh|pcs|pc|bj|biji|roll|ikat|iket|portion|porsi)";
+
+const UNIT_CANONICAL_GROUPS: string[][] = [
+  ["karton", "krtn", "krt", "ctn"],
+  ["kotak", "ktk"],
+  ["dus", "dos", "box"],
+  ["pack", "pak", "pck"],
+  ["slop", "slp"],
+  ["bungkus", "bks"],
+  ["kaleng", "klg"],
+  ["sachet", "sch", "sct"],
+  ["botol", "btl"],
+  ["jerigen", "jrgn", "jrg", "dirigen"],
+  ["galon", "gln"],
+  ["karung", "krg", "sak"],
+  ["bal", "ball"],
+  ["krat", "tray", "papan"],
+  ["lusin", "lsn", "dz"],
+  ["liter", "ltr", "lt", "l"],
+  ["ml", "cc", "mililiter"],
+  ["kg", "kilo", "kilogram"],
+  ["gr", "g", "grm", "gram"],
+  ["pcs", "pc", "bj", "biji", "bh", "buah", "btr", "butir"],
+  ["roll"],
+  ["ikat", "iket"],
+  ["pouch", "pch"],
+  ["tabung", "tbg"],
+];
+
+function canonicalizeUnitToken(token: string): string {
+  const clean = token.trim().toLowerCase();
+  if (!clean) return "";
+  const firstWord = clean.split(/[\s(/]/)[0];
+  for (const grp of UNIT_CANONICAL_GROUPS) {
+    if (grp.includes(clean) || (firstWord && grp.includes(firstWord))) {
+      return grp[0];
+    }
+  }
+  return firstWord || clean;
+}
+
+function unitTokenMatchesDeclaredUnit(declaredUnit: string, spokenUnit: string, combinedText: string): boolean {
+  const declTrim = declaredUnit.trim().toLowerCase();
+  if (!declTrim) return false;
+  const declFirstWord = declTrim.split(/[\s(/]/)[0];
+  const declCanon = canonicalizeUnitToken(declTrim);
+  const spokenTrim = spokenUnit.trim().toLowerCase();
+  const spokenCanon = canonicalizeUnitToken(spokenTrim);
+
+  if (spokenTrim) {
+    if (
+      declTrim === spokenTrim ||
+      declFirstWord === spokenTrim ||
+      (declCanon && spokenCanon && declCanon === spokenCanon)
+    ) {
+      return true;
+    }
+  }
+
+  // Cek kemunculan alias satuan yang dideklarasikan langsung di kalimat (misal "2krt", "3 slop", "5 liter")
+  const matchedGroup = UNIT_CANONICAL_GROUPS.find(
+    (g) => g.includes(declTrim) || g.includes(declFirstWord) || g[0] === declCanon
+  );
+  const tokensToCheck = matchedGroup ? matchedGroup : [declFirstWord];
+  return tokensToCheck.some((tok) => {
+    if (!tok) return false;
+    const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|\\d|\\s)${esc}\\b`, "i").test(combinedText);
+  });
+}
 
 export function resolveIngredientPackagingFromText(
   ing: any,
@@ -960,6 +1050,8 @@ export function resolveIngredientPackagingFromText(
   const baseLower = baseUnit.trim().toLowerCase();
   const masterUnit = String(ing?.purchaseUnit || "").trim();
   const masterFactor = Number(ing?.conversionFactor) || 0;
+  const bulkUnit = String(ing?.bulkUnit || "").trim();
+  const bulkFactor = Number(ing?.bulkConversionFactor) || 0;
   const unitLower = String(rawUnit || "").trim().toLowerCase();
   const textLower = String(rawText || "").trim().toLowerCase();
   const combined = `${unitLower} ${textLower}`;
@@ -967,26 +1059,27 @@ export function resolveIngredientPackagingFromText(
   const isVolume = ["ml", "cc", "mililiter"].includes(baseLower);
   const isWeight = ["gr", "g", "gram"].includes(baseLower);
 
+  // Prioritas 1: Cocokkan ke Satuan Terbesar / Grosir milik bahan itu sendiri (Tingkat 3)
+  if (bulkUnit && bulkFactor > 0 && unitTokenMatchesDeclaredUnit(bulkUnit, unitLower, combined)) {
+    return { unit: bulkUnit, unitMode: "PRESET", conversionFactor: bulkFactor };
+  }
+
+  // Prioritas 2: Cocokkan ke Satuan Beli / Menengah milik bahan itu sendiri (Tingkat 2)
+  if (masterUnit && masterFactor > 0 && unitTokenMatchesDeclaredUnit(masterUnit, unitLower, combined)) {
+    return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+  }
+
+  // Prioritas 3: Cocokkan ke Satuan Resep / Terkecil milik bahan itu sendiri (Tingkat 1)
   if (
     unitLower === baseLower ||
     (isWeight && ["g", "gr", "grm", "gram"].includes(unitLower)) ||
-    (isVolume && ["ml", "cc"].includes(unitLower))
+    (isVolume && ["ml", "cc", "mililiter"].includes(unitLower)) ||
+    (!isWeight && !isVolume && unitTokenMatchesDeclaredUnit(baseUnit, unitLower, ""))
   ) {
     return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
   }
 
-  if (masterUnit && masterFactor > 0) {
-    const masterFirstWord = masterUnit.toLowerCase().split(/[\s(]/)[0];
-    if (
-      unitLower &&
-      (masterUnit.toLowerCase() === unitLower ||
-        masterUnit.toLowerCase().includes(unitLower) ||
-        (masterFirstWord && unitLower.includes(masterFirstWord)))
-    ) {
-      return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
-    }
-  }
-
+  // Prioritas 4: Ukuran kemasan eksplisit di teks (mis. 500gr, 250g, 12x1L)
   if (isVolume) {
     if (/\b(karton|krtn|krt|ctn)\b/.test(combined)) {
       return { unit: "Karton (12L)", unitMode: "PRESET", conversionFactor: 12000 };
@@ -1001,7 +1094,7 @@ export function resolveIngredientPackagingFromText(
       return { unit: "Botol (700ml)", unitMode: "PRESET", conversionFactor: 700 };
     }
     if (
-      /\b(liter|ltr|lt|l|kotak)\b/.test(unitLower) ||
+      /\b(liter|ltr|lt|l|kotak|ktk)\b/.test(unitLower) ||
       /\b\d+(?:[.,]\d+)?\s*(liter|ltr|lt|l)\b/i.test(textLower)
     ) {
       return { unit: "Liter", unitMode: "PRESET", conversionFactor: 1000 };
@@ -1042,6 +1135,9 @@ export function resolveIngredientPackagingFromText(
 
   if (masterUnit && masterFactor > 0) {
     return { unit: masterUnit, unitMode: "PURCHASE", conversionFactor: masterFactor };
+  }
+  if (bulkUnit && bulkFactor > 0) {
+    return { unit: bulkUnit, unitMode: "PRESET", conversionFactor: bulkFactor };
   }
   return { unit: baseUnit, unitMode: "BASE", conversionFactor: 1 };
 }
@@ -1332,8 +1428,10 @@ export function parseSmartCoffeeTextEntry(text: string, storeContext?: any) {
 
     // 3. Ekstrak nominal uang (prioritaskan `@` per unit, lalu prefix Rp/total, lalu suffix rb/k/jt, lalu ribuan bertitik)
     let amount = 0;
-    const perUnitRegex =
-      /(?:@|per\s*(?:unit|pcs|buah|kg|gr|liter|ltr|lt|l|karton|krtn|dus|dos|pack|pak|gln|galon|btl|botol|karung|krg|sak|bal)?\s*:?)\s*(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(rb|ribu|rbu|k|jt|juta)?\b/i;
+    const perUnitRegex = new RegExp(
+      `(?:@|per\\s*(?:${UNIT_REGEX_PART})?\\s*:?)\\s*(?:rp\\.?\\s*)?(\\d+(?:[.,]\\d+)*)\\s*(rb|ribu|rbu|k|jt|juta)?\\b`,
+      "i"
+    );
     const perUnitMatch = workStr.match(perUnitRegex);
 
     if (perUnitMatch) {

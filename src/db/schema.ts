@@ -177,7 +177,7 @@ export const settings = pgTable("settings", {
   enableLeaderAllowanceBonus: boolean("enable_leader_allowance_bonus").default(true),
   enableKpiScoreBonus: boolean("enable_kpi_score_bonus").default(false),
   posSupervisorPin: text("pos_supervisor_pin").default("1234"),
-  autoDeductStockOnSale: boolean("auto_deduct_stock_on_sale").default(true),
+  autoDeductStockOnSale: boolean("auto_deduct_stock_on_sale").default(false),
   allowNegativeStockSale: boolean("allow_negative_stock_sale").default(true),
 });
 export const deviceSessions = pgTable("device_sessions", {
@@ -208,6 +208,9 @@ export const ingredients = pgTable("ingredients", {
   purchaseUnit: text("purchase_unit"),
   conversionFactor: doublePrecision("conversion_factor"),
   purchasePrice: doublePrecision("purchase_price"),
+  bulkUnit: text("bulk_unit"),
+  bulkConversionFactor: doublePrecision("bulk_conversion_factor"),
+  bulkPrice: doublePrecision("bulk_price"),
   storageLocation: varchar("storage_location", { length: 100 }),
   notes: text("notes"),
 });

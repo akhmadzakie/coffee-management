@@ -32,6 +32,12 @@ export function sanitizeIngredientRecord(i: any, fallbackId: string) {
     purchasePriceRaw !== null && purchasePriceRaw !== undefined && purchasePriceRaw !== ""
       ? Number(purchasePriceRaw)
       : NaN;
+  const bulkConvRaw = i?.bulkConversionFactor;
+  const bulkConvNum =
+    bulkConvRaw !== null && bulkConvRaw !== undefined && bulkConvRaw !== "" ? Number(bulkConvRaw) : NaN;
+  const bulkPriceRaw = i?.bulkPrice;
+  const bulkPriceNum =
+    bulkPriceRaw !== null && bulkPriceRaw !== undefined && bulkPriceRaw !== "" ? Number(bulkPriceRaw) : NaN;
 
   return {
     id: String(i?.id || fallbackId),
@@ -45,6 +51,9 @@ export function sanitizeIngredientRecord(i: any, fallbackId: string) {
     purchaseUnit: i?.purchaseUnit ? String(i.purchaseUnit).trim() : null,
     conversionFactor: Number.isFinite(convNum) && convNum > 0 ? convNum : null,
     purchasePrice: Number.isFinite(purchasePriceNum) && purchasePriceNum >= 0 ? purchasePriceNum : null,
+    bulkUnit: i?.bulkUnit ? String(i.bulkUnit).trim() : null,
+    bulkConversionFactor: Number.isFinite(bulkConvNum) && bulkConvNum > 0 ? bulkConvNum : null,
+    bulkPrice: Number.isFinite(bulkPriceNum) && bulkPriceNum >= 0 ? bulkPriceNum : null,
     storageLocation: i?.storageLocation ? String(i.storageLocation).trim() : null,
     notes: i?.notes ? String(i.notes) : null,
   };

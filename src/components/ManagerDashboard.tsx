@@ -149,7 +149,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   }, []);
 
   const handleOpenCopilot = (
-    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    tab: "quick-input" | "receipt" | "insights",
     prompt?: string
   ) => {
     window.dispatchEvent(
@@ -806,12 +806,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </button>
           </div>
 
-          {/* Quick Ask / Consultant Query Input */}
+          {/* Quick Input / Audit AI Trigger */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (managerAiInput.trim()) {
-                handleOpenCopilot("consultant", managerAiInput);
+                handleOpenCopilot("quick-input", managerAiInput);
               }
             }}
             className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5 pl-4 focus-within:bg-white/15 focus-within:border-white/40 transition-all shadow-inner"
@@ -821,7 +821,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               type="text"
               value={managerAiInput}
               onChange={(e) => setManagerAiInput(e.target.value)}
-              placeholder="Tanya SOP shift, cara cegah susu basi, atau strategi margin HPP kopi..."
+              placeholder="Catat belanja/mutasi cepat via Input Pintar (misal: beli 2 krt susu @210rb)..."
               className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none"
             />
             <button
@@ -829,7 +829,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               disabled={!managerAiInput.trim()}
               className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
             >
-              <span>Tanya AI</span>
+              <span>Proses Input</span>
               <Send className="w-3 h-3" />
             </button>
           </form>
@@ -847,40 +847,18 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               <span>🚨 Audit Bahan Menipis ({stockValuation.criticalCount})</span>
             </button>
             <button
-              onClick={() =>
-                handleOpenCopilot(
-                  "consultant",
-                  "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?"
-                )
-              }
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Coffee className="w-3.5 h-3.5 text-amber-300" />
-              <span>☕ Optimasi Margin & HPP Resep</span>
-            </button>
-            <button
-              onClick={() =>
-                handleOpenCopilot(
-                  "consultant",
-                  "Bagaimana pembagian tugas dan workflow 2 barista saat rush hour ramai?"
-                )
-              }
+              onClick={() => handleOpenCopilot("quick-input")}
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>⚡ Workflow Rush Hour Ramai</span>
+              <span>⚡ Input Pintar Belanja &amp; Kas</span>
             </button>
             <button
-              onClick={() =>
-                handleOpenCopilot(
-                  "consultant",
-                  "Bagaimana SOP mencegah susu basi dan meminimalkan waste biji kopi di bar?"
-                )
-              }
+              onClick={() => handleOpenCopilot("receipt")}
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ClipboardCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>📋 SOP Cegah Waste Bahan</span>
+              <span>🧾 Pindai Nota / Struk</span>
             </button>
           </div>
         </div>

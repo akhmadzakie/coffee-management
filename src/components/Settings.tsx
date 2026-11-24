@@ -53,7 +53,7 @@ export const SettingsComponent = () => {
   const [maxCashierDiscount, setMaxCashierDiscount] = useState(settings.maxCashierDiscount ?? 10);
   const [posSupervisorPin, setPosSupervisorPin] = useState(settings.posSupervisorPin || "1234");
   const [showSupervisorPin, setShowSupervisorPin] = useState(false);
-  const [autoDeductStockOnSale, setAutoDeductStockOnSale] = useState(settings.autoDeductStockOnSale !== false);
+  const [autoDeductStockOnSale, setAutoDeductStockOnSale] = useState(settings.autoDeductStockOnSale === true);
   const [allowNegativeStockSale, setAllowNegativeStockSale] = useState(settings.allowNegativeStockSale !== false);
   const [profitShareOwnerPercent, setProfitShareOwnerPercent] = useState<number>(settings.profitShareOwnerPercent ?? 70);
   const [profitShareReservePercent, setProfitShareReservePercent] = useState<number>(settings.profitShareReservePercent ?? 30);
@@ -77,7 +77,7 @@ export const SettingsComponent = () => {
     setTaxMode(settings.taxMode ?? "EXCLUSIVE");
     setMaxCashierDiscount(settings.maxCashierDiscount ?? 10);
     setPosSupervisorPin(settings.posSupervisorPin || "1234");
-    setAutoDeductStockOnSale(settings.autoDeductStockOnSale !== false);
+    setAutoDeductStockOnSale(settings.autoDeductStockOnSale === true);
     setAllowNegativeStockSale(settings.allowNegativeStockSale !== false);
     setProfitShareOwnerPercent(settings.profitShareOwnerPercent ?? 70);
     setProfitShareReservePercent(settings.profitShareReservePercent ?? 30);
@@ -769,13 +769,13 @@ export const SettingsComponent = () => {
               </div>
 
               {/* Toggle 1: Potong Stok Otomatis */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold text-slate-800">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
                     Potong Stok Bahan Otomatis dari Penjualan {FEATURES.POS ? "POS" : "(Rekap/Impor)"}
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    Saat transaksi penjualan masuk atau diimpor, bahan baku resep otomatis dipotong. Jika dimatikan, stok hanya berubah dari mutasi manual atau stok opname.
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <strong className="text-slate-700 dark:text-slate-200">OFF (Disarankan untuk kontrol mutasi + opname mingguan):</strong> Stok hanya berkurang dari pencatatan mutasi keluar harian &amp; stok opname, sementara penjualan produk menghitung <strong className="text-brand-700 dark:text-brand-300">Perkiraan Pemakaian Bahan &amp; Estimasi HPP</strong> sebagai pembanding. Nyalakan hanya jika tidak mencatat mutasi keluar harian.
                   </p>
                 </div>
                 <label className={`relative inline-flex items-center shrink-0 ${isOwner ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>

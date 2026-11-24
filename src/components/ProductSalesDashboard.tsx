@@ -42,12 +42,14 @@ import type {
   Recipe,
   SalesTransaction,
   Settings,
+  StockMovement,
 } from "../types";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { addDaysToLocalDate } from "../utils/syncSanitizers";
 import { exportProductSalesAnalyticsToXlsx } from "../utils/exportXlsx";
 import { formatCurrency } from "../utils/format";
 import {
+  computePhysicalStockOutByIngredient,
   computeProductSalesAnalytics,
   formatCatalogMenuVariantLabel,
   PRODUCT_GROUP_LABELS,
@@ -72,6 +74,7 @@ export interface ProductSalesDashboardProps {
   products: Product[];
   recipes: Recipe[];
   ingredients: Ingredient[];
+  stockMovements?: StockMovement[];
   settings: Settings;
   cashAccounts: CashAccount[];
   isReadOnly: boolean;
@@ -174,6 +177,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   products,
   recipes,
   ingredients,
+  stockMovements = [],
   settings,
   isReadOnly,
   onImportSales,
@@ -262,6 +266,39 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
       sortBy,
     ]
   );
+
+  const physicalOutMap = useMemo(() => {
+    if (dateMode === "SINGLE_DAY") {
+      return computePhysicalStockOutByIngredient({
+        stockMovements,
+        startDate: singleDate,
+        endDate: singleDate,
+      });
+    }
+    if (dateMode === "DATE_RANGE") {
+      return computePhysicalStockOutByIngredient({
+        stockMovements,
+        startDate,
+        endDate,
+      });
+    }
+    return computePhysicalStockOutByIngredient({ stockMovements });
+  }, [stockMovements, dateMode, singleDate, startDate, endDate]);
+
+  const benchmarkTotals = useMemo(() => {
+    let recipeCost = 0;
+    for (const row of analytics.ingredientUsageSummary) {
+      recipeCost += row.totalCost;
+    }
+    let physicalCost = 0;
+    for (const row of physicalOutMap.values()) {
+      physicalCost += row.totalOutCost;
+    }
+    return {
+      recipeCost: Math.round(recipeCost),
+      physicalCost: Math.round(physicalCost),
+    };
+  }, [analytics.ingredientUsageSummary, physicalOutMap]);
 
   // Catalog variant options for Import template & Manual Input modal
   const catalogVariantChoices = useMemo(() => {
@@ -1817,14 +1854,68 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
           </>
         )}
 
-        {/* ── SUB-TAB 2: PEMAKAIAN BAHAN BAKU TEORETIS ────────────────────── */}
+        {/* ── SUB-TAB 2: PEMAKAIAN BAHAN BAKU TEORETIS & PEMBANDING ──────── */}
         {subView === "ingredients" && (
-          <div className="p-4 space-y-3">
-            <div className="p-3 rounded-xl bg-brand-50/60 dark:bg-brand-500/10 border border-brand-200/70 dark:border-brand-500/30 flex items-start gap-2.5 text-xs text-brand-900 dark:text-brand-200">
-              <Info className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0 mt-0.5" />
-              <p>
-                Ringkasan di bawah menghitung pemakaian bahan baku teoretis berdasarkan resep produk &amp; varian yang terjual pada filter aktif. Gunakan data ini sebagai pembanding stok opname fisik dan patokan persiapan batch berikutnya.
-              </p>
+          <div className="p-4 space-y-4">
+            <div className="p-3 rounded-xl bg-brand-50/60 dark:bg-brand-500/10 border border-brand-200/70 dark:border-brand-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-brand-900 dark:text-brand-200">
+              <div className="flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0 mt-0.5" />
+                <p>
+                  Ringkasan di bawah menghitung <strong>perkiraan pemakaian bahan &amp; estimasi HPP</strong> dari resep produk terjual untuk dibandingkan langsung dengan <strong>mutasi keluar fisik penyimpanan</strong> dan <strong>stok opname mingguan</strong>.
+                </p>
+              </div>
+              <span
+                className={`self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 ${
+                  settings?.autoDeductStockOnSale === true
+                    ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                }`}
+              >
+                {settings?.autoDeductStockOnSale === true
+                  ? "Auto-Potong Stok Aktif"
+                  : "Mode Pembanding (Stok Tidak Dipotong)"}
+              </span>
+            </div>
+
+            {/* 3-Card Ringkasan Pembanding Bahan & Estimasi HPP */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 border border-brand-200/70 dark:border-brand-500/30 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Estimasi HPP Penjualan
+                </span>
+                <p className="text-lg font-black font-mono tabular-nums text-brand-700 dark:text-brand-300">
+                  {formatCurrency(analytics.kpiSummary.totalHpp)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Food Cost: {analytics.kpiSummary.foodCostPercent.toFixed(1)}% dari omzet produk
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Estimasi Biaya Bahan (Resep)
+                </span>
+                <p className="text-lg font-black font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                  {formatCurrency(benchmarkTotals.recipeCost)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Berdasarkan {analytics.ingredientUsageSummary.length} bahan resep terjual
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50/70 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 border border-amber-200/70 dark:border-amber-500/30 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Mutasi Keluar Fisik (Periode Sama)
+                </span>
+                <p className="text-lg font-black font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                  {formatCurrency(benchmarkTotals.physicalCost)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Selisih biaya:{" "}
+                  {benchmarkTotals.physicalCost - benchmarkTotals.recipeCost >= 0 ? "+" : ""}
+                  {formatCurrency(benchmarkTotals.physicalCost - benchmarkTotals.recipeCost)}
+                </p>
+              </div>
             </div>
 
             {analytics.ingredientUsageSummary.length === 0 ? (
@@ -1837,38 +1928,61 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                   <thead>
                     <tr className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider text-[10px]">
                       <th className="p-3">Nama Bahan Baku</th>
-                      <th className="p-3 text-right">Total Terpakai (Resep)</th>
+                      <th className="p-3 text-right">Perkiraan Resep</th>
+                      <th className="p-3 text-right">Keluar Fisik (Mutasi)</th>
+                      <th className="p-3 text-right">Selisih (Fisik − Resep)</th>
                       <th className="p-3 text-right">Sisa Stok Gudang</th>
-                      <th className="p-3 text-right">Nilai Biaya Bahan</th>
+                      <th className="p-3 text-right">Estimasi Biaya (HPP)</th>
                       <th className="p-3">Dipakai Oleh Menu</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {analytics.ingredientUsageSummary.map((ing) => (
-                      <tr
-                        key={ing.ingredientId}
-                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                      >
-                        <td className="p-3 font-bold text-slate-900 dark:text-slate-100">
-                          {ing.ingredientName}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-brand-700 dark:text-brand-300 tabular-nums">
-                          {ing.totalUsedQty.toLocaleString("id-ID")} {ing.unit}
-                        </td>
-                        <td className="p-3 text-right font-mono text-slate-700 dark:text-slate-300 tabular-nums">
-                          {ing.currentStock.toLocaleString("id-ID")} {ing.unit}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                          {formatCurrency(ing.totalCost)}
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-600 dark:text-slate-300">
-                          {ing.usedByMenus.slice(0, 3).join(", ")}
-                          {ing.usedByMenus.length > 3
-                            ? ` (+${ing.usedByMenus.length - 3} menu lainnya)`
-                            : ""}
-                        </td>
-                      </tr>
-                    ))}
+                    {analytics.ingredientUsageSummary.map((ing) => {
+                      const physical = physicalOutMap.get(ing.ingredientId);
+                      const physicalQty = physical?.totalOutQty || 0;
+                      const diffQty = Number((physicalQty - ing.totalUsedQty).toFixed(2));
+                      return (
+                        <tr
+                          key={ing.ingredientId}
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="p-3 font-bold text-slate-900 dark:text-slate-100">
+                            {ing.ingredientName}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-brand-700 dark:text-brand-300 tabular-nums">
+                            {ing.totalUsedQty.toLocaleString("id-ID")} {ing.unit}
+                          </td>
+                          <td className="p-3 text-right font-mono font-semibold text-slate-800 dark:text-slate-200 tabular-nums">
+                            {physicalQty.toLocaleString("id-ID")} {ing.unit}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold tabular-nums">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[11px] border ${
+                                Math.abs(diffQty) <= 0.01
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                                  : diffQty > 0
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30"
+                                  : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/30"
+                              }`}
+                            >
+                              {diffQty > 0 ? `+${diffQty.toLocaleString("id-ID")}` : diffQty.toLocaleString("id-ID")} {ing.unit}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-700 dark:text-slate-300 tabular-nums">
+                            {ing.currentStock.toLocaleString("id-ID")} {ing.unit}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                            {formatCurrency(ing.totalCost)}
+                          </td>
+                          <td className="p-3 text-[11px] text-slate-600 dark:text-slate-300">
+                            {ing.usedByMenus.slice(0, 3).join(", ")}
+                            {ing.usedByMenus.length > 3
+                              ? ` (+${ing.usedByMenus.length - 3} menu lainnya)`
+                              : ""}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

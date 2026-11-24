@@ -701,7 +701,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       enableLeaderAllowanceBonus: true,
       enableKpiScoreBonus: false,
       posSupervisorPin: "1234",
-      autoDeductStockOnSale: true,
+      autoDeductStockOnSale: false,
       allowNegativeStockSale: true,
     };
     try {
@@ -1431,6 +1431,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               : (settings?.ingredientCategories && settings.ingredientCategories.length > 0
                   ? settings.ingredientCategories
                   : DEFAULT_INGREDIENT_CATEGORIES),
+            ingredientCategoryDivisions:
+              s.ingredientCategoryDivisions &&
+              typeof s.ingredientCategoryDivisions === "object" &&
+              !Array.isArray(s.ingredientCategoryDivisions)
+                ? s.ingredientCategoryDivisions
+                : settings?.ingredientCategoryDivisions,
             menuCategories:
               s.menuCategories && typeof s.menuCategories === "object" && !Array.isArray(s.menuCategories)
                 ? s.menuCategories
@@ -1447,7 +1453,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             enableLeaderAllowanceBonus: s.enableLeaderAllowanceBonus !== false,
             enableKpiScoreBonus: Boolean(s.enableKpiScoreBonus),
             posSupervisorPin: String(s.posSupervisorPin ?? ""),
-            autoDeductStockOnSale: s.autoDeductStockOnSale !== false,
+            autoDeductStockOnSale: s.autoDeductStockOnSale === true,
             allowNegativeStockSale: s.allowNegativeStockSale !== false,
           };
           setSettings(newSettings);
@@ -3587,9 +3593,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       changedDomains.push("cash_transactions");
     }
 
-    // 2. Potong stok bahan baku otomatis sesuai resep produk bila diaktifkan
+    // 2. Potong stok bahan baku otomatis sesuai resep produk HANYA jika diaktifkan eksplisit
     let stockDeductedCount = 0;
-    if (settings.autoDeductStockOnSale !== false) {
+    if (settings.autoDeductStockOnSale === true) {
       const usageByIng = new Map<string, { qty: number; menus: Set<string> }>();
       newTxs.forEach((tx) => {
         const qtySold = Number(tx.quantitySold) || 0;

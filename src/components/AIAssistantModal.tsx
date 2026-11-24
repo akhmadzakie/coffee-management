@@ -7,14 +7,10 @@ import {
   Upload,
   Sparkles,
   Loader2,
-  Send,
-  MessageSquare,
   Receipt,
   Lightbulb,
-  Copy,
   Check,
   TrendingUp,
-  Coffee,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -40,7 +36,12 @@ import { formatCurrency } from "../utils/format";
 import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
 import { authFetch } from "../utils/authHeaders";
 import { isNonOperationalCashTransaction } from "../utils/financeMetrics";
-import { calculateCashFlowHppSync, type CashFlowHppSyncResult } from "../utils/posDomainLogic";
+import {
+  calculateCashFlowHppSync,
+  getIngredientPackagingChoices,
+  getPackagingSelectValue,
+  type CashFlowHppSyncResult,
+} from "../utils/posDomainLogic";
 import {
   compressImageFile,
   formatFileSize,
@@ -76,16 +77,8 @@ export interface AIAssistantModalProps {
     }
   ) => void;
   onOpenInCashFlowModal?: (transactions: ParsedTransactionDraft[]) => void;
-  initialTab?: "quick-input" | "receipt" | "consultant" | "insights";
+  initialTab?: "quick-input" | "receipt" | "insights";
   initialPrompt?: string;
-}
-
-interface ChatMessage {
-  id: string;
-  sender: "user" | "ai";
-  text: string;
-  time: string;
-  source?: "gemini" | "local-expert";
 }
 
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
@@ -117,25 +110,23 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   } = useStore();
 
   const canWriteTransactions = Boolean(onApplyTransactions || onOpenInCashFlowModal);
-
-  const [activeTab, setActiveTab] = useState<
-    "quick-input" | "receipt" | "consultant" | "insights"
-  >(
+  const resolvedInitialTab: "quick-input" | "receipt" | "insights" =
     !canWriteTransactions && (initialTab === "quick-input" || initialTab === "receipt")
       ? "insights"
-      : initialTab
-  );
+      : initialTab === "quick-input" || initialTab === "receipt" || initialTab === "insights"
+        ? initialTab
+        : "insights";
+
+  const [activeTab, setActiveTab] = useState<
+    "quick-input" | "receipt" | "insights"
+  >(resolvedInitialTab);
 
   // Sync initialTab when modal opens
   useEffect(() => {
     if (isOpen) {
-      if (!canWriteTransactions && (initialTab === "quick-input" || initialTab === "receipt")) {
-        setActiveTab("insights");
-      } else if (initialTab) {
-        setActiveTab(initialTab);
-      }
+      setActiveTab(resolvedInitialTab);
     }
-  }, [isOpen, initialTab, canWriteTransactions]);
+  }, [isOpen, resolvedInitialTab]);
 
   // AI Connection Status
   const [aiStatus, setAiStatus] = useState<{
@@ -182,6 +173,8 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         unit: i.unit,
         purchaseUnit: i.purchaseUnit,
         conversionFactor: i.conversionFactor,
+        bulkUnit: i.bulkUnit,
+        bulkConversionFactor: i.bulkConversionFactor,
         currentStock: i.currentStock,
         costPerUnit: i.costPerUnit,
       })),
@@ -502,49 +495,14 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     }
   };
 
-  // ─── TAB 3: CHAT CONSULTANT STATE ─────────────────────────────────────────
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      sender: "ai",
-      text: `Halo ${currentUser?.name || "Rekan"}! Saya **Julia Coffee AI Copilot**.\n\nSaya siap membantu analisis HPP, optimasi alur barista saat rush hour, strategi promo jam sepi, maupun audit stok bahan baku toko. Apa yang ingin Anda diskusikan hari ini?`,
-      time: new Date().toLocaleTimeString("id-ID", {
-        timeZone: DEFAULT_STORE_TIMEZONE,
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    },
-  ]);
-  const [inputQuestion, setInputQuestion] = useState(initialPrompt || "");
-  const [isAsking, setIsAsking] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-
-  // Auto scroll chat
-  useEffect(() => {
-    if (activeTab === "consultant") {
-      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, activeTab]);
-
   // When initialPrompt is passed, load it
   useEffect(() => {
-    if (initialPrompt && initialPrompt.trim()) {
-      setInputQuestion(initialPrompt);
-      if (initialTab === "quick-input") {
-        setNaturalText(initialPrompt);
-      }
+    if (initialPrompt && initialPrompt.trim() && initialTab === "quick-input") {
+      setNaturalText(initialPrompt);
     }
   }, [initialPrompt, initialTab]);
 
-  const quickConsultantPrompts = [
-    { label: "Hitung HPP Kopi Susu", query: "Bagaimana cara hitung rincian HPP dan margin optimal kopi susu gula aren 12oz?" },
-    { label: "Optimalisasi Rush Hour", query: "Bagaimana pembagian tugas dan workflow 2 barista saat rush hour ramai?" },
-    { label: "Promo Jam Sepi (14-17)", query: "Berikan 3 ide promo menarik untuk menaikkan omset di jam sepi 14.00-17.00." },
-    { label: "Cegah Waste Susu & Kopi", query: "Bagaimana SOP mencegah susu basi dan meminimalkan waste biji kopi di bar?" },
-  ];
-
-  // Computed Live Store Metrics (shared across Konsultan & Executive Insights)
+  // Computed Live Store Metrics (Executive Insights)
   const liveMetrics = useMemo(() => {
     const normCashType = (t: any): "CASH_IN" | "CASH_OUT" | "TRANSFER" => {
       if (t === "TRANSFER") return "TRANSFER";
@@ -765,107 +723,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     users,
   ]);
 
-  const handleSendChat = async (questionText?: string) => {
-    const textToSend = questionText || inputQuestion;
-    if (!textToSend.trim() || isAsking) return;
-
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
-      sender: "user",
-      text: textToSend.trim(),
-      time: new Date().toLocaleTimeString("id-ID", {
-        timeZone: DEFAULT_STORE_TIMEZONE,
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    if (!questionText) setInputQuestion("");
-    setIsAsking(true);
-
-    try {
-      const storeContext = {
-        role: currentUser?.role,
-        brand: settings.brandName,
-        totalSalesCount: salesTransactions?.length || 0,
-        ingredientCount: ingredients?.length || 0,
-        totalRevenue: liveMetrics.totalRevenue,
-        totalExpense: liveMetrics.totalExpense,
-        netProfit: liveMetrics.netProfit,
-        marginPercent: liveMetrics.marginPercent,
-        expenseBreakdown: liveMetrics.expenseBreakdown.slice(0, 8),
-        totalCashLiquidity: liveMetrics.totalCashLiquidity,
-        cashBalances: liveMetrics.cashBalances,
-        unpaidPoTotal: liveMetrics.unpaidPoTotal,
-        unpaidPoCount: liveMetrics.unpaidPoCount,
-        unpaidPoList: liveMetrics.unpaidPoList.slice(0, 8),
-        shiftVariances: liveMetrics.shiftVariances.slice(0, 5),
-        wasteLossTotal: liveMetrics.wasteLossTotal,
-        lowStockItems: liveMetrics.lowStockItems.map(
-          (i) => `${i.name} (Sisa ${i.currentStock} ${i.unit}, Min ${i.minStock} ${i.unit})`
-        ),
-        topProducts: liveMetrics.topStarProducts,
-        menuAudit: liveMetrics.menuAudit.slice(0, 25),
-        menuEngineering: liveMetrics.menuEngineering.slice(0, 20),
-        hrSummary: liveMetrics.hrSummary,
-      };
-
-      const historyPayload = messages.slice(-6).map((m) => ({
-        role: m.sender === "user" ? "user" : "model",
-        text: m.text,
-      }));
-
-      const res = await authFetch("/api/ai/ask-advisor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: textToSend,
-          chatHistory: historyPayload,
-          storeContext,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal menghubungi AI");
-
-      const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        sender: "ai",
-        text: data.reply || "Maaf, tidak dapat menghasilkan jawaban.",
-        time: new Date().toLocaleTimeString("id-ID", {
-          timeZone: DEFAULT_STORE_TIMEZONE,
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        source: data.source,
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (err: any) {
-      const errorMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        sender: "ai",
-        text: `Terjadi kendala: ${err.message || "Gagal memproses"}. Sistem tetap dapat berkonsultasi dalam mode offline.`,
-        time: new Date().toLocaleTimeString("id-ID", {
-          timeZone: DEFAULT_STORE_TIMEZONE,
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsAsking(false);
-    }
-  };
-
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // ─── TAB 4: MANAGEMENT INSIGHTS & AUDIT STATE ─────────────────────────────
+  // ─── TAB 3: MANAGEMENT INSIGHTS & AUDIT STATE ─────────────────────────────
   const [executiveBriefing, setExecutiveBriefing] = useState<string | null>(null);
   const [isLoadingBriefing, setIsLoadingBriefing] = useState(false);
 
@@ -969,15 +827,10 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     if (lastAutoTriggerKeyRef.current === triggerKey) return;
     lastAutoTriggerKeyRef.current = triggerKey;
 
-    if (cleanPrompt) {
-      if (initialTab === "quick-input") {
-        setNaturalText(cleanPrompt);
-        handleParseNatural(cleanPrompt);
-      } else if (initialTab === "consultant") {
-        setInputQuestion("");
-        handleSendChat(cleanPrompt);
-      }
-    } else if (initialTab === "insights" && !executiveBriefing && !isLoadingBriefing) {
+    if (cleanPrompt && initialTab === "quick-input") {
+      setNaturalText(cleanPrompt);
+      handleParseNatural(cleanPrompt);
+    } else if (resolvedInitialTab === "insights" && !executiveBriefing && !isLoadingBriefing) {
       handleGenerateExecutiveBriefing();
     }
   }, [isOpen, initialTab, initialPrompt]);
@@ -1206,12 +1059,41 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       buttonClassName="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] font-semibold text-indigo-900 max-w-[200px]"
                     />
                     {matchedIng && (
-                      <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap px-2 py-1 rounded-lg bg-indigo-50/70 border border-indigo-200/70">
-                        +{qtyVal} {unitLabel}
-                        {factor > 1
-                          ? ` = ${(qtyVal * factor).toLocaleString("id-ID")} ${matchedIng.unit}`
-                          : ""}
-                      </span>
+                      <>
+                        <CustomSelect
+                          value={getPackagingSelectValue(
+                            {
+                              unitMode: (tx.unitMode || undefined) as any,
+                              unit: tx.unit || undefined,
+                            },
+                            getIngredientPackagingChoices(matchedIng)
+                          )}
+                          onChange={(key) => {
+                            const choices = getIngredientPackagingChoices(matchedIng);
+                            const picked = choices.find((c) => c.key === key);
+                            if (!picked) return;
+                            updateDraftInList(setter, idx, {
+                              unit: picked.unit,
+                              unitMode: picked.mode,
+                              conversionFactor: picked.factor,
+                            });
+                          }}
+                          options={getIngredientPackagingChoices(matchedIng)
+                            .filter((c) => c.key !== "CUSTOM")
+                            .map((c) => ({
+                              value: c.key,
+                              label: c.label,
+                            }))}
+                          placeholder="Satuan"
+                          buttonClassName="px-2 py-1 rounded-lg bg-brand-50 border border-brand-200 text-[11px] font-semibold text-brand-900 max-w-[180px]"
+                        />
+                        <span className="text-[10px] font-mono text-indigo-700 whitespace-nowrap px-2 py-1 rounded-lg bg-indigo-50/70 border border-indigo-200/70">
+                          +{qtyVal} {unitLabel}
+                          {factor > 1
+                            ? ` = ${(qtyVal * factor).toLocaleString("id-ID")} ${matchedIng.unit}`
+                            : ""}
+                        </span>
+                      </>
                     )}
                   </div>
                 )}
@@ -1480,7 +1362,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 )}
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                Data Entry Cerdas, Analisis Manajemen & Konsultan Specialty Coffee
+                Data Entry Cerdas, Scan Nota &amp; Ringkasan Audit Toko
               </p>
             </div>
           </div>
@@ -1524,19 +1406,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               </button>
             </>
           )}
-
-          <button
-            onClick={() => setActiveTab("consultant")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
-              activeTab === "consultant"
-                ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
-                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
-            }`}
-          >
-            <MessageSquare className="w-4 h-4 text-brand-600 shrink-0" />
-            <span className="hidden sm:inline">Konsultan Bisnis & Barista</span>
-            <span className="sm:hidden">Konsultan AI</span>
-          </button>
 
           <button
             onClick={() => setActiveTab("insights")}
@@ -1927,127 +1796,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
           </div>
         )}
 
-        {/* ─── TAB 3: KONSULTAN BISNIS & BARISTA (CHAT) ─── */}
-        {activeTab === "consultant" && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]">
-            {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
-              {messages.map((m) => {
-                const isAi = m.sender === "ai";
-                return (
-                  <div
-                    key={m.id}
-                    className={`flex gap-3 ${isAi ? "justify-start" : "justify-end"}`}
-                  >
-                    {isAi && (
-                      <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                        <Coffee className="w-4 h-4" />
-                      </div>
-                    )}
-
-                    <div
-                      className={`relative max-w-[85%] sm:max-w-[78%] rounded-2xl px-4 py-3 text-xs sm:text-[13px] leading-relaxed group shadow-2xs ${
-                        isAi
-                          ? "bg-white border border-slate-200/90 text-slate-800"
-                          : "bg-brand-600 text-white font-medium"
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap">{m.text}</div>
-
-                      <div className="mt-1.5 flex items-center justify-between gap-3 text-[10px] opacity-70">
-                        <span>{m.time}</span>
-                        {isAi && (
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleCopy(m.id, m.text)}
-                              className="hover:text-brand-600 flex items-center gap-1 font-medium cursor-pointer"
-                              title="Salin jawaban"
-                            >
-                              {copiedId === m.id ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                  <span className="text-emerald-600">Tersalin</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>Salin</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {isAsking && (
-                <div className="flex gap-3 items-center text-xs text-slate-500 py-1">
-                  <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-600 flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  </div>
-                  <span>Julia AI sedang menyusun rekomendasi...</span>
-                </div>
-              )}
-              <div ref={chatBottomRef} />
-            </div>
-
-            {/* Quick Prompts */}
-            <div className="px-4 py-2.5 border-t border-slate-200/80 bg-white flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-bold shrink-0">
-                Topik Cepat:
-              </span>
-              {quickConsultantPrompts.map((p, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendChat(p.query)}
-                  disabled={isAsking}
-                  className="shrink-0 px-3 py-1 rounded-lg bg-slate-50 hover:bg-brand-50 hover:text-brand-800 hover:border-brand-300 border border-slate-200 text-xs text-slate-700 font-medium transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Input Form */}
-            <div className="p-3 sm:p-4 border-t border-slate-200 bg-white">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendChat();
-                }}
-                className="flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={inputQuestion}
-                  onChange={(e) => setInputQuestion(e.target.value)}
-                  placeholder="Ketik pertanyaan bisnis, HPP, resep, atau SOP barista..."
-                  disabled={isAsking}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:bg-white"
-                />
-                <button
-                  type="submit"
-                  disabled={!inputQuestion.trim() || isAsking}
-                  className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all disabled:opacity-40 shadow-xs cursor-pointer"
-                >
-                  {isAsking ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <span>Kirim</span>
-                      <Send className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ─── TAB 4: AUDIT & REKOMENDASI TOKO (EXECUTIVE MANAGEMENT) ─── */}
+        {/* ─── TAB 3: AUDIT & REKOMENDASI TOKO (EXECUTIVE MANAGEMENT) ─── */}
         {activeTab === "insights" && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F8F9FA] custom-scrollbar">
             {/* Live KPI Quick Metrics */}
@@ -2207,20 +1956,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   </p>
                 </div>
               )}
-            </div>
-
-            {/* Quick Action Footer */}
-            <div className="p-4 rounded-2xl bg-brand-50/70 border border-brand-200/80 flex items-center justify-between text-xs text-slate-700">
-              <span className="font-medium">Ingin konsultasi langsung langkah aksi dengan AI?</span>
-              <button
-                onClick={() => {
-                  setActiveTab("consultant");
-                  handleSendChat("Analisis cara meningkatkan margin rata-rata toko saya bulan ini.");
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 transition-colors font-bold shadow-2xs cursor-pointer"
-              >
-                Tanya Konsultan AI →
-              </button>
             </div>
           </div>
         )}

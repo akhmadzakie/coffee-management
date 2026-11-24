@@ -623,6 +623,9 @@ async function ensureTables() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_pin_attempts INTEGER DEFAULT 0 NOT NULL`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_reason TEXT`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS bulk_unit TEXT`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS bulk_conversion_factor DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS bulk_price DOUBLE PRECISION`,
     `ALTER TABLE employees RENAME COLUMN nik TO username`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_bar_tasks JSONB`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS leader_kitchen_tasks JSONB`,
@@ -641,7 +644,7 @@ async function ensureTables() {
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_leader_allowance_bonus BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS enable_kpi_score_bonus BOOLEAN DEFAULT FALSE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pos_supervisor_pin TEXT DEFAULT '1234'`,
-    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_deduct_stock_on_sale BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_deduct_stock_on_sale BOOLEAN DEFAULT FALSE`,
     `ALTER TABLE settings ADD COLUMN IF NOT EXISTS allow_negative_stock_sale BOOLEAN DEFAULT TRUE`,
     `UPDATE cash_transactions SET type = 'CASH_OUT' WHERE type IN ('OUT', 'EXPENSE')`,
     `UPDATE cash_transactions SET type = 'CASH_IN' WHERE type IN ('IN', 'INCOME')`,
@@ -1242,6 +1245,13 @@ async function startServer() {
     if (st?.ingredientCategories && Array.isArray(st.ingredientCategories)) {
       divTarget.__ingredientCategories = st.ingredientCategories;
     }
+    if (
+      st?.ingredientCategoryDivisions &&
+      typeof st.ingredientCategoryDivisions === "object" &&
+      !Array.isArray(st.ingredientCategoryDivisions)
+    ) {
+      divTarget.__ingredientCategoryDivisions = st.ingredientCategoryDivisions;
+    }
     if (st?.menuCategories && typeof st.menuCategories === "object" && !Array.isArray(st.menuCategories)) {
       divTarget.__menuCategories = st.menuCategories;
     }
@@ -1310,7 +1320,7 @@ async function startServer() {
       enableLeaderAllowanceBonus: st?.enableLeaderAllowanceBonus !== false,
       enableKpiScoreBonus: Boolean(st?.enableKpiScoreBonus),
       posSupervisorPin: resolvedSupervisorPin,
-      autoDeductStockOnSale: st?.autoDeductStockOnSale !== false,
+      autoDeductStockOnSale: st?.autoDeductStockOnSale === true,
       allowNegativeStockSale: st?.allowNegativeStockSale !== false,
     };
   };
@@ -1949,6 +1959,13 @@ async function startServer() {
           }
         );
         delete rawDivObj.__profitShareConfig;
+        const offIngCatDivisions =
+          rawDivObj.__ingredientCategoryDivisions &&
+          typeof rawDivObj.__ingredientCategoryDivisions === "object" &&
+          !Array.isArray(rawDivObj.__ingredientCategoryDivisions)
+            ? rawDivObj.__ingredientCategoryDivisions
+            : rawSettings?.ingredientCategoryDivisions;
+        delete rawDivObj.__ingredientCategoryDivisions;
         return {
           ...offlineState,
           users: (offlineState.users || initialUsers).map(sanitizeUser),
@@ -1967,6 +1984,7 @@ async function startServer() {
             geminiApiKey: isSuperAdminRole ? effectiveApiKey : "",
             gemini_api_key: isSuperAdminRole ? effectiveApiKey : "",
             posSupervisorPin: isPrivilegedRole ? (rawSettings?.posSupervisorPin || "1234") : "",
+            ...(offIngCatDivisions ? { ingredientCategoryDivisions: offIngCatDivisions } : {}),
             profitShareOwnerPercent: profitShareCfg.ownerPercent,
             profitShareReservePercent: profitShareCfg.reservePercent,
             profitShareInvestorPercent: profitShareCfg.investorPercent,
@@ -2255,6 +2273,18 @@ async function startServer() {
         : (Array.isArray(rawSettings.ingredientCategories) ? rawSettings.ingredientCategories : undefined);
       delete rawDivTarget.__ingredientCategories;
 
+      const ingredientCategoryDivisions =
+        rawDivTarget.__ingredientCategoryDivisions &&
+        typeof rawDivTarget.__ingredientCategoryDivisions === "object" &&
+        !Array.isArray(rawDivTarget.__ingredientCategoryDivisions)
+          ? rawDivTarget.__ingredientCategoryDivisions
+          : (rawSettings.ingredientCategoryDivisions &&
+              typeof rawSettings.ingredientCategoryDivisions === "object" &&
+              !Array.isArray(rawSettings.ingredientCategoryDivisions)
+                ? rawSettings.ingredientCategoryDivisions
+                : undefined);
+      delete rawDivTarget.__ingredientCategoryDivisions;
+
       const menuCategories =
         rawDivTarget.__menuCategories &&
         typeof rawDivTarget.__menuCategories === "object" &&
@@ -2325,6 +2355,7 @@ async function startServer() {
         leaderJobdeskAllowanceRules: allowanceRules,
         shiftDefinitions: shiftDefs,
         ...(ingredientCategories ? { ingredientCategories } : {}),
+        ...(ingredientCategoryDivisions ? { ingredientCategoryDivisions } : {}),
         ...(menuCategories ? { menuCategories } : {}),
         ...(defaultOverheadPercent !== undefined && !isNaN(defaultOverheadPercent)
           ? { defaultOverheadPercent }
@@ -3835,7 +3866,7 @@ async function startServer() {
         offlineState.sales_transactions.unshift(...sanitizedTxs);
 
         const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
-        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale === true;
         if (shouldAutoDeduct) {
           const allRecipes = offlineState.recipes || [];
           for (const s of sanitizedTxs) {
@@ -3897,7 +3928,7 @@ async function startServer() {
         await tx.insert(schema.salesTransactions).values(transactions);
 
         const currentSettings = await tx.select().from(schema.settings).limit(1);
-        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale === true;
         if (shouldAutoDeduct) {
           // Process stock reduction based on recipes
           const allRecipes = await tx.select().from(schema.recipes);
@@ -4304,19 +4335,21 @@ Daftar Bahan Baku di Gudang/Bar: ${JSON.stringify(
               baseUnit: i.unit,
               purchaseUnit: i.purchaseUnit,
               conversionFactor: i.conversionFactor,
+              bulkUnit: i.bulkUnit,
+              bulkConversionFactor: i.bulkConversionFactor,
             })) || []
           )}
 
 Teks Catatan: "${text}"
 
 Aturan Pemrosesan Ketat:
-1. Pahami singkatan & typo umum: "ssu/fm/gf/uht" = Susu Fresh Milk, "kpi/hb" = Beans Kopi, "gln" = Galon, "krt/krtn" = Karton, "krg" = Karung, "sdtn" = Sedotan, "pln/token" = Listrik, "gj" = Gaji, "tf/trf" = Transfer Bank, "rb/rbu/k" = x1000, "jt" = x1000000, titik pada "180.000"/"28.500" adalah pemisah ribuan.
+1. Pahami singkatan & typo umum: "ssu/fm/gf/uht" = Susu Fresh Milk, "kpi/hb" = Beans Kopi, "gln" = Galon, "krt/krtn/ctn" = Karton, "ktk" = Kotak, "krg/sak" = Karung, "slp" = Slop, "pck/pak" = Pack, "bks" = Bungkus, "klg" = Kaleng, "sch/sct" = Sachet, "btl" = Botol, "jrgn/jrg" = Jerigen, "ltr/lt/l" = Liter, "sdtn" = Sedotan, "pln/token" = Listrik, "gj" = Gaji, "tf/trf" = Transfer Bank, "rb/rbu/k" = x1000, "jt" = x1000000, titik pada "180.000"/"28.500" adalah pemisah ribuan.
 2. JIKA ada "@" atau "per", WAJIB kalikan: amount = quantity * harga_satuan (mis. "2 krtn @210rb" => amount 420000; "2,5kg @ 180.000" => amount 450000). Jangan jadikan angka kuantitas ("6 liter 111rb") sebagai harga ("6000")!
 3. Abaikan format dimensi ukuran (misal 80x100, 12oz) — jangan jadikan ukuran sebagai nominal!
 4. Tentukan type: "CASH_OUT" untuk belanja/beli/bayar/keluar/token/gaji, "CASH_IN" untuk pemasukan/terima/omset.
 5. Pisahkan kategori nota campuran: Bahan Baku hanya untuk bahan resep; Packaging untuk cup/lid/sedotan/plastik; Kebersihan untuk sabun/tisu/trashbag; Utilitas untuk listrik/wifi/gas/air PDAM; Ongkir/servis ke Operasional.
 6. Wariskan akun kas & vendor jika disebut di awal kalimat untuk item-item berikutnya (mis. "tf bca beli susu ..., kopi ..., pln ..." -> semua akun Bank BCA).
-7. Cocokkan ingredientId & ingredientName bila item termasuk bahan baku gudang, lengkapi quantity, unit kemasan beli, dan conversionFactor (berapa baseUnit per 1 unit beli).
+7. Cocokkan ingredientId & ingredientName bila item termasuk bahan baku gudang. Prioritaskan pencocokan 3 tingkat satuan yang dideklarasikan bahan tersebut terlebih dahulu (bulkUnit dengan bulkConversionFactor -> purchaseUnit dengan conversionFactor -> baseUnit dengan 1), baru pakai preset ukuran kemasan standar bila tidak cocok. Lengkapi quantity, unit kemasan beli, dan conversionFactor (berapa baseUnit per 1 unit beli).
 8. Buat summary bahasa Indonesia yang ringkas dan ramah.`;
 
           const { response } = await generateContentWithFallback(ai, {
@@ -5265,7 +5298,7 @@ ${
           }
 
           const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
-          const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+          const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale === true;
           for (const item of items) {
             offlineState.sales_transactions.push({
               id: crypto.randomUUID(),
@@ -5373,7 +5406,7 @@ ${
           }
 
           const currentSettings = await tx.select().from(schema.settings).limit(1);
-          const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+          const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale === true;
 
           for (const item of items) {
             await tx.insert(schema.salesTransactions).values({
@@ -5492,7 +5525,7 @@ ${
 
         const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
         const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
-        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale === true;
         for (const item of items) {
           offlineState.sales_transactions.push({
             id: crypto.randomUUID(),
@@ -5576,7 +5609,7 @@ ${
 
         // 4. Stock deductions and sales transactions
         const currentSettings = await tx.select().from(schema.settings).limit(1);
-        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale === true;
 
         const items = await tx
           .select()
@@ -5836,7 +5869,7 @@ ${
 
         // Deduct inventory for split items (or final parent items on closing evenly split)
         const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
-        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale === true;
         if (shouldAutoDeduct && itemsForSalesAndStock.length > 0) {
           applyOfflineOrderStock(itemsForSalesAndStock, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
         }
@@ -6050,7 +6083,7 @@ ${
 
         // Deduct inventory
         const currentSettings = await tx.select().from(schema.settings).limit(1);
-        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale === true;
         if (shouldAutoDeduct && itemsForSalesAndStock.length > 0) {
           await applyDbOrderStock(tx, itemsForSalesAndStock, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
         }

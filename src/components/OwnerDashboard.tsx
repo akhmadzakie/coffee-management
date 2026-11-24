@@ -185,7 +185,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   }, [posTodayStats]);
 
   const handleOpenCopilot = (
-    tab: "quick-input" | "receipt" | "consultant" | "insights",
+    tab: "quick-input" | "receipt" | "insights",
     prompt?: string
   ) => {
     window.dispatchEvent(
