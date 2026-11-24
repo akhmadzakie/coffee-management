@@ -1,4 +1,6 @@
 import {
+  BankStatementLine,
+  Budget,
   CashAccount,
   CashTransaction,
   DailySalesRecap,
@@ -11,6 +13,7 @@ import {
   PurchaseOrder,
   Recipe,
   SalesTransaction,
+  StockMovement,
   StockOpname,
   StockOpnameItem,
 } from "../types";
@@ -593,6 +596,560 @@ export function matchesIngredientCategory(
   return aliases ? aliases.includes(normalizedIng) : false;
 }
 
+/** Menyusun daftar kategori bahan baku dinamis dari Settings + kategori aktual pada daftar bahan. */
+export function buildIngredientCategoryList(
+  configuredCategories?: string[] | null,
+  ingredientsList: Ingredient[] = []
+): string[] {
+  const base =
+    Array.isArray(configuredCategories) && configuredCategories.length > 0
+      ? configuredCategories
+      : DEFAULT_INGREDIENT_CATEGORIES;
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  const addUnique = (name: string) => {
+    const clean = String(name || "").trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(clean);
+    }
+  };
+
+  base.forEach(addUnique);
+  ingredientsList.forEach((ing) => addUnique(normalizeIngredientCategoryName(ing.category)));
+  if (result.length === 0) {
+    result.push("Lainnya");
+  }
+  return result;
+}
+
+/** Mengubah nama kategori bahan & memutakhirkan bahan terkait (termasuk alias kategori warisan). */
+export function applyRenameIngredientCategory(params: {
+  currentList: string[];
+  oldName: string;
+  newName: string;
+  ingredients: Ingredient[];
+}): { updatedCategories: string[]; updatedIngredients: Ingredient[] } {
+  const { currentList, oldName, newName, ingredients } = params;
+  const cleanOld = String(oldName || "").trim();
+  const cleanNew = String(newName || "").trim();
+  const seen = new Set<string>();
+  const updatedCategories: string[] = [];
+
+  currentList.forEach((cat) => {
+    const candidate =
+      cat.trim().toLowerCase() === cleanOld.toLowerCase() ? cleanNew : cat.trim();
+    if (!candidate) return;
+    const key = candidate.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      updatedCategories.push(candidate);
+    }
+  });
+
+  if (!seen.has(cleanNew.toLowerCase()) && cleanNew) {
+    updatedCategories.push(cleanNew);
+  }
+
+  const updatedIngredients = ingredients
+    .filter((ing) => matchesIngredientCategory(ing.category, cleanOld))
+    .map((ing) => ({ ...ing, category: cleanNew }));
+
+  return { updatedCategories, updatedIngredients };
+}
+
+/** Menghapus kategori bahan & memindahkan bahan terkait ke kategori cadangan (mis. Lainnya). */
+export function applyDeleteIngredientCategory(params: {
+  currentList: string[];
+  targetName: string;
+  ingredients: Ingredient[];
+  fallbackCategory?: string;
+}): {
+  updatedCategories: string[];
+  updatedIngredients: Ingredient[];
+  fallbackCategory: string;
+} {
+  const { currentList, targetName, ingredients, fallbackCategory } = params;
+  const cleanTarget = String(targetName || "").trim();
+  const updatedCategories = currentList.filter(
+    (c) => c.trim().toLowerCase() !== cleanTarget.toLowerCase()
+  );
+
+  const fallback =
+    fallbackCategory ||
+    updatedCategories.find((c) => c.toLowerCase() === "lainnya") ||
+    "Lainnya";
+
+  const updatedIngredients = ingredients
+    .filter((ing) => matchesIngredientCategory(ing.category, cleanTarget))
+    .map((ing) => ({ ...ing, category: fallback }));
+
+  if (
+    updatedIngredients.length > 0 &&
+    !updatedCategories.some((c) => c.toLowerCase() === fallback.toLowerCase())
+  ) {
+    updatedCategories.push(fallback);
+  }
+
+  if (updatedCategories.length === 0) {
+    updatedCategories.push(fallback);
+  }
+
+  return { updatedCategories, updatedIngredients, fallbackCategory: fallback };
+}
+
+/** Menyinkronkan nama kategori pada transaksi arus kas ketika Pos Kategori diubah namanya. */
+export function cascadeExpenseCategoryUpdate(params: {
+  updatedCategory: ExpenseCategory;
+  previousCategory?: ExpenseCategory;
+  cashTransactions: CashTransaction[];
+}): CashTransaction[] {
+  const { updatedCategory, previousCategory, cashTransactions } = params;
+  const prevLower = String(previousCategory?.name || "").trim().toLowerCase();
+  return cashTransactions.map((tx) => {
+    const matchById = tx.categoryId === updatedCategory.id;
+    const matchByOrphanName =
+      !tx.categoryId &&
+      Boolean(prevLower) &&
+      String(tx.category || "").trim().toLowerCase() === prevLower;
+    if (!matchById && !matchByOrphanName) return tx;
+    return {
+      ...tx,
+      categoryId: updatedCategory.id,
+      category: updatedCategory.name,
+    };
+  });
+}
+
+/** Melepas/memindahkan referensi kategori pada transaksi arus kas & anggaran saat Pos Kategori dihapus. */
+export function cascadeExpenseCategoryDelete(params: {
+  categoryId: string;
+  categories: ExpenseCategory[];
+  cashTransactions: CashTransaction[];
+  budgets?: Budget[];
+}): {
+  updatedCategories: ExpenseCategory[];
+  updatedTransactions: CashTransaction[];
+  updatedBudgets: Budget[];
+} {
+  const { categoryId, categories, cashTransactions, budgets = [] } = params;
+  const toDelete = categories.find((c) => c.id === categoryId);
+  if (!toDelete) {
+    return {
+      updatedCategories: categories,
+      updatedTransactions: cashTransactions,
+      updatedBudgets: budgets,
+    };
+  }
+
+  const deletedIds = new Set<string>([toDelete.id]);
+  categories.forEach((c) => {
+    if (c.parentId === toDelete.id) deletedIds.add(c.id);
+  });
+
+  const parentCat = toDelete.parentId
+    ? categories.find((c) => c.id === toDelete.parentId && !deletedIds.has(c.id))
+    : undefined;
+
+  const updatedCategories = categories.filter((c) => !deletedIds.has(c.id));
+  const deletedNamesLower = new Set(
+    categories
+      .filter((c) => deletedIds.has(c.id))
+      .map((c) => String(c.name || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const updatedTransactions = cashTransactions.map((tx) => {
+    const matchById = Boolean(tx.categoryId && deletedIds.has(tx.categoryId));
+    const matchByName =
+      !tx.categoryId &&
+      deletedNamesLower.has(String(tx.category || "").trim().toLowerCase());
+    if (!matchById && !matchByName) return tx;
+    if (parentCat) {
+      return {
+        ...tx,
+        categoryId: parentCat.id,
+        category: parentCat.name,
+      };
+    }
+    return {
+      ...tx,
+      categoryId: null,
+      category: "Lainnya",
+    };
+  });
+
+  const updatedBudgets = budgets.filter(
+    (b) => !b.categoryId || !deletedIds.has(b.categoryId)
+  );
+
+  return { updatedCategories, updatedTransactions, updatedBudgets };
+}
+
+/** Menghapus Pos Kas beserta mutasi Saldo Awal miliknya dan memindahkan mutasi tersisa agar Pos Kas tidak hidup kembali. */
+export function cascadeCashAccountDelete(params: {
+  accountId: string;
+  cashAccounts: CashAccount[];
+  cashTransactions: CashTransaction[];
+}): {
+  updatedAccounts: CashAccount[];
+  updatedTransactions: CashTransaction[];
+  transactionsChanged: boolean;
+} {
+  const { accountId, cashAccounts, cashTransactions } = params;
+  const updatedAccounts = cashAccounts.filter((a) => a.id !== accountId);
+  const fallbackAcc =
+    updatedAccounts.find((a) => a.isDefault) || updatedAccounts[0];
+  const openingRef = `OPENING:${accountId}`;
+  let transactionsChanged = false;
+  const updatedTransactions: CashTransaction[] = [];
+
+  for (const tx of cashTransactions) {
+    if (tx.accountId !== accountId) {
+      updatedTransactions.push(tx);
+      continue;
+    }
+    if (String(tx.referenceId || "") === openingRef) {
+      transactionsChanged = true;
+      continue;
+    }
+    if (fallbackAcc) {
+      transactionsChanged = true;
+      updatedTransactions.push({ ...tx, accountId: fallbackAcc.id });
+    } else {
+      updatedTransactions.push(tx);
+    }
+  }
+
+  return { updatedAccounts, updatedTransactions, transactionsChanged };
+}
+
+/** Menghapus Purchase Order beserta mutasi stok (mengembalikan stok ke level sebelum PO) dan transaksi kas terkait PO. */
+export function cascadePurchaseOrderDelete(params: {
+  poId: string;
+  purchaseOrders: PurchaseOrder[];
+  stockMovements: StockMovement[];
+  ingredients: Ingredient[];
+  cashTransactions: CashTransaction[];
+}): {
+  updatedPurchaseOrders: PurchaseOrder[];
+  updatedStockMovements: StockMovement[];
+  updatedIngredients: Ingredient[];
+  updatedCashTransactions: CashTransaction[];
+  movementsChanged: boolean;
+  ingredientsChanged: boolean;
+  cashChanged: boolean;
+} {
+  const {
+    poId,
+    purchaseOrders,
+    stockMovements,
+    ingredients,
+    cashTransactions,
+  } = params;
+  const targetPo = purchaseOrders.find((p) => p.id === poId);
+  const updatedPurchaseOrders = purchaseOrders.filter((p) => p.id !== poId);
+
+  const reverseQtyByIng = new Map<string, number>();
+  const updatedStockMovements = stockMovements.filter((m) => {
+    const matchByRef = Boolean(m.referenceId && m.referenceId === poId);
+    const matchLegacyNote =
+      !m.referenceId &&
+      m.type === "IN" &&
+      Boolean(targetPo?.poNumber) &&
+      String(m.note || "").includes(targetPo!.poNumber);
+    if (!matchByRef && !matchLegacyNote) {
+      return true;
+    }
+    const delta =
+      m.type === "IN" || m.type === "RETURN"
+        ? -Number(m.quantity || 0)
+        : Number(m.quantity || 0);
+    if (delta !== 0) {
+      reverseQtyByIng.set(
+        m.ingredientId,
+        (reverseQtyByIng.get(m.ingredientId) || 0) + delta
+      );
+    }
+    return false;
+  });
+
+  const movementsChanged = updatedStockMovements.length !== stockMovements.length;
+  let ingredientsChanged = false;
+  const updatedIngredients = ingredients.map((ing) => {
+    const delta = reverseQtyByIng.get(ing.id);
+    if (!delta) return ing;
+    ingredientsChanged = true;
+    return {
+      ...ing,
+      currentStock: Math.max(0, Number((ing.currentStock + delta).toFixed(4))),
+    };
+  });
+
+  const updatedCashTransactions = cashTransactions.filter(
+    (tx) => tx.referenceId !== poId
+  );
+  const cashChanged = updatedCashTransactions.length !== cashTransactions.length;
+
+  return {
+    updatedPurchaseOrders,
+    updatedStockMovements,
+    updatedIngredients,
+    updatedCashTransactions,
+    movementsChanged,
+    ingredientsChanged,
+    cashChanged,
+  };
+}
+
+/** Menghitung saldo aktual masing-masing Pos Kas berdasarkan seluruh riwayat transaksi kas. */
+export function computeCashAccountBalances(
+  cashAccounts: CashAccount[],
+  cashTransactions: CashTransaction[]
+): Record<string, number> {
+  const balances: Record<string, number> = {};
+  (cashAccounts || []).forEach((acc) => {
+    if (acc?.id) balances[acc.id] = 0;
+  });
+  (cashTransactions || []).forEach((tx) => {
+    if (!tx?.accountId) return;
+    const rawType = String(tx.type || "").toUpperCase();
+    const amt = Number(tx.amount) || 0;
+    if (rawType === "CASH_IN" || rawType === "IN") {
+      balances[tx.accountId] = (balances[tx.accountId] || 0) + amt;
+    } else if (
+      rawType === "CASH_OUT" ||
+      rawType === "OUT" ||
+      rawType === "EXPENSE"
+    ) {
+      balances[tx.accountId] = (balances[tx.accountId] || 0) - amt;
+    }
+  });
+  return balances;
+}
+
+/** Mengurai nominal transaksi dari file mutasi CSV/Excel (mendukung format Rupiah Rp 150.000, kurung negatif, maupun format EN). */
+export function parseBankStatementAmount(raw: unknown): number {
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? Math.round(raw) : 0;
+  }
+  const str = String(raw ?? "").trim();
+  if (!str) return 0;
+
+  const isParenNegative = /^\(.*\)$/.test(str);
+  const isMinusNegative = /^-\s*/.test(str) || /\(-\s*/.test(str);
+  const isNegative = isParenNegative || isMinusNegative;
+
+  // Sisakan hanya digit, titik, dan koma untuk dianalisis polanya
+  const cleaned = str.replace(/[^\d.,]/g, "");
+  if (!cleaned) return 0;
+
+  let parsed = 0;
+  const hasDot = cleaned.includes(".");
+  const hasComma = cleaned.includes(",");
+
+  if (hasDot && hasComma) {
+    const lastDot = cleaned.lastIndexOf(".");
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastIdx = Math.max(lastDot, lastComma);
+    const digitsAfter = cleaned.length - lastIdx - 1;
+    if (digitsAfter >= 1 && digitsAfter <= 2) {
+      const intPart = cleaned.slice(0, lastIdx).replace(/[.,]/g, "");
+      const decPart = cleaned.slice(lastIdx + 1).replace(/[.,]/g, "");
+      parsed = Number.parseFloat(`${intPart || "0"}.${decPart}`);
+    } else {
+      parsed = Number.parseFloat(cleaned.replace(/[.,]/g, ""));
+    }
+  } else if (hasDot) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(cleaned)) {
+      parsed = Number.parseFloat(cleaned.replace(/\./g, ""));
+    } else {
+      parsed = Number.parseFloat(cleaned.replace(/\.(?=.*\.)/g, ""));
+    }
+  } else if (hasComma) {
+    if (/^\d{1,3}(,\d{3})+$/.test(cleaned)) {
+      parsed = Number.parseFloat(cleaned.replace(/,/g, ""));
+    } else {
+      parsed = Number.parseFloat(cleaned.replace(/,(?=.*,)/g, "").replace(",", "."));
+    }
+  } else {
+    parsed = Number.parseFloat(cleaned);
+  }
+
+  if (!Number.isFinite(parsed)) return 0;
+  const rounded = Math.round(parsed);
+  if (rounded === 0) return 0;
+  return isNegative ? -rounded : rounded;
+}
+
+/** Memecah satu baris CSV mengikuti RFC 4180 (menghormati tanda kutip ganda & escape ""). */
+function splitCsvRecord(line: string, delimiter: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      fields.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current.trim());
+  return fields;
+}
+
+/** Mengurai teks CSV mutasi rekening bank secara aman (mendukung BOM UTF-8, delimiter ; / , / tab, serta kutip berkoma). */
+export function parseBankStatementCsv(text: string): Record<string, string>[] {
+  const normalized = String(text || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+  if (!normalized.trim()) return [];
+
+  // Gabungkan record yang mungkin memiliki newline di dalam kutip
+  const records: string[] = [];
+  let currentRec = "";
+  let inQuotes = false;
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      currentRec += ch;
+    } else if (ch === "\n" && !inQuotes) {
+      if (currentRec.trim().length > 0) records.push(currentRec);
+      currentRec = "";
+    } else {
+      currentRec += ch;
+    }
+  }
+  if (currentRec.trim().length > 0) records.push(currentRec);
+  if (records.length === 0) return [];
+
+  const headerLine = records[0];
+  let semicolonCount = 0;
+  let tabCount = 0;
+  let commaCount = 0;
+  let headerInQuotes = false;
+  for (let i = 0; i < headerLine.length; i++) {
+    const ch = headerLine[i];
+    if (ch === '"') headerInQuotes = !headerInQuotes;
+    else if (!headerInQuotes) {
+      if (ch === ";") semicolonCount++;
+      else if (ch === "\t") tabCount++;
+      else if (ch === ",") commaCount++;
+    }
+  }
+  const delimiter =
+    semicolonCount > commaCount && semicolonCount >= tabCount
+      ? ";"
+      : tabCount > commaCount && tabCount > semicolonCount
+        ? "\t"
+        : ",";
+
+  const headers = splitCsvRecord(headerLine, delimiter).map((h) => h.toLowerCase());
+  const rows: Record<string, string>[] = [];
+
+  for (let r = 1; r < records.length; r++) {
+    const cols = splitCsvRecord(records[r], delimiter);
+    if (cols.every((c) => !c)) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      if (h) obj[h] = cols[i] ?? "";
+    });
+    rows.push(obj);
+  }
+
+  return rows;
+}
+
+/** Menentukan tipe mutasi rekening koran ("CREDIT" vs "DEBIT") dengan memprioritaskan kolom tipe eksplisit sebelum fallback ke tanda nominal. */
+export function resolveBankStatementType(
+  rawType: string | undefined | null,
+  amount: number
+): "CREDIT" | "DEBIT" {
+  const normalized = String(rawType || "").trim().toUpperCase();
+  if (
+    normalized === "DEBIT" ||
+    normalized === "DB" ||
+    normalized === "D" ||
+    normalized === "OUT" ||
+    normalized === "KELUAR" ||
+    normalized === "DR"
+  ) {
+    return "DEBIT";
+  }
+  if (
+    normalized === "CREDIT" ||
+    normalized === "CR" ||
+    normalized === "C" ||
+    normalized === "IN" ||
+    normalized === "MASUK"
+  ) {
+    return "CREDIT";
+  }
+  return amount < 0 ? "DEBIT" : "CREDIT";
+}
+
+/** Mencocokkan baris CSV mutasi rekening koran dengan transaksi buku kas secara 1-ke-1 agar nominal kembar tidak dobel cocok ke 1 transaksi. */
+export function matchBankStatementLines(
+  rawLines: any[],
+  systemTransactions: CashTransaction[],
+  reconciliationId: string,
+  idFactory: () => string,
+  nowIso: string = new Date().toISOString()
+): BankStatementLine[] {
+  const usedTxIds = new Set<string>();
+
+  return (rawLines || []).map((line) => {
+    const date = String(line?.date || line?.tanggal || nowIso);
+    const numericAmount = parseBankStatementAmount(line?.amount ?? line?.jumlah ?? "0");
+    const desc = String(line?.description || line?.deskripsi || line?.keterangan || "");
+    const rawType = line?.type ?? line?.tipe ?? "";
+    const transactionType = resolveBankStatementType(rawType, numericAmount);
+    const absAmount = Math.abs(numericAmount);
+
+    const potentialMatch = systemTransactions.find((t) => {
+      if (usedTxIds.has(t.id)) return false;
+      const rawSysType = String(t.type || "").toUpperCase();
+      if (rawSysType === "TRANSFER") return false;
+      const sysType: "CREDIT" | "DEBIT" =
+        rawSysType === "CASH_IN" || rawSysType === "IN" || rawSysType === "INCOME"
+          ? "CREDIT"
+          : "DEBIT";
+      return Math.round(Math.abs(Number(t.amount) || 0)) === absAmount && sysType === transactionType;
+    });
+
+    if (potentialMatch) {
+      usedTxIds.add(potentialMatch.id);
+    }
+
+    return {
+      id: idFactory(),
+      reconciliationId,
+      date,
+      description: desc,
+      amount: absAmount,
+      transactionType,
+      isMatched: Boolean(potentialMatch),
+      matchedTransactionId: potentialMatch ? potentialMatch.id : null,
+      createdAt: nowIso,
+    };
+  });
+}
+
 // ─── Kalkulasi HPP + Overhead Persentase ─────────────────────────────────────
 
 export interface HppWithOverheadParams {
@@ -1102,6 +1659,8 @@ export function getSaleTransactionAmount(s: SalesTransaction | Record<string, an
 
 export interface ComputePeriodFinancialSummaryParams {
   period: string; // "YYYY-MM" or "ALL"
+  startDate?: string; // Opsional filter rentang tanggal lokal "YYYY-MM-DD"
+  endDate?: string; // Opsional filter rentang tanggal lokal "YYYY-MM-DD"
   salesTransactions: SalesTransaction[];
   dailySalesRecaps?: DailySalesRecap[];
   cashTransactions: CashTransaction[];
@@ -1193,6 +1752,8 @@ export function computePeriodFinancialSummary(
 ): PeriodFinancialSummaryResult {
   const {
     period,
+    startDate,
+    endDate,
     salesTransactions,
     dailySalesRecaps = [],
     cashTransactions,
@@ -1206,8 +1767,25 @@ export function computePeriodFinancialSummary(
     cashAccounts = [],
   } = params;
 
-  const matchesPeriod = (rawDate: string | undefined | null) =>
-    matchesPeriodDate(rawDate, period);
+  const hasDateRange = Boolean(startDate && endDate);
+  const effectiveStartDate = hasDateRange
+    ? startDate! <= endDate!
+      ? startDate!
+      : endDate!
+    : "";
+  const effectiveEndDate = hasDateRange
+    ? startDate! <= endDate!
+      ? endDate!
+      : startDate!
+    : "";
+
+  const matchesPeriod = (rawDate: string | undefined | null) => {
+    if (hasDateRange) {
+      const day = toLocalDateKey(rawDate);
+      return Boolean(day && day >= effectiveStartDate && day <= effectiveEndDate);
+    }
+    return matchesPeriodDate(rawDate, period);
+  };
 
   const dailyMap = new Map<
     string,
@@ -1424,21 +2002,28 @@ export function computePeriodFinancialSummary(
   const netSales = recognizedRevenue;
   const grossSales = recognizedRevenue + totalDiscountAmount + totalRefundAmount;
 
+  const rangeCashForHelpers = hasDateRange
+    ? cashTransactions.filter((t) => matchesPeriod(t.date))
+    : cashTransactions;
+  const rangePosForHelpers = hasDateRange
+    ? purchaseOrders.filter((po) => matchesPeriod(po.date))
+    : purchaseOrders;
+
   const cogsResult = computePeriodicOpnameCogs({
-    period,
+    period: hasDateRange ? "ALL" : period,
     stockOpnames,
     stockOpnameItems,
-    purchaseOrders,
-    cashTransactions,
+    purchaseOrders: rangePosForHelpers,
+    cashTransactions: rangeCashForHelpers,
     expenseCategories,
     ingredients,
     theoreticalCOGS,
   });
 
   const savingsFlow = computePeriodSavingsFlow(
-    period,
+    hasDateRange ? "ALL" : period,
     cashAccounts,
-    cashTransactions
+    rangeCashForHelpers
   );
 
   let unpaidPoDebt = 0;
@@ -1767,5 +2352,134 @@ export function recoverOrphanCashAccountsAndCategories(
     addedCategories,
     addedAccountCount: addedAccounts.length,
     addedCategoryCount: addedCategories.length,
+  };
+}
+
+/** Mengecek apakah transaksi kas keluar adalah penarikan modal / prive Owner. */
+export function isOwnerPriveCashTransaction(
+  t: Pick<CashTransaction, "type" | "category" | "description">
+): boolean {
+  if (t.type !== "CASH_OUT") return false;
+  const cat = String(t.category || "").trim().toLowerCase();
+  const desc = String(t.description || "").trim().toLowerCase();
+  return (
+    cat.includes("prive") ||
+    cat.includes("penarikan modal") ||
+    desc.includes("prive") ||
+    desc.includes("penarikan modal")
+  );
+}
+
+/** Menormalkan persentase bagi hasil (default 70% Owner / 30% Tabungan Kedai / 0% Investor, total wajib 100%). */
+export function normalizeProfitSharePercentages(input?: {
+  ownerPercent?: unknown;
+  reservePercent?: unknown;
+  investorPercent?: unknown;
+}): { ownerPercent: number; reservePercent: number; investorPercent: number } {
+  const hasAny =
+    input &&
+    [input.ownerPercent, input.reservePercent, input.investorPercent].some(
+      (v) => v !== undefined && v !== null && !Number.isNaN(Number(v))
+    );
+  if (!hasAny) {
+    return { ownerPercent: 70, reservePercent: 30, investorPercent: 0 };
+  }
+
+  const clampPct = (v: unknown) => {
+    const n = Math.round(Number(v) || 0);
+    return Math.min(100, Math.max(0, n));
+  };
+
+  const ownerPercent = clampPct(input?.ownerPercent);
+  const reservePercent = clampPct(input?.reservePercent);
+  const investorPercent = clampPct(input?.investorPercent);
+
+  if (ownerPercent + reservePercent + investorPercent !== 100) {
+    return { ownerPercent: 70, reservePercent: 30, investorPercent: 0 };
+  }
+
+  return { ownerPercent, reservePercent, investorPercent };
+}
+
+export interface OwnerProfitAllocationResult {
+  netProfit: number;
+  ownerSharePercent: number;
+  reserveSharePercent: number;
+  investorSharePercent: number;
+  ownerShareAmount: number;
+  reserveShareAmount: number;
+  investorShareAmount: number;
+  ownerPriveTotal: number;
+  ownerRemainingEntitlement: number;
+  savingsDepositTotal: number;
+  savingsWithdrawalTotal: number;
+  netSavingsAllocation: number;
+  reserveRemainingToTransfer: number;
+  capexExpense: number;
+  retainedProfitAfterPrive: number;
+}
+
+/** Menghitung alokasi laba bersih (Owner, Tabungan Kedai, Investor), realisasi Prive, dan setoran tabungan. */
+export function computeOwnerProfitAllocation(params: {
+  netProfit: number;
+  cashTransactions: CashTransaction[];
+  cashAccounts: CashAccount[];
+  expenseCategories?: ExpenseCategory[];
+  ownerPercent?: number;
+  reservePercent?: number;
+  investorPercent?: number;
+}): OwnerProfitAllocationResult {
+  const { ownerPercent, reservePercent, investorPercent } = normalizeProfitSharePercentages({
+    ownerPercent: params.ownerPercent,
+    reservePercent: params.reservePercent,
+    investorPercent: params.investorPercent,
+  });
+
+  const netProfit = Math.round(Number(params.netProfit) || 0);
+  const txs = params.cashTransactions || [];
+
+  const ownerPriveTotal = Math.round(
+    txs
+      .filter((t) => isOwnerPriveCashTransaction(t))
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+  );
+
+  const savingsFlow = computePeriodSavingsFlow("ALL", params.cashAccounts || [], txs);
+  const savingsDepositTotal = Math.round(savingsFlow.savingsDeposit || 0);
+  const savingsWithdrawalTotal = Math.round(savingsFlow.savingsWithdrawal || 0);
+  const netSavingsAllocation = Math.round(savingsFlow.netSavingsAllocation || 0);
+
+  const capexExpense = Math.round(
+    txs
+      .filter((t) => isCapexCashTransaction(t, params.expenseCategories || []))
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+  );
+
+  let ownerShareAmount = 0;
+  let reserveShareAmount = 0;
+  let investorShareAmount = 0;
+
+  if (netProfit > 0) {
+    reserveShareAmount = Math.round((netProfit * reservePercent) / 100);
+    investorShareAmount = Math.round((netProfit * investorPercent) / 100);
+    ownerShareAmount = Math.max(0, netProfit - reserveShareAmount - investorShareAmount);
+  }
+
+  return {
+    netProfit,
+    ownerSharePercent: ownerPercent,
+    reserveSharePercent: reservePercent,
+    investorSharePercent: investorPercent,
+    ownerShareAmount,
+    reserveShareAmount,
+    investorShareAmount,
+    ownerPriveTotal,
+    ownerRemainingEntitlement: ownerShareAmount - ownerPriveTotal,
+    savingsDepositTotal,
+    savingsWithdrawalTotal,
+    netSavingsAllocation,
+    reserveRemainingToTransfer: reserveShareAmount - netSavingsAllocation,
+    capexExpense,
+    retainedProfitAfterPrive: netProfit - ownerPriveTotal,
   };
 }

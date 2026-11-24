@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "../../context/ToastContext";
+import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
+import { authFetch } from "../../utils/authHeaders";
 import { formatCurrency } from "../../utils/format";
 import {
   Users,
@@ -59,7 +62,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   const fetchActiveOrders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pos/orders/active");
+      const res = await authFetch("/api/pos/orders/active");
       if (res.ok) {
         const data = await res.json();
         setOpenBills(data);
@@ -85,7 +88,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
   const handleConfirmVoid = async (manager: any, reason: string) => {
     if (!selectedVoidOrder) return;
     try {
-      const res = await fetch(`/api/pos/orders/${selectedVoidOrder.id}/void`, {
+      const res = await authFetch(`/api/pos/orders/${selectedVoidOrder.id}/void`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -100,14 +103,14 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
         throw new Error(err.error || "Gagal membatalkan order");
       }
 
-      alert(`Order #${selectedVoidOrder.receiptNo} berhasil dibatalkan.`);
+      toast.success(`Order #${selectedVoidOrder.receiptNo} berhasil dibatalkan.`);
       setSelectedVoidOrder(null);
       setShowPinModal(false);
       setVoidReason("");
       fetchActiveOrders();
       onOrderVoided();
     } catch (e: any) {
-      alert(`Error: ${e.message}`);
+      toast.error(`Error: ${e.message}`);
       setShowPinModal(false);
     }
   };
@@ -123,7 +126,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
     setVoidError(null);
 
     try {
-      const res = await fetch("/api/pos/approvals/request", {
+      const res = await authFetch("/api/pos/approvals/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +163,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/pos/approvals/${remoteRequestId}/status`);
+        const res = await authFetch(`/api/pos/approvals/${remoteRequestId}/status`);
         if (res.ok) {
           const data = await res.json();
           if (data.status === "APPROVED") {
@@ -168,7 +171,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
             setRemoteResponseNote(data.responseNote || null);
             clearInterval(interval);
             setTimeout(() => {
-              alert(`Order #${selectedVoidOrder?.receiptNo || ""} berhasil dibatalkan oleh Manager.`);
+              toast.success(`Order #${selectedVoidOrder?.receiptNo || ""} berhasil dibatalkan oleh Manager.`);
               setSelectedVoidOrder(null);
               setRemoteRequestId(null);
               setRemoteStatus(null);
@@ -196,7 +199,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -277,7 +280,8 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                   (sum: number, it: any) => sum + (Number(it.quantity) || 1),
                   0
                 );
-                const orderTime = new Date(bill.createdAt).toLocaleTimeString([], {
+                const orderTime = new Date(bill.createdAt).toLocaleTimeString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
                   hour: "2-digit",
                   minute: "2-digit",
                 });
@@ -386,7 +390,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
       {/* ─── Modal Otorisasi Void Bill (Remote In-App + PIN di Tempat) ─── */}
       <AnimatePresence>
         {selectedVoidOrder && !showPinModal && (
-          <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-60 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 14 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -621,7 +625,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-60 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -809,7 +813,7 @@ export const PosOpenBillsModal: React.FC<PosOpenBillsModalProps> = ({
                         }));
 
                       if (selectedItemsToPay.length === 0) {
-                        alert("Pilih minimal 1 porsi menu untuk dibayar!");
+                        toast.warning("Pilih minimal 1 porsi menu untuk dibayar!");
                         return;
                       }
 

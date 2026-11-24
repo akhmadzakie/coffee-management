@@ -123,7 +123,7 @@ export const GenericImportModal: React.FC<GenericImportModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}

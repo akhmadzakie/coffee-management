@@ -4,6 +4,7 @@
  */
 
 import { formatCurrency } from "./format";
+import { DEFAULT_STORE_TIMEZONE } from "./dateUtils";
 
 export function formatWhatsAppPhoneNumber(rawPhone: string): string {
   let cleaned = String(rawPhone || "").replace(/\D/g, "");
@@ -26,6 +27,7 @@ export function buildWhatsAppReceiptText(
   const dateFormatted = new Date(order.createdAt || Date.now()).toLocaleString("id-ID", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: DEFAULT_STORE_TIMEZONE,
   });
   const payment = order.payments?.[0] || order.payment || {};
   const items = order.items || [];

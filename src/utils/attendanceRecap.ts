@@ -1,9 +1,98 @@
-import type {
-  AttendanceRecord,
-  DailyAttendance,
-  Employee,
-  User,
+import {
+  DEFAULT_SHIFT_DEFINITIONS,
+  type AttendanceRecord,
+  type DailyAttendance,
+  type Employee,
+  type ShiftDefinition,
+  type User,
 } from "../types";
+import { DEFAULT_STORE_TIMEZONE } from "./dateUtils";
+
+export function getWitaTimeMinutes(
+  date: Date = new Date(),
+  timeZone: string = DEFAULT_STORE_TIMEZONE
+): number {
+  if (Number.isNaN(date.getTime())) return 0;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hourRaw = Number(parts.find((p) => p.type === "hour")?.value || "0");
+  const minuteRaw = Number(parts.find((p) => p.type === "minute")?.value || "0");
+  return (hourRaw % 24) * 60 + minuteRaw;
+}
+
+export function formatWitaTimeHm(
+  iso?: string | null,
+  timeZone: string = DEFAULT_STORE_TIMEZONE
+): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = String(Number(parts.find((p) => p.type === "hour")?.value || "0") % 24).padStart(2, "0");
+  const minute = String(Number(parts.find((p) => p.type === "minute")?.value || "0")).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+export function evaluateClockInLateness(params: {
+  now?: Date;
+  shiftId: string;
+  shiftDefinitions?: ShiftDefinition[];
+  timeZone?: string;
+}): {
+  status: "HADIR" | "TERLAMBAT";
+  lateMinutes: number;
+  matchedShift: ShiftDefinition | null;
+} {
+  const {
+    now = new Date(),
+    shiftId,
+    shiftDefinitions,
+    timeZone = DEFAULT_STORE_TIMEZONE,
+  } = params;
+
+  if (String(shiftId || "").toUpperCase() === "OFF") {
+    return { status: "HADIR", lateMinutes: 0, matchedShift: null };
+  }
+
+  const defs =
+    shiftDefinitions && shiftDefinitions.length > 0
+      ? shiftDefinitions
+      : DEFAULT_SHIFT_DEFINITIONS;
+  const matchedShift =
+    defs.find((s) => s.id === shiftId) ||
+    DEFAULT_SHIFT_DEFINITIONS.find((s) => s.id === shiftId) ||
+    null;
+
+  if (!matchedShift) {
+    return { status: "HADIR", lateMinutes: 0, matchedShift: null };
+  }
+
+  const [startH, startM] = (matchedShift.startTime || "07:00").split(":").map(Number);
+  const shiftStartMin = (Number.isFinite(startH) ? startH : 7) * 60 + (Number.isFinite(startM) ? startM : 0);
+  const currentMin = getWitaTimeMinutes(now, timeZone);
+  const tolerance = Number.isFinite(Number(matchedShift.lateToleranceMinutes))
+    ? Number(matchedShift.lateToleranceMinutes)
+    : 15;
+
+  if (currentMin > shiftStartMin + tolerance) {
+    return {
+      status: "TERLAMBAT",
+      lateMinutes: currentMin - shiftStartMin,
+      matchedShift,
+    };
+  }
+
+  return { status: "HADIR", lateMinutes: 0, matchedShift };
+}
 
 export type ClassifiedAttendanceStatus =
   | "HADIR"
@@ -146,17 +235,17 @@ export function buildAttendanceCorrectionUpdate(
 
   if (isPresentStatus) {
     const inDate = form.clockInTime
-      ? new Date(`${dateStr}T${form.clockInTime}:00`)
+      ? new Date(`${dateStr}T${form.clockInTime}:00+08:00`)
       : null;
     const outDate = form.clockOutTime
-      ? new Date(`${dateStr}T${form.clockOutTime}:00`)
+      ? new Date(`${dateStr}T${form.clockOutTime}:00+08:00`)
       : null;
 
     const validIn = inDate && !Number.isNaN(inDate.getTime()) ? inDate : null;
-    const validOut = outDate && !Number.isNaN(outDate.getTime()) ? outDate : null;
+    let validOut = outDate && !Number.isNaN(outDate.getTime()) ? outDate : null;
 
     if (validIn && validOut && validOut.getTime() < validIn.getTime()) {
-      validOut.setDate(validOut.getDate() + 1);
+      validOut = new Date(validOut.getTime() + 24 * 60 * 60 * 1000);
     }
 
     clockInIso = validIn ? validIn.toISOString() : null;

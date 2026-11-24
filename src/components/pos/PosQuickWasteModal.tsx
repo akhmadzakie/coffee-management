@@ -4,8 +4,10 @@
  */
 
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { toast } from "../../context/ToastContext";
 import { formatCurrency } from "../../utils/format";
 import { Trash2, Coffee, AlertTriangle, X, Check, Scale } from "lucide-react";
 import { CustomSelect } from "../common/CustomSelect";
@@ -22,7 +24,7 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
   onClose,
   defaultReason = "KALIBRASI_PAGI",
 }) => {
-  const { ingredients, addStockMovement, currentUser } = useStore();
+  const { ingredients, addStockMovement, currentUser, isReadOnly } = useStore();
 
   const [selectedIngredientId, setSelectedIngredientId] = useState<string>(() => {
     // Default cari espresso beans
@@ -44,8 +46,12 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly || currentUser?.role === "OWNER") {
+      toast.error("Mode Read-Only Owner tidak dapat mencatat waste stok.");
+      return;
+    }
     if (!selectedIngredientId || qtyNum <= 0) {
-      alert("Pilih bahan dan masukkan jumlah bahan yang terbuang/dikalibrasi.");
+      toast.warning("Pilih bahan dan masukkan jumlah bahan yang terbuang/dikalibrasi.");
       return;
     }
 
@@ -72,16 +78,18 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
         createdBy: currentUser?.name || "Barista POS",
       });
 
-      alert(`Berhasil mencatat waste ${qtyNum} ${currentIng?.unit || "unit"} ${currentIng?.name}!`);
+      toast.success(`Berhasil mencatat waste ${qtyNum} ${currentIng?.unit || "unit"} ${currentIng?.name}!`);
       onClose();
     } catch (err: any) {
-      alert(`Gagal mencatat waste: ${err.message}`);
+      toast.error(`Gagal mencatat waste: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -90,7 +98,10 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -261,7 +272,8 @@ export const PosQuickWasteModal: React.FC<PosQuickWasteModalProps> = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 

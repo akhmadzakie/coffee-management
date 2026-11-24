@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ViewState, CashTransactionItem } from "../types";
 import { useTranslation } from "../utils/i18n";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { ThemeToggleButton } from "../context/ThemeContext";
 import { SwitchAccountModal } from "./SwitchAccountModal";
 import { ExportModal } from "./ExportModal";
@@ -9,6 +11,9 @@ import { AIAssistantModal, type ParsedTransactionDraft } from "./AIAssistantModa
 import { ManagerApprovalModal } from "./ManagerApprovalModal";
 import { FEATURES } from "../config/features";
 import { calculateCashFlowHppSync } from "../utils/posDomainLogic";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
+import { validateCashPeriodAccess } from "../utils/syncSanitizers";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -93,16 +98,6 @@ export const Layout: React.FC<LayoutProps> = ({
     "quick-input" | "receipt" | "consultant" | "insights"
   >("quick-input");
   const [aiInitialPrompt, setAiInitialPrompt] = useState<string>("");
-
-  useEffect(() => {
-    const handleOpenAi = (e: any) => {
-      if (e.detail?.tab) setAiInitialTab(e.detail.tab);
-      setAiInitialPrompt(e.detail?.prompt || "");
-      setIsAIAssistantOpen(true);
-    };
-    window.addEventListener("open-ai-assistant", handleOpenAi);
-    return () => window.removeEventListener("open-ai-assistant", handleOpenAi);
-  }, []);
 
   // ─── Responsive Orientation & Screen Size Listener ───
   useEffect(() => {
@@ -195,7 +190,26 @@ export const Layout: React.FC<LayoutProps> = ({
     employees,
     users,
     unsuspendUser,
+    isReadOnly,
+    closedPeriods,
   } = useStore();
+  const isOwnerReadOnly = Boolean(isReadOnly || currentUser?.role === "OWNER");
+
+  useEffect(() => {
+    const handleOpenAi = (e: any) => {
+      const requestedTab = e.detail?.tab;
+      if (isOwnerReadOnly && (!requestedTab || requestedTab === "quick-input" || requestedTab === "receipt")) {
+        setAiInitialTab("insights");
+      } else if (requestedTab) {
+        setAiInitialTab(requestedTab);
+      }
+      setAiInitialPrompt(e.detail?.prompt || "");
+      setIsAIAssistantOpen(true);
+    };
+    window.addEventListener("open-ai-assistant", handleOpenAi);
+    return () => window.removeEventListener("open-ai-assistant", handleOpenAi);
+  }, [isOwnerReadOnly]);
+
   const { t } = useTranslation(settings.language || "id");
 
   const canManageSuspend =
@@ -212,7 +226,7 @@ export const Layout: React.FC<LayoutProps> = ({
     let isMounted = true;
     const fetchPendingCount = async () => {
       try {
-        const res = await fetch("/api/pos/approvals/pending");
+        const res = await authFetch("/api/pos/approvals/pending");
         if (res.ok && isMounted) {
           const data = await res.json();
           setPendingApprovalsCount(Array.isArray(data) ? data.length : 0);
@@ -387,9 +401,10 @@ export const Layout: React.FC<LayoutProps> = ({
     // Super Admin: Akses penuh teknis & manajerial
     SUPER_ADMIN: ALL_VIEWS,
 
-    // Owner: Pemilik usaha (murni laporan eksekutif, rekap penjualan, arus kas, laba rugi, & payroll)
+    // Owner: Pemilik usaha (murni laporan eksekutif, rekap penjualan, arus kas, laba rugi, inventori read-only, & payroll)
     OWNER: [
       "dashboard_owner",
+      "dashboard_inventory",
       "import_sales",
       "finance_reports",
       "cash_flow",
@@ -419,6 +434,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "finance_reports",
       "shifts",
       "hr",
+      "payroll",
       "leader_checklist",
       "users",
       "audit_log",
@@ -444,7 +460,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "kitchen_display",
     ],
 
-    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, & presensi
+    // Leader: Supervisi harian, stok bahan opname, pengajuan belanja PO, cek resep menu, SDM jadwal & presensi
     LEADER: [
       "dashboard_employee",
       "leader_checklist",
@@ -453,6 +469,7 @@ export const Layout: React.FC<LayoutProps> = ({
       "purchases",
       "suppliers",
       "menu_management",
+      "hr",
     ],
 
     // Barista, Kitchen, Baker: Portal karyawan & presensi masuk
@@ -553,20 +570,35 @@ export const Layout: React.FC<LayoutProps> = ({
         onClose={() => setIsAIAssistantOpen(false)}
         initialTab={aiInitialTab}
         initialPrompt={aiInitialPrompt}
-        onOpenInCashFlowModal={(drafts: ParsedTransactionDraft[]) => {
-          setIsAIAssistantOpen(false);
-          onViewChange("cash_flow");
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent("open-cashflow-with-ai-draft", { detail: { drafts } })
-            );
-          }, 80);
-        }}
-        onApplyTransactions={(txs, options) => {
-          if (Array.isArray(txs) && txs.length > 0) {
-            const defaultAccountId = cashAccounts?.[0]?.id || "acc-main";
-            const nowIso = new Date().toISOString();
-            const stockAddsByIngredientId = new Map<string, number>();
+        onOpenInCashFlowModal={
+          isOwnerReadOnly
+            ? undefined
+            : (drafts: ParsedTransactionDraft[]) => {
+                setIsAIAssistantOpen(false);
+                onViewChange("cash_flow");
+                setTimeout(() => {
+                  window.dispatchEvent(
+                    new CustomEvent("open-cashflow-with-ai-draft", { detail: { drafts } })
+                  );
+                }, 80);
+              }
+        }
+        onApplyTransactions={
+          isOwnerReadOnly
+            ? undefined
+            : (txs, options) => {
+                if (Array.isArray(txs) && txs.length > 0) {
+                  const defaultAccountId = cashAccounts?.[0]?.id || "acc-main";
+                  const nowIso = new Date().toISOString();
+                  const periodCheck = validateCashPeriodAccess({
+                    date: nowIso,
+                    closedPeriods,
+                  });
+                  if ("error" in periodCheck) {
+                    toast.error(periodCheck.error);
+                    return;
+                  }
+                  const stockAddsByIngredientId = new Map<string, number>();
             const hppInputRows: Array<{
               ingredientId?: string;
               unitMode?: "PURCHASE" | "BASE" | "PRESET" | "CUSTOM";
@@ -708,13 +740,14 @@ export const Layout: React.FC<LayoutProps> = ({
               );
             }
 
-            alert(
+            toast.success(
               `Berhasil menyimpan ${txs.length} transaksi dari AI ke Buku Kas!${
-                notes.length > 0 ? `\n(${notes.join(" • ")})` : ""
+                notes.length > 0 ? ` (${notes.join(" • ")})` : ""
               }`
             );
           }
-        }}
+        }
+        }
       />
 
       {/* ─── Export Center Modal ─── */}
@@ -730,7 +763,7 @@ export const Layout: React.FC<LayoutProps> = ({
           isOpen={isManagerApprovalOpen}
           onClose={() => setIsManagerApprovalOpen(false)}
           onProcessed={() => {
-            fetch("/api/pos/approvals/pending")
+            authFetch("/api/pos/approvals/pending")
               .then((r) => r.json())
               .then((d) => setPendingApprovalsCount(Array.isArray(d) ? d.length : 0))
               .catch(() => {});
@@ -739,127 +772,144 @@ export const Layout: React.FC<LayoutProps> = ({
       )}
 
       {/* ─── Suspended Accounts Notification Modal (Manager & Super Admin) ─── */}
-      <AnimatePresence>
-        {isSuspendedModalOpen && canManageSuspend && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 12 }}
-              className="bg-white rounded-3xl shadow-2xl border border-rose-200 w-full max-w-lg overflow-hidden"
-            >
-              <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
-                    <ShieldAlert className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-extrabold tracking-tight">
-                      Notifikasi Keamanan: Akun Ter-suspend
-                    </h3>
-                    <p className="text-xs text-rose-100">
-                      Otorisasi Manager / Super Admin untuk membuka kunci akun
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsSuspendedModalOpen(false)}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isSuspendedModalOpen && canManageSuspend && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsSuspendedModalOpen(false);
+                }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 12 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-200 dark:border-rose-500/30 w-full max-w-lg overflow-hidden"
                 >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-3 max-h-[65vh] overflow-y-auto">
-                {suspendedUsers.length === 0 ? (
-                  <div className="text-center py-8 space-y-2">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                    <p className="text-sm font-bold text-slate-800">
-                      Semua Akun Sudah Aktif Normal
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Tidak ada akun staf yang sedang ter-suspend saat ini.
-                    </p>
-                  </div>
-                ) : (
-                  suspendedUsers.map((u) => (
-                    <div
-                      key={u.id}
-                      className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-extrabold text-sm text-rose-950">
-                            🔒 {u.name}
-                          </span>
-                          <span className="text-xs font-mono text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md">
-                            @{u.username}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-rose-200 text-rose-800 uppercase">
-                            {u.role}
-                          </span>
-                        </div>
-                        <p className="text-xs text-rose-700">
-                          {u.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut"}
-                        </p>
-                        {u.suspendedAt && (
-                          <p className="text-[11px] text-rose-500 font-mono">
-                            Waktu kejadian: {new Date(u.suspendedAt).toLocaleString("id-ID")}
-                          </p>
-                        )}
+                  <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
+                        <ShieldAlert className="w-5 h-5 text-white" />
                       </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await unsuspendUser(u.id);
-                        }}
-                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all shrink-0 cursor-pointer active:scale-95"
-                      >
-                        🔓 Buka Suspend
-                      </button>
+                      <div>
+                        <h3 className="text-base font-extrabold tracking-tight">
+                          Notifikasi Keamanan: Akun Ter-suspend
+                        </h3>
+                        <p className="text-xs text-rose-100">
+                          Otorisasi Manager / Super Admin untuk membuka kunci akun
+                        </p>
+                      </div>
                     </div>
-                  ))
-                )}
-              </div>
+                    <button
+                      onClick={() => setIsSuspendedModalOpen(false)}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
 
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSuspendedModalOpen(false);
-                    onViewChange("users");
-                  }}
-                  className="text-xs font-bold text-brand-700 hover:text-brand-800 cursor-pointer"
-                >
-                  Ke Manajemen Pengguna →
-                </button>
-                <div className="flex items-center gap-2">
-                  {suspendedUsers.length > 1 && (
+                  <div className="p-6 space-y-3 max-h-[65vh] overflow-y-auto">
+                    {suspendedUsers.length === 0 ? (
+                      <div className="text-center py-8 space-y-2">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                          Semua Akun Sudah Aktif Normal
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Tidak ada akun staf yang sedang ter-suspend saat ini.
+                        </p>
+                      </div>
+                    ) : (
+                      suspendedUsers.map((u) => (
+                        <div
+                          key={u.id}
+                          className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-extrabold text-sm text-rose-950 dark:text-rose-100">
+                                🔒 {u.name}
+                              </span>
+                              <span className="text-xs font-mono text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-500/20 px-2 py-0.5 rounded-md">
+                                @{u.username}
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200 uppercase">
+                                {u.role}
+                              </span>
+                            </div>
+                            <p className="text-xs text-rose-700 dark:text-rose-300">
+                              {u.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut"}
+                            </p>
+                            {u.suspendedAt && (
+                              <p className="text-[11px] text-rose-500 dark:text-rose-400 font-mono">
+                                Waktu kejadian:{" "}
+                                {new Date(u.suspendedAt).toLocaleString("id-ID", {
+                                  timeZone: DEFAULT_STORE_TIMEZONE,
+                                })}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await unsuspendUser(u.id);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all shrink-0 cursor-pointer active:scale-95"
+                          >
+                            🔓 Buka Suspend
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between gap-3">
                     <button
                       type="button"
-                      onClick={async () => {
-                        for (const u of suspendedUsers) {
-                          await unsuspendUser(u.id);
-                        }
+                      onClick={() => {
+                        setIsSuspendedModalOpen(false);
+                        onViewChange("users");
                       }}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer"
+                      className="text-xs font-bold text-brand-700 dark:text-brand-300 hover:text-brand-800 cursor-pointer"
                     >
-                      🔓 Buka Semua ({suspendedUsers.length})
+                      Ke Manajemen Pengguna →
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setIsSuspendedModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer"
-                  >
-                    Tutup
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+                    <div className="flex items-center gap-2">
+                      {suspendedUsers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            for (const u of suspendedUsers) {
+                              await unsuspendUser(u.id);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer"
+                        >
+                          🔓 Buka Semua ({suspendedUsers.length})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsSuspendedModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 font-bold text-xs cursor-pointer"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
 
       {/* ─── SIDEBAR (DESKTOP) ─── */}
       <aside
@@ -1150,6 +1200,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   leader_checklist: "Checklist Supervisi Leader",
                   hpp_calculator: "Kalkulator & HPP Menu",
                   menu_management: "Katalog & Menu Produk",
+                  promotions: "Promo & Diskon Menu",
                 }[currentView] || currentView}
               </h2>
             </div>
@@ -1178,7 +1229,12 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-semibold">
-                {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {currentTime.toLocaleTimeString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
               </span>
             </div>
 
@@ -1237,7 +1293,10 @@ export const Layout: React.FC<LayoutProps> = ({
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => setIsAIAssistantOpen(true)}
+                onClick={() => {
+                  setAiInitialTab(isOwnerReadOnly ? "insights" : "quick-input");
+                  setIsAIAssistantOpen(true);
+                }}
                 title="Julia Coffee AI Copilot & Business Consultant"
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 transition-colors shadow-2xs cursor-pointer"
               >
@@ -1394,7 +1453,7 @@ export const Layout: React.FC<LayoutProps> = ({
         {currentView.startsWith("dashboard_") && ["SUPER_ADMIN", "OWNER", "MANAGER"].includes(currentUser?.role || "") && (
           <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-3 sm:px-6 py-2 shadow-2xs flex items-center justify-between gap-3 overflow-x-auto no-scrollbar shrink-0">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner w-full sm:w-auto">
-              {DASHBOARD_TABS.map((tab) => {
+              {DASHBOARD_TABS.filter((tab) => allowedViews.includes(tab.id)).map((tab) => {
                 const isActive = currentView === tab.id;
                 return (
                   <motion.button
@@ -1500,6 +1559,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       <button
                         onClick={() => {
                           setIsMobileMenuOpen(false);
+                          setAiInitialTab(isOwnerReadOnly ? "insights" : "quick-input");
                           setIsAIAssistantOpen(true);
                         }}
                         className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs font-bold text-brand-900 bg-brand-50 hover:bg-brand-100 border border-brand-200/90 rounded-xl transition-all cursor-pointer shadow-2xs"
@@ -1639,7 +1699,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 bg-[#f6f8ff] dark:bg-slate-950 relative custom-scrollbar pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] overscroll-contain">
           {/* Global Notification Banner for Suspended Accounts (Manager & Super Admin) */}
           {canManageSuspend && suspendedUsers.length > 0 && (
-            <div className="mb-4 max-w-7xl mx-auto p-3.5 sm:px-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-950 text-xs shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+            <div className="mb-4 max-w-7xl mx-auto p-3.5 sm:px-5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-950 text-xs shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start sm:items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
                   <ShieldAlert className="w-4 h-4" />

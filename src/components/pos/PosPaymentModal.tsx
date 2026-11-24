@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useStore } from "../../store/StoreContext";
+import { toast } from "../../context/ToastContext";
 import { formatCurrency } from "../../utils/format";
+import { getLocalDateString } from "../../utils/dateUtils";
+import { authFetch } from "../../utils/authHeaders";
 import { OrderType, PaymentMethod, PrintDestination, OrderModifier } from "../../types";
 import { resolvePaymentAccountId } from "../../utils/posDomainLogic";
 import { enqueueOfflineOrder } from "../../utils/posOfflineQueue";
@@ -164,7 +167,8 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
     setErrorMessage("");
 
     if (!activeShift) {
-      alert("⚠️ Shift Kasir belum dibuka! Silakan masukkan Modal Awal terlebih dahulu.");
+      setIsSubmitting(false);
+      toast.warning("⚠️ Shift Kasir belum dibuka! Silakan masukkan Modal Awal terlebih dahulu.");
       onClose();
       return;
     }
@@ -172,7 +176,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
     try {
       if (isSplitPayment && splitParentOrderId) {
         // Pelunasan Pecahan Tagihan (Split Bill)
-        const res = await fetch(`/api/pos/orders/${splitParentOrderId}/split`, {
+        const res = await authFetch(`/api/pos/orders/${splitParentOrderId}/split`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -208,7 +212,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
         });
       } else if (editingOrderId) {
         // Pelunasan Open Bill yang sudah ada di database
-        const res = await fetch(`/api/pos/orders/${editingOrderId}/pay`, {
+        const res = await authFetch(`/api/pos/orders/${editingOrderId}/pay`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -283,7 +287,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           if (paymentMethod !== "CASH") {
             throw new Error("Pembayaran non-tunai (QRIS / Kartu) memerlukan koneksi internet. Gunakan pembayaran Tunai (Cash) saat offline.");
           }
-          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+          const dateStr = getLocalDateString().replace(/-/g, "");
           const randomSuffix = Math.floor(1000 + Math.random() * 9000);
           const receiptNo = `ORD-OFFLINE-${dateStr}-${randomSuffix}`;
           const offlineOrder = { ...payload, id: crypto.randomUUID(), receiptNo, createdAt: new Date().toISOString() };
@@ -303,7 +307,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
           return;
         }
 
-        const res = await fetch("/api/pos/orders", {
+        const res = await authFetch("/api/pos/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -334,7 +338,7 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -518,10 +522,10 @@ export const PosPaymentModal: React.FC<PosPaymentModalProps> = ({
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col items-center text-center space-y-4">
               {/* QRIS Badge & QR Code */}
               <div className="bg-white p-4 rounded-2xl border-2 border-slate-200 shadow-md flex flex-col items-center max-w-[240px]">
-                <div className="w-full bg-slate-900 text-white py-1 px-3 rounded-lg text-center font-black tracking-widest text-[11px] mb-2 flex items-center justify-center gap-1.5">
-                  <span className="text-red-500">QR</span>
+                <div className="w-full bg-brand-700 text-white py-1 px-3 rounded-lg text-center font-black tracking-widest text-[11px] mb-2 flex items-center justify-center gap-1.5">
+                  <span className="text-rose-300">QR</span>
                   <span className="text-white">IS</span>
-                  <span className="text-[9px] font-normal text-slate-300">INDONESIA</span>
+                  <span className="text-[9px] font-normal text-brand-200">INDONESIA</span>
                 </div>
 
                 {/* Simulated QR Code SVG pattern */}

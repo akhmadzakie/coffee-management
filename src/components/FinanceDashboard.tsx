@@ -2,6 +2,8 @@ import { RupiahSign } from './common/RupiahSign';
 import React, { useState, useMemo } from "react";
 import { useStore } from "../store/StoreContext";
 import { formatCurrency } from "../utils/format";
+import { getLocalPeriodString } from "../utils/dateUtils";
+import { getLocalPeriodFromTimestamp } from "../utils/syncSanitizers";
 import {
   computeCashLiquidityBreakdown,
   computePeriodFinancialSummary,
@@ -81,8 +83,11 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     closedPeriods,
   } = useStore();
 
-  const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
-  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+  const [initialPeriodYear, initialPeriodMonthNum] = getLocalPeriodString()
+    .split("-")
+    .map(Number);
+  const [filterMonth, setFilterMonth] = useState<number>(initialPeriodMonthNum - 1);
+  const [filterYear, setFilterYear] = useState<number>(initialPeriodYear);
   const [financeAiInput, setFinanceAiInput] = useState("");
 
   const selectedPeriodStr =
@@ -105,14 +110,15 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     if (prompt || financeAiInput) setFinanceAiInput("");
   };
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = initialPeriodYear;
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  // Helper date filter
+  // Helper date filter (zona waktu WITA)
   const isDateInFilter = (dateStr: string) => {
-    const d = new Date(dateStr);
-    if (filterMonth === -1) return d.getFullYear() === filterYear;
-    return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
+    const period = getLocalPeriodFromTimestamp(dateStr);
+    if (!period) return false;
+    if (filterMonth === -1) return period.startsWith(`${filterYear}-`);
+    return period === `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
   };
 
   const filteredFinance = useMemo(
@@ -155,16 +161,24 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
     const yearStr = `${filterYear}-`;
     return computePeriodFinancialSummary({
       period: "ALL",
-      salesTransactions: salesTransactions.filter((s) => String(s.date).startsWith(yearStr)),
-      dailySalesRecaps: dailySalesRecaps.filter((r) => String(r.date).startsWith(yearStr)),
-      cashTransactions: cashTransactions.filter((c) => String(c.date).startsWith(yearStr)),
+      salesTransactions: salesTransactions.filter((s) =>
+        getLocalPeriodFromTimestamp(s.date).startsWith(yearStr)
+      ),
+      dailySalesRecaps: dailySalesRecaps.filter((r) =>
+        getLocalPeriodFromTimestamp(r.date).startsWith(yearStr)
+      ),
+      cashTransactions: cashTransactions.filter((c) =>
+        getLocalPeriodFromTimestamp(c.date).startsWith(yearStr)
+      ),
       expenseCategories,
       recipes,
       ingredients,
       products,
       stockOpnames,
       stockOpnameItems,
-      purchaseOrders: purchaseOrders.filter((po) => String(po.date).startsWith(yearStr)),
+      purchaseOrders: purchaseOrders.filter((po) =>
+        getLocalPeriodFromTimestamp(po.date).startsWith(yearStr)
+      ),
       cashAccounts,
     });
   }, [
@@ -399,7 +413,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
       </div>
 
       {/* ─── Finance AI Copilot Hub (Bookkeeping & Smart OCR) ─────────────── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-5 sm:p-6 shadow-xl border border-indigo-950/40">
+      <div className="relative overflow-hidden rounded-3xl bg-brand-gradient text-white p-5 sm:p-6 shadow-xl border border-brand-700/60">
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
 
@@ -425,7 +439,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             </div>
 
             <button
-              onClick={() => handleOpenCopilot("quick-input")}
+              onClick={() => handleOpenCopilot(isOwner ? "insights" : "quick-input")}
               className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white dark:bg-slate-900 text-brand-900 dark:text-brand-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent dark:border-brand-300/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
             >
               <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -946,13 +960,19 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               )}
             </div>
           </div>
-          <button
-            onClick={() => onNavigate("purchases")}
-            className="w-full mt-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <span>Lihat Daftar Pembelian</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          {!isOwner ? (
+            <button
+              onClick={() => onNavigate("purchases")}
+              className="w-full mt-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Lihat Daftar Pembelian</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div className="w-full mt-4 py-2.5 px-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-slate-400 font-semibold text-xs text-center">
+              Ringkasan Tagihan (Mode Pantau Owner)
+            </div>
+          )}
         </div>
 
         {/* Status Rekonsiliasi Bank */}
@@ -994,13 +1014,19 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
               </div>
             )}
           </div>
-          <button
-            onClick={() => onNavigate("bank_reconciliation")}
-            className="w-full mt-4 py-2.5 rounded-2xl bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <span>Buka Rekonsiliasi Bank</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          {currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" ? (
+            <button
+              onClick={() => onNavigate("bank_reconciliation")}
+              className="w-full mt-4 py-2.5 rounded-2xl bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Buka Rekonsiliasi Bank</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div className="w-full mt-4 py-2.5 px-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-slate-400 font-semibold text-xs text-center">
+              Dikelola Tim Finance &amp; Admin
+            </div>
+          )}
         </div>
 
         {/* Beban Gaji & Payroll Liability */}
@@ -1034,7 +1060,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             onClick={() => onNavigate("payroll")}
             className="w-full mt-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <span>Kelola Payroll & Gaji</span>
+            <span>Kelola Payroll &amp; Gaji</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -1057,16 +1083,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
             <p className="text-[10px] text-slate-500 mt-0.5">Input kas masuk / keluar</p>
           </button>
 
-          <button
-            onClick={() => onNavigate("bank_reconciliation")}
-            className="p-4 bg-white rounded-2xl border border-slate-200/80 hover:border-brand-500 hover:shadow-xs transition-all text-left group cursor-pointer active:scale-95"
-          >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-              <CreditCard className="w-4 h-4" />
-            </div>
-            <p className="text-xs font-bold text-slate-900">Rekonsiliasi Bank</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Cocokkan rekening koran</p>
-          </button>
+          {(currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN") && (
+            <button
+              onClick={() => onNavigate("bank_reconciliation")}
+              className="p-4 bg-white rounded-2xl border border-slate-200/80 hover:border-brand-500 hover:shadow-xs transition-all text-left group cursor-pointer active:scale-95"
+            >
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold text-slate-900">Rekonsiliasi Bank</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Cocokkan rekening koran</p>
+            </button>
+          )}
 
           <button
             onClick={() => onNavigate("finance_reports")}

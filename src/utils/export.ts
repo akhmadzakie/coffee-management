@@ -12,6 +12,7 @@ import {
   Employee,
 } from "../types";
 import { formatCurrency } from "./format";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "./dateUtils";
 import {
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
@@ -29,6 +30,7 @@ export const formatDateIndo = (dateStr: string | Date): string => {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: DEFAULT_STORE_TIMEZONE,
   });
 };
 
@@ -61,7 +63,7 @@ export const exportToCSV = (filename: string, rows: any[]) => {
             let cell = row[k] === null || row[k] === undefined ? "" : row[k];
             cell =
               cell instanceof Date
-                ? cell.toLocaleString("id-ID")
+                ? cell.toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })
                 : cell.toString().replace(/"/g, '""');
             if (cell.search(/("|,|\n)/g) >= 0) cell = `"${cell}"`;
             return cell;
@@ -109,6 +111,18 @@ export const downloadCsvTemplate = (filename: string, headers: string[], example
   }
 };
 
+function extractLocalYmd(raw?: string): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return getLocalDateString(parsed);
+  }
+  return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : null;
+}
+
 export const filterByDateRange = <
   T extends { date?: string; importDate?: string; timestamp?: string },
 >(
@@ -117,21 +131,20 @@ export const filterByDateRange = <
   endDate?: string,
 ): T[] => {
   if (!startDate && !endDate) return items;
+  let normStart = startDate ? extractLocalYmd(startDate) : null;
+  let normEnd = endDate ? extractLocalYmd(endDate) : null;
+  if (normStart && normEnd && normStart > normEnd) {
+    const tmp = normStart;
+    normStart = normEnd;
+    normEnd = tmp;
+  }
   return items.filter((item) => {
     const dStr = item.date || item.importDate || item.timestamp;
     if (!dStr) return true;
-    const itemTime = new Date(dStr).getTime();
-    if (isNaN(itemTime)) return true;
-    if (startDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      if (itemTime < start.getTime()) return false;
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      if (itemTime > end.getTime()) return false;
-    }
+    const itemDay = extractLocalYmd(dStr);
+    if (!itemDay) return true;
+    if (normStart && itemDay < normStart) return false;
+    if (normEnd && itemDay > normEnd) return false;
     return true;
   });
 };
@@ -348,6 +361,11 @@ export const exportInventoryToPDF = ({
   doc.save(`Laporan_Stok_${periodLabel}.pdf`);
 };
 
+const isCashInType = (type: unknown): boolean => {
+  const upper = String(type || "").toUpperCase();
+  return upper === "CASH_IN" || upper === "IN" || upper === "INCOME";
+};
+
 export const exportFinanceToPDF = ({
   finance,
   settings,
@@ -362,21 +380,25 @@ export const exportFinanceToPDF = ({
 
   const tableData =
     finance.length > 0
-      ? finance.map((f) => [
-          formatDateIndo(f.date),
-          f.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
-          f.category,
-          f.description,
-          (f.type === "CASH_IN" ? "+" : "-") + formatCurrency(f.amount),
-        ])
+      ? finance.map((f) => {
+          const isIn = isCashInType(f.type);
+          return [
+            formatDateIndo(f.date),
+            isIn ? "Pemasukan" : "Pengeluaran",
+            f.category,
+            f.description,
+            (isIn ? "+" : "-") + formatCurrency(f.amount),
+          ];
+        })
       : [["-", "-", "Tidak ada data arus kas di periode ini", "-", "-"]];
 
-  const totalIn = finance
-    .filter((f) => f.type === "CASH_IN")
-    .reduce((a, b) => a + b.amount, 0);
-  const totalOut = finance
-    .filter((f) => f.type === "CASH_OUT")
-    .reduce((a, b) => a + b.amount, 0);
+  const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
+  const totalIn = operationalFinance
+    .filter((f) => isCashInType(f.type))
+    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
+  const totalOut = operationalFinance
+    .filter((f) => !isCashInType(f.type))
+    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
   const netCash = totalIn - totalOut;
 
   autoTable(doc, {
@@ -502,7 +524,7 @@ export const exportFinanceToCSV = ({
 }) => {
   const rows = finance.map((f) => ({
     Tanggal: formatDateIndo(f.date),
-    "Jenis Transaksi": f.type === "CASH_IN" ? "Pemasukan" : "Pengeluaran",
+    "Jenis Transaksi": isCashInType(f.type) ? "Pemasukan" : "Pengeluaran",
     Kategori: f.category,
     Keterangan: f.description,
     "Jumlah (Rp)": f.amount,
@@ -739,8 +761,8 @@ export const exportAttendanceToCSV = ({
       Jabatan: emp?.position || "-",
       Divisi: emp?.department || "-",
       Status: a.status,
-      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID") : "-",
-      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID") : "-",
+      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
+      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
       "Status Verifikasi": a.approvalStatus,
     };
   });
@@ -1009,8 +1031,8 @@ export const exportSinglePayslipPDF = ({
   let periodStr = payroll.period;
   try {
     const [y, m] = payroll.period.split("-");
-    const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-    periodStr = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    const d = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, 15));
+    periodStr = d.toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: DEFAULT_STORE_TIMEZONE });
   } catch {
     periodStr = payroll.period;
   }
@@ -1238,8 +1260,8 @@ export const exportSinglePayslipPDF = ({
     doc.setFont("helvetica", "normal");
     doc.setTextColor(203, 213, 225);
     const paidText = paidViaAccountName
-      ? `Dibayar via: ${paidViaAccountName} (${payroll.paidDate ? new Date(payroll.paidDate).toLocaleDateString("id-ID") : "Lunas"})`
-      : `Dibayar pada: ${new Date(payroll.paidDate || Date.now()).toLocaleDateString("id-ID")}`;
+      ? `Dibayar via: ${paidViaAccountName} (${payroll.paidDate ? new Date(payroll.paidDate).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }) : "Lunas"})`
+      : `Dibayar pada: ${new Date(payroll.paidDate || Date.now()).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}`;
     doc.text(paidText, pageWidth - margin - 6, curY + 14, { align: "right" });
   }
 
@@ -1293,7 +1315,7 @@ export const exportSinglePayslipPDF = ({
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
-  const approvalDate = payroll.approvedAt ? `Disetujui: ${new Date(payroll.approvedAt).toLocaleDateString("id-ID")}` : "Otorisasi Resmi Kedai";
+  const approvalDate = payroll.approvedAt ? `Disetujui: ${new Date(payroll.approvedAt).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}` : "Otorisasi Resmi Kedai";
   doc.text(approvalDate, pageWidth - margin - 20, sigBoxY + 24, { align: "right" });
 
   doc.line(pageWidth - margin - 65, sigBoxY + 21, pageWidth - margin - 15, sigBoxY + 21);

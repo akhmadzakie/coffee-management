@@ -26,11 +26,95 @@ import {
   calculateFnbHealthMetrics,
   computePeriodicOpnameCogs,
   computeCashLiquidityBreakdown,
+  computeOwnerProfitAllocation,
   computePeriodSavingsFlow,
   computePeriodFinancialSummary,
+  normalizeProfitSharePercentages,
   isCapexCashTransaction,
   isAdminBankOrMdrTransaction,
+  isNonOperationalCashTransaction,
+  buildIngredientCategoryList,
+  applyRenameIngredientCategory,
+  applyDeleteIngredientCategory,
+  cascadeExpenseCategoryUpdate,
+  cascadeExpenseCategoryDelete,
+  cascadeCashAccountDelete,
+  cascadePurchaseOrderDelete,
+  recoverOrphanCashAccountsAndCategories,
+  resolveBankStatementType,
+  matchBankStatementLines,
+  parseBankStatementAmount,
+  parseBankStatementCsv,
 } from "../src/utils/financeMetrics";
+import {
+  sanitizeIngredientRecord,
+  sanitizeEmployeeRecord,
+  sanitizeEmployeeContractRecord,
+  formatContractForClient,
+  sanitizePayrollRecordData,
+  sanitizePurchaseOrderRecord,
+  sanitizeKPIRecordData,
+  formatKpiRecordForClient,
+  sanitizeKpiTaskRecord,
+  sanitizeKpiBonusRuleRecord,
+  applyRoleSyncRestrictions,
+  filterVisibleSessionsForUser,
+  canRevokeTargetSession,
+  selectSessionsToRevokeOthers,
+  resolveGeminiApiKeyForSave,
+  dedupeRecipesByMenuName,
+  recomputeOpnameItemsWithLiveStock,
+  computeMovementActualQuantityAndCost,
+  convertStockInputOnUnitToggle,
+  validateRecipeSubmission,
+  resolveDefaultTransferStation,
+  resolveDivisionStorageLocation,
+  mergeDuplicateRecipeIngredients,
+  parseRecipeIngredientsSafe,
+  splitRecipeItemsAndPackaging,
+  computeSignedMarginMetrics,
+  recalculateVariantFromLiveIngredients,
+  validateBatchPrepSubmission,
+  getLocalPeriodFromTimestamp,
+  addDaysToLocalDate,
+  computeDueDateStatus,
+  validateSupplierSubmission,
+  validatePoCheckoutInput,
+  validatePoPaymentInput,
+  extractWitaHour,
+  aggregatePosOrderTopItems,
+  validateDailySalesRecapSubmission,
+  validateCashDepositSubmission,
+  filterExpenseCategoryTree,
+  parseImportedExpenseCategories,
+  computeBudgetVsActual,
+  validateCashPeriodAccess,
+  resolveCategoryMatchForImport,
+  computePayrollCategoryBreakdown,
+  validatePayrollMutation,
+  computeShiftExpectedCash,
+  mergeOfflinePayrollPreservingPaid,
+  getPromotionRuntimeStatus,
+  validatePromotionInput,
+  computePromotionDiscountPreview,
+  computeOwnerCategoryContribution,
+  computePeriodGrowthPercent,
+  getWitaWeekStartDate,
+  evaluateApiAccess,
+  isValidKitchenStatus,
+  evaluateSessionHeartbeat,
+  evaluateGenericTableAccess,
+  aggregateBatchRequiredQuantities,
+  computeBatchWeightedUnitCost,
+  resolveCappedRefundAmount,
+  validatePosOrderPayload,
+  validateEvenlySplitAmount,
+  validateApprovalRequestInput,
+  mergePreservingProtectedRows,
+  protectSuperAdminAccountsOnSync,
+  protectClosedPeriodsOnSync,
+  enforceClosedPeriodDataLock,
+} from "../src/utils/syncSanitizers";
 import {
   buildEscPosReceipt,
   buildCashDrawerKickCommand,
@@ -40,17 +124,28 @@ import {
   buildWhatsAppReceiptText,
   buildWhatsAppReceiptUrl,
 } from "../src/utils/whatsappReceipt";
-import { exportSinglePayslipPDF } from "../src/utils/export";
+import {
+  exportSinglePayslipPDF,
+  filterByDateRange,
+  formatDateIndo,
+} from "../src/utils/export";
 import {
   AttendanceRecord,
+  Budget,
   CashTransaction,
   CashAccount,
   DailyAttendance,
   Employee,
+  ExpenseCategory,
+  PayrollRecord,
+  Promotion,
   Recipe,
   Ingredient,
   BatchPreparation,
   Product,
+  PurchaseOrder,
+  SalesTransaction,
+  StockMovement,
   User,
 } from "../src/types";
 import {
@@ -58,6 +153,9 @@ import {
   calculateWorkDurationHours,
   classifyDailyAttendanceStatus,
   computeMonthlyAttendanceRecap,
+  evaluateClockInLateness,
+  formatWitaTimeHm,
+  getWitaTimeMinutes,
   resolveCanonicalEmployeeId,
   syncAttendanceRecordsWithDaily,
 } from "../src/utils/attendanceRecap";
@@ -66,8 +164,12 @@ import {
   inferProductGroup,
   formatCatalogMenuVariantLabel,
   computeProductSalesAnalytics,
+  calculateVariantUnitHpp,
+  getDivisionMenuCategories,
+  applyRenameMenuCategory,
+  applyDeleteMenuCategory,
 } from "../src/utils/productSalesAnalytics";
-import { mapSalesRows } from "../src/utils/salesImportMapper";
+import { mapSalesRows, parseDateToIso } from "../src/utils/salesImportMapper";
 
 console.log("=========================================================");
 console.log("   TESTING & SYSTEM AUDIT SUITE: JULIA'S COFFEE ERP/POS   ");
@@ -2675,6 +2777,2751 @@ test("25d. Import Excel mapSalesRows: Kolom Varian Terpisah & Harga Satuan", () 
   assert.strictEqual(mapped.rows[0].totalPrice, 220000);
   assert.strictEqual(mapped.rows[1].menuName, "Kopi Susu Gula Aren - Botol 1 Liter");
   assert.strictEqual(mapped.rows[1].totalPrice, 170000);
+});
+
+test("26a. Edit & Hapus Kategori Bahan Baku Memperbarui Alias Warisan & Tidak Hidup Kembali", () => {
+  const ingList: Ingredient[] = [
+    {
+      id: "ing-coffee",
+      name: "Espresso Beans",
+      unit: "gr",
+      currentStock: 1000,
+      minStock: 200,
+      category: "Coffee",
+      costPerUnit: 250,
+    },
+    {
+      id: "ing-syrup-house",
+      name: "Simple Syrup Racikan",
+      unit: "ml",
+      currentStock: 500,
+      minStock: 100,
+      category: "Bahan Olahan",
+      costPerUnit: 15,
+    },
+  ];
+
+  const initialCats = buildIngredientCategoryList(undefined, ingList);
+  assert.ok(initialCats.includes("Biji Kopi"));
+  assert.ok(initialCats.includes("Bahan Olahan"));
+
+  // Rename "Biji Kopi" -> "Kopi Pilihan" (wajib ikut memperbarui bahan berlabel warisan "Coffee")
+  const renamed = applyRenameIngredientCategory({
+    currentList: initialCats,
+    oldName: "Biji Kopi",
+    newName: "Kopi Pilihan",
+    ingredients: ingList,
+  });
+  assert.ok(renamed.updatedCategories.includes("Kopi Pilihan"));
+  assert.ok(!renamed.updatedCategories.includes("Biji Kopi"));
+  assert.strictEqual(renamed.updatedIngredients.length, 1);
+  assert.strictEqual(renamed.updatedIngredients[0].category, "Kopi Pilihan");
+
+  const updatedIngsAfterRename = ingList.map(
+    (ing) => renamed.updatedIngredients.find((u) => u.id === ing.id) || ing
+  );
+  const rebuiltAfterRename = buildIngredientCategoryList(
+    renamed.updatedCategories,
+    updatedIngsAfterRename
+  );
+  assert.ok(!rebuiltAfterRename.includes("Biji Kopi"));
+  assert.ok(rebuiltAfterRename.includes("Kopi Pilihan"));
+
+  // Delete "Bahan Olahan" -> bahan dipindah ke "Lainnya" & kategori tidak muncul kembali
+  const deleted = applyDeleteIngredientCategory({
+    currentList: renamed.updatedCategories,
+    targetName: "Bahan Olahan",
+    ingredients: updatedIngsAfterRename,
+  });
+  assert.ok(!deleted.updatedCategories.includes("Bahan Olahan"));
+  assert.strictEqual(deleted.updatedIngredients.length, 1);
+  assert.strictEqual(deleted.updatedIngredients[0].category, "Lainnya");
+
+  const finalIngredients = updatedIngsAfterRename.map(
+    (ing) => deleted.updatedIngredients.find((u) => u.id === ing.id) || ing
+  );
+  const rebuiltAfterDelete = buildIngredientCategoryList(
+    deleted.updatedCategories,
+    finalIngredients
+  );
+  assert.ok(!rebuiltAfterDelete.includes("Bahan Olahan"));
+});
+
+test("26b. Edit & Hapus Kategori Menu Per Divisi Menyinkronkan Produk & Filter Analitik", () => {
+  const prods: Product[] = [
+    {
+      id: "prod-1",
+      name: "Signature Espresso",
+      category: "SIGNATURE COFFEE",
+      productGroup: "MINUMAN",
+      division: "BAR",
+      isActive: true,
+      createdAt: "2026-11-23T00:00:00.000Z",
+      variants: [
+        {
+          id: "var-1",
+          productId: "prod-1",
+          name: "Iced 16oz",
+          price: 28000,
+          estimatedHpp: 8000,
+          isAvailable: true,
+        },
+      ],
+    },
+  ];
+
+  const barCats = getDivisionMenuCategories("BAR", undefined, prods);
+  assert.ok(barCats.includes("SIGNATURE COFFEE"));
+
+  // Rename "SIGNATURE COFFEE" -> "KOPI SPESIAL"
+  const renamed = applyRenameMenuCategory({
+    division: "BAR",
+    currentCategories: barCats,
+    oldName: "SIGNATURE COFFEE",
+    newName: "KOPI SPESIAL",
+    products: prods,
+  });
+  assert.ok(renamed.updatedCategories.includes("KOPI SPESIAL"));
+  assert.ok(!renamed.updatedCategories.includes("SIGNATURE COFFEE"));
+  assert.strictEqual(renamed.updatedProducts.length, 1);
+  assert.strictEqual(renamed.updatedProducts[0].category, "KOPI SPESIAL");
+
+  const updatedProducts = prods.map(
+    (p) => renamed.updatedProducts.find((u) => u.id === p.id) || p
+  );
+
+  // Hapus "KOPI SPESIAL" -> produk dipindahkan ke "LAINNYA"
+  const deleted = applyDeleteMenuCategory({
+    division: "BAR",
+    currentCategories: renamed.updatedCategories,
+    targetName: "KOPI SPESIAL",
+    products: updatedProducts,
+  });
+  assert.ok(!deleted.updatedCategories.includes("KOPI SPESIAL"));
+  assert.ok(deleted.updatedCategories.includes("LAINNYA"));
+  assert.strictEqual(deleted.updatedProducts.length, 1);
+  assert.strictEqual(deleted.updatedProducts[0].category, "LAINNYA");
+
+  // Analitik memuat kategori dari Settings
+  const analytics = computeProductSalesAnalytics({
+    salesTransactions: [],
+    products: updatedProducts,
+    recipes: [],
+    ingredients: [],
+    menuCategoriesByDivision: { BAR: ["KOPI SPESIAL", "MATCHA BAR"] },
+    dateMode: "ALL",
+    singleDate: "2026-11-23",
+    startDate: "2026-11-01",
+    endDate: "2026-11-23",
+    division: "BAR",
+  });
+  assert.ok(analytics.availableMenuCategories.includes("MATCHA BAR"));
+});
+
+test("26c. Edit & Hapus Pos Kategori Keuangan Cascade ke Transaksi & Tidak Hidup Lagi", () => {
+  const categories: ExpenseCategory[] = [
+    {
+      id: "cat-ops",
+      name: "Operasional Lama",
+      type: "PENGELUARAN",
+      parentId: null,
+      color: "#1b2cc0",
+      icon: "tag",
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-ops-sub",
+      name: "Transportasi Kurir",
+      type: "PENGELUARAN",
+      parentId: "cat-ops",
+      color: "#1b2cc0",
+      icon: "tag",
+      isActive: true,
+      sortOrder: 2,
+    },
+  ];
+  const txs: CashTransaction[] = [
+    {
+      id: "tx-1",
+      accountId: "cash-drawer-main",
+      type: "CASH_OUT",
+      date: "2026-11-23",
+      amount: 25000,
+      description: "Ongkir bahan",
+      category: "Transportasi Kurir",
+      categoryId: "cat-ops-sub",
+    },
+  ];
+  const budgets: Budget[] = [
+    {
+      id: "bdg-1",
+      categoryId: "cat-ops-sub",
+      period: "2026-11",
+      targetAmount: 500000,
+      amount: 500000,
+      notes: "Anggaran kurir",
+      createdBy: "manager",
+      createdAt: "2026-11-01",
+    },
+  ];
+
+  // Edit nama sub-kategori
+  const updatedSub: ExpenseCategory = {
+    ...categories[1],
+    name: "Biaya Kurir Harian",
+  };
+  const txAfterRename = cascadeExpenseCategoryUpdate({
+    updatedCategory: updatedSub,
+    previousCategory: categories[1],
+    cashTransactions: txs,
+  });
+  assert.strictEqual(txAfterRename[0].category, "Biaya Kurir Harian");
+
+  // Hapus sub-kategori -> transaksi naik ke induk "Operasional Lama" & budget sub dihapus
+  const afterDeleteSub = cascadeExpenseCategoryDelete({
+    categoryId: "cat-ops-sub",
+    categories: categories.map((c) => (c.id === updatedSub.id ? updatedSub : c)),
+    cashTransactions: txAfterRename,
+    budgets,
+  });
+  assert.strictEqual(afterDeleteSub.updatedCategories.length, 1);
+  assert.strictEqual(afterDeleteSub.updatedTransactions[0].categoryId, "cat-ops");
+  assert.strictEqual(afterDeleteSub.updatedTransactions[0].category, "Operasional Lama");
+  assert.strictEqual(afterDeleteSub.updatedBudgets.length, 0);
+
+  // Hapus root "Operasional Lama" -> transaksi menjadi "Lainnya" & recovery tidak memunculkan kembali
+  const afterDeleteRoot = cascadeExpenseCategoryDelete({
+    categoryId: "cat-ops",
+    categories: afterDeleteSub.updatedCategories,
+    cashTransactions: afterDeleteSub.updatedTransactions,
+    budgets: afterDeleteSub.updatedBudgets,
+  });
+  assert.strictEqual(afterDeleteRoot.updatedCategories.length, 0);
+  assert.strictEqual(afterDeleteRoot.updatedTransactions[0].categoryId, null);
+  assert.strictEqual(afterDeleteRoot.updatedTransactions[0].category, "Lainnya");
+
+  const recovery = recoverOrphanCashAccountsAndCategories({
+    cashAccounts: [
+      { id: "cash-drawer-main", name: "Laci Kasir", type: "CASH", isDefault: true },
+    ],
+    cashTransactions: afterDeleteRoot.updatedTransactions,
+    expenseCategories: afterDeleteRoot.updatedCategories,
+  });
+  assert.strictEqual(recovery.addedCategories.length, 0);
+});
+
+test("26d. Hapus Pos Kas Menghapus OPENING TX & Memindahkan Mutasi Tersisa Tanpa Menghidupkan Pos Terhapus", () => {
+  const accounts: CashAccount[] = [
+    { id: "cash-main", name: "Laci Kasir Utama", type: "CASH", isDefault: true },
+    { id: "ewallet-1", name: "Dompet GoPay", type: "E_WALLET", isDefault: false },
+  ];
+  const txs: CashTransaction[] = [
+    {
+      id: "tx-open",
+      accountId: "ewallet-1",
+      type: "CASH_IN",
+      date: "2026-11-23",
+      amount: 100000,
+      description: "Saldo Awal (Dompet GoPay)",
+      category: "Saldo Awal",
+      categoryId: null,
+      referenceId: "OPENING:ewallet-1",
+    },
+    {
+      id: "tx-opex",
+      accountId: "ewallet-1",
+      type: "CASH_OUT",
+      date: "2026-11-23",
+      amount: 20000,
+      description: "Beli es batu",
+      category: "Bahan Baku",
+      categoryId: "cat-bahan-baku",
+    },
+  ];
+
+  const deleted = cascadeCashAccountDelete({
+    accountId: "ewallet-1",
+    cashAccounts: accounts,
+    cashTransactions: txs,
+  });
+  assert.strictEqual(deleted.transactionsChanged, true);
+  assert.strictEqual(deleted.updatedAccounts.length, 1);
+  assert.strictEqual(deleted.updatedAccounts[0].id, "cash-main");
+  assert.strictEqual(deleted.updatedTransactions.length, 1);
+  assert.strictEqual(deleted.updatedTransactions[0].id, "tx-opex");
+  assert.strictEqual(deleted.updatedTransactions[0].accountId, "cash-main");
+
+  const recovery = recoverOrphanCashAccountsAndCategories({
+    cashAccounts: deleted.updatedAccounts,
+    cashTransactions: deleted.updatedTransactions,
+    expenseCategories: [],
+  });
+  assert.strictEqual(recovery.addedAccounts.length, 0);
+});
+
+test("26e. Hapus Purchase Order Membalikkan Stok Bahan & Menghapus Mutasi Kas Terkait", () => {
+  const po: PurchaseOrder = {
+    id: "po-123",
+    poNumber: "PO-202611-001",
+    supplierId: "sup-1",
+    supplierName: "PT Kopi Maju",
+    date: "2026-11-23T08:00:00.000Z",
+    items: [
+      {
+        productId: "ing-beans",
+        quantity: 2000,
+        unit: "gr",
+        unitPrice: 250,
+        subtotal: 500000,
+      },
+    ],
+    totalAmount: 500000,
+    status: "PAID",
+    deliveryStatus: "RECEIVED",
+  };
+  const movements: StockMovement[] = [
+    {
+      id: "mv-po",
+      ingredientId: "ing-beans",
+      type: "IN",
+      quantity: 2000,
+      unitCost: 250,
+      totalCost: 500000,
+      date: "2026-11-23T08:00:00.000Z",
+      note: "PO Masuk Stok: PO-202611-001",
+      referenceId: "po-123",
+      createdBy: "Manager",
+    },
+    {
+      id: "mv-other",
+      ingredientId: "ing-beans",
+      type: "IN",
+      quantity: 500,
+      unitCost: 250,
+      totalCost: 125000,
+      date: "2026-11-22T08:00:00.000Z",
+      note: "Stok Awal",
+      createdBy: "Manager",
+    },
+  ];
+  const ingredients: Ingredient[] = [
+    {
+      id: "ing-beans",
+      name: "House Blend Beans",
+      unit: "gr",
+      currentStock: 2500,
+      minStock: 500,
+      category: "Biji Kopi",
+      costPerUnit: 250,
+    },
+  ];
+  const cashTransactions: CashTransaction[] = [
+    {
+      id: "trx-po",
+      accountId: "cash-main",
+      type: "CASH_OUT",
+      date: "2026-11-23T08:00:00.000Z",
+      amount: 500000,
+      description: "Pembelian PO: PO-202611-001",
+      category: "Pembelian Bahan",
+      categoryId: "cat-bahan-baku",
+      referenceId: "po-123",
+    },
+  ];
+
+  const deleted = cascadePurchaseOrderDelete({
+    poId: "po-123",
+    purchaseOrders: [po],
+    stockMovements: movements,
+    ingredients,
+    cashTransactions,
+  });
+
+  assert.strictEqual(deleted.updatedPurchaseOrders.length, 0);
+  assert.strictEqual(deleted.movementsChanged, true);
+  assert.strictEqual(deleted.updatedStockMovements.length, 1);
+  assert.strictEqual(deleted.updatedStockMovements[0].id, "mv-other");
+  assert.strictEqual(deleted.ingredientsChanged, true);
+  assert.strictEqual(deleted.updatedIngredients[0].currentStock, 500);
+  assert.strictEqual(deleted.cashChanged, true);
+  assert.strictEqual(deleted.updatedCashTransactions.length, 0);
+});
+
+// -------------------------------------------------------------
+// 27. DEEP AUDIT: DB SANITIZERS, RBAC SYNC, & BANK RECONCILIATION
+// -------------------------------------------------------------
+console.log("\n27. Pengujian Audit Sanitizers DB, RBAC Sync, & Rekonsiliasi Bank:");
+
+test("27a. sanitizeIngredientRecord Mempertahankan Kemasan, Harga Beli, Lokasi, Kode SKU, & Catatan", () => {
+  const ing = sanitizeIngredientRecord(
+    {
+      id: "ing-uht",
+      code: "SKU-MILK-01",
+      name: "Susu Full Cream UHT",
+      unit: "ml",
+      currentStock: 12000,
+      minStock: 3000,
+      category: "Susu & Dairy",
+      costPerUnit: 19,
+      purchaseUnit: "Karton 12L",
+      conversionFactor: 12000,
+      purchasePrice: 228000,
+      storageLocation: "CHILLER",
+      notes: "Simpan di chiller suhu 4C",
+    },
+    "fallback-id"
+  );
+
+  assert.strictEqual(ing.id, "ing-uht");
+  assert.strictEqual(ing.code, "SKU-MILK-01");
+  assert.strictEqual(ing.purchaseUnit, "Karton 12L");
+  assert.strictEqual(ing.conversionFactor, 12000);
+  assert.strictEqual(ing.purchasePrice, 228000);
+  assert.strictEqual(ing.storageLocation, "CHILLER");
+  assert.strictEqual(ing.notes, "Simpan di chiller suhu 4C");
+});
+
+test("27b. sanitizeEmployeeContractRecord & formatContractForClient Mempertahankan Field Kontrak Lengkap", () => {
+  const saved = sanitizeEmployeeContractRecord(
+    {
+      id: "ctr-1",
+      employeeId: "emp-1",
+      basicSalary: 2500000,
+      mealAllowance: 25000,
+      positionAllowance: 300000,
+      transportAllowance: 20000,
+      alphaDeductionPerDay: 100000,
+      kpiBonusTarget: 500000,
+      workingDaysPerMonth: 26,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "INACTIVE",
+      notes: "Kontrak Tahun 2026",
+    },
+    "fallback-ctr"
+  );
+
+  assert.strictEqual(saved.transportAllowance, 20000);
+  assert.strictEqual(saved.alphaDeductionPerDay, 100000);
+  assert.strictEqual(saved.kpiBonusTarget, 500000);
+  assert.strictEqual(saved.startDate, "2026-01-01");
+  assert.strictEqual(saved.effectiveDate, "2026-01-01");
+  assert.strictEqual(saved.endDate, "2026-12-31");
+  assert.strictEqual(saved.status, "INACTIVE");
+
+  // Fallback legacy DB row without startDate/status
+  const legacyHydrated = formatContractForClient({
+    id: "ctr-old",
+    employeeId: "emp-2",
+    effectiveDate: "2025-06-01",
+    basicSalary: 2200000,
+    mealAllowance: 20000,
+    positionAllowance: 0,
+    workingDaysPerMonth: 26,
+    notes: "",
+  });
+  assert.strictEqual(legacyHydrated.startDate, "2025-06-01");
+  assert.strictEqual(legacyHydrated.status, "ACTIVE");
+
+  const emp = sanitizeEmployeeRecord(
+    {
+      id: "emp-1",
+      username: "bima",
+      name: "Bima",
+      position: "Barista",
+      department: "BAR",
+      employmentType: "TETAP",
+      startDate: "2025-01-01",
+      phone: "08123",
+      email: "bima@julias.id",
+      address: "Jakarta",
+      status: "AKTIF",
+    },
+    "emp-fallback"
+  );
+  assert.strictEqual(emp.email, "bima@julias.id");
+});
+
+test("27c. sanitizePayrollRecordData Mempertahankan Tunjangan Transport, Bonus Target, Potongan Telat, & Tier Leader", () => {
+  const pr = sanitizePayrollRecordData(
+    {
+      id: "pay-1",
+      employeeId: "emp-1",
+      period: "2026-11",
+      basicSalary: 2600000,
+      mealAllowance: 650000,
+      positionAllowance: 400000,
+      rawPositionAllowance: 500000,
+      leaderJobdeskScore: 85,
+      matchedLeaderTier: {
+        id: "lar-2",
+        grade: "Grade B",
+        minScore: 80,
+        maxScore: 89,
+        payoutPercentage: 80,
+        label: "Baik",
+      },
+      transportAllowance: 520000,
+      kpiBonus: 250000,
+      targetBonus: 150000,
+      alphaDeduction: 0,
+      lateDeduction: 45000,
+      lateHours: 1.5,
+      lateDays: 2,
+      overtimePay: 75000,
+      overtimeHours: 2,
+      overtimeRate: 37500,
+      overtimeApproved: true,
+      otherDeductions: 0,
+      grossPay: 4645000,
+      netPay: 4600000,
+      status: "APPROVED",
+    },
+    "pay-fallback"
+  );
+
+  assert.strictEqual(pr.transportAllowance, 520000);
+  assert.strictEqual(pr.targetBonus, 150000);
+  assert.strictEqual(pr.rawPositionAllowance, 500000);
+  assert.strictEqual(pr.leaderJobdeskScore, 85);
+  assert.strictEqual((pr.matchedLeaderTier as any)?.grade, "Grade B");
+  assert.strictEqual(pr.overtimeApproved, true);
+  assert.strictEqual(pr.lateDeduction, 45000);
+  assert.strictEqual(pr.lateHours, 1.5);
+  assert.strictEqual(pr.lateDays, 2);
+});
+
+test("27d. sanitizePurchaseOrderRecord, sanitizeKPIRecordData, & KpiTask/Rule Helpers", () => {
+  const po = sanitizePurchaseOrderRecord(
+    {
+      id: "po-market-1",
+      poNumber: "PO-PASAR-001",
+      supplierId: "market-direct",
+      supplierName: "Pasar Kebayoran",
+      purchaseType: "MARKET",
+      cashAccountId: "cash-drawer-main",
+      notes: "Belanja buah & es batu",
+      totalAmount: 185000,
+      status: "PAID",
+      deliveryStatus: "RECEIVED",
+      items: [],
+    },
+    "po-fallback"
+  );
+  assert.strictEqual(po.supplierName, "Pasar Kebayoran");
+  assert.strictEqual(po.purchaseType, "MARKET");
+  assert.strictEqual(po.cashAccountId, "cash-drawer-main");
+  assert.strictEqual(po.notes, "Belanja buah & es batu");
+
+  const kpi = sanitizeKPIRecordData(
+    {
+      id: "kpi-1",
+      employeeId: "emp-1",
+      month: 11,
+      year: 2026,
+      targets: [{ id: "t1", description: "Speed", weight: 100, score: 92 }],
+      totalScore: 92,
+      kpiBonus: 300000,
+    },
+    "kpi-fallback"
+  );
+  assert.strictEqual(kpi.month, 11);
+  assert.strictEqual(kpi.year, 2026);
+  assert.strictEqual(kpi.quarter, 4);
+  assert.strictEqual(kpi.period, "2026-11");
+
+  const legacyKpi = formatKpiRecordForClient({
+    id: "kpi-old",
+    employeeId: "emp-1",
+    quarter: 2,
+    year: 2026,
+    targets: [],
+    totalScore: 80,
+    kpiBonus: 100000,
+  });
+  assert.strictEqual(legacyKpi.month, 4);
+  assert.strictEqual(legacyKpi.period, "2026-04");
+
+  const task = sanitizeKpiTaskRecord(
+    { id: "kt-1", employeeId: "emp-1", period: "2026-11", taskName: "Kalibrasi", weight: 20, target: 30, realization: 28, score: 18.6 },
+    "kt-fb"
+  );
+  const rule = sanitizeKpiBonusRuleRecord(
+    { id: "kr-1", minScore: 90, maxScore: 100, bonusAmount: 500000, isActive: true },
+    "kr-fb"
+  );
+  assert.strictEqual(task.taskName, "Kalibrasi");
+  assert.strictEqual(rule.bonusAmount, 500000);
+});
+
+test("27e. applyRoleSyncRestrictions Memblokir Role BAR Secara Ketat namun Mengizinkan LEADER Sync Belanja/Stok", () => {
+  const samplePayload = {
+    users: [{ id: "u1" }],
+    settings: { brandName: "Hacked" },
+    payroll_records: [{ id: "p1" }],
+    suppliers: [{ id: "sup1" }],
+    purchase_orders: [{ id: "po1" }],
+    cash_transactions: [{ id: "tx1" }],
+    ingredients: [{ id: "ing1" }],
+    dailyAttendances: [{ id: "da1" }],
+    dailyChecklists: [{ id: "dc1" }],
+  };
+
+  const barFiltered = applyRoleSyncRestrictions("BAR", samplePayload);
+  assert.strictEqual(barFiltered.users, undefined);
+  assert.strictEqual(barFiltered.settings, undefined);
+  assert.strictEqual(barFiltered.payroll_records, undefined);
+  assert.strictEqual(barFiltered.suppliers, undefined);
+  assert.strictEqual(barFiltered.purchase_orders, undefined);
+  assert.strictEqual(barFiltered.cash_transactions, undefined);
+  assert.strictEqual(barFiltered.ingredients, undefined);
+  assert.strictEqual(Array.isArray(barFiltered.dailyAttendances), true);
+  assert.strictEqual(Array.isArray(barFiltered.dailyChecklists), true);
+
+  const leaderFiltered = applyRoleSyncRestrictions("LEADER", samplePayload);
+  assert.strictEqual(leaderFiltered.users, undefined);
+  assert.strictEqual(leaderFiltered.settings, undefined);
+  assert.strictEqual(leaderFiltered.payroll_records, undefined);
+  assert.strictEqual(Array.isArray(leaderFiltered.suppliers), true);
+  assert.strictEqual(Array.isArray(leaderFiltered.purchase_orders), true);
+  assert.strictEqual(Array.isArray(leaderFiltered.cash_transactions), true);
+  assert.strictEqual(Array.isArray(leaderFiltered.ingredients), true);
+  assert.strictEqual(Array.isArray(leaderFiltered.dailyChecklists), true);
+});
+
+test("27f. Rekonsiliasi Bank: Klasifikasi DEBIT Nominal Positif & Matching 1-ke-1 Anti-Dobel", () => {
+  assert.strictEqual(resolveBankStatementType("DEBIT", 150000), "DEBIT");
+  assert.strictEqual(resolveBankStatementType("CREDIT", -50000), "CREDIT");
+  assert.strictEqual(resolveBankStatementType("", -75000), "DEBIT");
+  assert.strictEqual(resolveBankStatementType("", 75000), "CREDIT");
+
+  const sysTxs: CashTransaction[] = [
+    {
+      id: "tx-qris-1",
+      accountId: "bank-bca",
+      type: "CASH_IN",
+      date: "2026-11-20",
+      amount: 100000,
+      description: "Settlement QRIS 1",
+      category: "Penjualan",
+    },
+    {
+      id: "tx-fee-1",
+      accountId: "bank-bca",
+      type: "CASH_OUT",
+      date: "2026-11-20",
+      amount: 25000,
+      description: "Biaya Admin Bank",
+      category: "Biaya Bank",
+    },
+  ];
+
+  let seq = 0;
+  const matched = matchBankStatementLines(
+    [
+      { date: "2026-11-20", description: "QRIS MASUK A", amount: "100000", type: "CREDIT" },
+      { date: "2026-11-20", description: "QRIS MASUK B (Kembar)", amount: "100000", type: "CREDIT" },
+      { date: "2026-11-20", description: "ADM BANK", amount: "25000", type: "DEBIT" },
+    ],
+    sysTxs,
+    "recon-1",
+    () => `line-${++seq}`,
+    "2026-11-20T12:00:00.000Z"
+  );
+
+  assert.strictEqual(matched.length, 3);
+  assert.strictEqual(matched[0].transactionType, "CREDIT");
+  assert.strictEqual(matched[0].isMatched, true);
+  assert.strictEqual(matched[0].matchedTransactionId, "tx-qris-1");
+  // Baris ke-2 nominal kembar Rp 100.000 tidak boleh ikut match ke tx-qris-1 yang sama!
+  assert.strictEqual(matched[1].isMatched, false);
+  assert.strictEqual(matched[1].matchedTransactionId, null);
+  // Baris ke-3 DEBIT nominal positif tetap terbaca DEBIT & match ke CASH_OUT!
+  assert.strictEqual(matched[2].transactionType, "DEBIT");
+  assert.strictEqual(matched[2].isMatched, true);
+  assert.strictEqual(matched[2].matchedTransactionId, "tx-fee-1");
+});
+
+// -------------------------------------------------------------
+// 28. ZONA 1: AUTH, SESI PERANGKAT, RBAC & ISOLASI GEMINI KEY
+// -------------------------------------------------------------
+console.log("\n28. Pengujian Zona 1: Sesi Perangkat, RBAC & Keamanan Pengaturan:");
+
+test("28a. filterVisibleSessionsForUser & canRevokeTargetSession Mengisolasi Sesi Non-Admin", () => {
+  const sessions = [
+    { id: "s-admin", userId: "admin-1", status: "ACTIVE" },
+    { id: "s-kasir-1", userId: "kasir-1", status: "ACTIVE" },
+    { id: "s-kasir-2", userId: "kasir-1", status: "ACTIVE" },
+    { id: "s-fin-1", userId: "fin-1", status: "ACTIVE" },
+  ];
+
+  // Kasir hanya melihat sesinya sendiri
+  const kasirVisible = filterVisibleSessionsForUser(sessions, { id: "kasir-1", role: "KASIR" });
+  assert.deepStrictEqual(kasirVisible.map((s) => s.id), ["s-kasir-1", "s-kasir-2"]);
+
+  // Manager & Super Admin melihat semua sesi
+  const mgrVisible = filterVisibleSessionsForUser(sessions, { id: "mgr-1", role: "MANAGER" });
+  assert.strictEqual(mgrVisible.length, 4);
+
+  // Kasir tidak boleh mencabut sesi milik Finance, hanya boleh sesi miliknya
+  assert.strictEqual(
+    canRevokeTargetSession({ id: "kasir-1", role: "KASIR" }, { userId: "fin-1" }),
+    false
+  );
+  assert.strictEqual(
+    canRevokeTargetSession({ id: "kasir-1", role: "KASIR" }, { userId: "kasir-1" }),
+    true
+  );
+  // Manager boleh mencabut sesi perangkat lain siapa pun
+  assert.strictEqual(
+    canRevokeTargetSession({ id: "mgr-1", role: "MANAGER" }, { userId: "fin-1" }),
+    true
+  );
+});
+
+test("28b. selectSessionsToRevokeOthers Menjaga Scope Per-User vs Privilege Manager/Admin", () => {
+  const sessions = [
+    { id: "s-admin", userId: "admin-1", status: "ACTIVE" },
+    { id: "s-kasir", userId: "kasir-1", status: "ACTIVE" },
+    { id: "s-fin-1", userId: "fin-1", status: "ACTIVE" },
+    { id: "s-fin-2", userId: "fin-1", status: "ACTIVE" },
+    { id: "s-revoked", userId: "fin-1", status: "REVOKED" },
+  ];
+
+  // Finance yang mengklik "Keluarkan Semua Perangkat Lain" hanya memutus sesi miliknya sendiri selain current
+  const finTargets = selectSessionsToRevokeOthers(
+    sessions,
+    { id: "fin-1", role: "FINANCE" },
+    "s-fin-1"
+  );
+  assert.deepStrictEqual(finTargets.map((s) => s.id), ["s-fin-2"]);
+
+  // Manager / Super Admin memutus seluruh perangkat aktif lain yang tampil selain current
+  const adminTargets = selectSessionsToRevokeOthers(
+    sessions,
+    { id: "admin-1", role: "SUPER_ADMIN" },
+    "s-admin"
+  );
+  assert.deepStrictEqual(adminTargets.map((s) => s.id), ["s-kasir", "s-fin-1", "s-fin-2"]);
+});
+
+test("28c. resolveGeminiApiKeyForSave Mencegah Manager Menimpa API Key Super Admin", () => {
+  // Manager menyimpan pengaturan dengan geminiApiKey kosong (karena server mem-mask dari UI Manager)
+  const keptForManager = resolveGeminiApiKeyForSave({
+    role: "MANAGER",
+    incomingKey: "",
+    existingKey: "AIzaSySecretProdKey123",
+    envKey: null,
+  });
+  assert.strictEqual(keptForManager, "AIzaSySecretProdKey123");
+
+  // Super Admin mengubah API key secara sah
+  const updatedBySuperAdmin = resolveGeminiApiKeyForSave({
+    role: "SUPER_ADMIN",
+    incomingKey: "  AIzaSyNewKey999  ",
+    existingKey: "AIzaSySecretProdKey123",
+    envKey: null,
+  });
+  assert.strictEqual(updatedBySuperAdmin, "AIzaSyNewKey999");
+
+  // Nilai masked ("••••...") tidak boleh menimpa key asli meski oleh Super Admin
+  const maskedKept = resolveGeminiApiKeyForSave({
+    role: "SUPER_ADMIN",
+    incomingKey: "•••••••123",
+    existingKey: "AIzaSySecretProdKey123",
+    envKey: null,
+  });
+  assert.strictEqual(maskedKept, "AIzaSySecretProdKey123");
+});
+
+// -------------------------------------------------------------
+// 29. ZONA 2: INVENTORI, STOK OPNAME, MUTASI & RESEP BOM
+// -------------------------------------------------------------
+console.log("\n29. Pengujian Zona 2: Inventori, Stok Opname, Mutasi & Resep:");
+
+test("29a. dedupeRecipesByMenuName Menghapus Duplikat Case-Insensitive & Nama Kosong", () => {
+  const input = [
+    { id: "r1", menuName: "  Kopi Susu Gula Aren ", ingredients: [] },
+    { id: "r2", menuName: "kopi susu gula aren", ingredients: [{ ingredientId: "ing-1", quantity: 18 }] },
+    { id: "r3", menuName: "   ", ingredients: [] },
+    { id: "r4", menuName: "Matcha Latte", ingredients: [{ ingredientId: "ing-2", quantity: 15 }] },
+  ];
+  const result = dedupeRecipesByMenuName(input);
+  assert.strictEqual(result.length, 2);
+  assert.strictEqual(result[0].id, "r2");
+  assert.strictEqual(result[1].id, "r4");
+});
+
+test("29b. recomputeOpnameItemsWithLiveStock Menghitung Ulang Selisih Draf Terhadap Stok Terkini", () => {
+  const draftItems = [
+    { ingredientId: "ing-1", physicalStock: 4200, difference: 0, notes: "Tumpah saat brew" },
+    { ingredientId: "ing-2", physicalStock: 3500, difference: -500, notes: "" },
+  ];
+  // Stok live berubah karena ada PO / penjualan setelah draf dibuat
+  const liveIngredients = [
+    { id: "ing-1", currentStock: 4500, costPerUnit: 250 },
+    { id: "ing-2", currentStock: 3000, costPerUnit: 20 },
+  ];
+  const recomputed = recomputeOpnameItemsWithLiveStock(draftItems, liveIngredients);
+  assert.strictEqual(recomputed[0].systemStock, 4500);
+  assert.strictEqual(recomputed[0].difference, -300);
+  assert.strictEqual(recomputed[0].unitCost, 250);
+  assert.strictEqual(recomputed[0].adjustmentTotalCost, 75000);
+  assert.strictEqual(recomputed[1].systemStock, 3000);
+  assert.strictEqual(recomputed[1].difference, 500);
+  assert.strictEqual(recomputed[1].adjustmentTotalCost, 10000);
+});
+
+test("29c. computeMovementActualQuantityAndCost Menghitung Qty Aktual & Biaya Integer di Mode Kemasan vs Dasar", () => {
+  const baseRes = computeMovementActualQuantityAndCost({
+    quantity: 35,
+    unitMode: "BASE",
+    hasConversion: true,
+    conversionFactor: 1000,
+    costPerUnit: 220,
+  });
+  assert.strictEqual(baseRes.actualQuantity, 35);
+  assert.strictEqual(baseRes.totalCost, 7700);
+
+  // Jika dicatat dalam mode kemasan (mis. 2 Kg kopi = 2000 gr -> 2000 * 220 = Rp 440.000)
+  const purchaseRes = computeMovementActualQuantityAndCost({
+    quantity: 2,
+    unitMode: "PURCHASE",
+    hasConversion: true,
+    conversionFactor: 1000,
+    costPerUnit: 220,
+  });
+  assert.strictEqual(purchaseRes.actualQuantity, 2000);
+  assert.strictEqual(purchaseRes.totalCost, 440000);
+});
+
+test("29d. convertStockInputOnUnitToggle Mengonversi Input Stok Dasar <-> Kemasan Tanpa Lonjakan 1000x", () => {
+  const toPurchase = convertStockInputOnUnitToggle({
+    currentValue: 5000,
+    fromUnit: "BASE",
+    toUnit: "PURCHASE",
+    conversionFactor: 1000,
+  });
+  assert.strictEqual(toPurchase, 5);
+
+  const toBase = convertStockInputOnUnitToggle({
+    currentValue: 2.5,
+    fromUnit: "PURCHASE",
+    toUnit: "BASE",
+    conversionFactor: 1000,
+  });
+  assert.strictEqual(toBase, 2500);
+
+  // Toggle ulang ke unit yang sama tidak mengubah nilai
+  assert.strictEqual(
+    convertStockInputOnUnitToggle({
+      currentValue: 1200,
+      fromUnit: "BASE",
+      toUnit: "BASE",
+      conversionFactor: 1000,
+    }),
+    1200
+  );
+});
+
+test("29e. validateRecipeSubmission & resolveDefaultTransferStation Memblokir Duplikat & Memetakan Divisi Baker", () => {
+  const dupMenu = validateRecipeSubmission({
+    menuName: "kopi susu gula aren",
+    ingredients: [{ ingredientId: "ing-1", quantity: 18 }],
+    existingRecipes: [{ id: "rec-1", menuName: "Kopi Susu Gula Aren" }],
+    editingRecipeId: null,
+  });
+  assert.strictEqual(dupMenu.ok, false);
+
+  // Edit diri sendiri diperbolehkan
+  const selfEdit = validateRecipeSubmission({
+    menuName: "Kopi Susu Gula Aren",
+    ingredients: [{ ingredientId: "ing-1", quantity: 20 }],
+    existingRecipes: [{ id: "rec-1", menuName: "Kopi Susu Gula Aren" }],
+    editingRecipeId: "rec-1",
+  });
+  assert.strictEqual(selfEdit.ok, true);
+
+  // Bahan baku duplikat dalam satu resep ditolak
+  const dupIng = validateRecipeSubmission({
+    menuName: "Menu Baru",
+    ingredients: [
+      { ingredientId: "ing-1", quantity: 10 },
+      { ingredientId: "ing-1", quantity: 15 },
+    ],
+    existingRecipes: [],
+  });
+  assert.strictEqual(dupIng.ok, false);
+
+  // Baker dipetakan ke BAKERY (bukan "BAKER" yang tidak ada di opsi stasiun)
+  assert.strictEqual(
+    resolveDefaultTransferStation({ ingredientStorageLocation: undefined, userDivision: "BAKER" }),
+    "BAKERY"
+  );
+  // Jika bahan punya storageLocation valid, ikuti lokasi bahan
+  assert.strictEqual(
+    resolveDefaultTransferStation({ ingredientStorageLocation: "CHILLER", userDivision: "BAR" }),
+    "CHILLER"
+  );
+});
+
+// -------------------------------------------------------------
+// 30. ZONA 3: KALKULATOR HPP, MANAJEMEN MENU & BATCH PREP
+// -------------------------------------------------------------
+console.log("\n30. Pengujian Zona 3: Kalkulator HPP, Manajemen Menu & Batch Prep:");
+
+test("30a. splitRecipeItemsAndPackaging Memisahkan Kemasan & Menggabungkan Duplikat Agar HPP Tidak Ganda", () => {
+  const mockIngs = [
+    { id: "ing-bean", name: "Espresso Beans", unit: "gr", costPerUnit: 250, category: "Biji Kopi" },
+    { id: "ing-cup", name: "Cup Plastic 16oz", unit: "pcs", costPerUnit: 700, category: "Packaging & Cup" },
+  ];
+  const rawRecipe = JSON.stringify([
+    { ingredientId: "ing-bean", quantity: 10 },
+    { ingredientId: "ing-bean", quantity: 8 },
+    { ingredientId: "ing-cup", quantity: 1 },
+  ]);
+  const split = splitRecipeItemsAndPackaging({
+    rawRecipe,
+    ingredients: mockIngs,
+    isPackagingCheck: (ing) => ing.category === "Packaging & Cup",
+  });
+  assert.strictEqual(split.materialItems.length, 1);
+  assert.strictEqual(split.materialItems[0].quantity, 18);
+  assert.deepStrictEqual(split.packagingIngredientIds, ["ing-cup"]);
+});
+
+test("30b. computeSignedMarginMetrics Mempertahankan Laba Rugi Negatif Saat HPP Melebihi Harga Jual", () => {
+  const loss = computeSignedMarginMetrics(15000, 18500);
+  assert.strictEqual(loss.grossProfit, -3500);
+  assert.strictEqual(loss.isLoss, true);
+  assert.ok(loss.grossMarginPercent < 0);
+
+  const profit = computeSignedMarginMetrics(25000, 8000);
+  assert.strictEqual(profit.grossProfit, 17000);
+  assert.strictEqual(profit.isLoss, false);
+  assert.strictEqual(profit.foodCostPercent, 32);
+});
+
+test("30c. recalculateVariantFromLiveIngredients Mengikuti Kenaikan Maupun Penurunan Harga Kemasan & Resep String JSON", () => {
+  const mockIngs = [
+    { id: "ing-bean", name: "Espresso Beans", costPerUnit: 250, category: "Biji Kopi" },
+    { id: "ing-cup", name: "Cup Plastic 16oz", costPerUnit: 500, category: "Packaging & Cup" }, // turun dari 900 -> 500
+  ];
+  const variant = {
+    id: "v1",
+    price: 25000,
+    packagingCost: 900,
+    wastagePercent: 0,
+    overheadPercent: 0,
+    estimatedHpp: 5400,
+    recipe: [],
+  };
+  const fallbackJson = JSON.stringify([
+    { ingredientId: "ing-bean", quantity: 18 }, // 4500
+    { ingredientId: "ing-cup", quantity: 1 }, // 500
+  ]);
+  const res = recalculateVariantFromLiveIngredients({
+    variant,
+    fallbackRecipe: fallbackJson,
+    ingredients: mockIngs,
+    isPackagingCheck: (ing) => ing.category === "Packaging & Cup",
+  });
+  assert.strictEqual(res.changed, true);
+  assert.strictEqual(res.updatedVariant.packagingCost, 500);
+  assert.strictEqual(res.updatedVariant.estimatedHpp, 5000);
+  assert.strictEqual(res.updatedVariant.recipe.length, 2);
+});
+
+test("30d. validateBatchPrepSubmission Menolak Yield Nol, Kosong & Self-Reference Serta Menggabungkan Bahan Duplikat", () => {
+  const zeroYield = validateBatchPrepSubmission({
+    name: "Gula Aren Cair",
+    targetIngredientName: "Gula Aren Cair",
+    yieldQuantity: 0,
+    ingredients: [{ ingredientId: "ing-1", quantity: 500 }],
+  });
+  assert.strictEqual(zeroYield.ok, false);
+
+  const selfRef = validateBatchPrepSubmission({
+    name: "Gula Aren Cair",
+    targetIngredientId: "ing-aren-cair",
+    targetIngredientName: "Gula Aren Cair",
+    yieldQuantity: 1000,
+    ingredients: [{ ingredientId: "ing-aren-cair", quantity: 200 }],
+  });
+  assert.strictEqual(selfRef.ok, false);
+
+  const validDup = validateBatchPrepSubmission({
+    name: "Gula Aren Cair",
+    targetIngredientId: "ing-aren-cair",
+    targetIngredientName: "Gula Aren Cair",
+    yieldQuantity: 1000,
+    ingredients: [
+      { ingredientId: "ing-gula", quantity: 400 },
+      { ingredientId: "ing-gula", quantity: 100 },
+    ],
+  });
+  assert.strictEqual(validDup.ok, true);
+  if (validDup.ok) {
+    assert.deepStrictEqual(validDup.mergedIngredients, [{ ingredientId: "ing-gula", quantity: 500 }]);
+  }
+});
+
+test("30e. resolveDivisionStorageLocation Memetakan Divisi BAR, KITCHEN & BAKER ke Lokasi Stok Tepat", () => {
+  assert.strictEqual(resolveDivisionStorageLocation("BAR"), "BAR");
+  assert.strictEqual(resolveDivisionStorageLocation("KITCHEN"), "KITCHEN");
+  assert.strictEqual(resolveDivisionStorageLocation("BAKER"), "BAKERY");
+});
+
+// -------------------------------------------------------------
+// 31. AUDIT ZONA 4 (SUPPLIER, PO, BELANJA PASAR & HUTANG DAGANG)
+// -------------------------------------------------------------
+console.log("\n31. Audit Zona 4 (Supplier, Purchase Order & Hutang Dagang):");
+
+test("31a. getLocalPeriodFromTimestamp & addDaysToLocalDate Akurat di Batas Hari WITA & Pergantian Bulan", () => {
+  assert.strictEqual(
+    getLocalPeriodFromTimestamp("2026-10-31T22:30:00.000Z"),
+    "2026-11",
+    "22:30 UTC adalah 06:30 WITA tanggal 1 bulan berikutnya (2026-11)"
+  );
+  assert.strictEqual(getLocalPeriodFromTimestamp("2026-10-15"), "2026-10");
+  assert.strictEqual(getLocalPeriodFromTimestamp("2026-10"), "2026-10");
+  assert.strictEqual(addDaysToLocalDate("2026-10-28", 7), "2026-11-04");
+  assert.strictEqual(addDaysToLocalDate("2026-12-25", 14), "2027-01-08");
+});
+
+test("31b. computeDueDateStatus Selaras dengan Filter <= 7 Hari, Jatuh Tempo Hari Ini & Lewat Tempo", () => {
+  const overdue = computeDueDateStatus("2026-11-22", "2026-11-24");
+  assert.strictEqual(overdue.variant, "overdue");
+  assert.strictEqual(overdue.days, -2);
+
+  const dueToday = computeDueDateStatus("2026-11-24", "2026-11-24");
+  assert.strictEqual(dueToday.variant, "due_today");
+  assert.strictEqual(dueToday.days, 0);
+
+  const dueSoon5 = computeDueDateStatus("2026-11-29", "2026-11-24");
+  assert.strictEqual(dueSoon5.variant, "due_soon");
+  assert.strictEqual(dueSoon5.days, 5);
+
+  const normal10 = computeDueDateStatus("2026-12-04", "2026-11-24");
+  assert.strictEqual(normal10.variant, "normal");
+  assert.strictEqual(normal10.days, 10);
+
+  const empty = computeDueDateStatus(undefined, "2026-11-24");
+  assert.strictEqual(empty.variant, "default");
+});
+
+test("31c. validateSupplierSubmission Menolak Kosong/Duplikat & Membersihkan Input Opsional", () => {
+  const existing = [{ id: "sup-1", name: "PT Kopi Nusantara" }];
+
+  const emptyName = validateSupplierSubmission({
+    name: "   ",
+    contact: "08123",
+    existingSuppliers: existing,
+  });
+  assert.strictEqual(emptyName.ok, false);
+
+  const missingContact = validateSupplierSubmission({
+    name: "CV Susu Segar",
+    contact: "  ",
+    existingSuppliers: existing,
+  });
+  assert.strictEqual(missingContact.ok, false);
+
+  const dupName = validateSupplierSubmission({
+    name: " pt kopi nusantara ",
+    contact: "0812999",
+    existingSuppliers: existing,
+  });
+  assert.strictEqual(dupName.ok, false);
+
+  const selfEdit = validateSupplierSubmission({
+    name: "PT Kopi Nusantara",
+    contact: "0812999888",
+    picName: "  ",
+    address: "",
+    notes: " TOP 14 hari ",
+    existingSuppliers: existing,
+    editingId: "sup-1",
+  });
+  assert.strictEqual(selfEdit.ok, true);
+  if ("data" in selfEdit) {
+    assert.strictEqual(selfEdit.data.picName, "-");
+    assert.strictEqual(selfEdit.data.address, "-");
+    assert.strictEqual(selfEdit.data.notes, "TOP 14 hari");
+  }
+});
+
+test("31d. validatePoCheckoutInput Memvalidasi Item, Total > 0, Supplier & Akun Kas Secara Ketat", () => {
+  const baseItem = {
+    productId: "ing-1",
+    quantity: 2,
+    unitPrice: 120000,
+    conversionFactor: 1000,
+    subtotal: 240000,
+  };
+
+  assert.strictEqual(
+    validatePoCheckoutInput({
+      mode: "DISTRIBUTOR",
+      paymentMethod: "CASH",
+      supplierId: "sup-1",
+      cashAccountId: "acc-1",
+      items: [],
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validatePoCheckoutInput({
+      mode: "DISTRIBUTOR",
+      paymentMethod: "CASH",
+      supplierId: "sup-1",
+      cashAccountId: "acc-1",
+      items: [{ ...baseItem, conversionFactor: 0 }],
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validatePoCheckoutInput({
+      mode: "DISTRIBUTOR",
+      paymentMethod: "CASH",
+      supplierId: "sup-1",
+      cashAccountId: "acc-1",
+      items: [{ ...baseItem, unitPrice: 0, subtotal: 0 }],
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validatePoCheckoutInput({
+      mode: "DISTRIBUTOR",
+      paymentMethod: "TEMPO",
+      supplierId: "",
+      items: [baseItem],
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validatePoCheckoutInput({
+      mode: "MARKET",
+      paymentMethod: "CASH",
+      cashAccountId: "",
+      items: [baseItem],
+    }).ok,
+    false
+  );
+
+  const validTempo = validatePoCheckoutInput({
+    mode: "DISTRIBUTOR",
+    paymentMethod: "TEMPO",
+    supplierId: "sup-1",
+    items: [{ ...baseItem, quantity: 1.5, unitPrice: 55001, subtotal: 82502 }],
+  });
+  assert.strictEqual(validTempo.ok, true);
+  if ("totalAmount" in validTempo) {
+    assert.strictEqual(validTempo.totalAmount, 82502);
+  }
+});
+
+test("31e. validatePoPaymentInput Mencegah Overpay, Pembayaran Ulang Lunas & Periode Ditutup", () => {
+  assert.strictEqual(
+    validatePoPaymentInput({
+      poStatus: "PAID",
+      totalAmount: 500000,
+      amountPaid: 500000,
+      payAmount: 100000,
+      cashAccountId: "acc-1",
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validatePoPaymentInput({
+      poStatus: "UNPAID",
+      totalAmount: 500000,
+      amountPaid: 0,
+      payAmount: 100000,
+      cashAccountId: "acc-1",
+      payDateYmd: "2026-10-15",
+      isPeriodClosed: true,
+    }).ok,
+    false
+  );
+
+  const partial = validatePoPaymentInput({
+    poStatus: "UNPAID",
+    totalAmount: 500000,
+    amountPaid: 0,
+    payAmount: 200000,
+    cashAccountId: "acc-1",
+    payDateYmd: "2026-11-24",
+    isPeriodClosed: false,
+  });
+  assert.strictEqual(partial.ok, true);
+  if ("nextStatus" in partial) {
+    assert.strictEqual(partial.effectiveAmount, 200000);
+    assert.strictEqual(partial.newAmountPaid, 200000);
+    assert.strictEqual(partial.nextStatus, "PARTIAL");
+    assert.strictEqual(getLocalDateString(new Date(partial.payDateIso)), "2026-11-24");
+  }
+
+  const overpayClamped = validatePoPaymentInput({
+    poStatus: "PARTIAL",
+    totalAmount: 500000,
+    amountPaid: 200000,
+    payAmount: 900000,
+    cashAccountId: "acc-1",
+    payDateYmd: "2026-11-24",
+  });
+  assert.strictEqual(overpayClamped.ok, true);
+  if ("nextStatus" in overpayClamped) {
+    assert.strictEqual(overpayClamped.effectiveAmount, 300000);
+    assert.strictEqual(overpayClamped.newAmountPaid, 500000);
+    assert.strictEqual(overpayClamped.nextStatus, "PAID");
+  }
+});
+
+// -------------------------------------------------------------
+// 32. AUDIT ZONA 5 (PENJUALAN, REKAP HARIAN, ARSIP POS & PMIX)
+// -------------------------------------------------------------
+console.log("\n32. Audit Zona 5 (Penjualan, Rekap Harian, Arsip POS & Analitik Produk):");
+
+test("32a. mapSalesRows & parseDateToIso Menolak Baris TOTAL/Qty Nol & Mendukung Serial Excel + DD/MM/YYYY", () => {
+  assert.strictEqual(parseDateToIso(46349), "2026-11-23");
+  assert.strictEqual(parseDateToIso("23/11/2026"), "2026-11-23");
+
+  const mapped = mapSalesRows(
+    [
+      { Tanggal: "2026-11-23", "Nama Menu": "Cafe Latte", Quantity: 4, "Total Penjualan": 100000 },
+      { Tanggal: "2026-11-23", "Nama Menu": "Kopi Void", Quantity: 0, "Total Penjualan": 25000 },
+      { Tanggal: "2026-11-23", "Nama Menu": "Grand Total", Quantity: 4, "Total Penjualan": 100000 },
+    ],
+    ["Cafe Latte"]
+  );
+
+  assert.strictEqual(mapped.rows.length, 1);
+  assert.strictEqual(mapped.rows[0].menuName, "Cafe Latte");
+  assert.strictEqual(mapped.skippedRows, 2);
+});
+
+test("32b. calculateVariantUnitHpp Mengikuti Penurunan Harga Kemasan & computeProductSalesAnalytics Menormalisasi Rentang Terbalik", () => {
+  const droppedIngs: any[] = [
+    { id: "ing-bean", name: "Espresso Beans", category: "Biji Kopi", unit: "gr", costPerUnit: 250, currentStock: 5000 },
+    { id: "ing-cup", name: "Cup Plastik 16oz", category: "Packaging & Cup", unit: "pcs", costPerUnit: 500, currentStock: 100 },
+  ];
+  const prodList: any[] = [
+    {
+      id: "prod-latte",
+      name: "Cafe Latte",
+      category: "COFFEE",
+      division: "BAR",
+      isActive: true,
+      variants: [
+        {
+          id: "v1",
+          productId: "prod-latte",
+          name: "Iced 16oz",
+          price: 25000,
+          packagingCost: 900,
+          estimatedHpp: 5400,
+          isAvailable: true,
+          recipe: [
+            { ingredientId: "ing-bean", quantity: 18 }, // 4500
+            { ingredientId: "ing-cup", quantity: 1 }, // 500
+          ],
+        },
+      ],
+    },
+  ];
+  const hppInfo = calculateVariantUnitHpp(prodList[0].variants[0], prodList[0], [], droppedIngs);
+  assert.strictEqual(hppInfo.unitHpp, 5000);
+
+  const swapped = computeProductSalesAnalytics({
+    salesTransactions: [
+      { id: "s1", date: "2026-11-20", menuName: "Cafe Latte - Iced 16oz", quantitySold: 2, totalPrice: 50000, importLogId: "l1" },
+    ],
+    dailySalesRecaps: [],
+    products: prodList,
+    recipes: [],
+    ingredients: droppedIngs,
+    dateMode: "DATE_RANGE",
+    singleDate: "2026-11-20",
+    startDate: "2026-11-24",
+    endDate: "2026-11-18",
+  });
+  assert.strictEqual(swapped.filteredTransactions.length, 1);
+  assert.strictEqual(swapped.kpiSummary.totalQty, 2);
+});
+
+test("32c. extractWitaHour & aggregatePosOrderTopItems Membaca Jam WITA & Menu Name Varian POS Secara Akurat", () => {
+  assert.strictEqual(extractWitaHour("2026-11-24T01:30:00.000Z"), 9);
+
+  const topItems = aggregatePosOrderTopItems([
+    {
+      status: "PAID",
+      items: [
+        { menuName: "Kopi Susu Gula Aren", variantName: "Iced 16oz", quantity: 3, subtotal: 66000 },
+        { menuName: "Croissant Butter", variantName: "Regular", quantity: 2, subtotal: 48000 },
+      ],
+    },
+    {
+      status: "VOID",
+      items: [{ menuName: "Kopi Susu Gula Aren", variantName: "Iced 16oz", quantity: 99, subtotal: 999999 }],
+    },
+  ]);
+
+  assert.strictEqual(topItems.length, 2);
+  assert.strictEqual(topItems[0].name, "Kopi Susu Gula Aren (Iced 16oz)");
+  assert.strictEqual(topItems[0].quantity, 3);
+  assert.strictEqual(topItems[1].name, "Croissant Butter");
+});
+
+test("32d. validateDailySalesRecapSubmission Menolak Nol, Tutup Buku & Duplikat Tanggal+Shift", () => {
+  const existing = [{ id: "rec-1", date: "2026-11-24", shift: "PAGI" }];
+
+  assert.strictEqual(
+    validateDailySalesRecapSubmission({
+      date: "2026-11-24",
+      shift: "SORE",
+      cashAmount: 0,
+      qrisAmount: 0,
+      edcAmount: 0,
+      transferAmount: 0,
+      onlineDeliveryAmount: 0,
+      existingRecaps: existing,
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validateDailySalesRecapSubmission({
+      date: "2026-10-15",
+      shift: "ALL",
+      cashAmount: 500000,
+      qrisAmount: 0,
+      edcAmount: 0,
+      transferAmount: 0,
+      onlineDeliveryAmount: 0,
+      isPeriodClosed: true,
+      existingRecaps: existing,
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validateDailySalesRecapSubmission({
+      date: "2026-11-24",
+      shift: "PAGI",
+      cashAmount: 500000,
+      qrisAmount: 0,
+      edcAmount: 0,
+      transferAmount: 0,
+      onlineDeliveryAmount: 0,
+      existingRecaps: existing,
+    }).ok,
+    false
+  );
+
+  const selfEdit = validateDailySalesRecapSubmission({
+    date: "2026-11-24",
+    shift: "PAGI",
+    cashAmount: 500000.4,
+    qrisAmount: 250000.6,
+    edcAmount: 0,
+    transferAmount: 100000,
+    onlineDeliveryAmount: 0,
+    existingRecaps: existing,
+    editingId: "rec-1",
+  });
+  assert.strictEqual(selfEdit.ok, true);
+  if ("totalAmount" in selfEdit) {
+    assert.strictEqual(selfEdit.totalAmount, 850001);
+    assert.strictEqual(selfEdit.nonCashTotal, 350001);
+  }
+});
+
+test("32e. validateCashDepositSubmission Menolak Akun Kembar, Nominal <= 0 & Tutup Buku", () => {
+  assert.strictEqual(
+    validateCashDepositSubmission({
+      fromAccountId: "acc-1",
+      toAccountId: "acc-1",
+      amount: 1000000,
+      date: "2026-11-24",
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validateCashDepositSubmission({
+      fromAccountId: "acc-kas",
+      toAccountId: "acc-bca",
+      amount: 0,
+      date: "2026-11-24",
+    }).ok,
+    false
+  );
+
+  assert.strictEqual(
+    validateCashDepositSubmission({
+      fromAccountId: "acc-kas",
+      toAccountId: "acc-bca",
+      amount: 1000000,
+      date: "2026-10-15",
+      isPeriodClosed: true,
+    }).ok,
+    false
+  );
+
+  const valid = validateCashDepositSubmission({
+    fromAccountId: "acc-kas",
+    toAccountId: "acc-bca",
+    amount: 1500000.4,
+    date: "2026-11-24",
+  });
+  assert.strictEqual(valid.ok, true);
+  if ("amount" in valid) {
+    assert.strictEqual(valid.amount, 1500000);
+  }
+});
+
+// -------------------------------------------------------------
+// 33. ZONA 6: ARUS KAS, KATEGORI, REKONSILIASI BANK & LAPORAN
+// -------------------------------------------------------------
+console.log("\n33. Pengujian Zona 6: Arus Kas, Kategori, Rekonsiliasi Bank & Laporan Keuangan:");
+
+test("33a. parseBankStatementAmount, parseBankStatementCsv & matchBankStatementLines Mendukung Format Bank Indonesia & Quotes", () => {
+  assert.strictEqual(parseBankStatementAmount("Rp 150.000"), 150000);
+  assert.strictEqual(parseBankStatementAmount("1.250.000,00"), 1250000);
+  assert.strictEqual(parseBankStatementAmount("(25.000)"), -25000);
+  assert.strictEqual(parseBankStatementAmount("150,000.00"), 150000);
+
+  const csvWithBomAndSemicolon =
+    "\uFEFFdate;description;amount;type\n" +
+    '2026-11-20;"Transfer QRIS, Settlement Pagi";"Rp 150.000";CREDIT\n' +
+    '2026-11-20;"Biaya Admin; Bulanan";"(25.000)";DEBIT\n';
+  const parsed = parseBankStatementCsv(csvWithBomAndSemicolon);
+  assert.strictEqual(parsed.length, 2);
+  assert.strictEqual(parsed[0].description, "Transfer QRIS, Settlement Pagi");
+  assert.strictEqual(parsed[0].amount, "Rp 150.000");
+
+  const sysTxs: CashTransaction[] = [
+    {
+      id: "tx-in-1",
+      accountId: "bank-bca",
+      type: "CASH_IN",
+      date: "2026-11-20T10:00:00+08:00",
+      amount: 150000,
+      description: "Settlement QRIS",
+      category: "Penjualan",
+    },
+    {
+      id: "tx-out-1",
+      accountId: "bank-bca",
+      type: "CASH_OUT",
+      date: "2026-11-20T12:00:00+08:00",
+      amount: 25000,
+      description: "Admin Bank",
+      category: "Biaya Bank",
+    },
+    {
+      id: "tx-legacy-in",
+      accountId: "bank-bca",
+      type: "IN" as any,
+      date: "2026-11-21T09:00:00+08:00",
+      amount: 50000,
+      description: "Setoran Tunai",
+      category: "Penjualan",
+    },
+  ];
+
+  let idx = 0;
+  const matched = matchBankStatementLines(
+    [
+      ...parsed,
+      { date: "2026-11-21", description: "Setoran Tunai", amount: "Rp 50.000", type: "CREDIT" },
+    ],
+    sysTxs,
+    "rec-33a",
+    () => `ln-${++idx}`,
+    "2026-11-21T12:00:00+08:00"
+  );
+  assert.strictEqual(matched.length, 3);
+  assert.strictEqual(matched[0].amount, 150000);
+  assert.strictEqual(matched[0].isMatched, true);
+  assert.strictEqual(matched[0].matchedTransactionId, "tx-in-1");
+  assert.strictEqual(matched[1].transactionType, "DEBIT");
+  assert.strictEqual(matched[1].amount, 25000);
+  assert.strictEqual(matched[1].isMatched, true);
+  assert.strictEqual(matched[1].matchedTransactionId, "tx-out-1");
+  assert.strictEqual(matched[2].isMatched, true);
+  assert.strictEqual(matched[2].matchedTransactionId, "tx-legacy-in");
+});
+
+test("33b. filterExpenseCategoryTree & parseImportedExpenseCategories Menjaga Hirarki & Validasi Impor", () => {
+  const categories: ExpenseCategory[] = [
+    {
+      id: "cat-ops",
+      name: "Operasional",
+      type: "PENGELUARAN",
+      parentId: null,
+      color: "#1b2cc0",
+      icon: "wallet",
+      isActive: true,
+      sortOrder: 2,
+    },
+    {
+      id: "cat-ops-listrik",
+      name: "Listrik & Air",
+      type: "UTILITAS",
+      parentId: "cat-ops",
+      color: "#0284c7",
+      icon: "zap",
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-ops-sewa",
+      name: "Sewa Tempat",
+      type: "PENGELUARAN",
+      parentId: "cat-ops",
+      color: "#1b2cc0",
+      icon: "home",
+      isActive: true,
+      sortOrder: 2,
+    },
+  ];
+
+  const { tree, autoExpandIds } = filterExpenseCategoryTree(categories, "listrik", "ALL");
+  assert.strictEqual(tree.length, 1);
+  assert.strictEqual(tree[0].id, "cat-ops");
+  assert.strictEqual(tree[0].children?.length, 1);
+  assert.strictEqual(tree[0].children?.[0].id, "cat-ops-listrik");
+  assert.strictEqual(autoExpandIds["cat-ops"], true);
+
+  const parsed = parseImportedExpenseCategories(
+    [
+      { "Nama Kategori": "Operasional", Tipe: "PENGELUARAN", Warna: "#000000", Icon: "tag" },
+      { "Nama Kategori": "Biaya Kemasan Baru", Tipe: "INVALID_TYPE", Warna: "bukan-hex", Icon: "bad-icon" },
+      { "Nama Kategori": "  ", Tipe: "HRD", Warna: "#059669", Icon: "users" },
+      { "ID_SISTEM (JANGAN DIUBAH)": "cat-ops-sewa", "Nama Kategori": "Sewa Ruko", Tipe: "PENGELUARAN", Warna: "#059669", Icon: "home" },
+    ],
+    categories,
+    ["tag", "wallet", "zap", "home", "users"]
+  );
+
+  assert.strictEqual(parsed.toCreate.length, 1);
+  assert.strictEqual(parsed.toCreate[0].name, "Biaya Kemasan Baru");
+  assert.strictEqual(parsed.toCreate[0].type, "LAINNYA");
+  assert.strictEqual(parsed.toCreate[0].color, "#1b2cc0");
+  assert.strictEqual(parsed.toCreate[0].icon, "tag");
+  assert.strictEqual(parsed.toUpdate.length, 1);
+  assert.strictEqual(parsed.toUpdate[0].name, "Sewa Ruko");
+  assert.strictEqual(parsed.skipped, 2);
+});
+
+test("33c. computeBudgetVsActual Menggulung Sub-Kategori ke Induk Tanpa Double-Count & Hormati WITA", () => {
+  const categories: ExpenseCategory[] = [
+    {
+      id: "cat-ops",
+      name: "Operasional",
+      type: "PENGELUARAN",
+      parentId: null,
+      color: "#1b2cc0",
+      icon: "wallet",
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-sub-kebersihan",
+      name: "Kebersihan",
+      type: "PENGELUARAN",
+      parentId: "cat-ops",
+      color: "#0284c7",
+      icon: "tag",
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-sub-listrik",
+      name: "Listrik PLN",
+      type: "UTILITAS",
+      parentId: "cat-ops",
+      color: "#0284c7",
+      icon: "zap",
+      isActive: true,
+      sortOrder: 2,
+    },
+  ];
+
+  const budgets: Budget[] = [
+    {
+      id: "b-ops",
+      categoryId: "cat-ops",
+      period: "2026-11",
+      amount: 1000000,
+      notes: null,
+      createdAt: "2026-11-01",
+    },
+    {
+      id: "b-listrik",
+      categoryId: "cat-sub-listrik",
+      period: "2026-11",
+      amount: 500000,
+      notes: null,
+      createdAt: "2026-11-01",
+    },
+  ];
+
+  const txs: CashTransaction[] = [
+    // Masuk ke 2026-11-01 01:00 WITA (masih Nov di WITA walau 2026-10-31T17:00:00Z di UTC)
+    {
+      id: "tx-1",
+      accountId: "kas-1",
+      type: "CASH_OUT",
+      date: "2026-10-31T17:00:00.000Z",
+      amount: 300000,
+      description: "Sabun & Kebersihan",
+      category: "Kebersihan",
+      categoryId: null,
+    },
+    {
+      id: "tx-2",
+      accountId: "kas-1",
+      type: "CASH_OUT",
+      date: "2026-11-10T10:00:00+08:00",
+      amount: 600000,
+      description: "Token Listrik",
+      category: "Listrik PLN",
+      categoryId: "cat-sub-listrik",
+    },
+    {
+      id: "tx-transfer",
+      accountId: "kas-1",
+      type: "CASH_OUT",
+      date: "2026-11-10T11:00:00+08:00",
+      amount: 500000,
+      description: "Transfer Antar Kas",
+      category: "Transfer Antar Kas",
+      referenceId: "TRANSFER:1",
+    },
+  ];
+
+  const rows = computeBudgetVsActual({
+    period: "2026-11",
+    budgets,
+    cashTransactions: txs,
+    expenseCategories: categories,
+  });
+
+  // Listrik punya anggaran sendiri (120% overbudget -> urutan teratas), Kebersihan menggulung ke Operasional
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].categoryId, "cat-sub-listrik");
+  assert.strictEqual(rows[0].actualAmount, 600000);
+  assert.strictEqual(rows[0].variance, -100000);
+  assert.strictEqual(rows[1].categoryId, "cat-ops");
+  assert.strictEqual(rows[1].actualAmount, 300000);
+  assert.strictEqual(rows[1].variance, 700000);
+});
+
+test("33d. filterByDateRange Aman Zona Waktu WITA & Rentang Tanggal Terbalik", () => {
+  const items = [
+    { id: "before", date: "2026-10-31T15:30:00.000Z" }, // 2026-10-31 23:30 WITA
+    { id: "inside-early", date: "2026-10-31T17:00:00.000Z" }, // 2026-11-01 01:00 WITA
+    { id: "inside-late", date: "2026-11-15" },
+    { id: "after", date: "2026-11-16T00:30:00+08:00" },
+  ];
+
+  const filtered = filterByDateRange(items, "2026-11-15", "2026-11-01");
+  assert.deepStrictEqual(
+    filtered.map((x) => x.id),
+    ["inside-early", "inside-late"]
+  );
+});
+
+test("33e. validateCashPeriodAccess Menjaga Periode Tutup Buku Tujuan & Asal", () => {
+  const closed = [
+    { id: "cp-1", period: "2026-10", closedAt: "2026-11-01", closedBy: "Finance" },
+  ];
+
+  const closedTarget = validateCashPeriodAccess({
+    date: "2026-10-31T18:00:00+08:00",
+    closedPeriods: closed,
+  });
+  assert.strictEqual(closedTarget.ok, false);
+
+  const closedOrig = validateCashPeriodAccess({
+    date: "2026-11-05",
+    originalDate: "2026-10-20T09:00:00+08:00",
+    closedPeriods: closed,
+  });
+  assert.strictEqual(closedOrig.ok, false);
+
+  const allowed = validateCashPeriodAccess({
+    date: "2026-10-31T17:00:00.000Z", // 2026-11-01 01:00 WITA!
+    closedPeriods: closed,
+  });
+  assert.strictEqual(allowed.ok, true);
+});
+
+test("33f. resolveCategoryMatchForImport Mencocokkan Kategori Secara Case-Insensitive & Hierarki", () => {
+  const categories: ExpenseCategory[] = [
+    {
+      id: "cat-bahan-baku",
+      name: "Bahan Baku",
+      type: "BAHAN_BAKU",
+      parentId: null,
+      color: "#d97706",
+      icon: "package",
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-kopi",
+      name: "Biji Kopi Espresso",
+      type: "BAHAN_BAKU",
+      parentId: "cat-bahan-baku",
+      color: "#d97706",
+      icon: "coffee",
+      isActive: true,
+      sortOrder: 2,
+    },
+  ];
+
+  const m1 = resolveCategoryMatchForImport("bahan baku > biji kopi espresso", categories);
+  assert.deepStrictEqual(m1, { categoryId: "cat-kopi", category: "Biji Kopi Espresso" });
+
+  const m2 = resolveCategoryMatchForImport("Pos Baru Kustom", categories);
+  assert.deepStrictEqual(m2, { categoryId: null, category: "Pos Baru Kustom" });
+});
+
+// -------------------------------------------------------------
+// 34. PENGUJIAN MODUL HR, ABSENSI, SHIFT & PAYROLL (ZONA 7)
+// -------------------------------------------------------------
+console.log("\n34. Pengujian Modul HR, Absensi, Shift & Payroll (Zona 7):");
+
+test("34a. evaluateClockInLateness & formatWitaTimeHm Menghormati WITA & Toleransi Shift", () => {
+  const onTimeMorning = evaluateClockInLateness({
+    now: new Date("2026-11-24T07:10:00+08:00"),
+    shiftId: "PAGI",
+  });
+  assert.strictEqual(onTimeMorning.status, "HADIR");
+  assert.strictEqual(onTimeMorning.lateMinutes, 0);
+
+  const lateMorning = evaluateClockInLateness({
+    now: new Date("2026-11-24T07:20:00+08:00"),
+    shiftId: "PAGI",
+  });
+  assert.strictEqual(lateMorning.status, "TERLAMBAT");
+  assert.strictEqual(lateMorning.lateMinutes, 20);
+
+  const offShift = evaluateClockInLateness({
+    now: new Date("2026-11-24T14:00:00+08:00"),
+    shiftId: "OFF",
+  });
+  assert.strictEqual(offShift.status, "HADIR");
+  assert.strictEqual(offShift.lateMinutes, 0);
+
+  // Midnight WITA normalization (hindari bug "24:05" di Intl)
+  const midnightIso = "2026-11-24T00:05:00+08:00";
+  assert.strictEqual(formatWitaTimeHm(midnightIso), "00:05");
+  assert.strictEqual(getWitaTimeMinutes(new Date(midnightIso)), 5);
+});
+
+test("34b. buildAttendanceCorrectionUpdate Parsing WITA & Shift Melewati Tengah Malam", () => {
+  const existing: DailyAttendance = {
+    id: "att-overnight-1",
+    employeeId: "emp-1",
+    date: "2026-11-24",
+    status: "ALPHA",
+    clockInTime: null,
+    clockOutTime: null,
+    clockInLocation: null,
+    clockOutLocation: null,
+    clockInPhotoUrl: null,
+    clockOutPhotoUrl: null,
+    notes: "",
+    approvalStatus: "PENDING",
+  };
+
+  const updated = buildAttendanceCorrectionUpdate(
+    existing,
+    {
+      status: "HADIR",
+      clockInTime: "22:00",
+      clockOutTime: "02:00",
+      overtimeApproved: false,
+      reason: "Lupa clock out shift malam event akhir pekan",
+    },
+    "Manager Test"
+  );
+
+  assert.strictEqual(formatWitaTimeHm(updated.clockInTime), "22:00");
+  assert.strictEqual(formatWitaTimeHm(updated.clockOutTime), "02:00");
+  assert.strictEqual(
+    calculateWorkDurationHours(updated.clockInTime, updated.clockOutTime),
+    4
+  );
+  assert.strictEqual(updated.approvalStatus, "APPROVED");
+  assert.strictEqual(updated.isCorrected, true);
+});
+
+test("34c. computeShiftExpectedCash Tanpa Double-Count & Mengabaikan Akun Non-Kasir", () => {
+  const cashTx: CashTransaction[] = [
+    {
+      id: "tx-before",
+      accountId: "cash-1",
+      date: "2026-11-24T07:55:00+08:00",
+      type: "CASH_IN",
+      category: "Penjualan",
+      amount: 999000,
+      description: "Sebelum shift",
+    },
+    {
+      id: "tx-pos-cash",
+      accountId: "cash-1",
+      date: "2026-11-24T09:15:00+08:00",
+      type: "CASH_IN",
+      category: "Penjualan POS (Tunai)",
+      amount: 150000,
+      description: "Order #POS-001",
+      referenceId: "order-1",
+    },
+    {
+      id: "tx-pos-qris",
+      accountId: "bank-1",
+      date: "2026-11-24T09:20:00+08:00",
+      type: "CASH_IN",
+      category: "Penjualan POS (QRIS)",
+      amount: 250000,
+      description: "Order #POS-002",
+      referenceId: "order-2",
+    },
+    {
+      id: "tx-topup-laci",
+      accountId: "cash-1",
+      date: "2026-11-24T10:00:00+08:00",
+      type: "CASH_IN",
+      category: "Modal Tambahan",
+      amount: 50000,
+      description: "Tambah kembalian",
+    },
+    {
+      id: "tx-out-laci",
+      accountId: "cash-1",
+      date: "2026-11-24T11:30:00+08:00",
+      type: "CASH_OUT",
+      category: "Operasional",
+      amount: 75000,
+      description: "Beli es batu darurat",
+    },
+  ];
+
+  const summary = computeShiftExpectedCash({
+    startingCash: 500000,
+    shiftStartTime: "2026-11-24T08:00:00+08:00",
+    cashAccountId: "cash-1",
+    cashTransactions: cashTx,
+  });
+
+  assert.strictEqual(summary.totalSalesCashIn, 150000);
+  assert.strictEqual(summary.totalOtherCashIn, 50000);
+  assert.strictEqual(summary.totalCashOut, 75000);
+  assert.strictEqual(summary.expectedEndingCash, 625000);
+});
+
+test("34d. computePayrollCategoryBreakdown Menjaga Jumlah Porsi Persis Sama Dengan netPay", () => {
+  const slip: PayrollRecord = {
+    id: "pay-34d",
+    employeeId: "emp-1",
+    period: "2026-11",
+    basicSalary: 2000000,
+    mealAllowance: 250000,
+    transportAllowance: 0,
+    positionAllowance: 300000,
+    kpiBonus: 150000,
+    targetBonus: 100000,
+    overtimePay: 50000,
+    alphaDeduction: 100000,
+    lateDeduction: 25000,
+    otherDeductions: 25000,
+    grossPay: 2950000,
+    netPay: 2800000, // termasuk residual Rp 100.000 (misal insentif harian/SOP)
+    status: "APPROVED",
+    paidDate: null,
+    paidVia: null,
+    notes: null,
+    createdBy: "Manager",
+    createdAt: "2026-11-24T00:00:00.000Z",
+  };
+
+  const breakdown = computePayrollCategoryBreakdown(slip);
+  assert.strictEqual(
+    breakdown.netBasicPortion + breakdown.netBonusAllowancePortion,
+    2800000
+  );
+  assert.strictEqual(breakdown.netBasicPortion >= 0, true);
+  assert.strictEqual(breakdown.netBonusAllowancePortion >= 0, true);
+  assert.strictEqual(
+    breakdown.combinedItems.reduce((sum, item) => sum + item.total, 0),
+    2800000
+  );
+});
+
+test("34e. validatePayrollMutation Menjaga Periode Tutup Buku, Immutabilitas PAID & Anti-Cair Ganda", () => {
+  const closedPeriods = [{ period: "2026-10" }];
+
+  // Periode tutup buku ditolak untuk CREATE / UPDATE / PAY
+  const closedCreate = validatePayrollMutation({
+    action: "CREATE",
+    recordPeriod: "2026-10",
+    closedPeriods,
+  });
+  assert.strictEqual(closedCreate.ok, false);
+
+  const closedPayDate = validatePayrollMutation({
+    action: "PAY",
+    recordPeriod: "2026-11",
+    existingStatus: "APPROVED",
+    paymentDatePeriod: "2026-10",
+    closedPeriods,
+  });
+  assert.strictEqual(closedPayDate.ok, false);
+
+  // DRAFT belum boleh dicairkan
+  const draftPay = validatePayrollMutation({
+    action: "PAY",
+    recordPeriod: "2026-11",
+    existingStatus: "DRAFT",
+    closedPeriods,
+  });
+  assert.strictEqual(draftPay.ok, false);
+
+  // Pencairan ganda dicegah lewat existingCashRefIds
+  const duplicatePay = validatePayrollMutation({
+    action: "PAY",
+    recordPeriod: "2026-11",
+    existingStatus: "APPROVED",
+    closedPeriods,
+    existingCashRefIds: ["pay-123"],
+    recordId: "pay-123",
+  });
+  assert.strictEqual(duplicatePay.ok, false);
+
+  // PAID immutable terhadap UPDATE & DELETE
+  assert.strictEqual(
+    validatePayrollMutation({
+      action: "UPDATE",
+      recordPeriod: "2026-11",
+      existingStatus: "PAID",
+      closedPeriods,
+    }).ok,
+    false
+  );
+  assert.strictEqual(
+    validatePayrollMutation({
+      action: "DELETE",
+      recordPeriod: "2026-11",
+      existingStatus: "APPROVED",
+      closedPeriods,
+    }).ok,
+    false
+  );
+
+  // APPROVED di periode terbuka & belum cair -> diizinkan
+  const allowedPay = validatePayrollMutation({
+    action: "PAY",
+    recordPeriod: "2026-11",
+    existingStatus: "APPROVED",
+    paymentDatePeriod: "2026-11",
+    closedPeriods,
+    existingCashRefIds: [],
+    recordId: "pay-123",
+  });
+  assert.strictEqual(allowedPay.ok, true);
+});
+
+test("34f. mergeOfflinePayrollPreservingPaid Melindungi Record PAID Saat Sync Offline", () => {
+  const existing: PayrollRecord[] = [
+    {
+      id: "pay-paid",
+      employeeId: "emp-1",
+      period: "2026-11",
+      basicSalary: 3000000,
+      positionAllowance: 0,
+      mealAllowance: 0,
+      transportAllowance: 0,
+      alphaDeduction: 0,
+      kpiBonus: 0,
+      overtimePay: 0,
+      otherDeductions: 0,
+      grossPay: 3000000,
+      netPay: 3000000,
+      status: "PAID",
+      paidDate: "2026-11-24",
+      paidVia: "cash-1",
+      notes: null,
+      createdBy: "Finance",
+      createdAt: "2026-11-24T00:00:00.000Z",
+    },
+    {
+      id: "pay-draft",
+      employeeId: "emp-2",
+      period: "2026-11",
+      basicSalary: 2000000,
+      positionAllowance: 0,
+      mealAllowance: 0,
+      transportAllowance: 0,
+      alphaDeduction: 0,
+      kpiBonus: 0,
+      overtimePay: 0,
+      otherDeductions: 0,
+      grossPay: 2000000,
+      netPay: 2000000,
+      status: "DRAFT",
+      paidDate: null,
+      paidVia: null,
+      notes: null,
+      createdBy: "Finance",
+      createdAt: "2026-11-24T00:00:00.000Z",
+    },
+  ];
+
+  const incoming: PayrollRecord[] = [
+    {
+      ...existing[0],
+      netPay: 100,
+      status: "DRAFT",
+    },
+    {
+      ...existing[1],
+      netPay: 2250000,
+    },
+    {
+      id: "pay-new",
+      employeeId: "emp-3",
+      period: "2026-11",
+      basicSalary: 1800000,
+      positionAllowance: 0,
+      mealAllowance: 0,
+      transportAllowance: 0,
+      alphaDeduction: 0,
+      kpiBonus: 0,
+      overtimePay: 0,
+      otherDeductions: 0,
+      grossPay: 1800000,
+      netPay: 1800000,
+      status: "DRAFT",
+      paidDate: null,
+      paidVia: null,
+      notes: null,
+      createdBy: "Finance",
+      createdAt: "2026-11-24T00:00:00.000Z",
+    },
+  ];
+
+  const merged = mergeOfflinePayrollPreservingPaid(incoming, existing);
+  assert.strictEqual(merged.length, 3);
+  const keptPaid = merged.find((r) => r.id === "pay-paid");
+  assert.strictEqual(keptPaid?.status, "PAID");
+  assert.strictEqual(keptPaid?.netPay, 3000000);
+  assert.strictEqual(merged.find((r) => r.id === "pay-draft")?.netPay, 2250000);
+  assert.strictEqual(merged.find((r) => r.id === "pay-new")?.netPay, 1800000);
+});
+
+test("34g. sanitizePayrollRecordData & sanitizeEmployeeContractRecord Membulatkan Rupiah Integer", () => {
+  const sanitizedPayroll = sanitizePayrollRecordData(
+    {
+      employeeId: "emp-1",
+      period: "2026-11",
+      basicSalary: 2500000.6,
+      positionAllowance: 125000.4,
+      mealAllowance: -5000,
+      alphaDeduction: 100000.5,
+      kpiBonus: 75000.2,
+      grossPay: 2625001.2,
+      netPay: 2525000.7,
+      status: "DRAFT",
+    },
+    "pay-clean-1"
+  );
+
+  assert.strictEqual(sanitizedPayroll.basicSalary, 2500001);
+  assert.strictEqual(sanitizedPayroll.positionAllowance, 125000);
+  assert.strictEqual(sanitizedPayroll.mealAllowance, 0);
+  assert.strictEqual(sanitizedPayroll.grossPay, 2625001);
+  assert.strictEqual(sanitizedPayroll.netPay, 2525001);
+
+  const sanitizedContract = sanitizeEmployeeContractRecord(
+    {
+      employeeId: "emp-1",
+      basicSalary: 3200000.8,
+      positionAllowance: 250000.3,
+      mealAllowance: 15000.6,
+      transportAllowance: 10000.2,
+      alphaDeductionPerDay: 120000.5,
+      kpiBonusTarget: 300000.4,
+      startDate: "2026-11-01",
+      status: "ACTIVE",
+    },
+    "ctr-clean-1"
+  );
+
+  assert.strictEqual(sanitizedContract.basicSalary, 3200001);
+  assert.strictEqual(sanitizedContract.positionAllowance, 250000);
+  assert.strictEqual(sanitizedContract.mealAllowance, 15001);
+  assert.strictEqual(sanitizedContract.transportAllowance, 10000);
+  assert.strictEqual(sanitizedContract.alphaDeductionPerDay, 120001);
+  assert.strictEqual(sanitizedContract.kpiBonusTarget, 300000);
+});
+
+// =============================================================
+// SUITE 35: ZONA 8 (PROMOTIONS, DASHBOARD HELPERS & WITA WEEK)
+// =============================================================
+
+test("35a. getPromotionRuntimeStatus Mengklasifikasikan Status Promo Sesuai Tanggal WITA", () => {
+  assert.strictEqual(
+    getPromotionRuntimeStatus({ isActive: false, startDate: "2026-11-01", endDate: "2026-11-30" }, "2026-11-15"),
+    "INACTIVE"
+  );
+  assert.strictEqual(
+    getPromotionRuntimeStatus({ isActive: true, startDate: "2026-11-01", endDate: "2026-11-14" }, "2026-11-15"),
+    "EXPIRED"
+  );
+  assert.strictEqual(
+    getPromotionRuntimeStatus({ isActive: true, startDate: "2026-11-16", endDate: "2026-11-30" }, "2026-11-15"),
+    "UPCOMING"
+  );
+  assert.strictEqual(
+    getPromotionRuntimeStatus({ isActive: true, startDate: "2026-11-15", endDate: "2026-11-15" }, "2026-11-15"),
+    "ACTIVE"
+  );
+});
+
+test("35b. validatePromotionInput Menolak Persen > 100, Tanggal Terbalik, & Kode Duplikat", () => {
+  const existing: Promotion[] = [
+    {
+      id: "promo-1",
+      name: "Promo Kopi Pagi",
+      code: "PAGI10",
+      type: "PERCENT",
+      value: 10,
+      isActive: true,
+      createdAt: "2026-11-01T00:00:00.000Z",
+    },
+  ];
+
+  const tooHighPct = validatePromotionInput(
+    { name: "Diskon Gila", type: "PERCENT", value: 120 },
+    existing
+  );
+  assert.strictEqual("error" in tooHighPct, true);
+
+  const reversedDates = validatePromotionInput(
+    {
+      name: "Weekend Promo",
+      type: "NOMINAL",
+      value: 10000,
+      startDate: "2026-11-20",
+      endDate: "2026-11-18",
+    },
+    existing
+  );
+  assert.strictEqual("error" in reversedDates, true);
+
+  const dupCode = validatePromotionInput(
+    { name: "Promo Pagi 2", code: " pagi10 ", type: "PERCENT", value: 15 },
+    existing
+  );
+  assert.strictEqual("error" in dupCode, true);
+
+  const valid = validatePromotionInput(
+    {
+      name: "  Member Sore ",
+      code: " sore15 ",
+      type: "PERCENT",
+      value: 15.4,
+      minSpend: 50000.6,
+      maxDiscount: 20000.4,
+      startDate: "2026-11-15",
+      endDate: "2026-11-30",
+    },
+    existing,
+    "promo-2"
+  );
+  assert.strictEqual(valid.ok, true);
+  if (valid.ok) {
+    assert.strictEqual(valid.normalized.name, "Member Sore");
+    assert.strictEqual(valid.normalized.code, "SORE15");
+    assert.strictEqual(valid.normalized.value, 15);
+    assert.strictEqual(valid.normalized.minSpend, 50001);
+    assert.strictEqual(valid.normalized.maxDiscount, 20000);
+  }
+});
+
+test("35c. computePromotionDiscountPreview Menghitung Batas Min Spend, Cap Diskon, & Pembulatan Integer", () => {
+  const notEligible = computePromotionDiscountPreview({
+    type: "PERCENT",
+    value: 20,
+    minSpend: 150000,
+    subtotal: 100000,
+  });
+  assert.strictEqual(notEligible.applied, false);
+  assert.strictEqual(notEligible.discount, 0);
+  assert.strictEqual(notEligible.finalTotal, 100000);
+
+  const cappedPercent = computePromotionDiscountPreview({
+    type: "PERCENT",
+    value: 50,
+    maxDiscount: 30000,
+    subtotal: 100000,
+  });
+  assert.strictEqual(cappedPercent.applied, true);
+  assert.strictEqual(cappedPercent.discount, 30000);
+  assert.strictEqual(cappedPercent.finalTotal, 70000);
+
+  const nominalCappedBySubtotal = computePromotionDiscountPreview({
+    type: "NOMINAL",
+    value: 75000,
+    subtotal: 40000,
+  });
+  assert.strictEqual(nominalCappedBySubtotal.applied, true);
+  assert.strictEqual(nominalCappedBySubtotal.discount, 40000);
+  assert.strictEqual(nominalCappedBySubtotal.finalTotal, 0);
+});
+
+test("35d. computeOwnerCategoryContribution Menghitung Kontribusi Kategori Nyata & Fallback Rekap", () => {
+  const products: Product[] = [
+    {
+      id: "p-1",
+      name: "Kopi Susu Arena",
+      category: "Coffee Beverages",
+      division: "BAR",
+      isActive: true,
+      variants: [],
+      createdAt: "2026-11-01T00:00:00.000Z",
+    },
+    {
+      id: "p-2",
+      name: "Croissant Butter",
+      category: "Pastry & Food",
+      division: "BAKER",
+      isActive: true,
+      variants: [],
+      createdAt: "2026-11-01T00:00:00.000Z",
+    },
+  ];
+  const sales: SalesTransaction[] = [
+    {
+      id: "s-1",
+      date: "2026-11-20T08:00:00.000Z",
+      menuName: "Kopi Susu Arena (Iced)",
+      quantitySold: 2,
+      totalPrice: 50000,
+      importLogId: "imp-1",
+    },
+    {
+      id: "s-2",
+      date: "2026-11-20T09:00:00.000Z",
+      menuName: "Croissant Butter",
+      quantitySold: 1,
+      totalPrice: 30000,
+      importLogId: "imp-1",
+    },
+  ];
+
+  const breakdown = computeOwnerCategoryContribution({
+    filteredSales: sales,
+    products,
+    totalRevenue: 80000,
+  });
+  assert.strictEqual(breakdown.length, 2);
+  assert.strictEqual(breakdown[0].name, "Coffee Beverages");
+  assert.strictEqual(breakdown[0].value, 50000);
+  assert.strictEqual(breakdown[1].name, "Pastry & Food");
+  assert.strictEqual(breakdown[1].value, 30000);
+
+  const recapOnly = computeOwnerCategoryContribution({
+    filteredSales: [],
+    products,
+    totalRevenue: 125000,
+  });
+  assert.strictEqual(recapOnly.length, 1);
+  assert.strictEqual(recapOnly[0].name, "Penjualan Rekap Harian");
+  assert.strictEqual(recapOnly[0].value, 125000);
+});
+
+test("35e. computePeriodGrowthPercent Menghitung Pertumbuhan Periode Dengan Jujur", () => {
+  assert.strictEqual(computePeriodGrowthPercent(500000, 0), null);
+  assert.strictEqual(computePeriodGrowthPercent(1200000, 1000000), 20);
+  assert.strictEqual(computePeriodGrowthPercent(875000, 1000000), -12.5);
+});
+
+test("35f. getWitaWeekStartDate Mengembalikan Senin WITA di Batas Hari UTC", () => {
+  // Minggu 22 Nov 2026 23:30 WITA (15:30 UTC) -> masih pekan Senin 16 Nov 2026
+  const sunNightWita = new Date("2026-11-22T15:30:00.000Z");
+  const mondayForSunNight = getWitaWeekStartDate(sunNightWita);
+  assert.strictEqual(mondayForSunNight.toISOString().slice(0, 10), "2026-11-16");
+
+  // Senin 23 Nov 2026 00:30 WITA (22 Nov 16:30 UTC) -> sudah masuk pekan Senin 23 Nov 2026
+  const monEarlyWita = new Date("2026-11-22T16:30:00.000Z");
+  const mondayForMonEarly = getWitaWeekStartDate(monEarlyWita);
+  assert.strictEqual(mondayForMonEarly.toISOString().slice(0, 10), "2026-11-23");
+});
+
+// -------------------------------------------------------------
+// SUITE 36: KEAMANAN API BACKEND, VALIDASI KDS & RINGKASAN KAS
+// -------------------------------------------------------------
+test("36a. evaluateApiAccess Memblokir Unauthenticated, Suspended, dan Role Tidak Berizin", () => {
+  const noUser = evaluateApiAccess(null);
+  assert.strictEqual(noUser.ok, false);
+  if (!noUser.ok) {
+    assert.strictEqual(noUser.status, 401);
+  }
+
+  const suspended = evaluateApiAccess({ role: "MANAGER", isSuspended: true }, ["SUPER_ADMIN", "MANAGER"]);
+  assert.strictEqual(suspended.ok, false);
+  if (!suspended.ok) {
+    assert.strictEqual(suspended.status, 403);
+  }
+
+  const forbiddenRole = evaluateApiAccess({ role: "KASIR", isSuspended: false }, ["SUPER_ADMIN", "OWNER", "MANAGER"]);
+  assert.strictEqual(forbiddenRole.ok, false);
+  if (!forbiddenRole.ok) {
+    assert.strictEqual(forbiddenRole.status, 403);
+  }
+
+  const allowedSpecific = evaluateApiAccess({ role: "OWNER", isSuspended: false }, ["SUPER_ADMIN", "OWNER", "MANAGER"]);
+  assert.deepStrictEqual(allowedSpecific, { ok: true });
+
+  const allowedAny = evaluateApiAccess({ role: "KASIR", isSuspended: false });
+  assert.deepStrictEqual(allowedAny, { ok: true });
+});
+
+test("36b. isValidKitchenStatus Menolak Status KDS Tidak Sah", () => {
+  assert.strictEqual(isValidKitchenStatus("QUEUED"), true);
+  assert.strictEqual(isValidKitchenStatus("PREPARING"), true);
+  assert.strictEqual(isValidKitchenStatus("READY"), true);
+  assert.strictEqual(isValidKitchenStatus("SERVED"), true);
+
+  assert.strictEqual(isValidKitchenStatus(""), false);
+  assert.strictEqual(isValidKitchenStatus("CANCELLED"), false);
+  assert.strictEqual(isValidKitchenStatus("DONE"), false);
+  assert.strictEqual(isValidKitchenStatus(null), false);
+  assert.strictEqual(isValidKitchenStatus(123), false);
+});
+
+test("36c. Ringkasan Kas Dashboard Menyaring Saldo Awal, Transfer Kas, dan Prive Non-Operasional", () => {
+  const txs = [
+    { type: "CASH_IN", amount: 250000, category: "Penjualan", description: "Omzet Kopi Susu", referenceId: "ORD-1" },
+    { type: "CASH_IN", amount: 5000000, category: "Saldo Awal", description: "OPENING: Modal awal kas", referenceId: "OPENING-1" },
+    { type: "CASH_IN", amount: 1500000, category: "Transfer Kas", description: "TRANSFER: Laci -> BCA", referenceId: "TRF-1" },
+    { type: "CASH_OUT", amount: 80000, category: "Bahan Baku", description: "Beli Susu Segar", referenceId: "PO-1" },
+    { type: "CASH_OUT", amount: 2000000, category: "Prive Owner", description: "Penarikan modal owner", referenceId: "PRV-1" },
+  ];
+
+  const operational = txs.filter((t) => !isNonOperationalCashTransaction(t));
+  const rev = operational.filter((t) => t.type === "CASH_IN").reduce((s, t) => s + t.amount, 0);
+  const exp = operational.filter((t) => t.type === "CASH_OUT").reduce((s, t) => s + t.amount, 0);
+
+  assert.strictEqual(operational.length, 2);
+  assert.strictEqual(rev, 250000);
+  assert.strictEqual(exp, 80000);
+});
+
+// -------------------------------------------------------------
+// SUITE 37: ANTI SESSION-FORGERY, RBAC CRUD TABEL & WITA EXPORT
+// -------------------------------------------------------------
+test("37a. evaluateSessionHeartbeat Menolak Sesi Forged/Unknown, Revoked, Expired, Suspended & Idle > 1 Jam", () => {
+  const nowMs = Date.UTC(2026, 10, 24, 12, 0, 0);
+  const recentIso = new Date(nowMs - 5 * 60 * 1000).toISOString();
+  const expiredIso = new Date(nowMs - 61 * 60 * 1000).toISOString();
+
+  assert.deepStrictEqual(evaluateSessionHeartbeat(null, null, nowMs), {
+    allow: false,
+    revoked: true,
+    status: "INVALID",
+  });
+  assert.deepStrictEqual(
+    evaluateSessionHeartbeat({ status: "REVOKED", lastActive: recentIso }, { isSuspended: false }, nowMs),
+    { allow: false, revoked: true, status: "REVOKED" }
+  );
+  assert.deepStrictEqual(
+    evaluateSessionHeartbeat({ status: "EXPIRED", lastActive: recentIso }, { isSuspended: false }, nowMs),
+    { allow: false, revoked: true, status: "EXPIRED" }
+  );
+  assert.deepStrictEqual(
+    evaluateSessionHeartbeat({ status: "ACTIVE", lastActive: recentIso }, { isSuspended: true }, nowMs),
+    { allow: false, revoked: true, status: "SUSPENDED" }
+  );
+  assert.deepStrictEqual(
+    evaluateSessionHeartbeat({ status: "ACTIVE", lastActive: expiredIso }, { isSuspended: false }, nowMs),
+    { allow: false, revoked: true, status: "EXPIRED" }
+  );
+  assert.deepStrictEqual(
+    evaluateSessionHeartbeat({ status: "ACTIVE", lastActive: recentIso }, { isSuspended: false }, nowMs),
+    { allow: true, revoked: false, status: "ACTIVE" }
+  );
+});
+
+test("37b. evaluateGenericTableAccess Memblokir Tabel Keamanan & Membatasi Role", () => {
+  const noAuth = evaluateGenericTableAccess(null, "ingredients");
+  assert.strictEqual(noAuth.ok, false);
+  if ("error" in noAuth) assert.strictEqual(noAuth.status, 401);
+
+  const suspendedAdmin = evaluateGenericTableAccess({ role: "SUPER_ADMIN", isSuspended: true }, "ingredients");
+  assert.strictEqual(suspendedAdmin.ok, false);
+  if ("error" in suspendedAdmin) assert.strictEqual(suspendedAdmin.status, 403);
+
+  for (const blocked of ["users", "device_sessions", "audit_logs"]) {
+    const res = evaluateGenericTableAccess({ role: "SUPER_ADMIN", isSuspended: false }, blocked);
+    assert.strictEqual(res.ok, false);
+    if ("error" in res) assert.strictEqual(res.status, 403);
+  }
+
+  assert.deepStrictEqual(
+    evaluateGenericTableAccess({ role: "SUPER_ADMIN", isSuspended: false }, "ingredients"),
+    { ok: true }
+  );
+
+  const ownerCheck = evaluateGenericTableAccess({ role: "OWNER", isSuspended: false }, "cash_transactions");
+  assert.strictEqual(ownerCheck.ok, false);
+  if ("error" in ownerCheck) assert.strictEqual(ownerCheck.status, 403);
+
+  const financeSettings = evaluateGenericTableAccess({ role: "FINANCE", isSuspended: false }, "settings");
+  assert.strictEqual(financeSettings.ok, false);
+  if ("error" in financeSettings) assert.strictEqual(financeSettings.status, 403);
+  assert.deepStrictEqual(
+    evaluateGenericTableAccess({ role: "FINANCE", isSuspended: false }, "cash_transactions"),
+    { ok: true }
+  );
+
+  const managerPayroll = evaluateGenericTableAccess({ role: "MANAGER", isSuspended: false }, "payroll_records");
+  assert.strictEqual(managerPayroll.ok, false);
+  if ("error" in managerPayroll) assert.strictEqual(managerPayroll.status, 403);
+  assert.deepStrictEqual(
+    evaluateGenericTableAccess({ role: "MANAGER", isSuspended: false }, "purchase_orders"),
+    { ok: true }
+  );
+
+  const kasirIngredients = evaluateGenericTableAccess({ role: "KASIR", isSuspended: false }, "ingredients");
+  assert.strictEqual(kasirIngredients.ok, false);
+  if ("error" in kasirIngredients) assert.strictEqual(kasirIngredients.status, 403);
+});
+
+test("37c. formatDateIndo Menggunakan Zona Waktu WITA (Asia/Makassar) di Batas Hari UTC", () => {
+  // 2026-11-24T17:30:00Z = 25 Nov 2026 01:30 WITA
+  const witaNextDay = formatDateIndo("2026-11-24T17:30:00.000Z");
+  assert.ok(witaNextDay.includes("25") && witaNextDay.includes("2026"), `Expected 25 Nov 2026 WITA, got: ${witaNextDay}`);
+
+  // Date-only string
+  const dateOnly = formatDateIndo("2026-11-24");
+  assert.ok(dateOnly.includes("24") && dateOnly.includes("2026"), `Expected 24 Nov 2026, got: ${dateOnly}`);
+});
+
+// -------------------------------------------------------------
+// SUITE 38: BATCH COOK, PEMBULATAN HPP & BATAS REFUND POS
+// -------------------------------------------------------------
+test("38a. aggregateBatchRequiredQuantities Menjumlahkan Bahan Duplikat Sebelum Cek Stok Batch", () => {
+  const totals = aggregateBatchRequiredQuantities(
+    [
+      { ingredientId: "ing-milk", quantity: 500 },
+      { ingredientId: "ing-milk", quantity: 300 },
+      { ingredientId: "ing-sugar", quantity: 100 },
+    ],
+    2
+  );
+  assert.strictEqual(totals.get("ing-milk"), 1600);
+  assert.strictEqual(totals.get("ing-sugar"), 200);
+});
+
+test("38b. computeBatchWeightedUnitCost Kebal Terhadap Stok Negatif dan Menghasilkan Rupiah Integer", () => {
+  const fromNegStock = computeBatchWeightedUnitCost(-200, 100, 1000, 50000);
+  assert.strictEqual(fromNegStock, 50);
+
+  const fromPosStock = computeBatchWeightedUnitCost(500, 40, 500, 30000);
+  assert.strictEqual(fromPosStock, 50);
+});
+
+test("38c. resolveCappedRefundAmount Membatasi Refund Maksimal Sebesar Total Order (Rupiah Integer)", () => {
+  assert.strictEqual(resolveCappedRefundAmount(55000, undefined), 55000);
+  assert.strictEqual(resolveCappedRefundAmount(55000, 0), 55000);
+  assert.strictEqual(resolveCappedRefundAmount(55000, 20000.6), 20001);
+  assert.strictEqual(resolveCappedRefundAmount(55000, 999999), 55000);
+});
+
+// -------------------------------------------------------------
+// SUITE 39: VALIDASI ORDER POS, SPLIT BILL & REMOTE APPROVAL
+// -------------------------------------------------------------
+test("39a. validatePosOrderPayload Menolak Keranjang Kosong, Status Ilegal & Nominal Negatif", () => {
+  const emptyItems = validatePosOrderPayload({ items: [], status: "OPEN", totalAmount: 0 });
+  assert.strictEqual(emptyItems.ok, false);
+
+  const badStatus = validatePosOrderPayload({
+    items: [{ menuName: "Espresso", quantity: 1 }],
+    status: "VOID",
+    totalAmount: 20000,
+  });
+  assert.strictEqual(badStatus.ok, false);
+
+  const negTotal = validatePosOrderPayload({
+    items: [{ menuName: "Espresso", quantity: 1 }],
+    status: "PAID",
+    subtotal: 20000,
+    totalAmount: -100,
+  });
+  assert.strictEqual(negTotal.ok, false);
+
+  assert.deepStrictEqual(
+    validatePosOrderPayload({
+      items: [{ menuName: "Espresso", quantity: 1 }],
+      status: "PAID",
+      subtotal: 20000,
+      discountAmount: 0,
+      taxAmount: 2000,
+      totalAmount: 22000,
+    }),
+    { ok: true }
+  );
+});
+
+test("39b. validateEvenlySplitAmount Menolak Nominal <= 0 atau Melebihi Sisa Tagihan Induk", () => {
+  assert.strictEqual(validateEvenlySplitAmount(0, 10000).ok, false);
+  assert.strictEqual(validateEvenlySplitAmount(100000, 0).ok, false);
+  assert.strictEqual(validateEvenlySplitAmount(100000, -5000).ok, false);
+  assert.strictEqual(validateEvenlySplitAmount(100000, 120000).ok, false);
+
+  assert.deepStrictEqual(validateEvenlySplitAmount(100000, 40000), {
+    ok: true,
+    splitTotal: 40000,
+    newParentTotal: 60000,
+  });
+  assert.deepStrictEqual(validateEvenlySplitAmount(60000, 60000), {
+    ok: true,
+    splitTotal: 60000,
+    newParentTotal: 0,
+  });
+});
+
+test("39c. validateApprovalRequestInput Memvalidasi Tipe, Status Order & Batas Nominal Refund", () => {
+  assert.strictEqual(
+    validateApprovalRequestInput({ type: "DISCOUNT", orderStatus: "PAID", orderTotalAmount: 50000 }).ok,
+    false
+  );
+  assert.strictEqual(
+    validateApprovalRequestInput({ type: "REFUND", orderStatus: "OPEN", orderTotalAmount: 50000 }).ok,
+    false
+  );
+  assert.strictEqual(
+    validateApprovalRequestInput({ type: "VOID", orderStatus: "REFUNDED", orderTotalAmount: 50000 }).ok,
+    false
+  );
+
+  assert.deepStrictEqual(
+    validateApprovalRequestInput({
+      type: "REFUND",
+      orderStatus: "PAID",
+      orderTotalAmount: 50000,
+      requestedAmount: 999999,
+    }),
+    { ok: true, type: "REFUND", normalizedAmount: 50000 }
+  );
+  assert.deepStrictEqual(
+    validateApprovalRequestInput({
+      type: "VOID",
+      orderStatus: "OPEN",
+      orderTotalAmount: 75000,
+    }),
+    { ok: true, type: "VOID", normalizedAmount: 75000 }
+  );
+});
+
+// -------------------------------------------------------------
+// SUITE 40: KEAMANAN SINKRONISASI, FAIL-CLOSED ROLE & SUPER ADMIN
+// -------------------------------------------------------------
+test("40a. applyRoleSyncRestrictions Memblokir device_sessions Untuk Semua Role & Fail-Closed Role Asing", () => {
+  const payload = {
+    device_sessions: [{ id: "sess-forged" }],
+    users: [{ id: "u1" }],
+    settings: { brandName: "Test" },
+    payroll_records: [{ id: "pr1" }],
+    cash_transactions: [{ id: "ct1" }],
+    ingredients: [{ id: "ing1" }],
+    dailyAttendances: [{ id: "da1" }],
+  };
+
+  for (const role of ["SUPER_ADMIN", "MANAGER", "KASIR", "FINANCE", "LEADER", "BAR"]) {
+    const filtered = applyRoleSyncRestrictions(role, payload);
+    assert.strictEqual(filtered.device_sessions, undefined, `device_sessions must be stripped for ${role}`);
+  }
+
+  const unknownRoleFiltered = applyRoleSyncRestrictions("GUEST", payload);
+  assert.strictEqual(unknownRoleFiltered.device_sessions, undefined);
+  assert.strictEqual(unknownRoleFiltered.users, undefined);
+  assert.strictEqual(unknownRoleFiltered.settings, undefined);
+  assert.strictEqual(unknownRoleFiltered.payroll_records, undefined);
+  assert.strictEqual(unknownRoleFiltered.cash_transactions, undefined);
+  assert.strictEqual(unknownRoleFiltered.ingredients, undefined);
+});
+
+test("40b. mergePreservingProtectedRows Menjamin Baris Terproteksi Server Selalu Menang Atas Payload Klien", () => {
+  const incoming = [
+    { id: "pos-1", amount: 1 },
+    { id: "manual-1", amount: 25000 },
+  ];
+  const protectedRows = [{ id: "pos-1", amount: 50000 }];
+  const merged = mergePreservingProtectedRows(incoming, protectedRows);
+
+  assert.strictEqual(merged.length, 2);
+  const posRow = merged.find((r) => r.id === "pos-1");
+  const manualRow = merged.find((r) => r.id === "manual-1");
+  assert.strictEqual(posRow?.amount, 50000);
+  assert.strictEqual(manualRow?.amount, 25000);
+});
+
+test("40c. protectSuperAdminAccountsOnSync Mencegah Eskalasi & Penghapusan SUPER_ADMIN Oleh Manager", () => {
+  const existingUsers = [
+    { id: "u-sa", username: "superadmin", role: "SUPER_ADMIN", pin: "hash-sa" },
+    { id: "u-mgr", username: "manager", role: "MANAGER", pin: "hash-mgr" },
+    { id: "u-ksr", username: "kasir", role: "KASIR", pin: "hash-ksr" },
+  ];
+
+  // Empty incoming list preserves existing users
+  assert.strictEqual(protectSuperAdminAccountsOnSync("MANAGER", [], existingUsers).length, 3);
+
+  // Manager attempts privilege escalation + overwriting/deleting Super Admin
+  const hostileManagerSync = [
+    { id: "u-sa", username: "superadmin", role: "KASIR", pin: "1111" },
+    { id: "u-mgr", username: "manager", role: "SUPER_ADMIN", pin: "hash-mgr" },
+    { id: "u-ksr", username: "kasir", role: "KASIR", pin: "hash-ksr" },
+  ];
+  const guardedByMgr = protectSuperAdminAccountsOnSync("MANAGER", hostileManagerSync, existingUsers);
+  const saAfterMgr = guardedByMgr.find((u) => u.id === "u-sa");
+  const mgrAfterMgr = guardedByMgr.find((u) => u.id === "u-mgr");
+  assert.strictEqual(saAfterMgr?.role, "SUPER_ADMIN");
+  assert.strictEqual(saAfterMgr?.pin, "hash-sa");
+  assert.strictEqual(mgrAfterMgr?.role, "MANAGER");
+
+  // Manager omits Super Admin -> preserved
+  const omitSaSync = [{ id: "u-mgr", username: "manager", role: "MANAGER", pin: "hash-mgr" }];
+  const restoredSa = protectSuperAdminAccountsOnSync("MANAGER", omitSaSync, existingUsers);
+  assert.ok(restoredSa.some((u) => u.id === "u-sa" && u.role === "SUPER_ADMIN"));
+
+  // Super Admin updating a cashier role is allowed while Super Admin remains intact
+  const adminSync = [
+    { id: "u-sa", username: "superadmin", role: "SUPER_ADMIN", pin: "hash-sa" },
+    { id: "u-ksr", username: "kasir", role: "LEADER", pin: "hash-ksr" },
+  ];
+  const guardedBySa = protectSuperAdminAccountsOnSync("SUPER_ADMIN", adminSync, existingUsers);
+  assert.strictEqual(guardedBySa.find((u) => u.id === "u-ksr")?.role, "LEADER");
+});
+
+// -------------------------------------------------------------
+// TEST SUITE 41: PROFIT SHARING, CLOSED PERIOD PROTECTION & RANGE LOCK
+// -------------------------------------------------------------
+console.log("\n--- SUITE 41: PROFIT SHARING & CLOSED PERIOD HARDENING ---");
+
+test("41a. normalizeProfitSharePercentages memaksa total 100% & fallback default 70/30/0", () => {
+  const def = normalizeProfitSharePercentages();
+  assert.deepStrictEqual(def, { ownerPercent: 70, reservePercent: 30, investorPercent: 0 });
+
+  const invalid = normalizeProfitSharePercentages({ ownerPercent: 50, reservePercent: 20, investorPercent: 10 });
+  assert.deepStrictEqual(invalid, { ownerPercent: 70, reservePercent: 30, investorPercent: 0 });
+
+  const valid = normalizeProfitSharePercentages({ ownerPercent: 60, reservePercent: 25, investorPercent: 15 });
+  assert.deepStrictEqual(valid, { ownerPercent: 60, reservePercent: 25, investorPercent: 15 });
+});
+
+test("41b. computeOwnerProfitAllocation menghitung hak owner, prive, tabungan & capex dengan presisi integer", () => {
+  const result = computeOwnerProfitAllocation({
+    netProfit: 10000000,
+    ownerPercent: 70,
+    reservePercent: 30,
+    investorPercent: 0,
+    cashAccounts: [
+      { id: "acc-ops", name: "Kas Operasional", type: "CASH", isDefault: true },
+      { id: "acc-sav", name: "Tabungan Kedai", type: "SAVINGS", isDefault: false },
+    ],
+    cashTransactions: [
+      {
+        id: "tx-prive",
+        date: "2026-11-10T10:00:00+08:00",
+        type: "CASH_OUT",
+        amount: 2000000,
+        category: "Prive Owner",
+        description: "Tarik profit owner November",
+        accountId: "acc-ops",
+      } as any,
+      {
+        id: "tx-sav",
+        date: "2026-11-11T10:00:00+08:00",
+        type: "CASH_IN",
+        amount: 1500000,
+        category: "Setoran Tabungan",
+        description: "Transfer profit reserve",
+        accountId: "acc-sav",
+      } as any,
+      {
+        id: "tx-capex",
+        date: "2026-11-12T10:00:00+08:00",
+        type: "CASH_OUT",
+        amount: 3500000,
+        categoryId: "cat-aset",
+        category: "CapEx Peralatan",
+        description: "Beli grinder cadangan",
+        accountId: "acc-ops",
+      } as any,
+    ],
+  });
+
+  assert.strictEqual(result.ownerShareAmount, 7000000);
+  assert.strictEqual(result.ownerPriveTotal, 2000000);
+  assert.strictEqual(result.ownerRemainingEntitlement, 5000000);
+  assert.strictEqual(result.reserveShareAmount, 3000000);
+  assert.strictEqual(result.netSavingsAllocation, 1500000);
+  assert.strictEqual(result.reserveRemainingToTransfer, 1500000);
+  assert.strictEqual(result.capexExpense, 3500000);
+  assert.strictEqual(result.retainedProfitAfterPrive, 8000000);
+});
+
+test("41c. protectClosedPeriodsOnSync mencegah role non-Manager/non-SuperAdmin membuka kembali periode terkunci", () => {
+  const existingClosed = [
+    { id: "cp-1", period: "2026-10", status: "CLOSED", closedBy: "Manager" },
+  ];
+
+  // FINANCE atau KASIR tidak dapat menghapus/membuka kembali periode 2026-10 lewat sync
+  const afterFinance = protectClosedPeriodsOnSync("FINANCE", [], existingClosed);
+  assert.ok(afterFinance.some((p: any) => p.period === "2026-10" && p.status === "CLOSED"));
+
+  // MANAGER dapat membuka kembali periode 2026-10 (mengirim array tanpa 2026-10)
+  const afterManager = protectClosedPeriodsOnSync("MANAGER", [], existingClosed);
+  assert.strictEqual(afterManager.length, 0);
+});
+
+test("41d. enforceClosedPeriodDataLock mempertahankan baris eksisting pada periode CLOSED dan memblokir sisipan baru ke periode terkunci", () => {
+  const activeClosed = [{ period: "2026-10" }];
+  const existingRows = [
+    { id: "tx-locked", date: "2026-10-15T10:00:00+08:00", amount: 500000 },
+    { id: "tx-open", date: "2026-11-15T10:00:00+08:00", amount: 100000 },
+  ];
+  const hostileIncoming = [
+    { id: "tx-locked", date: "2026-10-15T10:00:00+08:00", amount: 9999999 }, // coba ubah nominal bulan tutup buku
+    { id: "tx-new-in-closed", date: "2026-10-20T10:00:00+08:00", amount: 123456 }, // coba sisip ke bulan tutup buku
+    { id: "tx-open", date: "2026-11-15T10:00:00+08:00", amount: 250000 }, // sah di bulan terbuka
+  ];
+
+  const lockedResult = enforceClosedPeriodDataLock(
+    hostileIncoming,
+    existingRows,
+    activeClosed,
+    (row: any) => getLocalPeriodFromTimestamp(row.date)
+  );
+
+  assert.strictEqual(lockedResult.find((r: any) => r.id === "tx-locked")?.amount, 500000);
+  assert.strictEqual(lockedResult.some((r: any) => r.id === "tx-new-in-closed"), false);
+  assert.strictEqual(lockedResult.find((r: any) => r.id === "tx-open")?.amount, 250000);
 });
 
 // -------------------------------------------------------------

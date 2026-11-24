@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "../../context/ToastContext";
+import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
+import { authFetch } from "../../utils/authHeaders";
 import { formatCurrency } from "../../utils/format";
 import {
   Receipt,
@@ -84,7 +87,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
   const fetchTodayOrders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pos/orders/today");
+      const res = await authFetch("/api/pos/orders/today");
       if (res.ok) {
         const data = await res.json();
         setSummaryData(data);
@@ -102,7 +105,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
 
   const handleOpenReceiptReprint = async (orderId: string) => {
     try {
-      const res = await fetch(`/api/pos/orders/${orderId}`);
+      const res = await authFetch(`/api/pos/orders/${orderId}`);
       if (res.ok) {
         const fullData = await res.json();
         setSelectedReprintOrder({
@@ -112,7 +115,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
         });
       }
     } catch (e) {
-      alert("Gagal memuat detail transaksi");
+      toast.error("Gagal memuat detail transaksi");
     }
   };
 
@@ -141,7 +144,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
     setRefundError(null);
 
     try {
-      const res = await fetch(`/api/pos/orders/${orderToRefund.id}/refund`, {
+      const res = await authFetch(`/api/pos/orders/${orderToRefund.id}/refund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,7 +189,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
     setRefundError(null);
 
     try {
-      const res = await fetch("/api/pos/approvals/request", {
+      const res = await authFetch("/api/pos/approvals/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -225,7 +228,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/pos/approvals/${remoteRequestId}/status`);
+        const res = await authFetch(`/api/pos/approvals/${remoteRequestId}/status`);
         if (res.ok) {
           const data = await res.json();
           if (data.status === "APPROVED") {
@@ -281,7 +284,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -405,7 +408,8 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
             </div>
           ) : (
             filteredOrders.map((ord) => {
-              const timeStr = new Date(ord.createdAt).toLocaleTimeString([], {
+              const timeStr = new Date(ord.createdAt).toLocaleTimeString("id-ID", {
+                timeZone: DEFAULT_STORE_TIMEZONE,
                 hour: "2-digit",
                 minute: "2-digit",
               });
@@ -568,7 +572,7 @@ export const PosTodayOrdersModal: React.FC<PosTodayOrdersModalProps> = ({ onClos
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-60 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 12 }}

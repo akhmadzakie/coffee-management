@@ -44,16 +44,16 @@ import type {
   Settings,
 } from "../types";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
+import { addDaysToLocalDate } from "../utils/syncSanitizers";
 import { exportProductSalesAnalyticsToXlsx } from "../utils/exportXlsx";
 import { formatCurrency } from "../utils/format";
 import {
   computeProductSalesAnalytics,
   formatCatalogMenuVariantLabel,
-  inferProductGroup,
   PRODUCT_GROUP_LABELS,
+  toSaleLocalDateKey,
   type DateFilterMode,
   type MenuEngineeringQuadrant,
-  type ProductMixRow,
   type ProductSortBy,
 } from "../utils/productSalesAnalytics";
 import { CurrencyInput } from "./common/CurrencyInput";
@@ -86,6 +86,7 @@ export interface ProductSalesDashboardProps {
     existingProduct?: Product | null
   ) => void;
   onSaveRecipe: (recipe: Omit<Recipe, "id">) => void;
+  onUpdateRecipe?: (recipe: Recipe) => void;
   isPeriodClosed: (dateStr: string) => boolean;
 }
 
@@ -97,15 +98,6 @@ const CHART_COLORS = [
   "#a2c5fb",
   "#e11d48",
 ];
-
-const addDaysYmd = (ymd: string, delta: number): string => {
-  const parts = ymd.split("-").map(Number);
-  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
-    return getLocalDateString();
-  }
-  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + delta));
-  return dt.toISOString().slice(0, 10);
-};
 
 const QUADRANT_BADGES: Record<
   MenuEngineeringQuadrant,
@@ -188,6 +180,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   onAddManualSales,
   onSaveProduct,
   onSaveRecipe,
+  onUpdateRecipe,
   isPeriodClosed,
 }) => {
   const todayYmd = getLocalDateString();
@@ -240,6 +233,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
         products,
         recipes,
         ingredients,
+        menuCategoriesByDivision: settings?.menuCategories,
         dateMode,
         singleDate,
         startDate,
@@ -256,6 +250,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
       products,
       recipes,
       ingredients,
+      settings?.menuCategories,
       dateMode,
       singleDate,
       startDate,
@@ -323,7 +318,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   const latestAvailableSaleDate = useMemo(() => {
     let latest = "";
     salesTransactions.forEach((s) => {
-      const d = String(s.date || "").slice(0, 10);
+      const d = toSaleLocalDateKey(s.date);
       if (d > latest) latest = d;
     });
     return latest;
@@ -346,10 +341,10 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
       setSingleDate(todayYmd);
     } else if (preset === "YESTERDAY") {
       setDateMode("SINGLE_DAY");
-      setSingleDate(addDaysYmd(todayYmd, -1));
+      setSingleDate(addDaysToLocalDate(todayYmd, -1));
     } else if (preset === "LAST_7") {
       setDateMode("DATE_RANGE");
-      setStartDate(addDaysYmd(todayYmd, -6));
+      setStartDate(addDaysToLocalDate(todayYmd, -6));
       setEndDate(todayYmd);
     } else if (preset === "THIS_MONTH") {
       setDateMode("DATE_RANGE");
@@ -367,6 +362,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   }, [dateMode, singleDate, startDate, endDate, todayYmd]);
 
   const handleOpenManualModal = (prefillDate?: string) => {
+    if (isReadOnly) return;
     const first = catalogVariantChoices[0];
     setManualDate(
       prefillDate || (dateMode === "SINGLE_DAY" ? singleDate : todayYmd)
@@ -428,6 +424,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
 
   const handleSubmitManualSales = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!manualDate) {
       toast.error("Pilih tanggal penjualan terlebih dahulu.");
       return;
@@ -440,7 +437,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
     }
 
     const validRows = manualRows.filter(
-      (r) => r.menuName.trim() && Number(r.quantity) > 0
+      (r) => r.menuName.trim() && Math.round(Number(r.quantity) || 0) > 0
     );
     if (validRows.length === 0) {
       toast.error("Tambahkan minimal 1 item menu dengan jumlah terjual > 0.");
@@ -469,12 +466,23 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
   };
 
   const handleExportFiltered = () => {
+    if (
+      analytics.productMixRows.length === 0 &&
+      analytics.filteredTransactions.length === 0
+    ) {
+      toast.warning(
+        "Tidak ada data penjualan produk pada filter aktif untuk diekspor."
+      );
+      return;
+    }
     exportProductSalesAnalyticsToXlsx({
       analytics,
       settings,
       periodLabel: activePeriodLabel,
     });
-    toast.success("Laporan Penjualan Produk (4 sheet analitik) berhasil diekspor ke Excel.");
+    toast.success(
+      "Laporan Penjualan Produk (4 sheet analitik) berhasil diekspor ke Excel."
+    );
   };
 
   // Charts Data
@@ -652,7 +660,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSingleDate(addDaysYmd(singleDate, -1))}
+                    onClick={() => setSingleDate(addDaysToLocalDate(singleDate, -1))}
                     className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:border-brand-300 cursor-pointer"
                     title="Hari sebelumnya"
                   >
@@ -666,7 +674,7 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSingleDate(addDaysYmd(singleDate, 1))}
+                    onClick={() => setSingleDate(addDaysToLocalDate(singleDate, 1))}
                     className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:border-brand-300 cursor-pointer"
                     title="Hari berikutnya"
                   >
@@ -680,7 +688,12 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                   <div className="w-38">
                     <CustomDatePicker
                       value={startDate}
-                      onChange={setStartDate}
+                      onChange={(val) => {
+                        setStartDate(val);
+                        if (val && endDate && val > endDate) {
+                          setEndDate(val);
+                        }
+                      }}
                       placeholder="Dari tanggal"
                     />
                   </div>
@@ -688,7 +701,12 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                   <div className="w-38">
                     <CustomDatePicker
                       value={endDate}
-                      onChange={setEndDate}
+                      onChange={(val) => {
+                        setEndDate(val);
+                        if (val && startDate && val < startDate) {
+                          setStartDate(val);
+                        }
+                      }}
                       placeholder="Sampai tanggal"
                     />
                   </div>
@@ -713,14 +731,14 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                   label: "Kemarin",
                   active:
                     dateMode === "SINGLE_DAY" &&
-                    singleDate === addDaysYmd(todayYmd, -1),
+                    singleDate === addDaysToLocalDate(todayYmd, -1),
                 },
                 {
                   id: "LAST_7" as const,
                   label: "7 Hari",
                   active:
                     dateMode === "DATE_RANGE" &&
-                    startDate === addDaysYmd(todayYmd, -6) &&
+                    startDate === addDaysToLocalDate(todayYmd, -6) &&
                     endDate === todayYmd,
                 },
                 {
@@ -833,8 +851,18 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari nama produk..."
-                    className="w-full pl-8 pr-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:border-brand-500"
+                    className="w-full pl-8 pr-8 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:border-brand-500"
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Hapus pencarian produk"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
                 <div className="w-32 shrink-0">
                   <CustomSelect
@@ -948,19 +976,26 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
               </span>
               {omzetCrossCheck.datesWithRecapButNoProducts
                 .slice(0, 6)
-                .map((d) => (
-                  <button
-                    key={d.date}
-                    type="button"
-                    onClick={() => {
-                      if (!isReadOnly) handleOpenManualModal(d.date);
-                    }}
-                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 font-semibold hover:border-brand-400 cursor-pointer tabular-nums"
-                    title="Klik untuk input penjualan produk di tanggal ini"
-                  >
-                    {d.date} ({formatCurrency(d.recapAmount)})
-                  </button>
-                ))}
+                .map((d) =>
+                  isReadOnly ? (
+                    <span
+                      key={d.date}
+                      className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 font-semibold tabular-nums"
+                    >
+                      {d.date} ({formatCurrency(d.recapAmount)})
+                    </span>
+                  ) : (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => handleOpenManualModal(d.date)}
+                      className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 font-semibold hover:border-brand-400 cursor-pointer tabular-nums"
+                      title="Klik untuk input penjualan produk di tanggal ini"
+                    >
+                      {d.date} ({formatCurrency(d.recapAmount)})
+                    </button>
+                  )
+                )}
             </div>
           )}
         </div>
@@ -1118,8 +1153,15 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                 ({formatCurrency(kpiSummary.topByVolume.totalRevenue)})
               </p>
               {kpiSummary.topByProfit && (
-                <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold truncate tabular-nums">
-                  Laba tertinggi: {kpiSummary.topByProfit.productName} (+
+                <p
+                  className={`text-[10px] font-semibold truncate tabular-nums ${
+                    kpiSummary.topByProfit.grossProfit >= 0
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "text-rose-600 dark:text-rose-400"
+                  }`}
+                >
+                  Laba tertinggi: {kpiSummary.topByProfit.productName} (
+                  {kpiSummary.topByProfit.grossProfit >= 0 ? "+" : ""}
                   {formatCurrency(kpiSummary.topByProfit.grossProfit)})
                 </p>
               )}
@@ -1594,8 +1636,15 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                                               <span className="text-slate-500 dark:text-slate-400">
                                                 HPP {formatCurrency(vb.totalHpp)}
                                               </span>
-                                              <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                                                +{formatCurrency(vb.grossProfit)}{" "}
+                                              <span
+                                                className={`font-bold ${
+                                                  vb.grossProfit >= 0
+                                                    ? "text-emerald-700 dark:text-emerald-300"
+                                                    : "text-rose-600 dark:text-rose-400"
+                                                }`}
+                                              >
+                                                {vb.grossProfit >= 0 ? "+" : ""}
+                                                {formatCurrency(vb.grossProfit)}{" "}
                                                 ({vb.marginPercent}%)
                                               </span>
                                             </div>
@@ -1693,7 +1742,13 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
                         <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-100 dark:border-slate-800 tabular-nums">
                           <span className="text-slate-500 dark:text-slate-400">
                             HPP {formatCurrency(row.totalHpp)} • Laba{" "}
-                            <strong className="text-emerald-700 dark:text-emerald-300">
+                            <strong
+                              className={
+                                row.grossProfit >= 0
+                                  ? "text-emerald-700 dark:text-emerald-300"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }
+                            >
                               {formatCurrency(row.grossProfit)} ({row.marginPercent}%)
                             </strong>
                           </span>
@@ -1961,72 +2016,69 @@ export const ProductSalesDashboard: React.FC<ProductSalesDashboardProps> = ({
       </div>
 
       {/* ── MODAL INPUT MANUAL PENJUALAN PRODUK (TERINTEGRASI KATALOG MENU) ── */}
-      <AnimatePresence>
-        {isManualModalOpen && (
-          <ManualProductSalesModal
-            manualDate={manualDate}
-            onChangeDate={setManualDate}
-            isClosed={isPeriodClosed(manualDate)}
-            rows={manualRows}
-            catalogChoices={catalogVariantChoices}
-            totalQty={totalManualDraftQty}
-            totalRevenue={totalManualDraftRevenue}
-            onAddRow={handleAddManualRow}
-            onRemoveRow={(rowId) =>
-              setManualRows((prev) =>
-                prev.length > 1 ? prev.filter((r) => r.rowId !== rowId) : prev
-              )
-            }
-            onSelectCatalog={handleSelectCatalogItemForRow}
-            onUpdateRow={handleUpdateManualRow}
-            onClose={() => setIsManualModalOpen(false)}
-            onSubmit={handleSubmitManualSales}
-          />
-        )}
-      </AnimatePresence>
+      <ManualProductSalesModal
+        isOpen={isManualModalOpen}
+        manualDate={manualDate}
+        onChangeDate={setManualDate}
+        isClosed={isPeriodClosed(manualDate)}
+        rows={manualRows}
+        catalogChoices={catalogVariantChoices}
+        totalQty={totalManualDraftQty}
+        totalRevenue={totalManualDraftRevenue}
+        onAddRow={handleAddManualRow}
+        onRemoveRow={(rowId) =>
+          setManualRows((prev) =>
+            prev.length > 1 ? prev.filter((r) => r.rowId !== rowId) : prev
+          )
+        }
+        onSelectCatalog={handleSelectCatalogItemForRow}
+        onUpdateRow={handleUpdateManualRow}
+        onClose={() => setIsManualModalOpen(false)}
+        onSubmit={handleSubmitManualSales}
+      />
 
       {/* ── MODAL DAFTARKAN / EDIT MENU + VARIAN + BAHAN RESEP ─────────────── */}
-      <AnimatePresence>
-        {productModalState.isOpen && (
-          <ProductFormModal
-            product={productModalState.product}
-            defaultDivision={
-              productModalState.product?.division ||
-              productModalState.initialDraft?.division ||
-              "BAR"
-            }
-            ingredients={ingredients}
-            recipes={recipes}
-            initialDraft={productModalState.initialDraft}
-            onSaveRecipe={onSaveRecipe}
-            onClose={() =>
-              setProductModalState({
-                isOpen: false,
-                product: null,
-                initialDraft: null,
-              })
-            }
-            onSave={(prodData) => {
-              onSaveProduct(prodData, productModalState.product);
-              setProductModalState({
-                isOpen: false,
-                product: null,
-                initialDraft: null,
-              });
-              toast.success(
-                productModalState.product
-                  ? `Menu "${prodData.name}" diperbarui & disinkronkan ke rekap produk.`
-                  : `Menu "${prodData.name}" didaftarkan ke Katalog Menu & langsung terhubung ke analitik.`
-              );
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <ProductFormModal
+        isOpen={productModalState.isOpen}
+        product={productModalState.product}
+        defaultDivision={
+          productModalState.product?.division ||
+          productModalState.initialDraft?.division ||
+          "BAR"
+        }
+        ingredients={ingredients}
+        recipes={recipes}
+        menuCategoriesMap={settings?.menuCategories}
+        initialDraft={productModalState.initialDraft}
+        onSaveRecipe={onSaveRecipe}
+        onUpdateRecipe={onUpdateRecipe}
+        onClose={() =>
+          setProductModalState({
+            isOpen: false,
+            product: null,
+            initialDraft: null,
+          })
+        }
+        onSave={(prodData) => {
+          onSaveProduct(prodData, productModalState.product);
+          setProductModalState({
+            isOpen: false,
+            product: null,
+            initialDraft: null,
+          });
+          toast.success(
+            productModalState.product
+              ? `Menu "${prodData.name}" diperbarui & disinkronkan ke rekap produk.`
+              : `Menu "${prodData.name}" didaftarkan ke Katalog Menu & langsung terhubung ke analitik.`
+          );
+        }}
+      />
     </motion.div>
   );
 };
 
 interface ManualProductSalesModalProps {
+  isOpen: boolean;
   manualDate: string;
   onChangeDate: (d: string) => void;
   isClosed: boolean;
@@ -2048,6 +2100,7 @@ interface ManualProductSalesModalProps {
 }
 
 const ManualProductSalesModal: React.FC<ManualProductSalesModalProps> = ({
+  isOpen,
   manualDate,
   onChangeDate,
   isClosed,
@@ -2062,38 +2115,55 @@ const ManualProductSalesModal: React.FC<ManualProductSalesModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  if (typeof document === "undefined") return null;
+  const hasValidRow = rows.some(
+    (r) => r.menuName.trim() && Math.round(Number(r.quantity) || 0) > 0
+  );
+
   return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 8 }}
-        transition={{ type: "spring", damping: 28, stiffness: 360 }}
-        className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 max-w-3xl w-full max-h-[88vh] overflow-y-auto custom-scrollbar space-y-4 shadow-2xl border border-slate-200/90 dark:border-slate-800"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div>
-            <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
-              Input Penjualan Produk (Dari Katalog Menu)
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Pilih menu &amp; varian dari Katalog, lalu isi jumlah terjual. Harga &amp; pemotongan stok bahan otomatis mengikuti resep varian.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer"
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="manual-product-sales-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onClick={onClose}
+          className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            onClick={(e) => e.stopPropagation()}
+            className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 max-w-3xl w-full max-h-[88vh] overflow-y-auto custom-scrollbar space-y-4 shadow-2xl border border-slate-200/90 dark:border-slate-800"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                  Input Penjualan Produk (Dari Katalog Menu)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Pilih menu &amp; varian dari Katalog, lalu isi jumlah terjual. Harga &amp; pemotongan stok bahan otomatis mengikuti resep varian.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Tutup modal input penjualan"
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {catalogChoices.length === 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-xs text-amber-800 dark:text-amber-200 font-semibold">
+                Belum ada produk aktif di Katalog Menu. Daftarkan produk terlebih dahulu di modul Katalog &amp; Menu untuk mencatat penjualan produk.
+              </div>
+            )}
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
@@ -2152,7 +2222,7 @@ const ManualProductSalesModal: React.FC<ManualProductSalesModalProps> = ({
                     emptyWhenZero
                     value={row.quantity}
                     onValueChange={(_, num) => {
-                      const nextQty = Math.max(0, num);
+                      const nextQty = Math.max(0, Math.round(num));
                       onUpdateRow(row.rowId, {
                         quantity: nextQty,
                         totalPrice: Math.round(nextQty * (row.unitPrice || 0)),
@@ -2214,7 +2284,7 @@ const ManualProductSalesModal: React.FC<ManualProductSalesModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isClosed}
+              disabled={isClosed || !hasValidRow}
               className="px-5 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm shadow-brand-600/20 flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -2223,7 +2293,9 @@ const ManualProductSalesModal: React.FC<ManualProductSalesModalProps> = ({
           </div>
         </form>
       </motion.div>
-    </motion.div>,
+    </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

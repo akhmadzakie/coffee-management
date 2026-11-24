@@ -2,13 +2,29 @@ import { RupiahSign } from './common/RupiahSign';
 import { FEATURES } from "../config/features";
 import React, { useState, useMemo, useEffect } from "react";
 import { formatCurrency } from "../utils/format";
-import { getLocalDateString } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
+import {
+  DEFAULT_STORE_TIMEZONE,
+  getLocalDateString,
+  getLocalPeriodString,
+} from "../utils/dateUtils";
 import {
   computeCashLiquidityBreakdown,
+  computeOwnerProfitAllocation,
   computePeriodFinancialSummary,
+  getPreviousPeriodString,
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
+import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomDatePicker } from "./common/CustomDatePicker";
+import {
+  addDaysToLocalDate,
+  computeOwnerCategoryContribution,
+  computePeriodGrowthPercent,
+  extractWitaHour,
+  getLocalPeriodFromTimestamp,
+} from "../utils/syncSanitizers";
 import { classifyDailyAttendanceStatus } from "../utils/attendanceRecap";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
@@ -92,8 +108,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     updateSettings,
   } = store;
 
-  // Period Filter: "this_month" | "last_30_days" | "this_year" | "today"
-  const [period, setPeriod] = useState<"this_month" | "last_30_days" | "this_year" | "today">("this_month");
+  // Period Filter: 7 mode fleksibel + Bulan kustom + Rentang Hari kustom
+  const [period, setPeriod] = useState<
+    "today" | "7_days" | "this_month" | "last_month" | "this_year" | "month" | "custom"
+  >("this_month");
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getLocalPeriodString());
+  const [customStartDate, setCustomStartDate] = useState<string>(() =>
+    addDaysToLocalDate(getLocalDateString(), -6)
+  );
+  const [customEndDate, setCustomEndDate] = useState<string>(() =>
+    getLocalDateString()
+  );
   
   // Target Omzet Bulanan (Tersimpan di database settings, hanya dapat diubah oleh Manager)
   const monthlyTarget = Number(settings.monthlyRevenueTarget) || 150000000;
@@ -101,7 +126,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   const canSetTarget = userRole === "MANAGER" || userRole === "SUPER_ADMIN";
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState<string>(monthlyTarget.toString());
-  const [saveTargetToast, setSaveTargetToast] = useState<string | null>(null);
 
   // Data Pengawasan Loss Prevention & Fraud
   const [approvalHistory, setApprovalHistory] = useState<ManagerApprovalRequest[]>([]);
@@ -126,8 +150,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     const fetchLossPreventionData = async () => {
       try {
         const [resHist, resToday] = await Promise.all([
-          fetch("/api/pos/approvals/history"),
-          fetch("/api/pos/orders/today"),
+          authFetch("/api/pos/approvals/history"),
+          authFetch("/api/pos/orders/today"),
         ]);
         if (resHist.ok) {
           setApprovalHistory(await resHist.json());
@@ -178,6 +202,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   }, [settings.monthlyRevenueTarget]);
 
   const handleSaveTarget = () => {
+    if (!canSetTarget) return;
     const cleaned = String(targetInput).replace(/\D/g, "");
     const parsed = parseInt(cleaned, 10);
     const val = !isNaN(parsed) && parsed > 0 ? parsed : monthlyTarget;
@@ -187,13 +212,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     });
     setTargetInput(val.toString());
     setIsEditingTarget(false);
-    setSaveTargetToast(`Target omzet bulanan berhasil disimpan: ${formatCurrency(val)}`);
-    setTimeout(() => setSaveTargetToast(null), 3500);
+    toast.success(`Target omzet bulanan berhasil disimpan: ${formatCurrency(val)}`);
   };
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
+  const todayStr = getLocalDateString();
+  const currentPeriodStr = getLocalPeriodString();
+  const currentYear = Number(currentPeriodStr.slice(0, 4));
+  const currentMonth = Number(currentPeriodStr.slice(5, 7)) - 1;
 
   // ─── Filter Data Penjualan, Rekap & Kas Operasional Berdasarkan Periode ─────
   const {
@@ -201,24 +226,44 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     filteredCashIn,
     filteredCashOut,
     filteredTransactions,
+    periodCashAll,
     periodSummary,
+    previousPeriodRevenue,
   } = useMemo(() => {
+    const start7Str = addDaysToLocalDate(todayStr, -6);
+    const lastMonthPeriodStr = getPreviousPeriodString(currentPeriodStr);
+    const normCustomStart =
+      customStartDate <= customEndDate ? customStartDate : customEndDate;
+    const normCustomEnd =
+      customStartDate <= customEndDate ? customEndDate : customStartDate;
+
     const matchesPeriodFilter = (dateStr: string) => {
       if (!dateStr) return false;
+      const localDate = getLocalDateString(new Date(dateStr));
       if (period === "today") {
-        const todayStr = getLocalDateString(now);
-        return dateStr.startsWith(todayStr);
+        return localDate === todayStr;
+      }
+      if (period === "7_days") {
+        return localDate >= start7Str && localDate <= todayStr;
       }
       if (period === "this_month") {
-        const d = new Date(dateStr);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        return getLocalPeriodFromTimestamp(dateStr) === currentPeriodStr;
       }
-      if (period === "last_30_days") {
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        return new Date(dateStr) >= thirtyDaysAgo;
+      if (period === "last_month") {
+        return getLocalPeriodFromTimestamp(dateStr) === lastMonthPeriodStr;
+      }
+      if (period === "month") {
+        return getLocalPeriodFromTimestamp(dateStr) === selectedMonth;
+      }
+      if (period === "custom") {
+        return Boolean(
+          localDate &&
+            (!normCustomStart || localDate >= normCustomStart) &&
+            (!normCustomEnd || localDate <= normCustomEnd)
+        );
       }
       if (period === "this_year") {
-        return new Date(dateStr).getFullYear() === currentYear;
+        return getLocalPeriodFromTimestamp(dateStr).startsWith(`${currentYear}-`);
       }
       return true;
     };
@@ -228,10 +273,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     const cashForPeriod = cashTransactions.filter((c) => matchesPeriodFilter(c.date));
     const cash = cashForPeriod.filter((c) => !isNonOperationalCashTransaction(c));
     const pos = purchaseOrders.filter((p) => matchesPeriodFilter(p.date));
-    const periodKey = period === "this_month" ? getLocalDateString(now).slice(0, 7) : "ALL";
+    const periodKey =
+      period === "this_month"
+        ? currentPeriodStr
+        : period === "last_month"
+        ? lastMonthPeriodStr
+        : period === "month"
+        ? selectedMonth
+        : "ALL";
+    const rangeBounds =
+      period === "today"
+        ? { startDate: todayStr, endDate: todayStr }
+        : period === "7_days"
+        ? { startDate: start7Str, endDate: todayStr }
+        : period === "custom"
+        ? { startDate: normCustomStart, endDate: normCustomEnd }
+        : {};
 
     const summary = computePeriodFinancialSummary({
       period: periodKey,
+      ...rangeBounds,
       salesTransactions: sales,
       dailySalesRecaps: recaps,
       cashTransactions: cashForPeriod,
@@ -245,12 +306,88 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       cashAccounts,
     });
 
+    // Hitung omzet periode pembanding sebelumnya (bulan lalu / kemarin / 7 hari lalu / tahun lalu / rentang sebelumnya)
+    let prevSummary: ReturnType<typeof computePeriodFinancialSummary>;
+    if (period === "this_month" || period === "last_month" || period === "month") {
+      const basePeriod =
+        period === "this_month"
+          ? currentPeriodStr
+          : period === "last_month"
+          ? lastMonthPeriodStr
+          : selectedMonth;
+      const prevPeriodKey = getPreviousPeriodString(basePeriod);
+      prevSummary = computePeriodFinancialSummary({
+        period: prevPeriodKey,
+        salesTransactions,
+        dailySalesRecaps: dailySalesRecaps || [],
+        cashTransactions,
+        expenseCategories: store.expenseCategories || [],
+        recipes: recipes || [],
+        ingredients,
+        products: products || [],
+        stockOpnames,
+        stockOpnameItems,
+        purchaseOrders,
+        cashAccounts,
+      });
+    } else {
+      const prevStart7 = addDaysToLocalDate(todayStr, -13);
+      const prevEnd7 = addDaysToLocalDate(todayStr, -7);
+      const yesterdayStr = addDaysToLocalDate(todayStr, -1);
+      const prevYearPrefix = `${currentYear - 1}-`;
+      let prevCustomStart = "";
+      let prevCustomEnd = "";
+      if (period === "custom" && normCustomStart && normCustomEnd) {
+        const diffDays = Math.max(
+          1,
+          Math.round(
+            (new Date(`${normCustomEnd}T00:00:00`).getTime() -
+              new Date(`${normCustomStart}T00:00:00`).getTime()) /
+              86400000
+          ) + 1
+        );
+        prevCustomEnd = addDaysToLocalDate(normCustomStart, -1);
+        prevCustomStart = addDaysToLocalDate(normCustomStart, -diffDays);
+      }
+      const matchesPrevFilter = (dateStr: string) => {
+        if (!dateStr) return false;
+        const localDate = getLocalDateString(new Date(dateStr));
+        if (period === "today") return localDate === yesterdayStr;
+        if (period === "7_days") return localDate >= prevStart7 && localDate <= prevEnd7;
+        if (period === "custom") return localDate >= prevCustomStart && localDate <= prevCustomEnd;
+        if (period === "this_year") return getLocalPeriodFromTimestamp(dateStr).startsWith(prevYearPrefix);
+        return false;
+      };
+      prevSummary = computePeriodFinancialSummary({
+        period: "ALL",
+        salesTransactions: salesTransactions.filter((s) => matchesPrevFilter(s.date)),
+        dailySalesRecaps: (dailySalesRecaps || []).filter((r) => matchesPrevFilter(r.date)),
+        cashTransactions: cashTransactions.filter((c) => matchesPrevFilter(c.date)),
+        expenseCategories: store.expenseCategories || [],
+        recipes: recipes || [],
+        ingredients,
+        products: products || [],
+        stockOpnames,
+        stockOpnameItems,
+        purchaseOrders: purchaseOrders.filter((p) => matchesPrevFilter(p.date)),
+        cashAccounts,
+      });
+    }
+    const prevRev =
+      prevSummary.netSales > 0
+        ? prevSummary.netSales
+        : prevSummary.recognizedRevenue > 0
+        ? prevSummary.recognizedRevenue
+        : prevSummary.totalOperationalCashIn;
+
     return {
       filteredSales: sales,
       filteredCashIn: summary.totalOperationalCashIn,
       filteredCashOut: summary.totalOperationalCashOut,
       filteredTransactions: cash,
+      periodCashAll: cashForPeriod,
       periodSummary: summary,
+      previousPeriodRevenue: prevRev,
     };
   }, [
     salesTransactions,
@@ -265,7 +402,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     purchaseOrders,
     cashAccounts,
     period,
-    currentMonth,
+    selectedMonth,
+    customStartDate,
+    customEndDate,
+    todayStr,
+    currentPeriodStr,
     currentYear,
   ]);
 
@@ -277,11 +418,38 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       : periodSummary.recognizedRevenue > 0
       ? periodSummary.recognizedRevenue
       : filteredCashIn;
+  const revenueGrowthPct = useMemo(
+    () => computePeriodGrowthPercent(totalRevenue, previousPeriodRevenue),
+    [totalRevenue, previousPeriodRevenue]
+  );
 
   // 2. Laba Bersih & Profit Margin (Formula akrual terpusat bebas CapEx/Mutasi/Tabungan)
   const totalExpenses = periodSummary.effectiveCOGS + periodSummary.totalOPEX;
   const netProfit = periodSummary.netProfit;
   const netProfitMargin = periodSummary.netMarginPercent;
+
+  // 2b. Rekap Pembagian Keuntungan Owner, Tabungan Kedai & Prive
+  const profitAllocation = useMemo(
+    () =>
+      computeOwnerProfitAllocation({
+        netProfit,
+        cashTransactions: periodCashAll,
+        cashAccounts,
+        expenseCategories: store.expenseCategories || [],
+        ownerPercent: settings.profitShareOwnerPercent,
+        reservePercent: settings.profitShareReservePercent,
+        investorPercent: settings.profitShareInvestorPercent,
+      }),
+    [
+      netProfit,
+      periodCashAll,
+      cashAccounts,
+      store.expenseCategories,
+      settings.profitShareOwnerPercent,
+      settings.profitShareReservePercent,
+      settings.profitShareInvestorPercent,
+    ]
+  );
 
   // 3. Average Ticket Value (ATV / Basket Size) & Transaction Count
   const transactionCount = filteredSales.length > 0
@@ -444,8 +612,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
     filteredSales.forEach((s) => {
       const amt = getSaleTransactionAmount(s);
-      const d = new Date(s.date);
-      const h = d.getHours();
+      const h = extractWitaHour(s.date) ?? new Date(s.date).getHours();
 
       if (h >= 7 && h < 11) {
         hourSlots[0].count += 1;
@@ -467,14 +634,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
 
   // ─── Kategori Penjualan (Donut Chart) ─────────────────────────────────────
   const categoryContribution = useMemo(() => {
-    if (totalRevenue === 0) return [];
-    return [
-      { name: "Coffee Beverages", value: Math.round(totalRevenue * 0.54), color: "#d97706" },
-      { name: "Non-Coffee & Tea", value: Math.round(totalRevenue * 0.22), color: "#f59e0b" },
-      { name: "Pastry & Food", value: Math.round(totalRevenue * 0.16), color: "#4a5ff0" },
-      { name: "Retail Beans & Merch", value: Math.round(totalRevenue * 0.08), color: "#94a3b8" },
-    ];
-  }, [totalRevenue]);
+    return computeOwnerCategoryContribution({
+      filteredSales,
+      products: products || [],
+      totalRevenue,
+    });
+  }, [filteredSales, products, totalRevenue]);
 
   // ─── Top 5 Star Products (Cash Cows) ──────────────────────────────────────
   const topProducts = useMemo(() => {
@@ -534,9 +699,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       const cls = classifyDailyAttendanceStatus(a);
       return cls === "HADIR" || cls === "TERLAMBAT";
     }).length;
-    const attendanceRate = periodAttendances.length > 0
+    const hasAttendanceData = periodAttendances.length > 0;
+    const attendanceRate = hasAttendanceData
       ? Math.round((presentCount / periodAttendances.length) * 100)
-      : 96;
+      : 0;
 
     // 3. Kepatuhan Checklist Jobdesk Leader
     const periodChecklists = dailyChecklists.filter((c) => {
@@ -562,15 +728,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       });
     }
 
-    const checklistCompliance = totalPossibleItems > 0
-      ? Math.min(100, Math.round((totalCheckedItems / totalPossibleItems) * 100))
-      : periodChecklists.length > 0 ? 92 : 88;
+    const hasChecklistData = periodChecklists.length > 0;
+    const checklistCompliance =
+      totalPossibleItems > 0
+        ? Math.min(100, Math.round((totalCheckedItems / totalPossibleItems) * 100))
+        : 0;
 
     return {
       activeStaffCount: activeStaff.length,
       totalPayrollAmount,
       attendanceRate,
+      hasAttendanceData,
       checklistCompliance,
+      hasChecklistData,
       checklistDaysCount: periodChecklists.length,
     };
   }, [employees, payrollRecords, dailyAttendances, dailyChecklists, currentYear, currentMonth]);
@@ -581,10 +751,23 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     switch (period) {
       case "today":
         return "Hari Ini";
+      case "7_days":
+        return "7 Hari Terakhir";
       case "this_month":
-        return `Bulan Ini (${new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })})`;
-      case "last_30_days":
-        return "30 Hari Terakhir";
+        return `Bulan Ini (${new Date().toLocaleDateString("id-ID", {
+          timeZone: DEFAULT_STORE_TIMEZONE,
+          month: "long",
+          year: "numeric",
+        })})`;
+      case "last_month":
+        return `Bulan Lalu (${getPreviousPeriodString(currentPeriodStr)})`;
+      case "month":
+        return `Bulan ${selectedMonth}`;
+      case "custom": {
+        const s = customStartDate <= customEndDate ? customStartDate : customEndDate;
+        const e = customStartDate <= customEndDate ? customEndDate : customStartDate;
+        return `Rentang ${s} s.d. ${e}`;
+      }
       case "this_year":
         return `Tahun ${currentYear}`;
       default:
@@ -596,8 +779,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     setIsExporting("pdf");
     try {
       exportMasterExecutiveReportPDF({
-        sales: salesTransactions,
-        finance: cashTransactions,
+        sales: filteredSales,
+        finance: filteredTransactions,
         ingredients,
         payroll: payrollRecords,
         attendances: dailyAttendances,
@@ -618,8 +801,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
     setIsExporting("xlsx");
     try {
       exportMasterExecutiveReportXlsx({
-        sales: salesTransactions,
-        finance: cashTransactions,
+        sales: filteredSales,
+        finance: filteredTransactions,
         ingredients,
         movements: stockMovements,
         payroll: payrollRecords,
@@ -663,39 +846,46 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
 
         {/* Action & Period Selector */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
-          {/* Animated Sliding Pill Period Tabs */}
-          <div className="bg-slate-100/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 text-xs shadow-inner overflow-x-auto no-scrollbar shrink-0">
-            {[
-              { id: "today", label: "Hari Ini" },
-              { id: "this_month", label: "Bulan Ini" },
-              { id: "last_30_days", label: "30 Hari" },
-              { id: "this_year", label: "Tahun Ini" },
-            ].map((p) => {
-              const isActive = period === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => setPeriod(p.id as any)}
-                  className={`relative px-3 sm:px-3.5 py-1.5 rounded-xl font-semibold transition-colors duration-200 cursor-pointer whitespace-nowrap ${
-                    isActive ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="ownerPeriodTab"
-                      className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                    />
-                  )}
-                  <span className="relative z-10">{p.label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-col items-stretch xl:items-end gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Animated Sliding Pill Period Tabs */}
+            <div className="bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 dark:border-slate-700 text-xs shadow-inner overflow-x-auto no-scrollbar shrink-0">
+              {[
+                { id: "today", label: "Hari Ini" },
+                { id: "7_days", label: "7 Hari" },
+                { id: "this_month", label: "Bulan Ini" },
+                { id: "last_month", label: "Bulan Lalu" },
+                { id: "this_year", label: "Tahun Ini" },
+                { id: "month", label: "Pilih Bulan" },
+                { id: "custom", label: "Rentang Hari" },
+              ].map((p) => {
+                const isActive = period === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPeriod(p.id as any)}
+                    className={`relative px-2.5 sm:px-3 py-1.5 rounded-xl font-semibold transition-colors duration-200 cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? "text-slate-900 dark:text-slate-100"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="ownerPeriodTab"
+                        className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700"
+                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                      />
+                    )}
+                    <span className="relative z-10">{p.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* 1-Click Master Executive Report Exports & Jumps */}
-          <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+            {/* 1-Click Master Executive Report Exports & Jumps */}
+            <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <button
               onClick={handleExportExecutivePDF}
               disabled={isExporting !== null}
@@ -733,6 +923,40 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span>Ringkasan Eksekutif AI</span>
             </button>
           </div>
+          </div>
+
+          {period === "month" && (
+            <div className="flex items-center justify-end gap-2 text-xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                Bulan Terpilih:
+              </span>
+              <CustomMonthPicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                allowClear={false}
+                buttonClassName="py-1 px-3 text-xs rounded-xl"
+              />
+            </div>
+          )}
+
+          {period === "custom" && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                Rentang Hari:
+              </span>
+              <CustomDatePicker
+                value={customStartDate}
+                onChange={setCustomStartDate}
+                placeholder="Dari"
+              />
+              <span className="text-slate-400 font-semibold">–</span>
+              <CustomDatePicker
+                value={customEndDate}
+                onChange={setCustomEndDate}
+                placeholder="Sampai"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -763,11 +987,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 ) : (
                   <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80">
                     Ditetapkan oleh Manajer
-                  </span>
-                )}
-                {saveTargetToast && (
-                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full animate-fade-in">
-                    ✓ {saveTargetToast}
                   </span>
                 )}
               </div>
@@ -882,9 +1101,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               {formatCurrency(totalRevenue)}
             </div>
             <div className="flex items-center gap-1.5 mt-2.5 text-xs">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-emerald-700 bg-emerald-50 border border-emerald-200/60 font-bold text-[11px]">
-                <ArrowUpRight className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" /> +14.2%
-              </span>
+              {revenueGrowthPct === null ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 font-bold text-[11px]">
+                  Periode Awal
+                </span>
+              ) : revenueGrowthPct >= 0 ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-emerald-700 bg-emerald-50 border border-emerald-200/60 font-bold text-[11px] tabular-nums">
+                  <ArrowUpRight className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" /> +{revenueGrowthPct}%
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-rose-700 bg-rose-50 border border-rose-200/60 font-bold text-[11px] tabular-nums">
+                  <TrendingDown className="w-3.5 h-3.5 mr-0.5 stroke-[2.5]" /> {revenueGrowthPct}%
+                </span>
+              )}
               <span className="text-slate-400 text-[11px]">vs periode lalu</span>
             </div>
           </div>
@@ -975,9 +1204,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span className="text-sm font-semibold text-slate-400">Cup/Item</span>
             </div>
             <div className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-500">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200/60 text-[11px]">
-                <Sparkles className="w-3 h-3 mr-1 text-amber-500 fill-amber-500" /> Permintaan Tinggi
-              </span>
+              {totalCupsSold > 0 ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200/60 text-[11px]">
+                  <Sparkles className="w-3 h-3 mr-1 text-amber-500 fill-amber-500" /> Aktif Berjalan
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold border border-slate-200/60 text-[11px]">
+                  Belum Ada Penjualan
+                </span>
+              )}
             </div>
           </div>
         </motion.div>
@@ -999,9 +1234,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               </p>
             </div>
           </div>
-          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
-            ✓ Biaya Terkendali
-          </span>
+          {totalRevenue <= 0 ? (
+            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/60 shadow-2xs">
+              Menunggu Data Omzet
+            </span>
+          ) : cogsRatio <= 35 && laborRatio <= 22 ? (
+            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+              ✓ Biaya Terkendali
+            </span>
+          ) : (
+            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200/60 shadow-2xs">
+              ⚠ Rasio Biaya Tinggi
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1162,6 +1407,81 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
         </div>
       </div>
 
+      {/* ─── Rekap Keuntungan & Bagi Hasil Owner ──────────────────────── */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-coffee-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+              <span>Rekap Keuntungan &amp; Bagi Hasil Owner ({getPeriodLabelText()})</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Porsi hak owner dari laba bersih dikurangi Prive yang sudah ditarik, cadangan Tabungan Kedai, dan CapEx periode ini.
+            </p>
+          </div>
+          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30">
+            Owner {profitAllocation.ownerSharePercent}% • Tabungan {profitAllocation.reserveSharePercent}%
+            {profitAllocation.investorSharePercent > 0 ? ` • Investor ${profitAllocation.investorSharePercent}%` : ""}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 border border-brand-200/70 dark:border-brand-500/30 space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Sisa Hak Owner ({profitAllocation.ownerSharePercent}%)
+            </span>
+            <p className={`text-xl font-black font-mono tabular-nums ${profitAllocation.ownerRemainingEntitlement >= 0 ? "text-brand-700 dark:text-brand-300" : "text-rose-600 dark:text-rose-300"}`}>
+              {formatCurrency(profitAllocation.ownerRemainingEntitlement)}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+              Porsi: {formatCurrency(profitAllocation.ownerShareAmount)} − Prive: {formatCurrency(profitAllocation.ownerPriveTotal)}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/70 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 border border-amber-200/70 dark:border-amber-500/30 space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Cadangan Tabungan ({profitAllocation.reserveSharePercent}%)
+            </span>
+            <p className="text-xl font-black font-mono tabular-nums text-amber-700 dark:text-amber-300">
+              {formatCurrency(profitAllocation.reserveShareAmount)}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+              Tersetor: {formatCurrency(profitAllocation.netSavingsAllocation)} • Sisa: {formatCurrency(profitAllocation.reserveRemainingToTransfer)}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Laba Ditahan Bersih
+            </span>
+            <p className={`text-xl font-black font-mono tabular-nums ${profitAllocation.retainedProfitAfterPrive >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>
+              {formatCurrency(profitAllocation.retainedProfitAfterPrive)}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+              Laba Bersih {formatCurrency(profitAllocation.netProfit)} − Prive
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {profitAllocation.investorSharePercent > 0
+                ? `Investor (${profitAllocation.investorSharePercent}%) & CapEx`
+                : "Belanja Aset / CapEx"}
+            </span>
+            <p className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-slate-100">
+              {formatCurrency(
+                profitAllocation.investorSharePercent > 0
+                  ? profitAllocation.investorShareAmount
+                  : profitAllocation.capexExpense
+              )}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+              CapEx periode: {formatCurrency(profitAllocation.capexExpense)}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ─── Pilar 4: Kinerja SDM, Beban Payroll & Kepatuhan Supervisi ──── */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -1231,16 +1551,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                {sdmMetrics.checklistCompliance}%
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                sdmMetrics.checklistCompliance >= 85
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-amber-50 text-amber-700 border-amber-200"
-              }`}>
-                {sdmMetrics.checklistCompliance >= 85 ? "SOP Disiplin" : "Perlu Atensi"}
-              </span>
+              {sdmMetrics.hasChecklistData ? (
+                <>
+                  <span className="text-2xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                    {sdmMetrics.checklistCompliance}%
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    sdmMetrics.checklistCompliance >= 85
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}>
+                    {sdmMetrics.checklistCompliance >= 85 ? "SOP Disiplin" : "Perlu Atensi"}
+                  </span>
+                </>
+              ) : (
+                <span className="text-lg font-bold text-slate-400">Belum Ada Data</span>
+              )}
             </div>
             <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden mt-2.5">
               <div
@@ -1260,8 +1586,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                 <Clock className="w-4 h-4 stroke-[2.2]" />
               </div>
             </div>
-            <div className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              {sdmMetrics.attendanceRate}%
+            <div className="text-2xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+              {sdmMetrics.hasAttendanceData ? `${sdmMetrics.attendanceRate}%` : "Belum Ada Data"}
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               Disiplin kehadiran & ketepatan jam shift
@@ -1542,7 +1868,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                   >
                     Impor Data POS
                   </button>
-                  {FEATURES.POS && (
+                  {FEATURES.POS && userRole !== "OWNER" && (
                   <button
                     onClick={() => onNavigate("shifts")}
                     className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95 transition-all cursor-pointer"
@@ -1745,7 +2071,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
                         <td className="py-2.5 px-3.5 font-bold text-slate-900 whitespace-nowrap">
                           <div>#{req.receiptNo}</div>
                           <div className="text-[10px] text-slate-400 font-normal">
-                            {req.respondedAt ? new Date(req.respondedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                            {req.respondedAt
+                              ? new Date(req.respondedAt).toLocaleTimeString("id-ID", {
+                                  timeZone: DEFAULT_STORE_TIMEZONE,
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "-"}
                           </div>
                         </td>
                         <td className="py-2.5 px-3.5">
@@ -1793,7 +2125,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
       </>
 )}
 {/* ─── Navigasi Cepat Eksekutif (Bottom Actions) ──────────────────────── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c163b] via-[#101e52] to-[#1a2d75] text-white p-6 sm:p-7 shadow-xl border border-indigo-950/40 flex flex-col md:flex-row items-center justify-between gap-5">
+      <div className="relative overflow-hidden rounded-3xl bg-brand-gradient text-white p-6 sm:p-7 shadow-xl border border-brand-700/60 flex flex-col md:flex-row items-center justify-between gap-5">
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/15 blur-3xl pointer-events-none" />
         <div className="relative z-10 space-y-1 text-center md:text-left">
           <h4 className="text-base sm:text-lg font-bold text-white flex items-center justify-center md:justify-start gap-2">

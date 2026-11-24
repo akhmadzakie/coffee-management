@@ -1,5 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { formatCurrency } from "../utils/format";
+import {
+  DEFAULT_STORE_TIMEZONE,
+  getLocalDateString,
+  getLocalPeriodString,
+} from "../utils/dateUtils";
+import {
+  addDaysToLocalDate,
+  getLocalPeriodFromTimestamp,
+} from "../utils/syncSanitizers";
 import { useStore } from "../store/StoreContext";
 import {
   computeCashLiquidityBreakdown,
@@ -70,10 +79,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const { t } = useTranslation(settings.language || "id");
   const isIndo = settings.language === "id";
 
-  const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
-  const [filterYear, setFilterYear] = useState<number>(
-    new Date().getFullYear(),
-  );
+  const currentPeriodStr = getLocalPeriodString();
+  const [initialPeriodYear, initialPeriodMonthNum] = currentPeriodStr.split("-").map(Number);
+  const [filterMonth, setFilterMonth] = useState<number>(initialPeriodMonthNum - 1);
+  const [filterYear, setFilterYear] = useState<number>(initialPeriodYear);
 
   const canViewFinance = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER" || currentUser?.role === "OWNER" || currentUser?.role === "FINANCE";
 
@@ -97,9 +106,10 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   };
 
   const isDateInFilter = (dateStr: string) => {
-    const d = new Date(dateStr);
-    if (filterMonth === -1) return d.getFullYear() === filterYear;
-    return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
+    const period = getLocalPeriodFromTimestamp(dateStr);
+    if (!period) return false;
+    if (filterMonth === -1) return period.startsWith(`${filterYear}-`);
+    return period === `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}`;
   };
 
   const filteredFinance = cashTransactions.filter(
@@ -134,16 +144,24 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
     const yearStr = `${filterYear}-`;
     return computePeriodFinancialSummary({
       period: "ALL",
-      salesTransactions: salesTransactions.filter((s) => String(s.date).startsWith(yearStr)),
-      dailySalesRecaps: dailySalesRecaps.filter((r) => String(r.date).startsWith(yearStr)),
-      cashTransactions: cashTransactions.filter((c) => String(c.date).startsWith(yearStr)),
+      salesTransactions: salesTransactions.filter((s) =>
+        getLocalPeriodFromTimestamp(s.date).startsWith(yearStr)
+      ),
+      dailySalesRecaps: dailySalesRecaps.filter((r) =>
+        getLocalPeriodFromTimestamp(r.date).startsWith(yearStr)
+      ),
+      cashTransactions: cashTransactions.filter((c) =>
+        getLocalPeriodFromTimestamp(c.date).startsWith(yearStr)
+      ),
       expenseCategories,
       recipes,
       ingredients,
       products,
       stockOpnames,
       stockOpnameItems,
-      purchaseOrders: purchaseOrders.filter((po) => String(po.date).startsWith(yearStr)),
+      purchaseOrders: purchaseOrders.filter((po) =>
+        getLocalPeriodFromTimestamp(po.date).startsWith(yearStr)
+      ),
       cashAccounts,
     });
   }, [
@@ -261,36 +279,33 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   // Inventory Valuation
   const totalInventoryValue = ingredients.reduce((sum, ing) => sum + (ing.currentStock * (ing.costPerUnit || 0)), 0);
 
-  // Expiring Contracts (within 30 days)
+  // Expiring Contracts (within 30 days - zona waktu WITA)
   const expiringContracts = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(today.getDate() + 30);
+    const todayStr = getLocalDateString();
+    const limitStr = addDaysToLocalDate(todayStr, 30);
 
-    return contracts.filter(c => {
+    return contracts.filter((c) => {
       // Check if the employee is still active, otherwise the contract doesn't matter
-      const emp = employees.find(e => e.id === c.employeeId);
+      const emp = employees.find((e) => e.id === c.employeeId);
       if (!emp || emp.status !== "AKTIF") return false;
 
-      if (c.status !== 'ACTIVE' || !c.endDate) return false;
-      const end = new Date(c.endDate);
-      return end >= today && end <= thirtyDaysFromNow;
+      if (c.status !== "ACTIVE" || !c.endDate) return false;
+      const endYmd = c.endDate.slice(0, 10);
+      return endYmd >= todayStr && endYmd <= limitStr;
     });
   }, [contracts, employees]);
 
-  // Expired Contracts (Past end date but employee still active)
+  // Expired Contracts (Past end date but employee still active - zona waktu WITA)
   const expiredContracts = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today
+    const todayStr = getLocalDateString();
 
-    return contracts.filter(c => {
-      const emp = employees.find(e => e.id === c.employeeId);
+    return contracts.filter((c) => {
+      const emp = employees.find((e) => e.id === c.employeeId);
       if (!emp || emp.status !== "AKTIF") return false;
 
-      if (c.status !== 'ACTIVE' || !c.endDate) return false;
-      const end = new Date(c.endDate);
-      return end < today;
+      if (c.status !== "ACTIVE" || !c.endDate) return false;
+      const endYmd = c.endDate.slice(0, 10);
+      return endYmd < todayStr;
     });
   }, [contracts, employees]);
 
@@ -315,20 +330,20 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const COLORS = ["#1b2cc0", "#7692ff", "#0f1860", "#a2c5fb", "#059669", "#e11d48"];
 
   // Dynamic year options: 5 years back to current
-  const currentYear = new Date().getFullYear();
+  const currentYear = initialPeriodYear;
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   // Custom Recharts tooltip with Rupiah formatting
   const RupiahTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white border border-stone-200 rounded-2xl shadow-coffee-lg px-3.5 py-3 text-xs">
-        <p className="font-bold text-stone-800 mb-1.5">{label}</p>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-coffee-lg px-3.5 py-3 text-xs">
+        <p className="font-bold text-slate-800 dark:text-slate-100 mb-1.5">{label}</p>
         {payload.map((entry: any) => (
           <div key={entry.dataKey} className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
-            <span className="text-stone-600 font-medium">{entry.name === "sales" ? "Penjualan" : "Pengeluaran"}:</span>
-            <span className="font-bold font-mono" style={{ color: entry.color }}>{formatCurrency(entry.value)}</span>
+            <span className="text-slate-600 dark:text-slate-300 font-medium">{entry.name === "sales" ? "Penjualan" : "Pengeluaran"}:</span>
+            <span className="font-bold font-mono tabular-nums" style={{ color: entry.color }}>{formatCurrency(entry.value)}</span>
           </div>
         ))}
       </div>
@@ -338,9 +353,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
   const PieTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-white border border-stone-200 rounded-2xl shadow-coffee px-3.5 py-2.5 text-xs">
-        <p className="font-semibold text-stone-800">{payload[0].name}</p>
-        <p className="text-stone-600 font-bold font-mono mt-0.5">{formatCurrency(payload[0].value)}</p>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-coffee px-3.5 py-2.5 text-xs">
+        <p className="font-semibold text-slate-800 dark:text-slate-100">{payload[0].name}</p>
+        <p className="text-slate-600 dark:text-slate-300 font-bold font-mono tabular-nums mt-0.5">{formatCurrency(payload[0].value)}</p>
       </div>
     );
   };
@@ -366,7 +381,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
               </p>
               <p className="text-xs text-emerald-700 mt-0.5">
                 Dimulai{" "}
-                {new Date(activeShift.startTime).toLocaleString("id-ID")} ·
+                {new Date(activeShift.startTime).toLocaleString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                })} ·
                 Berjalan {hours > 0 ? `${hours} jam ` : ""}
                 {minutes} menit
               </p>
@@ -433,7 +450,7 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                 setFilterYear(y);
               }}
               allowAllMonths={true}
-              buttonClassName="border-stone-200 shadow-2xs py-1.5 px-3 whitespace-nowrap"
+              buttonClassName="border-slate-200 dark:border-slate-700 shadow-2xs py-1.5 px-3 whitespace-nowrap"
             />
           )}
         </div>
@@ -556,20 +573,20 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                   </div>
                   {kpi.trend}
                 </div>
-                <p className={`text-2xl font-bold font-mono tracking-tight ${kpi.color}`}>{formatCurrency(kpi.value)}</p>
-                <p className="text-xs text-stone-600 mt-1 font-semibold">{kpi.label}</p>
+                <p className={`text-2xl font-bold font-mono tracking-tight tabular-nums ${kpi.color}`}>{formatCurrency(kpi.value)}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-semibold">{kpi.label}</p>
               </motion.div>
             ))}
           </div>
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
               <div className="mb-4">
-                <h3 className="text-base font-bold text-stone-900 tracking-tight">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                   {isIndo ? "Tren Penjualan & Pengeluaran" : "Sales & Expense Trend"}
                 </h3>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {filterMonth === -1 ? (isIndo ? "Agregasi per bulan" : "Monthly aggregation") : (isIndo ? "Agregasi per hari" : "Daily aggregation")}
                 </p>
               </div>
@@ -585,9 +602,9 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                       <stop offset="95%" stopColor="#e11d48" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1ece6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#a8a29e' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip content={<RupiahTooltip />} />
                   <Area type="monotone" dataKey="sales" name="sales" stroke="#d97706" strokeWidth={2.5} fill="url(#colorSales)" dot={false} />
                   <Area type="monotone" dataKey="expense" name="expense" stroke="#e11d48" strokeWidth={2.5} fill="url(#colorExpense)" dot={false} />
@@ -596,18 +613,18 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
               <div className="flex items-center gap-5 mt-3 justify-center">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-1 bg-amber-600 rounded-full" />
-                  <span className="text-xs font-semibold text-stone-600">{isIndo ? "Penjualan" : "Sales"}</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{isIndo ? "Penjualan" : "Sales"}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-1 bg-rose-600 rounded-full" />
-                  <span className="text-xs font-semibold text-stone-600">{isIndo ? "Pengeluaran" : "Expenses"}</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{isIndo ? "Pengeluaran" : "Expenses"}</span>
                 </div>
               </div>
             </div>
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
               <div className="mb-4">
-                <h3 className="text-base font-bold text-stone-900 tracking-tight">{isIndo ? "Pengeluaran per Kategori" : "Expenses by Category"}</h3>
-                <p className="text-xs text-stone-500 mt-0.5">{isIndo ? "Distribusi pengeluaran periode" : "Selected period"}</p>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">{isIndo ? "Pengeluaran per Kategori" : "Expenses by Category"}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isIndo ? "Distribusi pengeluaran periode" : "Selected period"}</p>
               </div>
               {expenseByCategory.length > 0 ? (
                 <ResponsiveContainer width="100%" height={240}>
@@ -627,12 +644,12 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
                     <Legend
                       iconType="circle"
                       iconSize={8}
-                      formatter={(val) => <span className="text-xs font-medium text-stone-700">{val}</span>}
+                      formatter={(val) => <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{val}</span>}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="flex flex-col items-center justify-center h-[240px] text-stone-400">
+                <div className="flex flex-col items-center justify-center h-[240px] text-slate-400">
                   <AlertCircle className="w-8 h-8 mb-2 opacity-40" />
                   <p className="text-xs font-medium">{isIndo ? "Belum ada data pengeluaran" : "No expense data"}</p>
                 </div>
@@ -645,50 +662,52 @@ export const Dashboard = ({ view }: { view: "FINANCE" | "INVENTORY" }) => {
       {view === "INVENTORY" && (
         <motion.div key="inventory-tab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="text-stone-500 text-xs font-bold uppercase tracking-wider">{isIndo ? "Valuasi Stok Bahan" : "Inventory Valuation"}</h3>
-              <p className="text-2xl font-bold font-mono text-stone-900 mt-2">{canViewFinance ? formatCurrency(totalInventoryValue) : "---"}</p>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
+              <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{isIndo ? "Valuasi Stok Bahan" : "Inventory Valuation"}</h3>
+              <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-2">{canViewFinance ? formatCurrency(totalInventoryValue) : "---"}</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="text-stone-500 text-xs font-bold uppercase tracking-wider">{isIndo ? "Bahan Stok Kritis" : "Low Stock"}</h3>
-              <p className="text-2xl font-bold font-mono text-rose-600 mt-2">{lowStockIngredients.length} item</p>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
+              <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{isIndo ? "Bahan Stok Kritis" : "Low Stock"}</h3>
+              <p className="text-2xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400 mt-2">{lowStockIngredients.length} item</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="text-stone-500 text-xs font-bold uppercase tracking-wider">{isIndo ? "Pergerakan Bulan Ini" : "Monthly Movements"}</h3>
-              <p className="text-2xl font-bold font-mono text-stone-900 mt-2">{stockMovements.filter(m => new Date(m.date).getMonth() === new Date().getMonth()).length} transaksi</p>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
+              <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{isIndo ? "Pergerakan Bulan Ini" : "Monthly Movements"}</h3>
+              <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-2">
+                {stockMovements.filter((m) => getLocalPeriodFromTimestamp(m.date) === currentPeriodStr).length} transaksi
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="font-bold text-base text-stone-900 mb-4">{isIndo ? "Bahan Baku Menipis" : "Low Stock Alerts"}</h3>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 mb-4">{isIndo ? "Bahan Baku Menipis" : "Low Stock Alerts"}</h3>
               <div className="space-y-3">
                 {lowStockIngredients.slice(0, 5).map((ing) => (
-                  <div key={ing.id} className="flex justify-between items-center p-3.5 bg-stone-50/80 rounded-2xl border border-stone-200/50">
-                    <span className="text-sm font-semibold text-stone-800">{ing.name}</span>
-                    <span className="font-bold font-mono text-xs text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                  <div key={ing.id} className="flex justify-between items-center p-3.5 bg-slate-50/80 dark:bg-slate-800/70 rounded-2xl border border-slate-200/50 dark:border-slate-700/70">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{ing.name}</span>
+                    <span className="font-bold font-mono text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-2.5 py-1 rounded-full border border-rose-200 dark:border-rose-500/30 tabular-nums">
                       {ing.currentStock} {ing.unit}
                     </span>
                   </div>
                 ))}
                 {lowStockIngredients.length === 0 && (
-                  <p className="text-xs text-stone-400 py-4 text-center">Semua stok bahan baku dalam batas aman.</p>
+                  <p className="text-xs text-slate-400 py-4 text-center">Semua stok bahan baku dalam batas aman.</p>
                 )}
               </div>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="font-bold text-base text-stone-900 mb-4">{isIndo ? "Aktivitas Stok Terbaru" : "Recent Movements"}</h3>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-coffee">
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 mb-4">{isIndo ? "Aktivitas Stok Terbaru" : "Recent Movements"}</h3>
               <div className="space-y-3">
                 {recentMovements.map((m) => (
-                  <div key={m.id} className="flex justify-between items-center p-3.5 bg-stone-50/80 rounded-2xl border border-stone-200/50 text-xs font-mono">
-                    <span className="font-sans font-medium text-stone-800">{ingredients.find(i => i.id === m.ingredientId)?.name}</span>
-                    <span className={`font-bold px-2 py-0.5 rounded-full ${m.type === 'IN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                  <div key={m.id} className="flex justify-between items-center p-3.5 bg-slate-50/80 dark:bg-slate-800/70 rounded-2xl border border-slate-200/50 dark:border-slate-700/70 text-xs font-mono">
+                    <span className="font-sans font-medium text-slate-800 dark:text-slate-100">{ingredients.find(i => i.id === m.ingredientId)?.name}</span>
+                    <span className={`font-bold px-2 py-0.5 rounded-full tabular-nums ${m.type === 'IN' ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30' : 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30'}`}>
                       {m.type === 'IN' ? '+' : '-'}{m.quantity}
                     </span>
                   </div>
                 ))}
                 {recentMovements.length === 0 && (
-                  <p className="text-xs text-stone-400 py-4 text-center">Belum ada riwayat pergerakan stok.</p>
+                  <p className="text-xs text-slate-400 py-4 text-center">Belum ada riwayat pergerakan stok.</p>
                 )}
               </div>
             </div>

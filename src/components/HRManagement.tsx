@@ -1,16 +1,20 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
+import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
+import { formatCurrency } from "../utils/format";
 import { Role, DEFAULT_LEADER_ALLOWANCE_RULES, DEFAULT_SHIFT_DEFINITIONS, ShiftDefinition } from "../types";
-import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import {
   buildAttendanceCorrectionUpdate,
   calculateWorkDurationHours,
   classifyDailyAttendanceStatus,
   computeMonthlyAttendanceRecap,
+  formatWitaTimeHm,
   resolveCanonicalEmployeeId,
 } from "../utils/attendanceRecap";
+import { addDaysToLocalDate, validatePayrollMutation } from "../utils/syncSanitizers";
 import { KPI } from "./KPI";
 import { Payroll } from "./Payroll";
 import { RupiahSign } from "./common/RupiahSign";
@@ -29,7 +33,6 @@ import {
   Printer,
   UserCheck,
   X,
-  Mail,
   MapPin,
   Camera,
   ExternalLink,
@@ -65,9 +68,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
-import { exportSinglePayslipPDF } from "../utils/export";
 import {
   Employee,
   EmployeeContract,
@@ -96,6 +96,8 @@ export function HRManagement() {
     dailyChecklists,
     setDailyChecklists,
     kpiBonusRules,
+    closedPeriods,
+    payrollRecords,
     addEmployee,
     updateEmployee,
     deleteEmployee,
@@ -108,6 +110,7 @@ export function HRManagement() {
     updateUser,
     deleteUser,
   } = useStore();
+  const confirmModal = useConfirm();
 
   const isIndo = settings.language === "id";
   const isLeader = currentUser?.role === "LEADER";
@@ -205,8 +208,6 @@ export function HRManagement() {
     }
     return currentUser?.role === "LEADER" ? "schedule" : "overview";
   });
-  const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
-  const payslipRef = useRef<HTMLDivElement>(null);
 
   // --- Modals State ---
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -294,17 +295,44 @@ export function HRManagement() {
     setShiftDefsForm(updated);
   };
 
+  const computeShiftDurationHours = (startTime: string, endTime: string): number => {
+    const parseHm = (hm: string) => {
+      const [h, m] = (hm || "00:00").split(":").map((n) => parseInt(n, 10) || 0);
+      return h * 60 + m;
+    };
+    const startMin = parseHm(startTime);
+    let endMin = parseHm(endTime);
+    if (endMin <= startMin) endMin += 24 * 60;
+    return Math.round(((endMin - startMin) / 60) * 10) / 10;
+  };
+
   const handleSaveShiftDefinitions = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengubah master shift.");
+      return;
+    }
+    if (shiftDefsForm.length === 0) {
+      toast.error("Minimal harus tersedia satu shift operasional.");
+      return;
+    }
+    const normalizedDefs = shiftDefsForm.map((s) => ({
+      ...s,
+      name: s.name.trim() || s.id,
+      workHours: computeShiftDurationHours(s.startTime, s.endTime),
+      lateToleranceMinutes: Math.max(0, Math.round(Number(s.lateToleranceMinutes) || 0)),
+    }));
     updateSettings({
       ...settings,
-      shiftDefinitions: shiftDefsForm,
+      shiftDefinitions: normalizedDefs,
     });
+    setShiftDefsForm(normalizedDefs);
     setShowShiftConfigModal(false);
-    alert("Pengaturan master shift dan jam operasional berhasil disimpan!");
+    toast.success("Pengaturan master shift dan jam operasional berhasil disimpan.");
   };
 
   const handleAddCustomShift = () => {
+    if (!canEditHR) return;
     const count = shiftDefsForm.length + 1;
     const newId = `SHIFT_${Date.now()}`;
     const newShift: ShiftDefinition = {
@@ -321,69 +349,118 @@ export function HRManagement() {
   };
 
   const handleRemoveCustomShift = (id: string) => {
-    if (confirm("Hapus shift ini dari daftar konfigurasi?")) {
-      setShiftDefsForm(shiftDefsForm.filter((s) => s.id !== id));
-    }
+    if (!canEditHR) return;
+    confirmModal.open({
+      title: "Hapus Konfigurasi Shift",
+      message: "Hapus shift ini dari daftar konfigurasi operasional?",
+      variant: "danger",
+      confirmLabel: "Ya, Hapus Shift",
+      onConfirm: () => {
+        setShiftDefsForm((prev) => prev.filter((s) => s.id !== id));
+      },
+    });
   };
 
   const handleResetShiftDefinitions = () => {
-    if (confirm("Reset seluruh master shift ke default bawaan sistem (Pagi, Middle, Sore)?")) {
-      setShiftDefsForm(DEFAULT_SHIFT_DEFINITIONS);
+    if (!canEditHR) return;
+    confirmModal.open({
+      title: "Reset Master Shift",
+      message: "Reset seluruh master shift ke default bawaan sistem (Pagi, Middle, Sore)?",
+      variant: "warning",
+      confirmLabel: "Ya, Reset Default",
+      onConfirm: () => {
+        setShiftDefsForm(DEFAULT_SHIFT_DEFINITIONS);
+        toast.info("Daftar shift dikembalikan ke pengaturan default. Klik Simpan untuk menerapkan.");
+      },
+    });
+  };
+
+  const getClosedAttendanceError = (dateList: string[]): string | null => {
+    for (const d of dateList) {
+      const p = (d || "").substring(0, 7);
+      if (!p) continue;
+      const check = validatePayrollMutation({
+        action: "UPDATE",
+        recordPeriod: p,
+        closedPeriods: closedPeriods || [],
+      });
+      if ("error" in check) {
+        return `Absensi periode ${p} sudah tutup buku dan tidak dapat dimodifikasi.`;
+      }
     }
+    return null;
   };
 
   const handleBulkApprove = (targetIds?: string[]) => {
-    const ids = targetIds && targetIds.length > 0 ? targetIds : selectedAttIds;
-    if (!ids || ids.length === 0) {
-      alert("Pilih minimal satu absensi untuk disetujui.");
+    if (!canEditHR) {
+      toast.error("Akses ditolak: hanya Manager atau Super Admin yang dapat mengesahkan absensi.");
       return;
     }
-    if (!confirm(`Sahkan / Setujui ${ids.length} catatan kehadiran yang dipilih?`)) {
+    const ids = targetIds && targetIds.length > 0 ? targetIds : selectedAttIds;
+    if (!ids || ids.length === 0) {
+      toast.warning("Pilih minimal satu absensi untuk disetujui.");
       return;
     }
     const idSet = new Set(ids);
-    const updated = dailyAttendances.map(a => 
-      idSet.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
-    );
-    setDailyAttendances(updated);
-    setSelectedAttIds([]);
-    alert(`Berhasil menyetujui ${ids.length} catatan kehadiran!`);
+    const affectedDates = dailyAttendances.filter((a) => idSet.has(a.id)).map((a) => a.date);
+    const closedErr = getClosedAttendanceError(affectedDates);
+    if (closedErr) {
+      toast.error(closedErr);
+      return;
+    }
+    confirmModal.open({
+      title: "Sahkan Absensi Terpilih",
+      message: `Sahkan / Setujui ${ids.length} catatan kehadiran yang dipilih?`,
+      variant: "info",
+      confirmLabel: `Sahkan (${ids.length})`,
+      onConfirm: () => {
+        const updated = dailyAttendances.map((a) =>
+          idSet.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
+        );
+        setDailyAttendances(updated);
+        setSelectedAttIds([]);
+        toast.success(`Berhasil menyetujui ${ids.length} catatan kehadiran!`);
+      },
+    });
   };
 
   const handleApproveAllPending = (pendingList: any[]) => {
+    if (!canEditHR) {
+      toast.error("Akses ditolak: hanya Manager atau Super Admin yang dapat mengesahkan absensi.");
+      return;
+    }
     if (!pendingList || pendingList.length === 0) {
-      alert("Tidak ada absensi yang menunggu persetujuan.");
+      toast.info("Tidak ada absensi yang menunggu persetujuan.");
       return;
     }
-    if (!confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingList.length} absensi yang berstatus 'Menunggu Verifikasi'?`)) {
+    const closedErr = getClosedAttendanceError(pendingList.map((a) => a.date));
+    if (closedErr) {
+      toast.error(closedErr);
       return;
     }
-    const pendingIds = new Set(pendingList.map(a => a.id));
-    const updated = dailyAttendances.map(a => 
-      pendingIds.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
-    );
-    setDailyAttendances(updated);
-    setSelectedAttIds([]);
-    alert(`Berhasil menyetujui seluruh ${pendingList.length} catatan kehadiran secara massal!`);
+    confirmModal.open({
+      title: "Sahkan Semua Absensi Pending",
+      message: `Sahkan / Setujui SEKALIGUS seluruh ${pendingList.length} absensi yang berstatus 'Menunggu Verifikasi'?`,
+      variant: "info",
+      confirmLabel: `Setujui Semua (${pendingList.length})`,
+      onConfirm: () => {
+        const pendingIds = new Set(pendingList.map((a) => a.id));
+        const updated = dailyAttendances.map((a) =>
+          pendingIds.has(a.id) ? { ...a, approvalStatus: "APPROVED" as const } : a
+        );
+        setDailyAttendances(updated);
+        setSelectedAttIds([]);
+        toast.success(`Berhasil menyetujui seluruh ${pendingList.length} catatan kehadiran secara massal!`);
+      },
+    });
   };
 
   // Manager Attendance Correction Handler (Aturan #3 & Audit Log)
   const handleOpenCorrectionModal = (att: any) => {
+    if (!canEditHR) return;
     setCorrectingAttendance(att);
-    let inStr = "07:00";
-    let outStr = "15:00";
-    if (att.clockInTime) {
-      const inDate = new Date(att.clockInTime);
-      const h = String(inDate.getHours()).padStart(2, "0");
-      const m = String(inDate.getMinutes()).padStart(2, "0");
-      inStr = `${h}:${m}`;
-    }
-    if (att.clockOutTime) {
-      const outDate = new Date(att.clockOutTime);
-      const h = String(outDate.getHours()).padStart(2, "0");
-      const m = String(outDate.getMinutes()).padStart(2, "0");
-      outStr = `${h}:${m}`;
-    }
+    const inStr = formatWitaTimeHm(att.clockInTime, DEFAULT_STORE_TIMEZONE) || "07:00";
+    const outStr = formatWitaTimeHm(att.clockOutTime, DEFAULT_STORE_TIMEZONE) || "15:00";
     setCorrectionForm({
       status: att.status || "HADIR",
       clockInTime: inStr,
@@ -396,7 +473,16 @@ export function HRManagement() {
 
   const handleSaveCorrection = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengoreksi absensi.");
+      return;
+    }
     if (!correctingAttendance) return;
+    const closedErr = getClosedAttendanceError([correctingAttendance.date]);
+    if (closedErr) {
+      toast.error(closedErr);
+      return;
+    }
     if (!correctionForm.reason.trim()) {
       toast.warning("Alasan koreksi wajib diisi sebagai rekam jejak Audit Log.");
       return;
@@ -434,16 +520,36 @@ export function HRManagement() {
   };
 
   const handleSaveAttendance = () => {
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengubah rekap absensi.");
+      return;
+    }
     if (!attendanceForm.employeeId || !attendanceForm.period) {
       toast.warning("Pilih Karyawan dan Periode terlebih dahulu.");
       return;
     }
-    if (editingAttendance) {
-      updateAttendance({ ...editingAttendance, ...attendanceForm });
-    } else {
-      addAttendance(attendanceForm);
+    const check = validatePayrollMutation({
+      action: editingAttendance ? "UPDATE" : "CREATE",
+      recordPeriod: attendanceForm.period,
+      closedPeriods: closedPeriods || [],
+    });
+    if ("error" in check) {
+      toast.error(`Periode ${attendanceForm.period} sudah tutup buku dan tidak dapat diubah.`);
+      return;
     }
-    setAttendanceRecapPeriod(attendanceForm.period);
+    const sanitizedForm = {
+      ...attendanceForm,
+      presentDays: Math.max(0, Math.round(Number(attendanceForm.presentDays) || 0)),
+      sickDays: Math.max(0, Math.round(Number(attendanceForm.sickDays) || 0)),
+      permissionDays: Math.max(0, Math.round(Number(attendanceForm.permissionDays) || 0)),
+      alphaDays: Math.max(0, Math.round(Number(attendanceForm.alphaDays) || 0)),
+    };
+    if (editingAttendance) {
+      updateAttendance({ ...editingAttendance, ...sanitizedForm });
+    } else {
+      addAttendance(sanitizedForm);
+    }
+    setAttendanceRecapPeriod(sanitizedForm.period);
     setIsAttendanceModalOpen(false);
     toast.success("Rekap absensi manual berhasil disimpan.");
   };
@@ -463,7 +569,10 @@ export function HRManagement() {
 
   const handleSaveEmployee = () => {
     if (isReadOnly || !canEditHR) return;
-    if (!empForm.username || !empForm.name) return alert("Username dan Nama wajib diisi");
+    if (!empForm.username.trim() || !empForm.name.trim()) {
+      toast.error("Username dan Nama wajib diisi.");
+      return;
+    }
     
     const cleanUsername = empForm.username.toLowerCase().trim();
     if (!editingEmployee) {
@@ -471,20 +580,23 @@ export function HRManagement() {
         (e) => (e.username || "").toLowerCase().trim() === cleanUsername
       );
       if (dupEmp) {
-        return alert(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}. Harap gunakan username unik.`);
+        toast.error(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}. Harap gunakan username unik.`);
+        return;
       }
       const dupUser = users.find(
         (u) => (u.username || "").toLowerCase().trim() === cleanUsername
       );
       if (dupUser) {
-        return alert(`Username "${empForm.username}" sudah terdaftar sebagai akun pengguna sistem.`);
+        toast.error(`Username "${empForm.username}" sudah terdaftar sebagai akun pengguna sistem.`);
+        return;
       }
     } else {
       const dupEmp = employees.find(
         (e) => e.id !== editingEmployee.id && (e.username || "").toLowerCase().trim() === cleanUsername
       );
       if (dupEmp) {
-        return alert(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}.`);
+        toast.error(`Username "${empForm.username}" sudah digunakan oleh karyawan ${dupEmp.name}.`);
+        return;
       }
     }
 
@@ -514,32 +626,45 @@ export function HRManagement() {
     }
 
     if (editingEmployee) {
-      updateEmployee({ ...editingEmployee, ...empForm });
-      
       const relatedUser = users.find(
         (u) =>
           (u.employeeId && u.employeeId === editingEmployee.id) ||
-          u.username.toLowerCase() === editingEmployee.username.toLowerCase() ||
+          u.username.toLowerCase() === (editingEmployee.username || "").toLowerCase() ||
           u.username.toLowerCase() === cleanUsername
       );
+
+      if (relatedUser && relatedUser.id === currentUser?.id && empForm.status !== "AKTIF") {
+        toast.error("Anda tidak dapat menonaktifkan akun Anda sendiri yang sedang login.");
+        return;
+      }
+      if (relatedUser && (relatedUser.role === "SUPER_ADMIN" || relatedUser.role === "OWNER") && currentUser?.role !== "SUPER_ADMIN") {
+        toast.error(`Hanya Super Admin yang dapat mengubah data akun ${relatedUser.role}.`);
+        return;
+      }
+
+      updateEmployee({ ...editingEmployee, ...empForm, username: cleanUsername, name: empForm.name.trim() });
 
       if (relatedUser) {
         if (empForm.status !== "AKTIF") {
           deleteUser(relatedUser.id);
-          alert("Akun login terkait telah dinonaktifkan/dihapus karena status karyawan menjadi " + empForm.status);
+          toast.info("Data diperbarui & akun login terkait dinonaktifkan karena status karyawan menjadi " + empForm.status);
         } else {
+          const isProtectedRole = relatedUser.role === "SUPER_ADMIN" || relatedUser.role === "OWNER";
           updateUser({
             ...relatedUser,
             username: cleanUsername,
             name: empForm.name.trim(),
-            role: calculatedRole,
-            department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
+            role: isProtectedRole ? relatedUser.role : calculatedRole,
+            department: !isProtectedRole && calculatedRole === "LEADER" ? (empForm.department as any) : relatedUser.department ?? null,
             employeeId: editingEmployee.id,
           });
+          toast.success(`Data karyawan "${empForm.name.trim()}" berhasil diperbarui.`);
         }
+      } else {
+        toast.success(`Data karyawan "${empForm.name.trim()}" berhasil diperbarui.`);
       }
     } else {
-      const newEmpId = addEmployee(empForm);
+      const newEmpId = addEmployee({ ...empForm, username: cleanUsername, name: empForm.name.trim() });
       if (autoCreateUser && newEmpId) {
         addUser({
           name: empForm.name.trim(),
@@ -549,7 +674,9 @@ export function HRManagement() {
           department: calculatedRole === "LEADER" ? (empForm.department as any) : null,
           employeeId: newEmpId
         });
-        alert(`Karyawan berhasil ditambahkan.\nAkun login otomatis dibuat:\nUsername: ${cleanUsername}\nPIN: 123456\nRole: ${calculatedRole}`);
+        toast.success(`Karyawan & akun login otomatis dibuat (${cleanUsername} • PIN default: 123456 • Role: ${calculatedRole}).`);
+      } else {
+        toast.success(`Karyawan "${empForm.name.trim()}" berhasil ditambahkan.`);
       }
     }
     setIsEmployeeModalOpen(false);
@@ -562,36 +689,59 @@ export function HRManagement() {
         (u.employeeId && u.employeeId === emp.id) ||
         u.username.toLowerCase() === (emp.username || "").toLowerCase()
     );
-    const confirmMsg = `Hapus data karyawan "${emp.name}" (@${emp.username})?\n\n` +
-      `Perhatian:\n- Data kontrak dan penugasan shift terkait akan otomatis dibersihkan.\n` +
-      (relatedUser ? `- Akun login sistem "${relatedUser.username}" akan dicabut.\n` : "") +
-      `Tindakan ini tidak dapat dibatalkan. Lanjutkan?`;
-    
-    if (confirm(confirmMsg)) {
-      deleteEmployee(emp.id);
-      if (relatedUser) {
-        deleteUser(relatedUser.id);
-      }
-      alert(`Data karyawan "${emp.name}" berhasil dihapus.`);
+    if (relatedUser && relatedUser.id === currentUser?.id) {
+      toast.error("Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif.");
+      return;
     }
+    if (relatedUser && (relatedUser.role === "SUPER_ADMIN" || relatedUser.role === "OWNER") && currentUser?.role !== "SUPER_ADMIN") {
+      toast.error(`Hanya Super Admin yang dapat menghapus data akun ${relatedUser.role}.`);
+      return;
+    }
+    const confirmMsg = `Hapus data karyawan "${emp.name}" (@${emp.username})? Data kontrak dan penugasan shift terkait akan otomatis dibersihkan` +
+      (relatedUser ? ` serta akun login sistem "${relatedUser.username}" akan dicabut.` : ".") +
+      ` Tindakan ini tidak dapat dibatalkan.`;
+
+    confirmModal.open({
+      title: "Hapus Data Karyawan",
+      message: confirmMsg,
+      variant: "danger",
+      confirmLabel: "Ya, Hapus Karyawan",
+      onConfirm: () => {
+        deleteEmployee(emp.id);
+        if (relatedUser) {
+          deleteUser(relatedUser.id);
+        }
+        toast.success(`Data karyawan "${emp.name}" berhasil dihapus.`);
+      },
+    });
   };
 
   const handleDeleteContract = (c: any) => {
     if (isReadOnly || !canEditHR) return;
     const empName = getEmployeeName(c.employeeId);
-    if (confirm(`Hapus kontrak kerja karyawan "${empName}"?\n\nTindakan ini akan menghapus data gaji pokok dan tunjangan kontrak ini.`)) {
-      deleteContract(c.id);
-      alert(`Kontrak kerja berhasil dihapus.`);
-    }
+    confirmModal.open({
+      title: "Hapus Kontrak Kerja",
+      message: `Hapus kontrak kerja karyawan "${empName}"? Data gaji pokok dan tunjangan pada kontrak ini akan dihapus.`,
+      variant: "danger",
+      confirmLabel: "Ya, Hapus Kontrak",
+      onConfirm: () => {
+        deleteContract(c.id);
+        toast.success(`Kontrak kerja "${empName}" berhasil dihapus.`);
+      },
+    });
   };
 
   const handleImportEmployees = (data: any[]) => {
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengimport data karyawan.");
+      return;
+    }
     let imported = 0;
     let updated = 0;
     data.forEach(row => {
       const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const username = row["Username"] || row.username;
-      const name = row["Nama Karyawan"] || row.name;
+      const username = String(row["Username"] || row.username || "").toLowerCase().trim();
+      const name = String(row["Nama Karyawan"] || row.name || "").trim();
       const position = row["Posisi"] || row.position;
       const department = row["Departemen"] || row.department;
       if (username && name) {
@@ -610,33 +760,47 @@ export function HRManagement() {
             updated++;
           }
         } else {
-          addEmployee({
-            username, name, position, department,
-            status: (row["Status"] || "AKTIF") as EmployeeStatus,
-            employmentType: (row["Tipe"] || "TETAP") as EmploymentType
-          });
-          imported++;
+          const dup = employees.some((e) => (e.username || "").toLowerCase().trim() === username);
+          if (!dup) {
+            addEmployee({
+              username,
+              name,
+              position,
+              department,
+              status: (row["Status"] || "AKTIF") as EmployeeStatus,
+              employmentType: (row["Tipe"] || "TETAP") as EmploymentType,
+              startDate: row["Tanggal Masuk"] || getLocalDateString(),
+              endDate: null,
+              phone: String(row["Telepon"] || "-"),
+              address: String(row["Alamat"] || "-"),
+            });
+            imported++;
+          }
         }
       }
     });
-    if (imported > 0 || updated > 0) alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data karyawan.`);
-    else alert("Tidak ada data valid yang diimport.");
+    if (imported > 0 || updated > 0) toast.success(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} data karyawan.`);
+    else toast.warning("Tidak ada data valid yang diimport.");
   };
 
   const handleImportContracts = (data: any[]) => {
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengimport kontrak kerja.");
+      return;
+    }
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.username === row["Username"])?.id;
+      const uname = String(row["Username"] || "").toLowerCase().trim();
+      const empId = employees.find(e => (e.username || "").toLowerCase().trim() === uname)?.id;
       if (empId) {
         addContract({
           employeeId: empId,
-          basicSalary: Number(row["Gaji Pokok"]) || 0,
-          positionAllowance: Number(row["Tunjangan Jabatan"]) || 0,
-          mealAllowance: Number(row["Tunjangan Makan"]) || 0,
-          transportAllowance: Number(row["Tunjangan Transport"]) || 0,
-          alphaDeductionPerDay: Number(row["Potongan Alpha"]) || 0,
-          kpiBonusTarget: Number(row["Target Bonus KPI"]) || 0,
-          
+          basicSalary: Math.max(0, Math.round(Number(row["Gaji Pokok"]) || 0)),
+          positionAllowance: Math.max(0, Math.round(Number(row["Tunjangan Jabatan"]) || 0)),
+          mealAllowance: Math.max(0, Math.round(Number(row["Tunjangan Makan"]) || 0)),
+          transportAllowance: Math.max(0, Math.round(Number(row["Tunjangan Transport"]) || 0)),
+          alphaDeductionPerDay: Math.max(0, Math.round(Number(row["Potongan Alpha"]) || 0)),
+          kpiBonusTarget: Math.max(0, Math.round(Number(row["Target Bonus KPI"]) || 0)),
           startDate: row["Mulai Kontrak"] || getLocalDateString(),
           endDate: row["Selesai Kontrak"] || getLocalDateString(),
           status: "ACTIVE"
@@ -644,30 +808,43 @@ export function HRManagement() {
         imported++;
       }
     });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} kontrak.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
+    if (imported > 0) toast.success(`Berhasil mengimport ${imported} kontrak.`);
+    else toast.warning("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
   };
 
   const handleImportAttendances = (data: any[]) => {
+    if (!canEditHR) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengimport rekap absensi.");
+      return;
+    }
     let imported = 0;
     data.forEach(row => {
-      const empId = employees.find(e => e.username === row["Username"])?.id;
+      const uname = String(row["Username"] || "").toLowerCase().trim();
+      const empId = employees.find(e => (e.username || "").toLowerCase().trim() === uname)?.id;
       const period = row["Periode (YYYY-MM)"];
       if (empId && period) {
+        const check = validatePayrollMutation({
+          action: "CREATE",
+          recordPeriod: String(period),
+          closedPeriods: closedPeriods || [],
+        });
+        if ("error" in check) return;
         addAttendance({
           employeeId: empId,
           period,
-          presentDays: Number(row["Hadir"]) || 0,
-          sickDays: Number(row["Sakit"]) || 0,
-          permissionDays: Number(row["Izin"]) || 0,
-          alphaDays: Number(row["Alpha"]) || 0,
+          presentDays: Math.max(0, Math.round(Number(row["Hadir"]) || 0)),
+          sickDays: Math.max(0, Math.round(Number(row["Sakit"]) || 0)),
+          permissionDays: Math.max(0, Math.round(Number(row["Izin"]) || 0)),
+          alphaDays: Math.max(0, Math.round(Number(row["Alpha"]) || 0)),
+          holidayDays: Math.max(0, Math.round(Number(row["Libur"]) || 0)),
+          workingDays: Math.max(0, Math.round(Number(row["Hari Kerja"]) || 26)),
           notes: row["Catatan"] || ""
         });
         imported++;
       }
     });
-    if (imported > 0) alert(`Berhasil mengimport ${imported} absensi.`);
-    else alert("Tidak ada data valid yang diimport. Pastikan Username karyawan sesuai.");
+    if (imported > 0) toast.success(`Berhasil mengimport ${imported} absensi.`);
+    else toast.warning("Tidak ada data valid yang diimport. Pastikan Username & Periode sesuai dan belum tutup buku.");
   };
 
   const handleOpenContractModal = (contract?: any, employeeId?: string) => {
@@ -683,45 +860,56 @@ export function HRManagement() {
 
   const handleSaveContract = () => {
     if (isReadOnly || !canEditHR) return;
-    if (!contractForm.employeeId) return alert("Pilih karyawan terlebih dahulu");
+    if (!contractForm.employeeId) {
+      toast.warning("Pilih karyawan terlebih dahulu.");
+      return;
+    }
+    if (contractForm.endDate && contractForm.startDate && contractForm.endDate < contractForm.startDate) {
+      toast.error("Tanggal berakhir kontrak tidak boleh lebih awal dari tanggal mulai.");
+      return;
+    }
+    const sanitizedContract = {
+      ...contractForm,
+      basicSalary: Math.max(0, Math.round(Number(contractForm.basicSalary) || 0)),
+      positionAllowance: Math.max(0, Math.round(Number(contractForm.positionAllowance) || 0)),
+      mealAllowance: Math.max(0, Math.round(Number(contractForm.mealAllowance) || 0)),
+      transportAllowance: Math.max(0, Math.round(Number(contractForm.transportAllowance) || 0)),
+      alphaDeductionPerDay: Math.max(0, Math.round(Number(contractForm.alphaDeductionPerDay) || 0)),
+      kpiBonusTarget: Math.max(0, Math.round(Number(contractForm.kpiBonusTarget) || 0)),
+    };
     if (editingContract) {
-      if (contractForm.status === "ACTIVE") {
+      if (sanitizedContract.status === "ACTIVE") {
         contracts.forEach((c) => {
-          if (c.id !== editingContract.id && c.employeeId === contractForm.employeeId && c.status === "ACTIVE") {
+          if (c.id !== editingContract.id && c.employeeId === sanitizedContract.employeeId && c.status === "ACTIVE") {
             updateContract({ ...c, status: "INACTIVE" });
           }
         });
       }
-      updateContract({ ...editingContract, ...contractForm });
+      updateContract({ ...editingContract, ...sanitizedContract });
     } else {
-      if (contractForm.status === "ACTIVE") {
+      if (sanitizedContract.status === "ACTIVE") {
         contracts.forEach((c) => {
-          if (c.employeeId === contractForm.employeeId && c.status === "ACTIVE") {
+          if (c.employeeId === sanitizedContract.employeeId && c.status === "ACTIVE") {
             updateContract({ ...c, status: "INACTIVE" });
           }
         });
       }
-      addContract(contractForm);
+      addContract(sanitizedContract);
     }
     
     // Sync endDate ke Employee
-    if (contractForm.status === "ACTIVE") {
-      const emp = employees.find(e => e.id === contractForm.employeeId);
+    if (sanitizedContract.status === "ACTIVE") {
+      const emp = employees.find(e => e.id === sanitizedContract.employeeId);
       if (emp) {
-        updateEmployee({ ...emp, endDate: contractForm.endDate });
+        updateEmployee({ ...emp, endDate: sanitizedContract.endDate });
       }
     }
     
     setIsContractModalOpen(false);
+    toast.success(`Kontrak kerja "${getEmployeeName(sanitizedContract.employeeId)}" berhasil disimpan.`);
   };
 
-  const formatRupiah = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatRupiah = (amount: number) => formatCurrency(Math.round(amount || 0));
 
   const getEmployeeName = (empId: string) => {
     const emp = employees.find((e) => e.id === empId);
@@ -731,24 +919,18 @@ export function HRManagement() {
   };
 
 
-  // --- Weekly Schedule Logic ---
+  // --- Weekly Schedule Logic (WITA-locked) ---
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    const day = today.getDay(); // 0 = Sunday, 1 = Monday
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    const monday = new Date(today);
-    monday.setDate(diff);
-    return monday;
+    const todayWitaNoon = new Date(`${getLocalDateString()}T12:00:00+08:00`);
+    const witaWeekday = new Date(todayWitaNoon.getTime() + 8 * 60 * 60 * 1000).getUTCDay();
+    const diffDays = witaWeekday === 0 ? -6 : 1 - witaWeekday;
+    return new Date(todayWitaNoon.getTime() + diffDays * 24 * 60 * 60 * 1000);
   });
 
   const generateWeekDays = (start: Date) => {
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(start);
-      d.setHours(12, 0, 0, 0);
-      d.setDate(start.getDate() + i);
-      days.push(d);
+      days.push(new Date(start.getTime() + i * 24 * 60 * 60 * 1000));
     }
     return days;
   };
@@ -758,16 +940,7 @@ export function HRManagement() {
   const isWeekApproved = currentWeekApproval.status === "APPROVED";
   const isWeekPending = currentWeekApproval.status === "PENDING";
 
-  const handleSubmitSchedule = () => {
-    if (isReadOnly) return;
-    if (scheduleCollisions.length > 0) {
-      const highSeverity = scheduleCollisions.filter(c => c.severity === "high");
-      if (highSeverity.length > 0) {
-        if (!confirm(`Peringatan: Terdeteksi ${highSeverity.length} potensi masalah pada jadwal (misal jeda istirahat < 8 jam / clopen). Tetap ajukan jadwal ini ke Manajer?`)) {
-          return;
-        }
-      }
-    }
+  const submitScheduleToManager = () => {
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
       [weekKey]: {
@@ -781,18 +954,36 @@ export function HRManagement() {
       ...settings,
       scheduleApprovals: newApprovals,
     });
-    alert(`Jadwal shift minggu ini (${weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - ${weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short" })}) berhasil diajukan ke Manajer untuk disahkan!`);
+    toast.success(`Jadwal shift minggu (${weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: DEFAULT_STORE_TIMEZONE })} - ${weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: DEFAULT_STORE_TIMEZONE })}) berhasil diajukan ke Manajer.`);
+  };
+
+  const handleSubmitSchedule = () => {
+    if (isReadOnly) return;
+    if (scheduleCollisions.length > 0) {
+      const highSeverity = scheduleCollisions.filter(c => c.severity === "high");
+      if (highSeverity.length > 0) {
+        confirmModal.open({
+          title: "Peringatan Benturan Jadwal",
+          message: `Terdeteksi ${highSeverity.length} potensi masalah pada jadwal (misal jeda istirahat < 8 jam / clopen). Tetap ajukan jadwal ini ke Manajer?`,
+          variant: "warning",
+          confirmLabel: "Ya, Tetap Ajukan",
+          onConfirm: submitScheduleToManager,
+        });
+        return;
+      }
+    }
+    submitScheduleToManager();
   };
 
   const handleOpenApproveModal = () => {
-    if (!isHRD || isReadOnly) return;
+    if (!canEditHR) return;
     const existingNotes = currentWeekApproval.notes || "Semangat bertugas minggu ini! Jaga konsistensi rasa kopi & makanan, kebersihan area kerja divisi, dan senyum ramah ke pelanggan.";
     setBriefNotesInput(existingNotes);
     setIsBriefModalOpen(true);
   };
 
   const handleSaveApprovedBrief = () => {
-    if (!isHRD || isReadOnly) return;
+    if (!canEditHR) return;
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
       [weekKey]: {
@@ -807,11 +998,11 @@ export function HRManagement() {
       scheduleApprovals: newApprovals,
     });
     setIsBriefModalOpen(false);
-    alert("Jadwal mingguan resmi telah disahkan! Catatan brief otomatis terkirim dan tampil di Dashboard Karyawan.");
+    toast.success("Jadwal mingguan resmi telah disahkan! Catatan brief otomatis tampil di Dashboard Karyawan.");
   };
 
   const handleToggleWeekApproval = () => {
-    if (!isHRD || isReadOnly) return;
+    if (!canEditHR) return;
     if (!isWeekApproved) {
       handleOpenApproveModal();
     } else {
@@ -831,7 +1022,7 @@ export function HRManagement() {
   };
 
   const handleRejectToDraft = () => {
-    if (!isHRD || isReadOnly) return;
+    if (!canEditHR) return;
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
       [weekKey]: {
@@ -844,7 +1035,7 @@ export function HRManagement() {
       ...settings,
       scheduleApprovals: newApprovals,
     });
-    alert("Jadwal dikembalikan ke status Draft untuk direvisi oleh Leader.");
+    toast.info("Jadwal dikembalikan ke status Draft untuk direvisi oleh Leader.");
   };
 
   const handleUnlockForRevision = () => {
@@ -868,7 +1059,7 @@ export function HRManagement() {
   const canEditShiftForEmployee = (emp: any) => {
     if (isReadOnly) return false;
     if (!isOperationalStaff(emp)) return false;
-    if (isHRD) return true; // Manager, Owner, Super Admin memiliki akses penuh ke semua staf operasional
+    if (canEditHR) return true;
     if (isLeader) {
       // Leader dapat menyusun dan mengedit jadwal staf di divisinya sendiri (Kasir ikut ke Bar)
       const empDiv = getEmployeeDivision(emp);
@@ -884,13 +1075,13 @@ export function HRManagement() {
   }, [employees, scheduleDivisionFilter]);
 
   const handleCopyLastWeekSchedule = () => {
-    if (isReadOnly) return;
+    if (isReadOnly || (!canEditHR && !isLeader)) return;
     const prevWeekDays = generateWeekDays(new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000));
     let copiedCount = 0;
     let newShifts = [...employeeShifts];
 
     filteredScheduleEmployees.forEach(emp => {
-      if (!canEditShiftForEmployee(emp) && !isHRD) return;
+      if (!canEditShiftForEmployee(emp)) return;
 
       for (let i = 0; i < 7; i++) {
         const prevDateStr = getLocalDateString(prevWeekDays[i]);
@@ -919,9 +1110,9 @@ export function HRManagement() {
       if (isWeekApproved && isLeader) {
         handleUnlockForRevision();
       }
-      alert(`Berhasil menyalin ${copiedCount} penugasan shift dari minggu lalu.`);
+      toast.success(`Berhasil menyalin ${copiedCount} penugasan shift dari minggu lalu.`);
     } else {
-      alert("Tidak ada data jadwal shift dari minggu sebelumnya untuk disalin.");
+      toast.warning("Tidak ada data jadwal shift dari minggu sebelumnya untuk disalin.");
     }
   };
 
@@ -1085,32 +1276,56 @@ export function HRManagement() {
     const operationalList = employees.filter((e) => isEmpActive(e) && isOperationalStaff(e));
     return operationalList.map((emp) => {
       const shiftAssigned = employeeShifts.find((s) => s.employeeId === emp.id && s.date === todayStr)?.shiftType || "OFF";
-      const att = dailyAttendances.find((a) => a.employeeId === emp.id && a.date === todayStr);
+      const att = dailyAttendances.find(
+        (a) => resolveCanonicalEmployeeId(a.employeeId, employees, users) === emp.id && a.date === todayStr
+      );
       return {
         emp,
         shift: shiftAssigned,
         attendance: att,
       };
     });
-  }, [employees, employeeShifts, dailyAttendances, todayStr]);
+  }, [employees, users, employeeShifts, dailyAttendances, todayStr]);
 
-  // Kontrak Mendekati Jatuh Tempo (< 30 hari atau overdue)
+  const filteredDailyAttendances = useMemo(() => {
+    return [...dailyAttendances]
+      .filter((d) => {
+        if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
+        if (
+          attendanceEmpFilter !== "ALL" &&
+          resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
+        ) {
+          return false;
+        }
+        if (attendanceApprovalFilter !== "ALL") {
+          if (attendanceApprovalFilter === "FORGOTTEN_CLOCKOUT") {
+            if (!(!d.clockOutTime && d.clockInTime && d.date < todayStr)) return false;
+          } else if (attendanceApprovalFilter === "CORRECTED") {
+            if (!d.isCorrected) return false;
+          } else {
+            const appStatus = d.approvalStatus || "PENDING";
+            if (appStatus !== attendanceApprovalFilter) return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.clockInTime || "").localeCompare(a.clockInTime || ""));
+  }, [dailyAttendances, attendanceDateFilter, attendanceEmpFilter, attendanceApprovalFilter, todayStr, employees, users]);
+
+  // Kontrak Mendekati Jatuh Tempo (< 30 hari atau overdue, WITA date comparison)
   const expiringContractsList = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const thirtyDays = new Date(today);
-    thirtyDays.setDate(today.getDate() + 30);
+    const thirtyDaysStr = addDaysToLocalDate(todayStr, 30);
+    const todayMidnightMs = new Date(`${todayStr}T00:00:00+08:00`).getTime();
 
     return contracts
       .filter((c) => {
         if (c.status !== "ACTIVE" && !(c as any).isActive) return false;
         if (!c.endDate) return false;
-        const end = new Date(c.endDate);
-        return end <= thirtyDays;
+        return c.endDate <= thirtyDaysStr;
       })
       .map((c) => {
-        const end = new Date(c.endDate);
-        const daysRemaining = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const endMs = new Date(`${c.endDate}T00:00:00+08:00`).getTime();
+        const daysRemaining = Math.round((endMs - todayMidnightMs) / (1000 * 60 * 60 * 24));
         return {
           ...c,
           daysRemaining,
@@ -1118,7 +1333,7 @@ export function HRManagement() {
         };
       })
       .sort((a, b) => a.daysRemaining - b.daysRemaining);
-  }, [contracts]);
+  }, [contracts, todayStr]);
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -1129,7 +1344,31 @@ export function HRManagement() {
         (emp.username || "").toLowerCase().includes(q) ||
         (emp.position || "").toLowerCase().includes(q);
       const matchDept =
-        empDeptFilter === "ALL" || (emp.department || "").toUpperCase() === empDeptFilter.toUpperCase();
+        empDeptFilter === "ALL" ||
+        (() => {
+          const div = getEmployeeDivision(emp);
+          const dept = (emp.department || "").toUpperCase();
+          const pos = (emp.position || "").toUpperCase();
+          if (empDeptFilter === "BAR" || empDeptFilter === "KITCHEN" || empDeptFilter === "BAKER") {
+            return div === empDeptFilter;
+          }
+          if (empDeptFilter === "FINANCE") {
+            return (
+              dept.includes("FINANCE") ||
+              dept.includes("KEUANGAN") ||
+              dept.includes("ACCOUNT") ||
+              pos.includes("FINANCE") ||
+              pos.includes("KEUANGAN")
+            );
+          }
+          if (empDeptFilter === "MANAGEMENT") {
+            return (
+              div === "OFFICE" &&
+              !(dept.includes("FINANCE") || dept.includes("KEUANGAN") || pos.includes("FINANCE") || pos.includes("KEUANGAN"))
+            );
+          }
+          return dept === empDeptFilter.toUpperCase();
+        })();
       const matchStatus =
         empStatusFilter === "ALL" ||
         (empStatusFilter === "AKTIF" ? isEmpActive(emp) : !isEmpActive(emp));
@@ -1138,10 +1377,7 @@ export function HRManagement() {
   }, [employees, empSearch, empDeptFilter, empStatusFilter]);
 
   const filteredContracts = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const thirtyDays = new Date(today);
-    thirtyDays.setDate(today.getDate() + 30);
+    const thirtyDaysStr = addDaysToLocalDate(todayStr, 30);
 
     return contracts.filter((c) => {
       const empName = getEmployeeName(c.employeeId).toLowerCase();
@@ -1151,9 +1387,9 @@ export function HRManagement() {
 
       if (contractStatusFilter === "ALL") return true;
       const isActive = c.status === "ACTIVE" || (c as any).isActive;
-      const endDate = c.endDate ? new Date(c.endDate) : null;
-      const isExpired = endDate ? endDate < today : false;
-      const isExpiring = isActive && endDate ? endDate >= today && endDate <= thirtyDays : false;
+      const endDateStr = c.endDate || "";
+      const isExpired = Boolean(endDateStr && endDateStr < todayStr);
+      const isExpiring = Boolean(isActive && endDateStr && endDateStr >= todayStr && endDateStr <= thirtyDaysStr);
 
       if (contractStatusFilter === "ACTIVE") return isActive && !isExpired;
       if (contractStatusFilter === "EXPIRING") return isExpiring;
@@ -1161,69 +1397,9 @@ export function HRManagement() {
       if (contractStatusFilter === "INACTIVE") return !isActive;
       return true;
     });
-  }, [contracts, contractSearch, contractStatusFilter, employees, users]);
+  }, [contracts, contractSearch, contractStatusFilter, employees, users, todayStr]);
 
-  // --- PDF Generation ---
-  const generatePDF = async () => {
-    if (!selectedPayslip) return;
-    try {
-      const payrollRecord: any = {
-        id: selectedPayslip.id || `PAY-${selectedPayslip.period}`,
-        employeeId: selectedPayslip.employee?.id,
-        period: selectedPayslip.period,
-        basicSalary: selectedPayslip.basic || 0,
-        positionAllowance: selectedPayslip.position || 0,
-        mealAllowance: selectedPayslip.meal || 0,
-        transportAllowance: selectedPayslip.transport || 0,
-        kpiBonus: selectedPayslip.kpiBonus || 0,
-        alphaDeduction: selectedPayslip.alphaDeduction || 0,
-        grossPay:
-          (selectedPayslip.basic || 0) +
-          (selectedPayslip.position || 0) +
-          (selectedPayslip.meal || 0) +
-          (selectedPayslip.kpiBonus || 0),
-        netPay: selectedPayslip.total || 0,
-        status: "APPROVED",
-        notes: null,
-      };
-
-      exportSinglePayslipPDF({
-        payroll: payrollRecord,
-        employee: selectedPayslip.employee,
-        settings,
-        attendanceBreakdown: {
-          totalWorkingDays: selectedPayslip.attendance?.totalWorkingDays || 26,
-          presentDays: selectedPayslip.attendance?.presentDays || 0,
-          lateDays: selectedPayslip.attendance?.lateDays || 0,
-          sickOrLeaveDays: selectedPayslip.attendance?.sickOrLeaveDays || 0,
-          alphaDays: selectedPayslip.attendance?.alphaDays || 0,
-        },
-      });
-    } catch (error) {
-      console.warn("Vector PDF export fallback, trying raster canvas:", error);
-      if (payslipRef.current) {
-        try {
-          const canvas = await html2canvas(payslipRef.current, {
-            scale: 2,
-            backgroundColor: "#ffffff",
-          });
-          const imgData = canvas.toDataURL("image/png");
-          const pdf = new jsPDF("p", "mm", "a4");
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-          pdf.save(
-            `Slip_Gaji_${selectedPayslip?.employee?.name?.replace(/\s+/g, "_")}_${selectedPayslip?.period}.pdf`,
-          );
-        } catch (canvasErr) {
-          console.error("Canvas fallback error:", canvasErr);
-          alert("Gagal memproses slip gaji ke PDF.");
-        }
-      }
-    }
-  };
-
-  // ─── PAYROLL CALCULATION ──────────────────────────────────────────────────────────
+  // ─── PAYROLL PROJECTION HELPER ──────────────────────────────────────────
   const payrollData = useMemo(() => {
     // Generate payroll based on attendance records
     return attendances
@@ -1243,6 +1419,10 @@ export function HRManagement() {
         const meal = isManagerOrExempt 
           ? contract.mealAllowance * (att.presentDays > 0 ? att.presentDays : 25) 
           : contract.mealAllowance * att.presentDays;
+        const transportRate = contract.transportAllowance || 0;
+        const transport = isManagerOrExempt
+          ? transportRate * (att.presentDays > 0 ? att.presentDays : 25)
+          : transportRate * att.presentDays;
         const dailyWage = Math.round(contract.basicSalary / 25);
         const alphaDeduction = isManagerOrExempt 
           ? 0 
@@ -1250,7 +1430,7 @@ export function HRManagement() {
 
         // Hitung Skor KPI Otomatis dari Checklist Shift & Presensi (0 - 100)
         const empChecklists = (dailyChecklists || []).filter(
-          (c) => c.employeeId === emp.id && c.date.startsWith(att.period)
+          (c) => resolveCanonicalEmployeeId(c.employeeId, employees, users) === emp.id && c.date.startsWith(att.period)
         );
         const checklistDays = empChecklists.length;
         const expectedDays = Math.max(1, att.presentDays || 22);
@@ -1291,7 +1471,7 @@ export function HRManagement() {
               ? applicableRule.bonusAmount
               : (targetKpi > 0 ? Math.round(targetKpi * (autoScore / 100)) : 0));
 
-        const total = basic + meal + position + kpiBonus - alphaDeduction;
+        const total = Math.round(basic + meal + transport + position + kpiBonus - alphaDeduction);
 
         return {
           id: `pr_${att.id}`,
@@ -1299,6 +1479,7 @@ export function HRManagement() {
           period: att.period,
           basic,
           meal,
+          transport,
           position,
           alphaDeduction,
           kpiBonus,
@@ -1307,23 +1488,33 @@ export function HRManagement() {
         };
       })
       .filter(Boolean) as any[];
-  }, [attendances, employees, contracts, kpiBonusRules, settings, dailyChecklists]);
+  }, [attendances, employees, users, contracts, kpiBonusRules, settings, dailyChecklists]);
 
-  const currentPeriod = useMemo(() => new Date().toISOString().substring(0, 7), []);
+  const currentPeriod = useMemo(() => getLocalPeriodString(), []);
   const avgKpiScore = useMemo(() => {
     if (!employees || employees.length === 0) return "0.0";
     const operational = employees.filter((e) => isEmpActive(e) && isOperationalStaff(e));
     if (operational.length === 0) return "0.0";
+    const recapList = computeMonthlyAttendanceRecap({
+      period: currentPeriod,
+      dailyAttendances,
+      manualAttendances: attendances,
+      employees,
+      users,
+    });
     const scores = operational.map((emp) => {
       const empChecklists = (dailyChecklists || []).filter(
-        (c) => c.employeeId === emp.id && c.date.startsWith(currentPeriod)
+        (c) => resolveCanonicalEmployeeId(c.employeeId, employees, users) === emp.id && c.date.startsWith(currentPeriod)
       );
-      return empChecklists.length > 0
-        ? Math.min(100, Math.round((empChecklists.length / 22) * 100))
-        : 0;
+      if (empChecklists.length > 0) {
+        return Math.min(100, Math.round((empChecklists.length / 22) * 100));
+      }
+      const attRecap = recapList.find((r) => r.employeeId === emp.id);
+      if (!attRecap || attRecap.presentDays === 0) return 0;
+      return Math.max(0, Math.min(100, Math.round((attRecap.presentDays / 22) * 100) - attRecap.lateDays * 2 - attRecap.alphaDays * 10));
     });
     return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
-  }, [employees, dailyChecklists, currentPeriod]);
+  }, [employees, users, dailyChecklists, dailyAttendances, attendances, currentPeriod]);
 
   // ─── TABS ──────────────────────────────────────────────────────────
   const tabs = isLeader ? [
@@ -1521,14 +1712,18 @@ export function HRManagement() {
                       <RupiahSign className="w-5 h-5" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold text-blue-900">
+                  <p className="text-2xl font-bold text-blue-900 tabular-nums">
                     {formatRupiah(
                       (() => {
+                        const existingPeriodSlips = (payrollRecords || []).filter((p: any) => p.period === currentPeriod);
+                        if (existingPeriodSlips.length > 0) {
+                          return existingPeriodSlips.reduce((sum: number, p: any) => sum + (p.netPay || 0), 0);
+                        }
                         const calculated = payrollData.reduce((sum, p) => sum + (p ? p.total : 0), 0);
                         if (calculated > 0) return calculated;
                         return contracts
                           .filter((c) => c.status === "ACTIVE" || (c as any).isActive)
-                          .reduce((sum, c) => sum + (c.basicSalary || 0) + (c.mealAllowance || 0) + (c.positionAllowance || 0) + (c.transportAllowance || 0), 0);
+                          .reduce((sum, c) => sum + Math.round((c.basicSalary || 0) + (c.mealAllowance || 0) + (c.positionAllowance || 0) + (c.transportAllowance || 0)), 0);
                       })()
                     )}
                   </p>
@@ -1550,7 +1745,7 @@ export function HRManagement() {
                         {isIndo ? "Roster Staf Bertugas Hari Ini" : "Today's On-Duty Staff"}
                       </h3>
                       <p className="text-xs text-slate-500">
-                        {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                        {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: DEFAULT_STORE_TIMEZONE })}
                       </p>
                     </div>
                   </div>
@@ -2817,50 +3012,15 @@ export function HRManagement() {
                               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                               title="Pilih Semua yang Ditampilkan"
                               onChange={(e) => {
-                                const currentFiltered = [...dailyAttendances].filter((d) => {
-                                  if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                  if (
-                                    attendanceEmpFilter !== "ALL" &&
-                                    resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
-                                  ) {
-                                    return false;
-                                  }
-                                  if (attendanceApprovalFilter !== "ALL") {
-                                    if (attendanceApprovalFilter === "FORGOTTEN_CLOCKOUT") {
-                                      if (!(!d.clockOutTime && d.clockInTime && d.date < todayStr)) return false;
-                                    } else if (attendanceApprovalFilter === "CORRECTED") {
-                                      if (!d.isCorrected) return false;
-                                    } else {
-                                      const appStatus = d.approvalStatus || "PENDING";
-                                      if (appStatus !== attendanceApprovalFilter) return false;
-                                    }
-                                  }
-                                  return true;
-                                });
                                 if (e.target.checked) {
-                                  setSelectedAttIds(currentFiltered.map((d) => d.id));
+                                  setSelectedAttIds(filteredDailyAttendances.map((d) => d.id));
                                 } else {
                                   setSelectedAttIds([]);
                                 }
                               }}
                               checked={
-                                selectedAttIds.length > 0 &&
-                                [...dailyAttendances]
-                                  .filter((d) => {
-                                    if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                    if (
-                                      attendanceEmpFilter !== "ALL" &&
-                                      resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
-                                    ) {
-                                      return false;
-                                    }
-                                    if (attendanceApprovalFilter !== "ALL") {
-                                      const appStatus = d.approvalStatus || "PENDING";
-                                      if (appStatus !== attendanceApprovalFilter) return false;
-                                    }
-                                    return true;
-                                  })
-                                  .every((d) => selectedAttIds.includes(d.id))
+                                filteredDailyAttendances.length > 0 &&
+                                filteredDailyAttendances.every((d) => selectedAttIds.includes(d.id))
                               }
                             />
                           </th>
@@ -2876,22 +3036,16 @@ export function HRManagement() {
                           <div className="flex items-center justify-end gap-2">
                             <span>Verifikasi Manager</span>
                             {canEditHR && (() => {
-                              const pendingItems = [...dailyAttendances].filter((d) => {
-                                if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                                if (
-                                  attendanceEmpFilter !== "ALL" &&
-                                  resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
-                                ) {
-                                  return false;
-                                }
+                              const pendingItems = filteredDailyAttendances.filter((d) => {
                                 const appStatus = d.approvalStatus || "PENDING";
                                 return appStatus === "PENDING" && d.status !== "ALPHA";
                               });
                               if (pendingItems.length > 0) {
                                 return (
                                   <button
+                                    type="button"
                                     onClick={() => handleApproveAllPending(pendingItems)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-xs flex items-center gap-1 transition-all"
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-xs flex items-center gap-1 transition-all cursor-pointer"
                                     title="Setujui sekaligus semua absensi pending yang tampil"
                                   >
                                     <CheckCheck className="w-3.5 h-3.5" />
@@ -2907,28 +3061,7 @@ export function HRManagement() {
                     </thead>
                     <tbody>
                       {(() => {
-                        const filtered = [...dailyAttendances]
-                          .filter((d) => {
-                            if (attendanceDateFilter && d.date !== attendanceDateFilter) return false;
-                            if (
-                              attendanceEmpFilter !== "ALL" &&
-                              resolveCanonicalEmployeeId(d.employeeId, employees, users) !== attendanceEmpFilter
-                            ) {
-                              return false;
-                            }
-                            if (attendanceApprovalFilter !== "ALL") {
-                              if (attendanceApprovalFilter === "FORGOTTEN_CLOCKOUT") {
-                                if (!(!d.clockOutTime && d.clockInTime && d.date < todayStr)) return false;
-                              } else if (attendanceApprovalFilter === "CORRECTED") {
-                                if (!d.isCorrected) return false;
-                              } else {
-                                const appStatus = d.approvalStatus || "PENDING";
-                                if (appStatus !== attendanceApprovalFilter) return false;
-                              }
-                            }
-                            return true;
-                          })
-                          .sort((a, b) => b.date.localeCompare(a.date) || (b.clockInTime || "").localeCompare(a.clockInTime || ""));
+                        const filtered = filteredDailyAttendances;
 
                         if (filtered.length === 0) {
                           return (
@@ -3101,10 +3234,10 @@ export function HRManagement() {
                                 </div>
                               </td>
                               {/* Jam In / Out */}
-                              <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-700">
-                                {d.clockInTime ? new Date(d.clockInTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'} 
+                              <td className="py-3 px-4 whitespace-nowrap font-mono tabular-nums text-slate-700">
+                                {d.clockInTime ? formatWitaTimeHm(d.clockInTime, DEFAULT_STORE_TIMEZONE) : "-"}
                                 {" - "}
-                                {d.clockOutTime ? new Date(d.clockOutTime).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : '-'}
+                                {d.clockOutTime ? formatWitaTimeHm(d.clockOutTime, DEFAULT_STORE_TIMEZONE) : "-"}
                               </td>
                                 {/* Durasi */}
                                 <td className="py-3 px-4 font-bold text-slate-800 whitespace-nowrap tabular-nums">
@@ -3120,10 +3253,17 @@ export function HRManagement() {
                                 <div className="flex items-center justify-end gap-1.5">
                                   {canEditHR && currentApproval !== "APPROVED" && d.status !== "ALPHA" && (
                                     <button
+                                      type="button"
                                       onClick={() => {
+                                        const closedErr = getClosedAttendanceError([d.date]);
+                                        if (closedErr) {
+                                          toast.error(closedErr);
+                                          return;
+                                        }
                                         updateDailyAttendance({ ...d, approvalStatus: "APPROVED" });
+                                        toast.success(`Kehadiran ${emp?.name || getEmployeeName(d.employeeId)} disahkan.`);
                                       }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-bold text-xs transition-colors shadow-2xs"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-bold text-xs transition-colors shadow-2xs cursor-pointer"
                                       title="Langsung sahkan / setujui kehadiran ini dengan 1 klik"
                                     >
                                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -3132,11 +3272,12 @@ export function HRManagement() {
                                   )}
 
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setVerifyingAttendance(d);
                                       setIsVerificationModalOpen(true);
                                     }}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs"
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold text-xs transition-colors shadow-2xs cursor-pointer"
                                     title="Lihat foto besar dan peta lokasi GPS lengkap"
                                   >
                                     <Eye className="w-3.5 h-3.5" />
@@ -3145,7 +3286,15 @@ export function HRManagement() {
 
                                   {canEditHR && (
                                     <button
-                                      onClick={() => handleOpenCorrectionModal(d)}
+                                      type="button"
+                                      onClick={() => {
+                                        const closedErr = getClosedAttendanceError([d.date]);
+                                        if (closedErr) {
+                                          toast.error(closedErr);
+                                          return;
+                                        }
+                                        handleOpenCorrectionModal(d);
+                                      }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-bold text-xs transition-colors shadow-2xs cursor-pointer"
                                       title="Koreksi jam masuk/pulang atau status kehadiran (dicatat di Audit Log)"
                                     >
@@ -3154,14 +3303,27 @@ export function HRManagement() {
                                     </button>
                                   )}
 
-                                  {canEditHR && d.status !== "DITOLAK" && d.status !== "ALPHA" && (
+                                  {canEditHR && d.approvalStatus !== "REJECTED" && d.status !== "ALPHA" && (
                                     <button
+                                      type="button"
                                       onClick={() => {
-                                        if(confirm(`Tolak kehadiran ${emp?.name || 'karyawan ini'} dan ubah status menjadi ALPHA?`)) {
-                                          updateDailyAttendance({...d, status: "ALPHA", approvalStatus: "REJECTED"});
+                                        const closedErr = getClosedAttendanceError([d.date]);
+                                        if (closedErr) {
+                                          toast.error(closedErr);
+                                          return;
                                         }
+                                        confirmModal.open({
+                                          title: "Tolak Kehadiran (Set ALPHA)",
+                                          message: `Tolak kehadiran ${emp?.name || getEmployeeName(d.employeeId)} dan ubah status menjadi ALPHA?`,
+                                          variant: "danger",
+                                          confirmLabel: "Ya, Tolak & Set ALPHA",
+                                          onConfirm: () => {
+                                            updateDailyAttendance({ ...d, status: "ALPHA", approvalStatus: "REJECTED" });
+                                            toast.warning(`Kehadiran ${emp?.name || getEmployeeName(d.employeeId)} ditolak (ALPHA).`);
+                                          },
+                                        });
                                       }}
-                                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                                       title="Tolak kehadiran jika terbukti tidak hadir di lapangan"
                                     >
                                       Tolak
@@ -3180,221 +3342,10 @@ export function HRManagement() {
             </div>
           )}
 
-          {/* PAYROLL TAB & PAYSLIP */}
+          {/* PAYROLL TAB */}
           {activeTab === "payroll" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              {selectedPayslip ? (
-                /* --- SLIP GAJI VIEW --- */
-                <div className="max-w-3xl mx-auto">
-                  <div className="flex justify-between items-center mb-6">
-                    <button
-                      onClick={() => setSelectedPayslip(null)}
-                      className="text-slate-500 hover:text-slate-800 font-medium text-sm transition-colors"
-                    >
-                      ←{" "}
-                      {isIndo
-                        ? "Kembali ke Daftar Payroll"
-                        : "Back to Payroll List"}
-                    </button>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          if (!selectedPayslip.employee.email) {
-                            alert("Karyawan tidak memiliki data email. Harap lengkapi email karyawan di menu Edit Karyawan.");
-                            return;
-                          }
-                          alert(`Slip Gaji berhasil dikirimkan ke email: ${selectedPayslip.employee.email}`);
-                        }}
-                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
-                      >
-                        <Mail className="w-4 h-4" /> {isIndo ? "Kirim Email" : "Send Email"}
-                      </button>
-                      <button
-                        onClick={generatePDF}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm"
-                      >
-                        <Download className="w-4 h-4" /> Download PDF
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Printable Area */}
-                  <div
-                    ref={payslipRef}
-                    className="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 shadow-sm relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600"></div>
-
-                    {/* Header */}
-                    <div className="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
-                      <div>
-                        <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
-                          {settings.brandName || "PERUSAHAAN"}
-                        </h1>
-                        <p className="text-sm text-slate-500 mt-1">
-                          {settings.companyAddress ||
-                            "Alamat Perusahaan Lengkap"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <h2 className="text-xl font-bold text-indigo-900 tracking-tight">
-                          SLIP GAJI
-                        </h2>
-                        <p className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-md inline-block mt-2">
-                          Periode: {selectedPayslip.period}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Employee Info */}
-                    <div className="grid grid-cols-2 gap-6 mb-8 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                      <div>
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">
-                          Data Karyawan
-                        </p>
-                        <p className="font-bold text-slate-800 text-lg">
-                          {selectedPayslip.employee.name}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          {selectedPayslip.employee.username} —{" "}
-                          {selectedPayslip.employee.position}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">
-                          Status Kehadiran
-                        </p>
-                        <p className="text-sm text-slate-700">
-                          <span className="font-semibold text-emerald-600">
-                            {selectedPayslip.attendance.presentDays}
-                          </span>{" "}
-                          Hari Hadir
-                        </p>
-                        <p className="text-sm text-slate-700">
-                          <span className="font-semibold text-rose-600">
-                            {selectedPayslip.attendance.alphaDays}
-                          </span>{" "}
-                          Hari Alpha
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Financials */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                      {/* Pendapatan */}
-                      <div>
-                        <h3 className="font-bold text-slate-800 border-b-2 border-indigo-100 pb-2 mb-3">
-                          PENDAPATAN
-                        </h3>
-                        <div className="space-y-3 text-sm">
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-600">Gaji Pokok</span>
-                            <span className="font-mono text-slate-800 font-medium">
-                              {formatRupiah(selectedPayslip.basic)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-600">
-                              Tunjangan Jabatan
-                            </span>
-                            <span className="font-mono text-slate-800 font-medium">
-                              {formatRupiah(selectedPayslip.position)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-600">
-                              Tunjangan Makan (
-                              {selectedPayslip.attendance.presentDays}x)
-                            </span>
-                            <span className="font-mono text-slate-800 font-medium">
-                              {formatRupiah(selectedPayslip.meal)}
-                            </span>
-                          </div>
-                          {selectedPayslip.kpiBonus > 0 && (
-                            <div className="flex justify-between items-center text-emerald-600 bg-emerald-50 p-1.5 rounded -mx-1.5 px-1.5">
-                              <span>Bonus KPI</span>
-                              <span className="font-mono font-medium">
-                                +{formatRupiah(selectedPayslip.kpiBonus)}
-                              </span>
-                            </div>
-                          )}
-                          <div className="border-t border-slate-200 pt-3 flex justify-between items-center font-bold text-slate-800">
-                            <span>Total Pendapatan</span>
-                            <span className="font-mono">
-                              {formatRupiah(
-                                selectedPayslip.basic +
-                                  selectedPayslip.position +
-                                  selectedPayslip.meal +
-                                  selectedPayslip.kpiBonus,
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Potongan */}
-                      <div>
-                        <h3 className="font-bold text-slate-800 border-b-2 border-rose-100 pb-2 mb-3">
-                          POTONGAN
-                        </h3>
-                        <div className="space-y-3 text-sm">
-                          <div className="flex justify-between items-center text-rose-600">
-                            <span>
-                              Potongan Alpha (
-                              {selectedPayslip.attendance.alphaDays}x)
-                            </span>
-                            <span className="font-mono font-medium">
-                              -{formatRupiah(selectedPayslip.alphaDeduction)}
-                            </span>
-                          </div>
-                          <div className="border-t border-slate-200 pt-3 flex justify-between items-center font-bold text-slate-800">
-                            <span>Total Potongan</span>
-                            <span className="font-mono text-rose-600">
-                              {formatRupiah(selectedPayslip.alphaDeduction)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* THP */}
-                    <div className="bg-indigo-600 text-white rounded-xl p-6 flex justify-between items-center shadow-lg shadow-indigo-200">
-                      <div>
-                        <p className="text-indigo-100 text-sm font-medium uppercase tracking-wider mb-1">
-                          TAKE HOME PAY
-                        </p>
-                        <p className="text-3xl font-black font-mono">
-                          {formatRupiah(selectedPayslip.total)}
-                        </p>
-                      </div>
-                      <UserCheck className="w-12 h-12 text-indigo-400 opacity-50" />
-                    </div>
-
-                    {/* Footer / Signatures */}
-                    <div className="mt-12 pt-8 border-t border-dashed border-slate-200 flex justify-between">
-                      <div className="text-center">
-                        <p className="text-sm text-slate-500 mb-12">
-                          Penerima,
-                        </p>
-                        <p className="font-bold text-slate-800 underline decoration-slate-300 underline-offset-4">
-                          {selectedPayslip.employee.name}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-slate-500 mb-12">
-                          Manajemen / Keuangan,
-                        </p>
-                        <p className="font-bold text-slate-800 underline decoration-slate-300 underline-offset-4">
-                          {settings.brandName}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* --- PAYROLL TABLE --- */
-                <Payroll />
-              )}
+              <Payroll />
             </motion.div>
           )}
         </div>
@@ -3410,14 +3361,16 @@ export function HRManagement() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
+                onClick={() => setIsEmployeeModalOpen(false)}
+                className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80 flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto"
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80 dark:border-slate-700/80 flex flex-col max-h-[85vh] sm:max-h-[88vh] my-auto"
                 >
             {/* Header */}
             <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
@@ -3661,14 +3614,16 @@ export function HRManagement() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto"
+                onClick={() => setIsContractModalOpen(false)}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80"
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80 dark:border-slate-700/80"
                 >
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
@@ -3767,14 +3722,16 @@ export function HRManagement() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
                 >
                   <motion.div
                     initial={{ opacity: 0, scale: 0.96, y: 12 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96, y: 8 }}
                     transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                    className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col border border-slate-100 my-auto"
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col border border-slate-100 dark:border-slate-700/80 my-auto"
                   >
             {/* Header */}
             <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-100 flex justify-between items-start sm:items-center bg-slate-50/80 z-10 shrink-0 gap-3">
@@ -3845,9 +3802,9 @@ export function HRManagement() {
                         <span className="font-bold text-slate-800 text-sm">Clock In (Masuk)</span>
                       </div>
                       <div className="text-right">
-                        <span className="font-mono font-bold text-emerald-700 text-base">
-                          {verifyingAttendance.clockInTime 
-                            ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                        <span className="font-mono tabular-nums font-bold text-emerald-700 text-base">
+                          {verifyingAttendance.clockInTime
+                            ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: DEFAULT_STORE_TIMEZONE })
                             : '-'}
                         </span>
                       </div>
@@ -3865,7 +3822,7 @@ export function HRManagement() {
                             onClick={() => setLightboxPhoto({
                               url: verifyingAttendance.clockInPhotoUrl,
                               title: `Foto Selfie Masuk - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
-                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? formatWitaTimeHm(verifyingAttendance.clockInTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                             })}
                             className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
@@ -3879,9 +3836,9 @@ export function HRManagement() {
                           onClick={() => setLightboxPhoto({
                             url: verifyingAttendance.clockInPhotoUrl,
                             title: `Foto Selfie Masuk - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
-                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? new Date(verifyingAttendance.clockInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockInTime ? formatWitaTimeHm(verifyingAttendance.clockInTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                           })}
-                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner cursor-pointer"
+                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-950 group shadow-inner cursor-pointer"
                           title="Klik untuk melihat foto ukuran penuh"
                         >
                           <img 
@@ -3955,9 +3912,9 @@ export function HRManagement() {
                         <span className="font-bold text-slate-800 text-sm">Clock Out (Pulang)</span>
                       </div>
                       <div className="text-right">
-                        <span className="font-mono font-bold text-rose-700 text-base">
-                          {verifyingAttendance.clockOutTime 
-                            ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+                        <span className="font-mono tabular-nums font-bold text-rose-700 text-base">
+                          {verifyingAttendance.clockOutTime
+                            ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: DEFAULT_STORE_TIMEZONE })
                             : 'Belum Pulang'}
                         </span>
                       </div>
@@ -3975,7 +3932,7 @@ export function HRManagement() {
                             onClick={() => setLightboxPhoto({
                               url: verifyingAttendance.clockOutPhotoUrl,
                               title: `Foto Selfie Pulang - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
-                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                              subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? formatWitaTimeHm(verifyingAttendance.clockOutTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                             })}
                             className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
                           >
@@ -3989,9 +3946,9 @@ export function HRManagement() {
                           onClick={() => setLightboxPhoto({
                             url: verifyingAttendance.clockOutPhotoUrl,
                             title: `Foto Selfie Pulang - ${emp?.name || getEmployeeName(verifyingAttendance.employeeId)}`,
-                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? new Date(verifyingAttendance.clockOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}`
+                            subtitle: `${verifyingAttendance.date} • Pukul ${verifyingAttendance.clockOutTime ? formatWitaTimeHm(verifyingAttendance.clockOutTime, DEFAULT_STORE_TIMEZONE) : '-'} WITA`
                           })}
-                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 group shadow-inner cursor-pointer"
+                          className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-950 group shadow-inner cursor-pointer"
                           title="Klik untuk melihat foto ukuran penuh"
                         >
                           <img 
@@ -4065,52 +4022,71 @@ export function HRManagement() {
             </div>
 
             {/* Modal Actions Footer */}
-            <div className="p-4 sm:px-6 sm:py-4 bg-slate-50 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-100 shrink-0">
+            <div className="p-4 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-800/60 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
               <button 
                 type="button"
                 onClick={() => setIsVerificationModalOpen(false)} 
-                className="w-full sm:w-auto px-5 py-2.5 text-slate-600 font-semibold hover:bg-slate-200/70 rounded-xl text-sm transition-colors text-center"
+                className="w-full sm:w-auto px-5 py-2.5 text-slate-600 dark:text-slate-300 font-semibold hover:bg-slate-200/70 dark:hover:bg-slate-700 rounded-xl text-sm transition-colors text-center cursor-pointer"
               >
                 Tutup
               </button>
               
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    if (confirm("Tolak kehadiran ini? Status karyawan akan diubah menjadi ALPHA dan tunjangan/gaji akan disesuaikan.")) {
+              {canEditHR && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const closedErr = getClosedAttendanceError([verifyingAttendance.date]);
+                      if (closedErr) {
+                        toast.error(closedErr);
+                        return;
+                      }
+                      confirmModal.open({
+                        title: "Tolak Kehadiran (Set ALPHA)",
+                        message: "Tolak kehadiran ini? Status karyawan akan diubah menjadi ALPHA dan tunjangan/gaji akan disesuaikan.",
+                        variant: "danger",
+                        confirmLabel: "Ya, Tolak & Set ALPHA",
+                        onConfirm: () => {
+                          updateDailyAttendance({
+                            ...verifyingAttendance,
+                            approvalStatus: "REJECTED",
+                            status: "ALPHA",
+                          });
+                          setIsVerificationModalOpen(false);
+                          toast.warning("Kehadiran ditolak dan status diubah ke ALPHA.");
+                        },
+                      });
+                    }} 
+                    className="w-full sm:w-auto px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-sm transition-colors text-center cursor-pointer"
+                  >
+                    Tolak (Set Alpha)
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const closedErr = getClosedAttendanceError([verifyingAttendance.date]);
+                      if (closedErr) {
+                        toast.error(closedErr);
+                        return;
+                      }
+                      const isRejectedAlpha =
+                        verifyingAttendance.approvalStatus === "REJECTED" &&
+                        verifyingAttendance.status === "ALPHA";
                       updateDailyAttendance({
-                        ...verifyingAttendance, 
-                        approvalStatus: 'REJECTED', 
-                        status: 'ALPHA'
+                        ...verifyingAttendance,
+                        status: isRejectedAlpha ? "HADIR" : verifyingAttendance.status,
+                        approvalStatus: "APPROVED",
                       });
                       setIsVerificationModalOpen(false);
-                    }
-                  }} 
-                  className="w-full sm:w-auto px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-sm transition-colors text-center"
-                >
-                  Tolak (Set Alpha)
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    const isRejectedAlpha =
-                      verifyingAttendance.approvalStatus === "REJECTED" &&
-                      verifyingAttendance.status === "ALPHA";
-                    updateDailyAttendance({
-                      ...verifyingAttendance,
-                      status: isRejectedAlpha ? "HADIR" : verifyingAttendance.status,
-                      approvalStatus: 'APPROVED',
-                    });
-                    setIsVerificationModalOpen(false);
-                    toast.success("Kehadiran berhasil disahkan.");
-                  }} 
-                  className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Verifikasi Sah (Approve)</span>
-                </button>
-              </div>
+                      toast.success("Kehadiran berhasil disahkan.");
+                    }} 
+                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Verifikasi Sah (Approve)</span>
+                  </button>
+                </div>
+              )}
             </div>
                   </motion.div>
                 </motion.div>
@@ -4131,14 +4107,16 @@ export function HRManagement() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 p-3 sm:p-6 overflow-y-auto"
+                onClick={() => setIsAttendanceModalOpen(false)}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80"
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/80 dark:border-slate-700/80"
                 >
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
               <h3 className="text-lg font-bold text-slate-800">
@@ -4220,24 +4198,26 @@ export function HRManagement() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                onClick={() => setShowShiftConfigModal(false)}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-100"
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-100 dark:border-slate-700/80"
                 >
             {/* Header */}
-            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-center shrink-0">
+            <div className="px-6 py-5 bg-brand-gradient text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                <div className="p-2.5 rounded-2xl bg-white/15 text-white border border-white/25">
                   <Clock className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black tracking-tight">Pengaturan Master Shift & Jam Operasional</h3>
-                  <p className="text-xs text-indigo-200 mt-0.5">
+                  <p className="text-xs text-blue-100 mt-0.5">
                     Sesuaikan jam mulai/selesai, toleransi keterlambatan, dan buat shift baru untuk kedai kopi Anda.
                   </p>
                 </div>
@@ -4417,17 +4397,17 @@ export function HRManagement() {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setShowShiftConfigModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-colors"
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-200 flex items-center gap-2"
+                  className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Simpan Pengaturan Shift</span>
@@ -4452,14 +4432,16 @@ export function HRManagement() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto"
+                onClick={() => setIsBriefModalOpen(false)}
+                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-sm overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col"
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-100 dark:border-slate-700/80 overflow-hidden my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col"
                 >
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500 to-teal-600 text-white shrink-0">
               <div className="flex items-center gap-3">
@@ -4469,7 +4451,7 @@ export function HRManagement() {
                 <div>
                   <h3 className="font-bold text-base">Sahkan Jadwal & Kirim Brief Mingguan</h3>
                   <p className="text-xs text-emerald-100">
-                    Periode: {weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} – {weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                    Periode: {weekDays[0].toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: DEFAULT_STORE_TIMEZONE })} – {weekDays[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: DEFAULT_STORE_TIMEZONE })}
                   </p>
                 </div>
               </div>
@@ -4561,11 +4543,11 @@ export function HRManagement() {
                 correctionForm.status === "HADIR" || correctionForm.status === "TERLAMBAT";
               let previewHours = 0;
               if (isPresentStatus && correctionForm.clockInTime && correctionForm.clockOutTime) {
-                const inDate = new Date(`${correctingAttendance.date}T${correctionForm.clockInTime}:00`);
-                const outDate = new Date(`${correctingAttendance.date}T${correctionForm.clockOutTime}:00`);
+                const inDate = new Date(`${correctingAttendance.date}T${correctionForm.clockInTime}:00+08:00`);
+                let outDate = new Date(`${correctingAttendance.date}T${correctionForm.clockOutTime}:00+08:00`);
                 if (!Number.isNaN(inDate.getTime()) && !Number.isNaN(outDate.getTime())) {
                   if (outDate.getTime() < inDate.getTime()) {
-                    outDate.setDate(outDate.getDate() + 1);
+                    outDate = new Date(outDate.getTime() + 24 * 60 * 60 * 1000);
                   }
                   previewHours = calculateWorkDurationHours(
                     inDate.toISOString(),
@@ -4582,14 +4564,16 @@ export function HRManagement() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                  onClick={() => setIsCorrectionModalOpen(false)}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
                 >
                   <motion.div
                     initial={{ opacity: 0, scale: 0.96, y: 12 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96, y: 8 }}
                     transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                    className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/90 my-auto flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/90 dark:border-slate-700/80 my-auto flex flex-col"
                   >
               {/* Header */}
               <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-amber-50/70 shrink-0">
@@ -4848,6 +4832,7 @@ export function HRManagement() {
           document.body
         )}
 
+      <ConfirmModal {...confirmModal.modalProps} />
     </div>
   );
 }

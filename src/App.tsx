@@ -120,8 +120,8 @@ const ComingSoon = ({ title }: { title: string }) => (
     <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
       <span className="text-3xl">🚧</span>
     </div>
-    <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
-    <p className="text-gray-400 text-sm max-w-xs">
+    <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">{title}</h2>
+    <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs">
       Modul ini sedang dalam pengembangan dan akan segera tersedia.
     </p>
   </div>
@@ -198,6 +198,7 @@ function AppContent() {
       "dashboard_owner",
       "dashboard_finance",
       "dashboard_manager",
+      "dashboard_inventory",
       "cash_flow",
       "expense_categories",
       "finance_reports",
@@ -226,6 +227,7 @@ function AppContent() {
       "import_sales",
       "shifts",
       "hr",
+      "payroll",
       "leader_checklist",
       "users",
       "audit_log",
@@ -254,6 +256,7 @@ function AppContent() {
       "dashboard_employee",
       "leader_checklist",
       "attendance_clock",
+      "hr",
       "inventory",
       "purchases",
       "suppliers",
@@ -270,13 +273,8 @@ function AppContent() {
     roleAllowedViews[role] = roleAllowedViews[role].filter((v) => !DISABLED_VIEWS.includes(v));
   });
 
-  React.useEffect(() => {
-    if (!currentUser) {
-      if (!isPosDedicatedRoute && !isKdsDedicatedRoute) {
-        setCurrentView("dashboard_finance");
-      }
-      return;
-    }
+  const getAllowedViewsForCurrentUser = (): ViewState[] => {
+    if (!currentUser) return ALL_VIEWS;
     const userEmp = (employees || []).find(
       (e: any) => e.username === currentUser.username || e.id === currentUser.employeeId
     );
@@ -284,29 +282,50 @@ function AppContent() {
       currentUser.role === "LEADER" ||
       ((userEmp?.position || "").toUpperCase().includes("LEADER") || (userEmp?.position || "").toUpperCase().includes("HEAD"))
     );
-
     const baseAllowed = roleAllowedViews[currentUser.role] || ALL_VIEWS;
-    const allowed = isEmpLeader && !baseAllowed.includes("leader_checklist")
+    return isEmpLeader && !baseAllowed.includes("leader_checklist")
       ? [...baseAllowed, "leader_checklist"]
       : baseAllowed;
+  };
 
+  const handleSafeViewChange = (nextView: ViewState) => {
+    if (!currentUser) {
+      setCurrentView(nextView);
+      return;
+    }
+    const allowed = getAllowedViewsForCurrentUser();
+    if (allowed.includes(nextView)) {
+      setCurrentView(nextView);
+    } else {
+      setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
+    }
+  };
+
+  React.useEffect(() => {
+    if (!currentUser) {
+      if (!isPosDedicatedRoute && !isKdsDedicatedRoute) {
+        setCurrentView("dashboard_finance");
+      }
+      return;
+    }
+    const allowed = getAllowedViewsForCurrentUser();
     if (!allowed.includes(currentView)) {
       setCurrentView(roleDefaultView[currentUser.role] || "dashboard_finance");
     }
-  }, [currentUser?.role, currentUser?.username, employees, isPosDedicatedRoute, isKdsDedicatedRoute]);
+  }, [currentUser?.role, currentUser?.username, employees, currentView, isPosDedicatedRoute, isKdsDedicatedRoute]);
 
   // Dukungan navigasi URL Hash (mis. #inventory, #users, #payroll, #cash_flow, #leader_checklist)
   useEffect(() => {
     const handleHashNav = () => {
       const h = window.location.hash.replace("#", "").trim() as ViewState;
       if (h && ALL_VIEWS.includes(h)) {
-        setCurrentView(h);
+        handleSafeViewChange(h);
       }
     };
     window.addEventListener("hashchange", handleHashNav);
     handleHashNav();
     return () => window.removeEventListener("hashchange", handleHashNav);
-  }, []);
+  }, [currentUser?.role, currentUser?.username, employees]);
 
   // ─── 1. DEDICATED ROUTE: /pos (POS KASIR TERISOLASI) ──────────────────────────
   if (isPosDedicatedRoute) {
@@ -317,6 +336,31 @@ function AppContent() {
             <PosCashierLogin onLoginSuccess={() => setCurrentView("pos_cashier")} />
           </ErrorBoundary>
         </Suspense>
+      );
+    }
+
+    const allowedPosViews = getAllowedViewsForCurrentUser();
+    if (!allowedPosViews.includes("pos_cashier")) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm p-6 text-center space-y-4">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+              Akses Terminal POS Dibatasi
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Akun <strong>{currentUser.name}</strong> ({currentUser.role}) tidak memiliki izin mengoperasikan Terminal Kasir POS.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/";
+              }}
+              className="inline-flex items-center justify-center rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 transition-colors cursor-pointer"
+            >
+              Kembali ke Back-Office
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -344,19 +388,19 @@ function AppContent() {
   const renderView = () => {
     switch (currentView) {
       case "dashboard_owner":
-        return <OwnerDashboard onNavigate={setCurrentView} />;
+        return <OwnerDashboard onNavigate={handleSafeViewChange} />;
       case "dashboard_finance":
-        return <FinanceDashboard onNavigate={setCurrentView} />;
+        return <FinanceDashboard onNavigate={handleSafeViewChange} />;
       case "dashboard_manager":
-        return <ManagerDashboard onNavigate={setCurrentView} />;
+        return <ManagerDashboard onNavigate={handleSafeViewChange} />;
       case "dashboard_inventory":
         return <Dashboard view="INVENTORY" />;
       case "inventory":
-        return <Inventory onNavigate={setCurrentView} />;
+        return <Inventory onNavigate={handleSafeViewChange} />;
       case "import_sales":
         return <Sales />;
       case "cash_flow":
-        return <CashFlow onNavigate={setCurrentView} />;
+        return <CashFlow onNavigate={handleSafeViewChange} />;
       case "audit_log":
         return <AuditLogViewer />;
       case "users":
@@ -387,11 +431,11 @@ function AppContent() {
       case "attendance_clock":
         return <ClockIn />;
       case "dashboard_employee":
-        return <EmployeeDashboard onNavigate={setCurrentView} />;
+        return <EmployeeDashboard onNavigate={handleSafeViewChange} />;
       case "hpp_calculator":
-        return <HppCalculator onNavigate={setCurrentView} />;
+        return <HppCalculator onNavigate={handleSafeViewChange} />;
       case "menu_management":
-        return <MenuManagement onNavigate={setCurrentView} />;
+        return <MenuManagement onNavigate={handleSafeViewChange} />;
       case "promotions":
         return <PromotionsManagement />;
       default:
@@ -433,7 +477,7 @@ function AppContent() {
     }
 
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={handleSafeViewChange}>
         <Suspense fallback={<PageLoader />}>
           <ErrorBoundary>
             {renderView()}

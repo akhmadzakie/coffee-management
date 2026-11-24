@@ -8,13 +8,14 @@ import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq, ne, not, desc, like, and, or, gte, lte } from "drizzle-orm";
+import { eq, ne, not, desc, like, and, or, gte, lte, sql } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
 import {
   getLocalDateString,
   getLocalPeriodString,
   getLocalDayUtcBounds,
   isTimestampOnLocalDate,
+  DEFAULT_STORE_TIMEZONE,
 } from "./src/utils/dateUtils.ts";
 import {
   resolveOrderItemIngredients,
@@ -25,7 +26,43 @@ import {
   enrichParsedTransactionWithStore,
   parseSmartCoffeeTextEntry,
 } from "./src/utils/posDomainLogic.ts";
-import { recoverOrphanCashAccountsAndCategories } from "./src/utils/financeMetrics.ts";
+import {
+  recoverOrphanCashAccountsAndCategories,
+  isNonOperationalCashTransaction,
+  normalizeProfitSharePercentages,
+} from "./src/utils/financeMetrics.ts";
+import {
+  sanitizeIngredientRecord,
+  sanitizeEmployeeRecord,
+  sanitizeEmployeeContractRecord,
+  formatContractForClient,
+  sanitizePayrollRecordData,
+  sanitizePurchaseOrderRecord,
+  sanitizeKPIRecordData,
+  formatKpiRecordForClient,
+  sanitizeKpiTaskRecord,
+  sanitizeKpiBonusRuleRecord,
+  applyRoleSyncRestrictions,
+  filterVisibleSessionsForUser,
+  canRevokeTargetSession,
+  selectSessionsToRevokeOthers,
+  resolveGeminiApiKeyForSave,
+  dedupeRecipesByMenuName,
+  mergeOfflinePayrollPreservingPaid,
+  evaluateApiAccess,
+  isValidKitchenStatus,
+  evaluateSessionHeartbeat,
+  evaluateGenericTableAccess,
+  resolveCappedRefundAmount,
+  validatePosOrderPayload,
+  validateEvenlySplitAmount,
+  validateApprovalRequestInput,
+  mergePreservingProtectedRows,
+  protectSuperAdminAccountsOnSync,
+  getLocalPeriodFromTimestamp,
+  protectClosedPeriodsOnSync,
+  enforceClosedPeriodDataLock,
+} from "./src/utils/syncSanitizers.ts";
 
 const initialSettings = {
   id: "1",
@@ -376,7 +413,8 @@ async function ensureTables() {
       )`,
     `CREATE TABLE IF NOT EXISTS stock_opnames (
         id TEXT PRIMARY KEY,
-        period TEXT NOT NULL,
+        period TEXT,
+        date TEXT,
         status TEXT NOT NULL DEFAULT 'DRAFT',
         notes TEXT,
         created_by TEXT,
@@ -457,11 +495,35 @@ async function ensureTables() {
     `CREATE TABLE IF NOT EXISTS kpi_records (
         id TEXT PRIMARY KEY,
         employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        quarter INTEGER NOT NULL DEFAULT 1,
+        month INTEGER,
+        year INTEGER NOT NULL DEFAULT 2026,
+        period TEXT,
+        targets JSONB NOT NULL DEFAULT '[]'::jsonb,
+        total_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+        kpi_bonus DOUBLE PRECISION NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        evaluated_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      )`,
+    `CREATE TABLE IF NOT EXISTS kpi_tasks (
+        id VARCHAR(255) PRIMARY KEY,
+        employee_id VARCHAR(255) NOT NULL,
         period TEXT NOT NULL,
-        score NUMERIC NOT NULL DEFAULT 0,
-        notes TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        evaluated_by TEXT NOT NULL
+        task_name TEXT NOT NULL,
+        weight DOUBLE PRECISION NOT NULL DEFAULT 0,
+        target DOUBLE PRECISION NOT NULL DEFAULT 0,
+        realization DOUBLE PRECISION NOT NULL DEFAULT 0,
+        score DOUBLE PRECISION NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT NOW()::TEXT
+      )`,
+    `CREATE TABLE IF NOT EXISTS kpi_bonus_rules (
+        id VARCHAR(255) PRIMARY KEY,
+        min_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+        max_score DOUBLE PRECISION NOT NULL DEFAULT 100,
+        bonus_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE
       )`,
     `CREATE TABLE IF NOT EXISTS payroll_records (
         id TEXT PRIMARY KEY,
@@ -493,8 +555,10 @@ async function ensureTables() {
         period TEXT NOT NULL UNIQUE,
         closed_at TEXT NOT NULL,
         closed_by TEXT NOT NULL,
-        notes TEXT
+        notes TEXT,
+        snapshot_json TEXT
       )`,
+    `ALTER TABLE closed_periods ADD COLUMN IF NOT EXISTS snapshot_json TEXT`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES expense_categories(id)`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS vendor_name TEXT`,
     `ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS receipt_no TEXT`,
@@ -514,6 +578,42 @@ async function ensureTables() {
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS corrected_at TEXT`,
     `ALTER TABLE daily_attendances ADD COLUMN IF NOT EXISTS correction_reason TEXT`,
     `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS code VARCHAR(100)`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_unit TEXT`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS conversion_factor DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_price DOUBLE PRECISION`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS storage_location VARCHAR(100)`,
+    `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS notes TEXT`,
+    `ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS start_date TEXT`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS end_date TEXT`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE'`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS transport_allowance DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS alpha_deduction_per_day DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS kpi_bonus_target DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS raw_position_allowance DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS leader_jobdesk_score DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS matched_leader_tier JSONB`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS transport_allowance DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS target_bonus DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS late_deduction DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS late_hours DOUBLE PRECISION DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS late_days INTEGER DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS overtime_approved BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_name TEXT`,
+    `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS purchase_type VARCHAR(50) DEFAULT 'DISTRIBUTOR'`,
+    `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS cash_account_id VARCHAR(255)`,
+    `ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS notes TEXT`,
+    `ALTER TABLE stock_opnames ALTER COLUMN period DROP NOT NULL`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS quarter INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS month INTEGER`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS year INTEGER NOT NULL DEFAULT 2026`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS period TEXT`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS targets JSONB NOT NULL DEFAULT '[]'::jsonb`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS total_score DOUBLE PRECISION NOT NULL DEFAULT 0`,
+    `ALTER TABLE kpi_records ADD COLUMN IF NOT EXISTS kpi_bonus DOUBLE PRECISION NOT NULL DEFAULT 0`,
+    `ALTER TABLE kpi_records ALTER COLUMN score DROP NOT NULL`,
+    `ALTER TABLE kpi_records ALTER COLUMN period DROP NOT NULL`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS total_cost NUMERIC NOT NULL DEFAULT 0`,
     `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS reference_id TEXT`,
@@ -842,6 +942,10 @@ async function startServer() {
         return schema.employeeShifts;
       case "kpi_records":
         return schema.kpiRecords;
+      case "kpi_tasks":
+        return schema.kpiTasks;
+      case "kpi_bonus_rules":
+        return schema.kpiBonusRules;
       case "shifts":
         return schema.shifts;
       // POS & Kasir
@@ -861,15 +965,8 @@ async function startServer() {
     }
   };
 
-  const sanitizeIngredient = (i: any) => ({
-    id: String(i.id || crypto.randomUUID()),
-    name: String(i.name || ""),
-    unit: String(i.unit || "pcs"),
-    currentStock: Number(i.currentStock) || 0,
-    minStock: Number(i.minStock) || 0,
-    category: String(i.category || ""),
-    costPerUnit: Number(i.costPerUnit) || 0,
-  });
+  const sanitizeIngredient = (i: any) =>
+    sanitizeIngredientRecord(i, crypto.randomUUID());
 
   const sanitizeRecipe = (r: any) => ({
     id: String(r.id || crypto.randomUUID()),
@@ -938,7 +1035,7 @@ async function startServer() {
 
   const sanitizeDailySalesRecap = (r: any) => ({
     id: String(r.id || crypto.randomUUID()),
-    date: String(r.date || new Date().toISOString().slice(0, 10)),
+    date: String(r.date || getLocalDateString()),
     shift: String(r.shift || "ALL"),
     cashAmount: Math.round(Number(r.cashAmount) || 0),
     qrisAmount: Math.round(Number(r.qrisAmount) || 0),
@@ -1067,30 +1164,8 @@ async function startServer() {
     notes: i.notes ? String(i.notes) : null,
   });
 
-  const sanitizePayrollRecord = (p: any) => ({
-    id: String(p.id || crypto.randomUUID()),
-    employeeId: String(p.employeeId || ""),
-    period: String(p.period || ""),
-    basicSalary: Number(p.basicSalary) || 0,
-    mealAllowance: Number(p.mealAllowance) || 0,
-    positionAllowance: Number(p.positionAllowance) || 0,
-    kpiBonus: Number(p.kpiBonus) || 0,
-    alphaDeduction: Number(p.alphaDeduction) || 0,
-    overtimePay: Number(p.overtimePay) || 0,
-    overtimeHours: Number(p.overtimeHours) || 0,
-    overtimeRate: Number(p.overtimeRate) || 0,
-    otherDeductions: Number(p.otherDeductions) || 0,
-    grossPay: Number(p.grossPay) || 0,
-    netPay: Number(p.netPay) || 0,
-    status: String(p.status || "DRAFT"),
-    approvedBy: p.approvedBy ? String(p.approvedBy) : null,
-    approvedAt: p.approvedAt ? String(p.approvedAt) : null,
-    paidDate: p.paidDate ? String(p.paidDate) : null,
-    paidVia: p.paidVia ? String(p.paidVia) : null,
-    notes: p.notes ? String(p.notes) : null,
-    createdBy: String(p.createdBy || "System"),
-    createdAt: String(p.createdAt || new Date().toISOString()),
-  });
+  const sanitizePayrollRecord = (p: any) =>
+    sanitizePayrollRecordData(p, crypto.randomUUID());
 
   const sanitizeCashAccount = (a: any) => ({
     id: String(a.id || crypto.randomUUID()),
@@ -1099,7 +1174,64 @@ async function startServer() {
     isDefault: Boolean(a.isDefault),
   });
 
-  const sanitizeSettings = (st: any, existingRow?: any, isPrivilegedRole = true) => {
+  const sanitizeClosedPeriodForDb = (cp: any) => {
+    const snapJson = cp?.snapshot
+      ? JSON.stringify(cp.snapshot)
+      : typeof cp?.snapshotJson === "string"
+        ? cp.snapshotJson
+        : null;
+    return {
+      id: String(cp?.id || crypto.randomUUID()),
+      period: String(cp?.period || ""),
+      closedAt: String(cp?.closedAt || new Date().toISOString()),
+      closedBy: String(cp?.closedBy || "Manager"),
+      notes: cp?.notes ? String(cp.notes) : "",
+      snapshotJson: snapJson,
+    };
+  };
+
+  const formatClosedPeriodForClient = (cp: any) => {
+    let parsedSnapshot = cp?.snapshot && typeof cp.snapshot === "object" ? cp.snapshot : null;
+    const rawSnapJson = cp?.snapshotJson ?? cp?.snapshot_json ?? null;
+    if (!parsedSnapshot && typeof rawSnapJson === "string" && rawSnapJson.trim()) {
+      try {
+        parsedSnapshot = JSON.parse(rawSnapJson);
+      } catch {
+        parsedSnapshot = null;
+      }
+    }
+    return {
+      id: String(cp?.id || ""),
+      period: String(cp?.period || ""),
+      closedAt: String(cp?.closedAt || cp?.closed_at || ""),
+      closedBy: String(cp?.closedBy || cp?.closed_by || "Manager"),
+      notes: cp?.notes || "",
+      ...(parsedSnapshot ? { snapshot: parsedSnapshot } : {}),
+      snapshotJson: typeof rawSnapJson === "string" ? rawSnapJson : parsedSnapshot ? JSON.stringify(parsedSnapshot) : null,
+    };
+  };
+
+  const getActiveClosedPeriodSet = async (txOrNull?: any): Promise<Set<string>> => {
+    if (!isDbConnected && offlineState) {
+      return new Set(
+        (offlineState.closed_periods || []).map((p: any) => String(p?.period || "").trim()).filter(Boolean)
+      );
+    }
+    try {
+      const executor = txOrNull || db;
+      const rows = await executor.select().from(schema.closedPeriods);
+      return new Set(rows.map((p: any) => String(p?.period || "").trim()).filter(Boolean));
+    } catch {
+      return new Set();
+    }
+  };
+
+  const sanitizeSettings = (
+    st: any,
+    existingRow?: any,
+    isPrivilegedRole = true,
+    isSuperAdmin = false
+  ) => {
     const divTarget = typeof st?.divisionKpiBonusTarget === "object" ? { ...st.divisionKpiBonusTarget } : {};
     if (st?.leaderJobdeskAllowanceRules && Array.isArray(st.leaderJobdeskAllowanceRules)) {
       divTarget.__leaderAllowanceRules = st.leaderJobdeskAllowanceRules;
@@ -1110,19 +1242,40 @@ async function startServer() {
     if (st?.ingredientCategories && Array.isArray(st.ingredientCategories)) {
       divTarget.__ingredientCategories = st.ingredientCategories;
     }
+    if (st?.menuCategories && typeof st.menuCategories === "object" && !Array.isArray(st.menuCategories)) {
+      divTarget.__menuCategories = st.menuCategories;
+    }
     if (st?.dailySalesRecaps && Array.isArray(st.dailySalesRecaps)) {
       divTarget.__dailySalesRecaps = st.dailySalesRecaps;
     }
     if (st?.defaultOverheadPercent !== undefined && st?.defaultOverheadPercent !== null) {
       divTarget.__defaultOverheadPercent = Number(st.defaultOverheadPercent);
     }
+    if (
+      st?.profitShareOwnerPercent !== undefined ||
+      st?.profitShareReservePercent !== undefined ||
+      st?.profitShareInvestorPercent !== undefined ||
+      divTarget.__profitShareConfig
+    ) {
+      divTarget.__profitShareConfig =
+        st?.profitShareOwnerPercent !== undefined ||
+        st?.profitShareReservePercent !== undefined ||
+        st?.profitShareInvestorPercent !== undefined
+          ? normalizeProfitSharePercentages({
+              ownerPercent: st?.profitShareOwnerPercent,
+              reservePercent: st?.profitShareReservePercent,
+              investorPercent: st?.profitShareInvestorPercent,
+            })
+          : normalizeProfitSharePercentages(divTarget.__profitShareConfig);
+    }
 
     const incomingKey = st?.gemini_api_key ?? st?.geminiApiKey;
-    const isMaskedKey = typeof incomingKey === "string" && incomingKey.startsWith("••");
-    let resolvedGeminiKey = existingRow?.gemini_api_key ?? process.env.GEMINI_API_KEY ?? null;
-    if (isPrivilegedRole && incomingKey !== undefined && !isMaskedKey) {
-      resolvedGeminiKey = incomingKey || process.env.GEMINI_API_KEY || null;
-    }
+    const resolvedGeminiKey = resolveGeminiApiKeyForSave({
+      role: isSuperAdmin ? "SUPER_ADMIN" : isPrivilegedRole ? "MANAGER" : "STAFF",
+      incomingKey,
+      existingKey: existingRow?.gemini_api_key ?? null,
+      envKey: process.env.GEMINI_API_KEY ?? null,
+    });
 
     const incomingSupPin = st?.posSupervisorPin;
     const isMaskedPin = typeof incomingSupPin === "string" && incomingSupPin.startsWith("••");
@@ -1259,32 +1412,11 @@ async function startServer() {
     status: String(s.status || "ACTIVE"),
   });
 
-  const sanitizeEmployee = (e: any) => ({
-    id: String(e.id || crypto.randomUUID()),
-    username: String(e.username || ""),
-    name: String(e.name || ""),
-    position: String(e.position || ""),
-    department: String(e.department || ""),
-    employmentType: String(e.employmentType || ""),
-    startDate: String(e.startDate || ""),
-    endDate: e.endDate ? String(e.endDate) : null,
-    phone: String(e.phone || ""),
-    address: String(e.address || ""),
-    status: String(e.status || ""),
-    createdAt: String(e.createdAt || new Date().toISOString()),
-  });
+  const sanitizeEmployee = (e: any) =>
+    sanitizeEmployeeRecord(e, crypto.randomUUID());
 
-  const sanitizeEmployeeContract = (c: any) => ({
-    id: String(c.id || crypto.randomUUID()),
-    employeeId: String(c.employeeId || ""),
-    effectiveDate: String(c.effectiveDate || ""),
-    basicSalary: Number(c.basicSalary) || 0,
-    mealAllowance: Number(c.mealAllowance) || 0,
-    positionAllowance: Number(c.positionAllowance) || 0,
-    alphaDeductionPerDay: Number(c.alphaDeductionPerDay) || 0,
-    workingDaysPerMonth: Number(c.workingDaysPerMonth) || 0,
-    notes: String(c.notes || ""),
-  });
+  const sanitizeEmployeeContract = (c: any) =>
+    sanitizeEmployeeContractRecord(c, crypto.randomUUID());
 
   const sanitizeAttendanceRecord = (a: any) => ({
     id: String(a.id || crypto.randomUUID()),
@@ -1341,18 +1473,14 @@ async function startServer() {
     notes: String(c.notes || ""),
   });
 
-  const sanitizeKPIRecord = (k: any) => ({
-    id: String(k.id || crypto.randomUUID()),
-    employeeId: String(k.employeeId || ""),
-    quarter: Number(k.quarter) || 1,
-    year: Number(k.year) || new Date().getFullYear(),
-    targets: Array.isArray(k.targets) ? k.targets : [],
-    totalScore: Number(k.totalScore) || 0,
-    kpiBonus: Number(k.kpiBonus) || 0,
-    notes: String(k.notes || ""),
-    evaluatedBy: String(k.evaluatedBy || ""),
-    createdAt: String(k.createdAt || new Date().toISOString()),
-  });
+  const sanitizeKPIRecord = (k: any) =>
+    sanitizeKPIRecordData(k, crypto.randomUUID());
+
+  const sanitizeKpiTask = (t: any) =>
+    sanitizeKpiTaskRecord(t, crypto.randomUUID());
+
+  const sanitizeKpiBonusRule = (r: any) =>
+    sanitizeKpiBonusRuleRecord(r, crypto.randomUUID());
 
   const sanitizeSupplier = (s: any) => ({
     id: String(s.id || crypto.randomUUID()),
@@ -1363,19 +1491,8 @@ async function startServer() {
     notes: String(s.notes || ""),
   });
 
-  const sanitizePurchaseOrder = (p: any) => ({
-    id: String(p.id || crypto.randomUUID()),
-    poNumber: String(p.poNumber || ""),
-    supplierId: String(p.supplierId || ""),
-    date: String(p.date || new Date().toISOString()),
-    items: Array.isArray(p.items) ? p.items : [],
-    totalAmount: Number(p.totalAmount) || 0,
-    status: String(p.status || "UNPAID"),
-    deliveryStatus: String(p.deliveryStatus || "PENDING"),
-    paymentMethod: String(p.paymentMethod || "CASH"),
-    dueDate: p.dueDate ? String(p.dueDate) : null,
-    amountPaid: Number(p.amountPaid) || 0,
-  });
+  const sanitizePurchaseOrder = (p: any) =>
+    sanitizePurchaseOrderRecord(p, crypto.randomUUID());
 
   const sanitizeShift = (s: any) => ({
     id: String(s.id || crypto.randomUUID()),
@@ -1383,18 +1500,18 @@ async function startServer() {
     cashAccountId: String(s.cashAccountId || ""),
     startTime: String(s.startTime || new Date().toISOString()),
     endTime: s.endTime ? String(s.endTime) : null,
-    startingCash: Number(s.startingCash) || 0,
+    startingCash: Math.round(Math.max(0, Number(s.startingCash) || 0)),
     expectedEndingCash:
       s.expectedEndingCash !== null && s.expectedEndingCash !== undefined
-        ? Number(s.expectedEndingCash)
+        ? Math.round(Number(s.expectedEndingCash) || 0)
         : null,
     actualEndingCash:
       s.actualEndingCash !== null && s.actualEndingCash !== undefined
-        ? Number(s.actualEndingCash)
+        ? Math.round(Number(s.actualEndingCash) || 0)
         : null,
     difference:
       s.difference !== null && s.difference !== undefined
-        ? Number(s.difference)
+        ? Math.round(Number(s.difference) || 0)
         : null,
     status: String(s.status || "OPEN"),
     picEmployeeId: s.picEmployeeId ? String(s.picEmployeeId) : null,
@@ -1494,6 +1611,8 @@ async function startServer() {
     dailyAttendances: [],
     dailyChecklists: [],
     kpiRecords: [],
+    kpiTasks: [],
+    kpiBonusRules: [],
   };
 
   let serverDataVersion = Date.now();
@@ -1536,6 +1655,20 @@ async function startServer() {
       }
     }
     return null;
+  };
+
+  const requireAuth = async (
+    req: express.Request,
+    res: express.Response,
+    allowedRoles?: readonly string[]
+  ) => {
+    const authUser = await resolveAuthUser(req);
+    const check = evaluateApiAccess(authUser, allowedRoles);
+    if ("error" in check) {
+      res.status(check.status).json({ error: check.error });
+      return null;
+    }
+    return authUser;
   };
 
   // Helper verifikasi PIN Supervisor / Manager / Unlock Layar POS dengan dukungan penuh SHA-256
@@ -1674,11 +1807,46 @@ async function startServer() {
     }
   });
 
+  app.post("/api/closed-periods/verify-reopen-pin", pinVerifyLimiter, async (req, res) => {
+    try {
+      const authUser = await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER"]);
+      if (!authUser) return;
+
+      const { pin, reason } = req.body || {};
+      const cleanReason = String(reason || "").trim();
+      if (cleanReason.length < 5) {
+        return res.status(400).json({
+          valid: false,
+          error: "Alasan pembukaan kembali periode wajib diisi minimal 5 karakter.",
+        });
+      }
+
+      const rawPin = String(pin || "").trim();
+      if (!rawPin) {
+        return res.status(400).json({ valid: false, error: "PIN Manager / Super Admin wajib diisi." });
+      }
+      const hashedPin =
+        rawPin.length === 64 ? rawPin : crypto.createHash("sha256").update(rawPin).digest("hex");
+      const userPinMatches = authUser.pin === hashedPin || authUser.pin === rawPin;
+      if (!userPinMatches) {
+        return res.status(403).json({
+          valid: false,
+          error: "PIN otorisasi Manager / Super Admin salah.",
+        });
+      }
+
+      return res.json({ valid: true, verifiedBy: authUser.name || authUser.role });
+    } catch (err: any) {
+      return res.status(500).json({ valid: false, error: err?.message || "Gagal memverifikasi PIN buka buku" });
+    }
+  });
+
   app.get("/api/sync", async (req, res) => {
     try {
       const authUser = await resolveAuthUser(req);
       const isPrivilegedRole =
         authUser?.role === "MANAGER" || authUser?.role === "SUPER_ADMIN";
+      const isSuperAdminRole = authUser?.role === "SUPER_ADMIN";
 
       // Jika belum login (mis. halaman pilih akun Login): hanya kirim daftar nama akun publik & branding dasar,
       // TANPA membocorkan kas, gaji, inventori, audit log, API key, maupun PIN!
@@ -1698,7 +1866,7 @@ async function startServer() {
                   .values(initialUsers.map((u: any) => sanitizeUserForInsert(u, u.pin)));
                 await tx
                   .insert(schema.settings)
-                  .values([sanitizeSettings(initialSettings)]);
+                  .values([sanitizeSettings(initialSettings, undefined, true, true)]);
               });
               publicUsers = initialUsers;
               rawSt = initialSettings;
@@ -1735,6 +1903,12 @@ async function startServer() {
         });
       }
 
+      if (authUser.isSuspended) {
+        return res.status(403).json({
+          error: "Forbidden: Akun Anda sedang ditangguhkan (suspended).",
+        });
+      }
+
       const clientVersion = req.query.v ? Number(req.query.v) : null;
       if (clientVersion && clientVersion === serverDataVersion) {
         return res.json({
@@ -1744,27 +1918,65 @@ async function startServer() {
         });
       }
 
-      if (!isDbConnected) {
-        const rawSettings = offlineState.settings && offlineState.settings.length > 0 ? (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) : initialSettings;
+      const buildOfflineSyncPayload = () => {
+        const rawSettings =
+          offlineState.settings && offlineState.settings.length > 0
+            ? Array.isArray(offlineState.settings)
+              ? offlineState.settings[0]
+              : offlineState.settings
+            : initialSettings;
         const effectiveApiKey =
           rawSettings?.gemini_api_key ||
           rawSettings?.geminiApiKey ||
           process.env.GEMINI_API_KEY ||
           "";
-        return res.json({
+        let rawDivObj: Record<string, any> = {};
+        try {
+          rawDivObj =
+            typeof rawSettings?.divisionKpiBonusTarget === "string"
+              ? JSON.parse(rawSettings.divisionKpiBonusTarget)
+              : typeof rawSettings?.divisionKpiBonusTarget === "object" && rawSettings?.divisionKpiBonusTarget
+                ? { ...rawSettings.divisionKpiBonusTarget }
+                : {};
+        } catch {
+          rawDivObj = {};
+        }
+        const profitShareCfg = normalizeProfitSharePercentages(
+          rawDivObj.__profitShareConfig || {
+            ownerPercent: rawSettings?.profitShareOwnerPercent,
+            reservePercent: rawSettings?.profitShareReservePercent,
+            investorPercent: rawSettings?.profitShareInvestorPercent,
+          }
+        );
+        delete rawDivObj.__profitShareConfig;
+        return {
           ...offlineState,
           users: (offlineState.users || initialUsers).map(sanitizeUser),
+          device_sessions: filterVisibleSessionsForUser(
+            offlineState.device_sessions || [],
+            authUser
+          ),
+          contracts: (offlineState.contracts || []).map(formatContractForClient),
+          kpiRecords: (offlineState.kpiRecords || []).map(formatKpiRecordForClient),
+          closed_periods: (offlineState.closed_periods || []).map(formatClosedPeriodForClient),
           v: serverDataVersion,
           settings: {
             ...rawSettings,
             hasGeminiApiKey: Boolean(effectiveApiKey),
             hasPosSupervisorPin: Boolean(rawSettings?.posSupervisorPin),
-            geminiApiKey: isPrivilegedRole ? effectiveApiKey : "",
-            gemini_api_key: isPrivilegedRole ? effectiveApiKey : "",
+            geminiApiKey: isSuperAdminRole ? effectiveApiKey : "",
+            gemini_api_key: isSuperAdminRole ? effectiveApiKey : "",
             posSupervisorPin: isPrivilegedRole ? (rawSettings?.posSupervisorPin || "1234") : "",
+            profitShareOwnerPercent: profitShareCfg.ownerPercent,
+            profitShareReservePercent: profitShareCfg.reservePercent,
+            profitShareInvestorPercent: profitShareCfg.investorPercent,
           },
           serverTime: new Date().toISOString(),
-        });
+        };
+      };
+
+      if (!isDbConnected) {
+        return res.json(buildOfflineSyncPayload());
       }
       let cash_accounts: any[] = [];
       let cash_transactions: any[] = [];
@@ -1782,6 +1994,8 @@ async function startServer() {
       let employee_contracts: any[] = [];
       let attendance_records: any[] = [];
       let kpi_records: any[] = [];
+      let kpi_tasks: any[] = [];
+      let kpi_bonus_rules: any[] = [];
       let employee_shifts: any[] = [];
       let daily_checklists: any[] = [];
       let daily_attendances: any[] = [];
@@ -1836,6 +2050,8 @@ async function startServer() {
           products,
           batch_preparations,
           promotions,
+          kpi_tasks,
+          kpi_bonus_rules,
         ] = await Promise.all([
           db.select().from(schema.cashAccounts),
           db.select().from(schema.cashTransactions),
@@ -1870,6 +2086,8 @@ async function startServer() {
           db.select().from(schema.products),
           db.select().from(schema.batchPreparations),
           db.select().from(schema.promotions),
+          db.select().from(schema.kpiTasks),
+          db.select().from(schema.kpiBonusRules),
         ]);
 
         // Seed default promotions if empty
@@ -1902,7 +2120,7 @@ async function startServer() {
                 .onConflictDoNothing();
               await tx
                 .insert(schema.settings)
-                .values([sanitizeSettings(initialSettings)])
+                .values([sanitizeSettings(initialSettings, undefined, true, true)])
                 .onConflictDoNothing();
             });
             users = initialUsers as any;
@@ -1987,10 +2205,7 @@ async function startServer() {
           dbErr,
         );
         if (offlineState) {
-          return res.json({
-            ...offlineState,
-            serverTime: new Date().toISOString(),
-          });
+          return res.json(buildOfflineSyncPayload());
         }
         users = initialUsers as any;
         settings = [initialSettings] as any;
@@ -2040,6 +2255,18 @@ async function startServer() {
         : (Array.isArray(rawSettings.ingredientCategories) ? rawSettings.ingredientCategories : undefined);
       delete rawDivTarget.__ingredientCategories;
 
+      const menuCategories =
+        rawDivTarget.__menuCategories &&
+        typeof rawDivTarget.__menuCategories === "object" &&
+        !Array.isArray(rawDivTarget.__menuCategories)
+          ? rawDivTarget.__menuCategories
+          : (rawSettings.menuCategories &&
+              typeof rawSettings.menuCategories === "object" &&
+              !Array.isArray(rawSettings.menuCategories)
+                ? rawSettings.menuCategories
+                : undefined);
+      delete rawDivTarget.__menuCategories;
+
       const legacyDailySalesRecaps = Array.isArray(rawDivTarget.__dailySalesRecaps)
         ? rawDivTarget.__dailySalesRecaps
         : (Array.isArray(rawSettings.dailySalesRecaps) ? rawSettings.dailySalesRecaps : undefined);
@@ -2060,7 +2287,7 @@ async function startServer() {
             .onConflictDoNothing();
           await db
             .update(schema.settings)
-            .set({ divisionKpiBonusTarget: cleanDivForMigration })
+            .set({ divisionKpiBonusTarget: JSON.stringify(cleanDivForMigration) })
             .where(eq(schema.settings.id, String(rawSettings.id || "1")));
           daily_sales_recaps = migratedRecaps;
         } catch (migErr) {
@@ -2075,12 +2302,21 @@ async function startServer() {
           : (rawSettings.defaultOverheadPercent !== undefined ? Number(rawSettings.defaultOverheadPercent) : undefined);
       delete rawDivTarget.__defaultOverheadPercent;
 
+      const profitShareCfg = normalizeProfitSharePercentages(
+        rawDivTarget.__profitShareConfig || {
+          ownerPercent: rawSettings.profitShareOwnerPercent,
+          reservePercent: rawSettings.profitShareReservePercent,
+          investorPercent: rawSettings.profitShareInvestorPercent,
+        }
+      );
+      delete rawDivTarget.__profitShareConfig;
+
       const formattedSettings = {
         ...rawSettings,
         hasGeminiApiKey: Boolean(effectiveApiKey),
         hasPosSupervisorPin: Boolean(rawSettings.posSupervisorPin),
-        geminiApiKey: isPrivilegedRole ? effectiveApiKey : "",
-        gemini_api_key: isPrivilegedRole ? effectiveApiKey : "",
+        geminiApiKey: isSuperAdminRole ? effectiveApiKey : "",
+        gemini_api_key: isSuperAdminRole ? effectiveApiKey : "",
         posSupervisorPin: isPrivilegedRole ? String(rawSettings.posSupervisorPin || "1234") : "",
         leaderBarTasks: parseTasksJson(rawSettings.leaderBarTasks),
         leaderKitchenTasks: parseTasksJson(rawSettings.leaderKitchenTasks),
@@ -2089,9 +2325,13 @@ async function startServer() {
         leaderJobdeskAllowanceRules: allowanceRules,
         shiftDefinitions: shiftDefs,
         ...(ingredientCategories ? { ingredientCategories } : {}),
+        ...(menuCategories ? { menuCategories } : {}),
         ...(defaultOverheadPercent !== undefined && !isNaN(defaultOverheadPercent)
           ? { defaultOverheadPercent }
           : {}),
+        profitShareOwnerPercent: profitShareCfg.ownerPercent,
+        profitShareReservePercent: profitShareCfg.reservePercent,
+        profitShareInvestorPercent: profitShareCfg.investorPercent,
         monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
         divisionKpiBonusTarget: rawDivTarget,
@@ -2110,7 +2350,7 @@ async function startServer() {
         cash_transactions,
         settings: formattedSettings,
         users: users.map(sanitizeUser),
-        device_sessions,
+        device_sessions: filterVisibleSessionsForUser(device_sessions, authUser),
         ingredients,
         stock_movements,
         sales_transactions,
@@ -2122,12 +2362,14 @@ async function startServer() {
         purchase_orders,
         shifts: formatShiftsForClient(shifts),
         employees,
-        contracts: employee_contracts,
+        contracts: employee_contracts.map(formatContractForClient),
         employeeShifts: employee_shifts,
         attendances: attendance_records,
         dailyChecklists: daily_checklists,
         dailyAttendances: daily_attendances,
-        kpiRecords: kpi_records,
+        kpiRecords: kpi_records.map(formatKpiRecordForClient),
+        kpiTasks: kpi_tasks,
+        kpiBonusRules: kpi_bonus_rules,
         // Fase 1-4
         expense_categories,
         budgets,
@@ -2136,7 +2378,7 @@ async function startServer() {
         stock_opnames,
         stock_opname_items,
         payroll_records,
-        closed_periods,
+        closed_periods: closed_periods.map(formatClosedPeriodForClient),
         products,
         batch_preparations,
         promotions,
@@ -2149,7 +2391,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/login", async (req, res) => {
+  app.post("/api/login", pinVerifyLimiter, async (req, res) => {
     try {
       const { username, pin } = req.body;
       const cleanUsername = String(username || "").trim().toLowerCase();
@@ -2351,12 +2593,8 @@ async function startServer() {
   // Endpoint khusus bagi Manager atau Super Admin untuk membuka suspend akun (Unsuspend)
   app.post("/api/users/:id/unsuspend", async (req, res) => {
     try {
-      const authUser = await resolveAuthUser(req);
-      if (!authUser || (authUser.role !== "MANAGER" && authUser.role !== "SUPER_ADMIN")) {
-        return res.status(403).json({
-          error: "Hanya Manager atau Super Admin yang memiliki wewenang membuka suspend akun.",
-        });
-      }
+      const authUser = await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER"]);
+      if (!authUser) return;
 
       const targetId = String(req.params.id || "").trim();
       if (!targetId) {
@@ -2412,22 +2650,13 @@ async function startServer() {
 
   app.post("/api/sync", async (req, res) => {
     try {
-      const authHeader = req.headers["authorization"] as string;
-      const token = authHeader?.split(" ")[1];
-
-      if (!token) {
-        return res.status(401).json({ error: "Unauthorized: No token provided" });
-      }
-
-      const requestUser = await resolveAuthUser(req);
+      const requestUser = await requireAuth(req, res);
+      if (!requestUser) return;
       let currentUsersDB: any[] = [];
-
-      if (!requestUser) {
-        return res.status(401).json({ error: "Unauthorized: Sesi tidak valid atau telah berakhir" });
-      }
 
       const isPrivilegedSyncUser =
         requestUser.role === "MANAGER" || requestUser.role === "SUPER_ADMIN";
+      const isSuperAdminSyncUser = requestUser.role === "SUPER_ADMIN";
 
       // ── ATURAN #5b: OWNER READ-ONLY ENFORCEMENT ──────────────────────────
       // Owner berstatus Read-Only (Pengawasan). Seluruh mutasi data via API ditolak di sisi server.
@@ -2437,6 +2666,10 @@ async function startServer() {
         });
       }
 
+      const restrictedBody = applyRoleSyncRestrictions(
+        requestUser.role,
+        req.body || {}
+      );
       let {
         cash_accounts,
         cash_transactions,
@@ -2473,79 +2706,31 @@ async function startServer() {
         products,
         batch_preparations,
         promotions,
-      } = req.body;
+      } = restrictedBody;
 
-      if (requestUser.role === "KASIR") {
-        // Kasir hanya diizinkan memperbarui data shift, absensi, dan sesi terminal
-        // Cegah tablet kasir menimpa tabel master, payroll, keuangan, atau pengaturan
-        users = undefined;
-        settings = undefined;
-        daily_sales_recaps = undefined;
-        payroll_records = undefined;
-        budgets = undefined;
-        bank_reconciliations = undefined;
-        bank_statement_lines = undefined;
-        closed_periods = undefined;
-        expense_categories = undefined;
-        cash_accounts = undefined;
-        cash_transactions = undefined;
-        promotions = undefined;
-        employees = undefined;
-        contracts = undefined;
-        kpiRecords = undefined;
-        kpiTasks = undefined;
-        kpiBonusRules = undefined;
-        suppliers = undefined;
-        purchase_orders = undefined;
-        ingredients = undefined;
-        recipes = undefined;
-        products = undefined;
-        batch_preparations = undefined;
-        stock_opnames = undefined;
-        stock_opname_items = undefined;
-      } else if (requestUser.role === "FINANCE") {
-        // Finance fokus pada keuangan & pembukuan, dilarang menimpa menu dan resep
-        users = undefined;
-        recipes = undefined;
-        products = undefined;
-        batch_preparations = undefined;
-        promotions = undefined;
-      } else if (["BARISTA", "KITCHEN", "BAKER", "LEADER"].includes(requestUser.role)) {
-        // Staff operasional hanya boleh checklist, absensi, dan sesi
-        users = undefined;
-        settings = undefined;
-        daily_sales_recaps = undefined;
-        payroll_records = undefined;
-        budgets = undefined;
-        bank_reconciliations = undefined;
-        bank_statement_lines = undefined;
-        closed_periods = undefined;
-        expense_categories = undefined;
-        cash_accounts = undefined;
-        cash_transactions = undefined;
-        promotions = undefined;
-        employees = undefined;
-        contracts = undefined;
-        suppliers = undefined;
-        purchase_orders = undefined;
-      }
-
-      const mergeByIdPreservingExisting = (incomingList: any[], protectedRows: any[]) => {
-        const map = new Map<string, any>();
-        for (const row of protectedRows) {
-          if (row?.id) map.set(String(row.id), row);
-        }
-        for (const item of incomingList) {
-          if (item?.id) map.set(String(item.id), item);
-        }
-        return Array.from(map.values());
-      };
+      const mergeByIdPreservingExisting = mergePreservingProtectedRows;
 
       if (!isDbConnected && offlineState) {
         const offlineOrderIds = new Set<string>((offlineState.orders || []).map((o: any) => String(o.id)));
-        if (ingredients !== undefined) offlineState.ingredients = ingredients;
-        if (recipes !== undefined) offlineState.recipes = recipes;
+        const existingClosedPeriods = offlineState.closed_periods || [];
+        const guardedClosedPeriods =
+          closed_periods !== undefined
+            ? protectClosedPeriodsOnSync(requestUser.role, closed_periods, existingClosedPeriods).map(
+                sanitizeClosedPeriodForDb
+              )
+            : existingClosedPeriods;
+        if (closed_periods !== undefined) {
+          offlineState.closed_periods = guardedClosedPeriods;
+        }
+        const effectiveClosedPeriods = guardedClosedPeriods;
+        if (ingredients !== undefined && Array.isArray(ingredients)) {
+          offlineState.ingredients = ingredients.map(sanitizeIngredient);
+        }
+        if (recipes !== undefined && Array.isArray(recipes)) {
+          offlineState.recipes = dedupeRecipesByMenuName(recipes);
+        }
         if (products !== undefined) offlineState.products = products;
+        if (batch_preparations !== undefined) offlineState.batch_preparations = batch_preparations;
         if (Array.isArray(cash_accounts) && cash_accounts.length > 0) {
           offlineState.cash_accounts = cash_accounts;
         }
@@ -2553,7 +2738,13 @@ async function startServer() {
           const protectedPosCash = (offlineState.cash_transactions || []).filter(
             (ct: any) => ct.referenceId && offlineOrderIds.has(String(ct.referenceId))
           );
-          offlineState.cash_transactions = mergeByIdPreservingExisting(cash_transactions, protectedPosCash);
+          const lockedCashTx = enforceClosedPeriodDataLock(
+            cash_transactions,
+            offlineState.cash_transactions || [],
+            effectiveClosedPeriods,
+            (t: any) => getLocalPeriodFromTimestamp(t?.date)
+          );
+          offlineState.cash_transactions = mergeByIdPreservingExisting(lockedCashTx, protectedPosCash);
         }
         if (stock_movements !== undefined && Array.isArray(stock_movements)) {
           const protectedPosMovements = (offlineState.stock_movements || []).filter(
@@ -2567,37 +2758,121 @@ async function startServer() {
           );
           offlineState.sales_transactions = mergeByIdPreservingExisting(sales_transactions, protectedPosSales);
         }
-        if (daily_sales_recaps !== undefined) {
-          offlineState.daily_sales_recaps = Array.isArray(daily_sales_recaps)
-            ? daily_sales_recaps.map(sanitizeDailySalesRecap)
+        if (sales_import_logs !== undefined) {
+          offlineState.sales_import_logs = Array.isArray(sales_import_logs)
+            ? sales_import_logs.map(sanitizeSalesImportLog)
             : [];
         }
+        if (daily_sales_recaps !== undefined) {
+          const incomingRecaps = Array.isArray(daily_sales_recaps)
+            ? daily_sales_recaps.map(sanitizeDailySalesRecap)
+            : [];
+          offlineState.daily_sales_recaps = enforceClosedPeriodDataLock(
+            incomingRecaps,
+            offlineState.daily_sales_recaps || [],
+            effectiveClosedPeriods,
+            (r: any) => getLocalPeriodFromTimestamp(r?.date)
+          );
+        }
         if (shifts !== undefined) offlineState.shifts = shifts;
-        if (users !== undefined && Array.isArray(users)) {
+        if (users !== undefined && Array.isArray(users) && users.length > 0) {
           const existingOfflineUsers = offlineState.users || initialUsers;
-          offlineState.users = users.map((u: any) => {
+          const guardedUsers = protectSuperAdminAccountsOnSync(
+            requestUser.role,
+            users,
+            existingOfflineUsers
+          );
+          offlineState.users = guardedUsers.map((u: any) => {
             const ex = existingOfflineUsers.find((cu: any) => String(cu.id) === String(u.id));
             return sanitizeUserForInsert(u, ex?.pin, ex);
           });
+          const validOfflineUserIds = new Set(offlineState.users.map((u: any) => String(u.id)));
+          offlineState.device_sessions = (offlineState.device_sessions || []).filter((s: any) =>
+            validOfflineUserIds.has(String(s.userId))
+          );
         }
         if (settings !== undefined && settings !== null) {
           const rawExisting = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
           const incomingSt = Array.isArray(settings) ? settings[0] : settings;
-          offlineState.settings = [sanitizeSettings(incomingSt, rawExisting, isPrivilegedSyncUser)];
+          offlineState.settings = [
+            sanitizeSettings(
+              incomingSt,
+              rawExisting,
+              isPrivilegedSyncUser,
+              isSuperAdminSyncUser
+            ),
+          ];
         }
         if (expense_categories !== undefined) offlineState.expense_categories = expense_categories;
         if (budgets !== undefined) offlineState.budgets = budgets;
-        if (payroll_records !== undefined) offlineState.payroll_records = payroll_records;
+        if (bank_reconciliations !== undefined) {
+          offlineState.bank_reconciliations = Array.isArray(bank_reconciliations)
+            ? bank_reconciliations.map(sanitizeBankReconciliation)
+            : [];
+        }
+        if (bank_statement_lines !== undefined) {
+          offlineState.bank_statement_lines = Array.isArray(bank_statement_lines)
+            ? bank_statement_lines.map(sanitizeBankStatementLine)
+            : [];
+        }
+        if (stock_opnames !== undefined) {
+          offlineState.stock_opnames = Array.isArray(stock_opnames)
+            ? stock_opnames.map(sanitizeStockOpname)
+            : [];
+        }
+        if (stock_opname_items !== undefined) {
+          offlineState.stock_opname_items = Array.isArray(stock_opname_items)
+            ? stock_opname_items.map(sanitizeStockOpnameItem)
+            : [];
+        }
+        if (closed_periods !== undefined) {
+          offlineState.closed_periods = Array.isArray(closed_periods) ? closed_periods : [];
+        }
+        if (device_sessions !== undefined && Array.isArray(device_sessions)) {
+          const protectedActive = (offlineState.device_sessions || []).filter(
+            (s: any) => s.status === "ACTIVE"
+          );
+          offlineState.device_sessions = mergeByIdPreservingExisting(
+            device_sessions.map(sanitizeDeviceSession),
+            protectedActive
+          );
+        }
+        if (payroll_records !== undefined && Array.isArray(payroll_records)) {
+          const mergedPaidPayroll = mergeOfflinePayrollPreservingPaid(
+            payroll_records.map(sanitizePayrollRecord),
+            offlineState.payroll_records || []
+          );
+          offlineState.payroll_records = enforceClosedPeriodDataLock(
+            mergedPaidPayroll,
+            offlineState.payroll_records || [],
+            effectiveClosedPeriods,
+            (p: any) => String(p?.period || "")
+          );
+        }
         if (promotions !== undefined) offlineState.promotions = promotions;
         if (suppliers !== undefined) offlineState.suppliers = suppliers;
-        if (purchase_orders !== undefined) offlineState.purchase_orders = purchase_orders;
-        if (employees !== undefined) offlineState.employees = employees;
-        if (contracts !== undefined) offlineState.contracts = contracts;
+        if (purchase_orders !== undefined && Array.isArray(purchase_orders)) {
+          offlineState.purchase_orders = purchase_orders.map(sanitizePurchaseOrder);
+        }
+        if (employees !== undefined && Array.isArray(employees)) {
+          offlineState.employees = employees.map(sanitizeEmployee);
+        }
+        if (contracts !== undefined && Array.isArray(contracts)) {
+          offlineState.contracts = contracts.map(sanitizeEmployeeContract);
+        }
         if (employeeShifts !== undefined) offlineState.employeeShifts = employeeShifts;
         if (attendances !== undefined) offlineState.attendances = attendances;
         if (dailyAttendances !== undefined) offlineState.dailyAttendances = dailyAttendances;
         if (dailyChecklists !== undefined) offlineState.dailyChecklists = dailyChecklists;
-        if (kpiRecords !== undefined) offlineState.kpiRecords = kpiRecords;
+        if (kpiRecords !== undefined && Array.isArray(kpiRecords)) {
+          offlineState.kpiRecords = kpiRecords.map(sanitizeKPIRecord);
+        }
+        if (kpiTasks !== undefined && Array.isArray(kpiTasks)) {
+          offlineState.kpiTasks = kpiTasks.map(sanitizeKpiTask);
+        }
+        if (kpiBonusRules !== undefined && Array.isArray(kpiBonusRules)) {
+          offlineState.kpiBonusRules = kpiBonusRules.map(sanitizeKpiBonusRule);
+        }
         if (audit_logs !== undefined && Array.isArray(audit_logs)) {
           offlineState.audit_logs = mergeByIdPreservingExisting(audit_logs, offlineState.audit_logs || []);
         }
@@ -2615,30 +2890,37 @@ async function startServer() {
         let protectedAuditLogs: any[] = [];
         let protectedActiveSessions: any[] = [];
         let protectedDbAllCashTx: any[] = [];
-        let protectedDbCashAccounts: any[] = [];
-        let protectedDbExpenseCategories: any[] = [];
+        let existingClosedPeriods: any[] = [];
+        let existingDbRecaps: any[] = [];
+        let existingDbPayrolls: any[] = [];
+
+        if (
+          closed_periods !== undefined ||
+          cash_transactions !== undefined ||
+          daily_sales_recaps !== undefined ||
+          payroll_records !== undefined
+        ) {
+          existingClosedPeriods = await tx.select().from(schema.closedPeriods);
+        }
+        const effectiveDbClosedPeriods =
+          closed_periods !== undefined
+            ? protectClosedPeriodsOnSync(requestUser.role, closed_periods, existingClosedPeriods)
+            : existingClosedPeriods;
+        if (daily_sales_recaps !== undefined) {
+          existingDbRecaps = await tx.select().from(schema.dailySalesRecaps);
+        }
+        if (payroll_records !== undefined) {
+          existingDbPayrolls = await tx.select().from(schema.payrollRecords);
+        }
 
         const needPosOrdersCheck =
           cash_transactions !== undefined ||
           stock_movements !== undefined ||
           sales_transactions !== undefined;
 
-        const needCashSafetySnapshot =
-          needPosOrdersCheck ||
-          cash_accounts !== undefined ||
-          expense_categories !== undefined;
-
         let posOrderIds = new Set<string>();
-        if (needCashSafetySnapshot) {
-          if (cash_transactions !== undefined || cash_accounts !== undefined || expense_categories !== undefined) {
-            protectedDbAllCashTx = await tx.select().from(schema.cashTransactions);
-          }
-          if (cash_accounts !== undefined) {
-            protectedDbCashAccounts = await tx.select().from(schema.cashAccounts);
-          }
-          if (expense_categories !== undefined) {
-            protectedDbExpenseCategories = await tx.select().from(schema.expenseCategories);
-          }
+        if (cash_transactions !== undefined) {
+          protectedDbAllCashTx = await tx.select().from(schema.cashTransactions);
         }
 
         if (needPosOrdersCheck) {
@@ -2744,6 +3026,12 @@ async function startServer() {
         if (kpiRecords !== undefined) {
           await tx.delete(schema.kpiRecords);
         }
+        if (kpiTasks !== undefined) {
+          await tx.delete(schema.kpiTasks);
+        }
+        if (kpiBonusRules !== undefined) {
+          await tx.delete(schema.kpiBonusRules);
+        }
         if (attendances !== undefined) {
           await tx.delete(schema.attendanceRecords);
         }
@@ -2768,7 +3056,8 @@ async function startServer() {
         if (hasValidExpenseCategories) {
           await tx.delete(schema.expenseCategories);
         }
-        if (users !== undefined) {
+        const hasValidUsers = Array.isArray(users) && users.length > 0;
+        if (hasValidUsers) {
           if (currentUsersDB.length === 0) {
             currentUsersDB = await tx.select().from(schema.users);
           }
@@ -2785,65 +3074,52 @@ async function startServer() {
         }
 
         // --- PHASE 2: INSERTS (Parent -> Child) ---
-        const effectiveCashTxForRecovery =
-          cash_transactions !== undefined
-            ? mergeByIdPreservingExisting(
-                Array.isArray(cash_transactions) ? cash_transactions : [],
-                protectedPosCash
-              )
-            : protectedDbAllCashTx;
-
-        const referencedAccountIds = new Set(
-          (effectiveCashTxForRecovery || []).map((t: any) => String(t?.accountId || "")).filter(Boolean)
-        );
-        const referencedCategoryIds = new Set(
-          (effectiveCashTxForRecovery || []).map((t: any) => String(t?.categoryId || "")).filter(Boolean)
-        );
-
         let validUserIds: Set<string> | null = null;
-        if (users !== undefined && Array.isArray(users)) {
-          validUserIds = new Set(users.map((u: any) => String(u.id)));
+        const guardedUsers = hasValidUsers
+          ? protectSuperAdminAccountsOnSync(requestUser.role, users, currentUsersDB)
+          : null;
+        if (guardedUsers) {
+          validUserIds = new Set(guardedUsers.map((u: any) => String(u.id)));
         }
 
         if (settings !== undefined && settings !== null) {
           const incomingSt = Array.isArray(settings) ? settings[0] : settings;
-          await tx.insert(schema.settings).values([sanitizeSettings(incomingSt, existingSettingsRow, isPrivilegedSyncUser)]);
+          await tx
+            .insert(schema.settings)
+            .values([
+              sanitizeSettings(
+                incomingSt,
+                existingSettingsRow,
+                isPrivilegedSyncUser,
+                isSuperAdminSyncUser
+              ),
+            ]);
         }
         if (hasValidCashAccounts) {
-          const protectedRefAccounts = protectedDbCashAccounts.filter((acc) =>
-            referencedAccountIds.has(String(acc.id))
-          );
-          const mergedCashAccounts = mergeByIdPreservingExisting(cash_accounts, protectedRefAccounts);
-          const { recoveredAccounts } = recoverOrphanCashAccountsAndCategories({
-            cashAccounts: mergedCashAccounts as any[],
-            cashTransactions: effectiveCashTxForRecovery as any[],
-            expenseCategories: (hasValidExpenseCategories ? expense_categories : protectedDbExpenseCategories) as any[],
-          });
-          if (recoveredAccounts.length > 0) {
-            await tx.insert(schema.cashAccounts).values(recoveredAccounts.map(sanitizeCashAccount)).onConflictDoNothing();
+          if (cash_accounts.length > 0) {
+            await tx.insert(schema.cashAccounts).values(cash_accounts.map(sanitizeCashAccount)).onConflictDoNothing();
           }
         }
-        if (users !== undefined) {
-          if (Array.isArray(users) && users.length > 0) {
-            await tx.insert(schema.users).values(
-              users.map((u: any) => {
-                const ex = currentUsersDB.find((cu) => cu.id === String(u.id));
-                return sanitizeUserForInsert(u, ex?.pin, ex);
-              })
-            );
+        if (guardedUsers && guardedUsers.length > 0) {
+          await tx.insert(schema.users).values(
+            guardedUsers.map((u: any) => {
+              const ex = currentUsersDB.find((cu) => cu.id === String(u.id));
+              return sanitizeUserForInsert(u, ex?.pin, ex);
+            })
+          );
+          if (validUserIds) {
+            const allDbSessions = await tx
+              .select({ id: schema.deviceSessions.id, userId: schema.deviceSessions.userId })
+              .from(schema.deviceSessions);
+            for (const s of allDbSessions) {
+              if (!validUserIds.has(String(s.userId))) {
+                await tx.delete(schema.deviceSessions).where(eq(schema.deviceSessions.id, s.id));
+              }
+            }
           }
         }
         if (hasValidExpenseCategories) {
-          const protectedRefCategories = protectedDbExpenseCategories.filter((cat) =>
-            referencedCategoryIds.has(String(cat.id))
-          );
-          const mergedCategories = mergeByIdPreservingExisting(expense_categories, protectedRefCategories);
-          const { recoveredCategories } = recoverOrphanCashAccountsAndCategories({
-            cashAccounts: (hasValidCashAccounts ? cash_accounts : protectedDbCashAccounts) as any[],
-            cashTransactions: effectiveCashTxForRecovery as any[],
-            expenseCategories: mergedCategories as any[],
-          });
-          const sortedCategories = [...recoveredCategories].sort((a, b) =>
+          const sortedCategories = [...expense_categories].sort((a, b) =>
             a.parentId && !b.parentId ? 1 : !a.parentId && b.parentId ? -1 : 0
           );
           if (sortedCategories.length > 0) {
@@ -2890,12 +3166,29 @@ async function startServer() {
             await tx.insert(schema.kpiRecords).values(kpiRecords.map(sanitizeKPIRecord));
           }
         }
+        if (kpiTasks !== undefined) {
+          if (Array.isArray(kpiTasks) && kpiTasks.length > 0) {
+            await tx.insert(schema.kpiTasks).values(kpiTasks.map(sanitizeKpiTask));
+          }
+        }
+        if (kpiBonusRules !== undefined) {
+          if (Array.isArray(kpiBonusRules) && kpiBonusRules.length > 0) {
+            await tx.insert(schema.kpiBonusRules).values(kpiBonusRules.map(sanitizeKpiBonusRule));
+          }
+        }
         if (payroll_records !== undefined) {
-          if (Array.isArray(payroll_records) && payroll_records.length > 0) {
-            const incomingToInsert = payroll_records.filter((pr: any) => !existingPaidIds.has(pr.id));
-            if (incomingToInsert.length > 0) {
-              await tx.insert(schema.payrollRecords).values(incomingToInsert.map(sanitizePayrollRecord));
-            }
+          const incomingFiltered = Array.isArray(payroll_records)
+            ? payroll_records.filter((pr: any) => !existingPaidIds.has(pr.id))
+            : [];
+          const existingUnpaidOrAll = existingDbPayrolls.filter((pr: any) => !existingPaidIds.has(pr.id));
+          const lockedPayrolls = enforceClosedPeriodDataLock(
+            incomingFiltered,
+            existingUnpaidOrAll,
+            effectiveDbClosedPeriods,
+            (p: any) => String(p?.period || "")
+          );
+          if (lockedPayrolls.length > 0) {
+            await tx.insert(schema.payrollRecords).values(lockedPayrolls.map(sanitizePayrollRecord));
           }
         }
         if (suppliers !== undefined) {
@@ -2914,19 +3207,29 @@ async function startServer() {
           }
         }
         if (closed_periods !== undefined) {
-          if (Array.isArray(closed_periods) && closed_periods.length > 0) {
-            await tx.insert(schema.closedPeriods).values(closed_periods.map((cp: any) => ({
-              id: cp.id,
-              period: cp.period,
-              closedAt: cp.closedAt,
-              closedBy: cp.closedBy,
-              notes: cp.notes || '',
-            })));
+          if (Array.isArray(effectiveDbClosedPeriods) && effectiveDbClosedPeriods.length > 0) {
+            const sanitizedClosed = effectiveDbClosedPeriods.map(sanitizeClosedPeriodForDb);
+            await tx.execute(sql.raw("SAVEPOINT sp_closed_periods"));
+            try {
+              await tx.insert(schema.closedPeriods).values(sanitizedClosed);
+              await tx.execute(sql.raw("RELEASE SAVEPOINT sp_closed_periods"));
+            } catch {
+              await tx.execute(sql.raw("ROLLBACK TO SAVEPOINT sp_closed_periods"));
+              const withoutSnap = sanitizedClosed.map(({ snapshotJson: _sj, ...rest }) => rest);
+              await tx.insert(schema.closedPeriods).values(withoutSnap as any);
+              await tx.execute(sql.raw("RELEASE SAVEPOINT sp_closed_periods"));
+            }
           }
         }
         if (cash_transactions !== undefined) {
-          const mergedCashTx = mergeByIdPreservingExisting(
+          const lockedCashTx = enforceClosedPeriodDataLock(
             Array.isArray(cash_transactions) ? cash_transactions : [],
+            protectedDbAllCashTx,
+            effectiveDbClosedPeriods,
+            (t: any) => getLocalPeriodFromTimestamp(t?.date)
+          );
+          const mergedCashTx = mergeByIdPreservingExisting(
+            lockedCashTx,
             protectedPosCash
           );
           if (mergedCashTx.length > 0) {
@@ -2952,16 +3255,28 @@ async function startServer() {
           }
         }
         if (daily_sales_recaps !== undefined) {
-          if (Array.isArray(daily_sales_recaps) && daily_sales_recaps.length > 0) {
+          const sanitizedIncomingRecaps = Array.isArray(daily_sales_recaps)
+            ? daily_sales_recaps.map(sanitizeDailySalesRecap)
+            : [];
+          const lockedRecaps = enforceClosedPeriodDataLock(
+            sanitizedIncomingRecaps,
+            existingDbRecaps,
+            effectiveDbClosedPeriods,
+            (r: any) => getLocalPeriodFromTimestamp(r?.date)
+          );
+          if (lockedRecaps.length > 0) {
             await tx
               .insert(schema.dailySalesRecaps)
-              .values(daily_sales_recaps.map(sanitizeDailySalesRecap))
+              .values(lockedRecaps)
               .onConflictDoNothing();
           }
         }
         if (recipes !== undefined) {
           if (Array.isArray(recipes) && recipes.length > 0) {
-            await tx.insert(schema.recipes).values(recipes.map(sanitizeRecipe));
+            const uniqueRecipes = dedupeRecipesByMenuName(recipes);
+            if (uniqueRecipes.length > 0) {
+              await tx.insert(schema.recipes).values(uniqueRecipes.map(sanitizeRecipe)).onConflictDoNothing();
+            }
           }
         }
         if (sales_import_logs !== undefined) {
@@ -3003,22 +3318,34 @@ async function startServer() {
             await tx.insert(schema.bankStatementLines).values(bank_statement_lines.map(sanitizeBankStatementLine));
           }
         }
+        let validOpnameIds: Set<string> | null = null;
         if (stock_opnames !== undefined) {
-          if (Array.isArray(stock_opnames) && stock_opnames.length > 0) {
-            await tx.insert(schema.stockOpnames).values(stock_opnames.map(sanitizeStockOpname));
+          if (Array.isArray(stock_opnames)) {
+            validOpnameIds = new Set(stock_opnames.map((o: any) => String(o.id)));
+            if (stock_opnames.length > 0) {
+              await tx.insert(schema.stockOpnames).values(stock_opnames.map(sanitizeStockOpname));
+            }
           }
         }
         if (stock_opname_items !== undefined) {
-          if (Array.isArray(stock_opname_items) && stock_opname_items.length > 0) {
+          const rawItems = Array.isArray(stock_opname_items) ? stock_opname_items : [];
+          const validItems = validOpnameIds
+            ? rawItems.filter((i: any) => validOpnameIds!.has(String(i.opnameId || "")))
+            : rawItems;
+          if (validItems.length > 0) {
+            await tx.execute(sql.raw("SAVEPOINT sp_stock_opname_items"));
             try {
-              await tx.insert(schema.stockOpnameItems).values(stock_opname_items.map(sanitizeStockOpnameItem));
-            } catch (insErr: any) {
-              const withoutDiff = stock_opname_items.map((i: any) => {
+              await tx.insert(schema.stockOpnameItems).values(validItems.map(sanitizeStockOpnameItem));
+              await tx.execute(sql.raw("RELEASE SAVEPOINT sp_stock_opname_items"));
+            } catch (_insErr: any) {
+              await tx.execute(sql.raw("ROLLBACK TO SAVEPOINT sp_stock_opname_items"));
+              const withoutDiff = validItems.map((i: any) => {
                 const s = sanitizeStockOpnameItem(i);
                 const { difference, ...rest } = s;
                 return rest;
               });
               await tx.insert(schema.stockOpnameItems).values(withoutDiff as any);
+              await tx.execute(sql.raw("RELEASE SAVEPOINT sp_stock_opname_items"));
             }
           }
         }
@@ -3089,6 +3416,9 @@ async function startServer() {
   // Session management endpoints for Connected Devices & Force Logout
   app.get("/api/sessions", async (req, res) => {
     try {
+      const authUser = await requireAuth(req, res);
+      if (!authUser) return;
+
       // Sesi tanpa heartbeat lebih dari 15 menit dianggap sudah tidak aktif (offline/closed)
       const STALE_THRESHOLD_MS = 15 * 60 * 1000;
       const now = Date.now();
@@ -3099,7 +3429,9 @@ async function startServer() {
             s.status === "ACTIVE" &&
             now - new Date(s.lastActive).getTime() <= STALE_THRESHOLD_MS,
         );
-        return res.json({ sessions: activeSessions });
+        return res.json({
+          sessions: filterVisibleSessionsForUser(activeSessions, authUser),
+        });
       }
 
       const allSessions = await db.select().from(schema.deviceSessions);
@@ -3120,7 +3452,7 @@ async function startServer() {
         }
       }
 
-      // Filter sesi yang benar-benar aktif saat ini
+      // Filter sesi yang benar-benar aktif saat ini sesuai hak akses user
       const activeSessions = allSessions
         .filter(
           (s) =>
@@ -3132,10 +3464,18 @@ async function startServer() {
             new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime(),
         );
 
-      res.json({ sessions: activeSessions });
+      res.json({
+        sessions: filterVisibleSessionsForUser(activeSessions, authUser),
+      });
     } catch (err) {
       if (offlineState) {
-        return res.json({ sessions: (offlineState.device_sessions || []).filter((s: any) => s.status === "ACTIVE") });
+        const authUser = await resolveAuthUser(req).catch(() => null);
+        const active = (offlineState.device_sessions || []).filter(
+          (s: any) => s.status === "ACTIVE",
+        );
+        return res.json({
+          sessions: authUser ? filterVisibleSessionsForUser(active, authUser) : [],
+        });
       }
       console.error("Fetch sessions error:", err);
       res.status(500).json({ error: "Failed to fetch sessions" });
@@ -3146,60 +3486,66 @@ async function startServer() {
     try {
       const {
         sessionId,
-        userId,
-        username,
-        userName,
         deviceName,
         browser,
         os,
         deviceType,
         location,
-      } = req.body;
-      if (!sessionId || !userId) {
+      } = req.body || {};
+      const authHeader = req.headers["authorization"] as string | undefined;
+      const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      const effectiveSessionId = String(sessionId || bearerToken || "").trim();
+      if (!effectiveSessionId) {
         return res.status(400).json({ error: "Missing required session info" });
       }
 
       if (!isDbConnected && offlineState) {
         offlineState.device_sessions = offlineState.device_sessions || [];
-        const existing = offlineState.device_sessions.find((s: any) => s.id === sessionId);
-        if (existing) {
-          existing.lastActive = new Date().toISOString();
-        } else {
-          offlineState.device_sessions.push({
-            id: sessionId,
-            userId,
-            username,
-            userName,
-            deviceName: deviceName || "Unknown",
-            browser: browser || "Web",
-            os: os || "Unknown",
-            deviceType: deviceType || "desktop",
-            location: location || null,
-            lastActive: new Date().toISOString(),
-            status: "ACTIVE",
-          });
+        const existing = offlineState.device_sessions.find((s: any) => s.id === effectiveSessionId);
+        const sessionUser = existing
+          ? (offlineState.users || []).find((u: any) => u.id === existing.userId)
+          : null;
+        const evalResult = evaluateSessionHeartbeat(existing, sessionUser, Date.now());
+        if (!evalResult.allow) {
+          if (existing && (evalResult.status === "EXPIRED" || evalResult.status === "SUSPENDED")) {
+            existing.status = "REVOKED";
+          }
+          return res.json({ success: false, revoked: true, status: evalResult.status });
         }
-        return res.json({ success: true });
+        existing.lastActive = new Date().toISOString();
+        if (deviceName) existing.deviceName = String(deviceName);
+        if (browser) existing.browser = String(browser);
+        if (os) existing.os = String(os);
+        if (deviceType) existing.deviceType = String(deviceType);
+        if (location) existing.location = String(location);
+        return res.json({ success: true, revoked: false, status: "ACTIVE" });
       }
 
-      // Check if session was explicitly REVOKED or expired
-      const existing = await db
+      const existingRows = await db
         .select()
         .from(schema.deviceSessions)
-        .where(eq(schema.deviceSessions.id, sessionId));
-      if (existing.length > 0) {
-        if (existing[0].status === "REVOKED") {
-          return res.json({ success: false, revoked: true, status: "REVOKED" });
-        }
-        const lastActiveDate = new Date(existing[0].lastActive).getTime();
-        if (Date.now() - lastActiveDate > 60 * 60 * 1000) {
-          // Auto-logout after 1 hour idle
+        .where(eq(schema.deviceSessions.id, effectiveSessionId))
+        .limit(1);
+      const existing = existingRows[0] || null;
+      const sessionUser = existing
+        ? (
+            await db
+              .select()
+              .from(schema.users)
+              .where(eq(schema.users.id, existing.userId))
+              .limit(1)
+          )[0] || null
+        : null;
+
+      const evalResult = evaluateSessionHeartbeat(existing, sessionUser, Date.now());
+      if (!evalResult.allow) {
+        if (existing && (evalResult.status === "EXPIRED" || evalResult.status === "SUSPENDED")) {
           await db
             .update(schema.deviceSessions)
             .set({ status: "REVOKED" })
-            .where(eq(schema.deviceSessions.id, sessionId));
-          return res.json({ success: false, revoked: true, status: "EXPIRED" });
+            .where(eq(schema.deviceSessions.id, effectiveSessionId));
         }
+        return res.json({ success: false, revoked: true, status: evalResult.status });
       }
 
       const now = new Date().toISOString();
@@ -3211,39 +3557,18 @@ async function startServer() {
         ? clientIp[0]
         : String(clientIp).split(",")[0].trim();
 
-      // Atomic UPSERT using PostgreSQL ON CONFLICT DO UPDATE
       await db
-        .insert(schema.deviceSessions)
-        .values({
-          id: String(sessionId),
-          userId: String(userId),
-          username: String(username || "user"),
-          userName: String(userName || "User"),
-          deviceName: String(deviceName || "Browser"),
-          browser: String(browser || "Web Browser"),
-          os: String(os || "Unknown OS"),
-          deviceType: String(deviceType || "desktop"),
-          ipAddress: formattedIp,
-          location: location ? String(location) : null,
+        .update(schema.deviceSessions)
+        .set({
           lastActive: now,
-          createdAt: now,
-          status: "ACTIVE",
+          deviceName: String(deviceName || existing.deviceName || "Browser"),
+          browser: String(browser || existing.browser || "Web Browser"),
+          os: String(os || existing.os || "Unknown OS"),
+          deviceType: String(deviceType || existing.deviceType || "desktop"),
+          ipAddress: formattedIp,
+          ...(location ? { location: String(location) } : {}),
         })
-        .onConflictDoUpdate({
-          target: schema.deviceSessions.id,
-          set: {
-            lastActive: now,
-            userId: String(userId),
-            username: String(username || "user"),
-            userName: String(userName || "User"),
-            deviceName: String(deviceName || "Browser"),
-            browser: String(browser || "Web Browser"),
-            os: String(os || "Unknown OS"),
-            deviceType: String(deviceType || "desktop"),
-            ipAddress: formattedIp,
-            ...(location ? { location: String(location) } : {}),
-          },
-        });
+        .where(eq(schema.deviceSessions.id, effectiveSessionId));
 
       return res.json({ success: true, revoked: false, status: "ACTIVE" });
     } catch (err) {
@@ -3254,7 +3579,37 @@ async function startServer() {
 
   app.post("/api/sessions/:id/revoke", async (req, res) => {
     try {
+      const authUser = await requireAuth(req, res);
+      if (!authUser) return;
+
       const { id } = req.params;
+
+      if (!isDbConnected && offlineState) {
+        offlineState.device_sessions = offlineState.device_sessions || [];
+        const target = offlineState.device_sessions.find((s: any) => s.id === id);
+        if (!target) {
+          return res.status(404).json({ error: "Session not found" });
+        }
+        if (!canRevokeTargetSession(authUser, target)) {
+          return res.status(403).json({ error: "Forbidden: Anda tidak berhak memutus sesi pengguna lain." });
+        }
+        target.status = "REVOKED";
+        return res.json({ success: true, message: "Session revoked successfully" });
+      }
+
+      const targetRows = await db
+        .select()
+        .from(schema.deviceSessions)
+        .where(eq(schema.deviceSessions.id, id))
+        .limit(1);
+      const target = targetRows[0];
+      if (!target) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      if (!canRevokeTargetSession(authUser, target)) {
+        return res.status(403).json({ error: "Forbidden: Anda tidak berhak memutus sesi pengguna lain." });
+      }
+
       await db
         .update(schema.deviceSessions)
         .set({ status: "REVOKED" })
@@ -3269,14 +3624,36 @@ async function startServer() {
 
   app.post("/api/sessions/revoke-others", async (req, res) => {
     try {
-      const { currentSessionId, userId } = req.body;
-      const allSessions = await db.select().from(schema.deviceSessions);
+      const authUser = await requireAuth(req, res);
+      if (!authUser) return;
 
-      const toRevoke = allSessions.filter(
-        (s) =>
-          s.id !== currentSessionId &&
-          s.status === "ACTIVE" &&
-          (!userId || s.userId === userId),
+      const authHeader = req.headers["authorization"] as string | undefined;
+      const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      const effectiveCurrentSessionId = String(req.body?.currentSessionId || bearerToken || "");
+
+      if (!isDbConnected && offlineState) {
+        offlineState.device_sessions = offlineState.device_sessions || [];
+        const toRevoke = selectSessionsToRevokeOthers(
+          offlineState.device_sessions,
+          authUser,
+          effectiveCurrentSessionId,
+        );
+        const revokeSet = new Set(toRevoke.map((s) => s.id));
+        offlineState.device_sessions = offlineState.device_sessions.map((s: any) =>
+          revokeSet.has(s.id) ? { ...s, status: "REVOKED" } : s,
+        );
+        return res.json({
+          success: true,
+          count: toRevoke.length,
+          message: `${toRevoke.length} other session(s) revoked`,
+        });
+      }
+
+      const allSessions = await db.select().from(schema.deviceSessions);
+      const toRevoke = selectSessionsToRevokeOthers(
+        allSessions,
+        authUser,
+        effectiveCurrentSessionId,
       );
 
       for (const s of toRevoke) {
@@ -3301,10 +3678,16 @@ async function startServer() {
     try {
       const { sessionId } = req.body;
       if (sessionId) {
-        await db
-          .update(schema.deviceSessions)
-          .set({ status: "REVOKED" })
-          .where(eq(schema.deviceSessions.id, sessionId));
+        if (!isDbConnected && offlineState) {
+          offlineState.device_sessions = (offlineState.device_sessions || []).map((s: any) =>
+            s.id === sessionId ? { ...s, status: "REVOKED" } : s,
+          );
+        } else {
+          await db
+            .update(schema.deviceSessions)
+            .set({ status: "REVOKED" })
+            .where(eq(schema.deviceSessions.id, sessionId));
+        }
       }
       res.json({ success: true });
     } catch (err) {
@@ -3319,54 +3702,13 @@ async function startServer() {
     next: express.NextFunction,
   ) => {
     try {
-      const authHeader = req.headers["authorization"] as string;
-      const token = authHeader?.split(" ")[1];
-
-      if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
-
-      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
-      const session = sessions[0];
-      if (!session) return res.status(401).json({ error: "Unauthorized: Invalid session" });
-
-      const currentUsers = await db.select().from(schema.users).where(eq(schema.users.id, session.userId));
-      const requestUser = currentUsers[0];
-      if (!requestUser) return res.status(401).json({ error: "Unauthorized: User not found" });
-
-      const role = requestUser.role;
-      const table = req.params.table;
-
-      // By default, only SUPER_ADMIN has full access, OWNER is read-only (so no POST/PUT/DELETE)
-      if (!role) return res.status(401).json({ error: "No role provided" });
-      if (role === "SUPER_ADMIN") return next();
-      if (role === "OWNER")
-        return res.status(403).json({ error: "Owner is read-only" });
-
-      if (role === "FINANCE") {
-        if (table !== "cash_transactions" && table !== "settings") {
-          return res
-            .status(403)
-            .json({ error: "Finance only has access to Cash Flow" });
-        }
-        return next();
+      const requestUser = await resolveAuthUser(req);
+      const check = evaluateGenericTableAccess(requestUser, req.params.table);
+      if ("error" in check) {
+        return res.status(check.status).json({ error: check.error });
       }
-      if (role === "MANAGER") {
-        if (
-          table !== "ingredients" &&
-          table !== "stock_movements" &&
-          table !== "sales_transactions" &&
-          table !== "sales_import_logs" &&
-          table !== "purchase_orders" &&
-          table !== "suppliers"
-        ) {
-          return res
-            .status(403)
-            .json({
-              error: "Manager only has access to Inventory, Sales, and Purchases",
-            });
-        }
-        return next();
-      }
-      return res.status(403).json({ error: "Unauthorized role" });
+      (req as any).authUser = requestUser;
+      return next();
     } catch (e) {
       console.error("RBAC Error:", e);
       return res.status(500).json({ error: "Internal server error" });
@@ -3380,8 +3722,8 @@ async function startServer() {
   ) => {
     const originalSend = res.json;
     res.json = function (body) {
-      if (res.statusCode >= 200 && res.statusCode < 300 && body.success) {
-        const userId = (req.headers["x-user-id"] as string) || "System";
+      if (res.statusCode >= 200 && res.statusCode < 300 && body?.success) {
+        const userId = String((req as any).authUser?.id || "System");
         const action =
           req.method === "POST"
             ? "CREATE"
@@ -3389,18 +3731,20 @@ async function startServer() {
               ? "UPDATE"
               : "DELETE";
         const tableName = req.params.table;
-        const recordId = req.params.id || req.body.id || "unknown";
+        const recordId = req.params.id || req.body?.id || "unknown";
 
-        db.insert(schema.auditLogs)
-          .values({
-            id: crypto.randomUUID(),
-            userId,
-            action,
-            tableName,
-            recordId,
-            timestamp: new Date().toISOString(),
-          })
-          .catch((err) => console.error("Failed to write audit log:", err));
+        if (isDbConnected) {
+          db.insert(schema.auditLogs)
+            .values({
+              id: crypto.randomUUID(),
+              userId,
+              action,
+              tableName,
+              recordId,
+              timestamp: new Date().toISOString(),
+            })
+            .catch((err) => console.error("Failed to write audit log:", err));
+        }
       }
       return originalSend.call(this, body);
     };
@@ -3409,25 +3753,8 @@ async function startServer() {
 
   app.post("/api/import/sales", async (req, res) => {
     try {
-      const authHeader = req.headers["authorization"] as string;
-      const token = authHeader?.split(" ")[1];
-
-      if (!token) {
-        return res.status(401).json({ error: "Unauthorized: No token provided" });
-      }
-
-      const sessions = await db.select().from(schema.deviceSessions).where(eq(schema.deviceSessions.id, token));
-      const session = sessions[0];
-      if (!session) {
-        return res.status(401).json({ error: "Unauthorized: Invalid session" });
-      }
-
-      const currentUsersDB = await db.select().from(schema.users).where(eq(schema.users.id, session.userId));
-      const requestUser = currentUsersDB[0];
-
-      if (!requestUser || (requestUser.role !== "SUPER_ADMIN" && requestUser.role !== "FINANCE" && requestUser.role !== "MANAGER")) {
-        return res.status(403).json({ error: "Forbidden: insufficient permissions" });
-      }
+      const requestUser = await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE"]);
+      if (!requestUser) return;
 
       const { sales_transactions, log } = req.body;
 
@@ -3442,7 +3769,7 @@ async function startServer() {
               .where(and(eq(schema.salesImportLogs.fileName, log.fileName), eq(schema.salesImportLogs.status, "SUCCESS")));
             if (existingLogs.length > 0) {
               return res.status(400).json({
-                error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existingLogs[0].importDate).toLocaleString("id-ID")}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
+                error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existingLogs[0].importDate).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
               });
             }
           } catch (chkErr) {
@@ -3454,36 +3781,124 @@ async function startServer() {
           );
           if (existing) {
             return res.status(400).json({
-              error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existing.importDate).toLocaleString("id-ID")}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
+              error: `File "${log.fileName}" sudah pernah diimpor pada ${new Date(existing.importDate).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}. Impor ditolak untuk mencegah double count omzet dan pemotongan stok bahan berulang.`,
             });
           }
         }
       }
 
+      if (!log?.fileName || !String(log.fileName).trim()) {
+        return res.status(400).json({ error: "Nama file impor wajib disertakan." });
+      }
+      if (!Array.isArray(sales_transactions) || sales_transactions.length === 0) {
+        return res.status(400).json({ error: "Daftar transaksi penjualan tidak boleh kosong." });
+      }
+
+      const activeClosedSet = await getActiveClosedPeriodSet();
+      const lockedImportPeriods = Array.from(
+        new Set(
+          sales_transactions
+            .map((s: any) => getLocalPeriodFromTimestamp(s?.date))
+            .filter((p) => Boolean(p) && activeClosedSet.has(p))
+        )
+      );
+      if (lockedImportPeriods.length > 0) {
+        return res.status(400).json({
+          error: `Impor ditolak: terdapat transaksi pada periode tutup buku (${lockedImportPeriods.join(", ")}).`,
+        });
+      }
+
       const logId = crypto.randomUUID();
+      const nowIso = new Date().toISOString();
+
+      if (!isDbConnected && offlineState) {
+        offlineState.sales_import_logs = offlineState.sales_import_logs || [];
+        offlineState.sales_transactions = offlineState.sales_transactions || [];
+        offlineState.stock_movements = offlineState.stock_movements || [];
+        offlineState.ingredients = offlineState.ingredients || [];
+
+        offlineState.sales_import_logs.unshift(
+          sanitizeSalesImportLog({
+            id: logId,
+            importDate: nowIso,
+            fileName: log.fileName,
+            rowCount: Number(log.rowCount) || sales_transactions.length,
+            status: "SUCCESS",
+            createdBy: log.createdBy || requestUser.name || "System",
+          })
+        );
+
+        const sanitizedTxs = sales_transactions.map((s: any) => ({
+          ...sanitizeSalesTransaction(s),
+          importLogId: logId,
+        }));
+        offlineState.sales_transactions.unshift(...sanitizedTxs);
+
+        const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
+        const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
+        if (shouldAutoDeduct) {
+          const allRecipes = offlineState.recipes || [];
+          for (const s of sanitizedTxs) {
+            const recipe = allRecipes.find(
+              (r: any) => String(r.menuName || "").toLowerCase() === String(s.menuName || "").toLowerCase()
+            );
+            if (!recipe) continue;
+            let ingredientsList: any[] = [];
+            try {
+              ingredientsList = Array.isArray(recipe.ingredients)
+                ? recipe.ingredients
+                : JSON.parse(recipe.ingredients || "[]");
+            } catch {
+              ingredientsList = [];
+            }
+            for (const reqIng of ingredientsList) {
+              const ing = offlineState.ingredients.find((i: any) => i.id === reqIng.ingredientId);
+              if (!ing) continue;
+              const qtyToDeduct = (Number(reqIng.quantity) || 0) * (Number(s.quantitySold) || 0);
+              if (qtyToDeduct <= 0) continue;
+              ing.currentStock = Number(((Number(ing.currentStock) || 0) - qtyToDeduct).toFixed(4));
+              offlineState.stock_movements.push({
+                id: crypto.randomUUID(),
+                ingredientId: reqIng.ingredientId,
+                type: "OUT",
+                quantity: qtyToDeduct,
+                date: nowIso,
+                note: `Auto deduction for sales: ${s.menuName} (${s.quantitySold}x)`,
+                unitCost: Math.round(Number(ing.costPerUnit) || 0),
+                totalCost: Math.round((Number(ing.costPerUnit) || 0) * qtyToDeduct),
+                referenceId: s.id,
+                location: null,
+                createdBy: "System",
+              });
+            }
+          }
+        }
+
+        bumpDataVersion();
+        return res.json({ success: true, logId });
+      }
 
       await db.transaction(async (tx) => {
         // Insert log
         await tx.insert(schema.salesImportLogs).values({
           id: logId,
-          importDate: new Date().toISOString(),
+          importDate: nowIso,
           fileName: log.fileName,
-          rowCount: log.rowCount,
+          rowCount: Number(log.rowCount) || sales_transactions.length,
           status: "SUCCESS",
-          createdBy: log.createdBy,
+          createdBy: log.createdBy || requestUser.name || "System",
         });
 
         // Insert transactions
-        if (
-          Array.isArray(sales_transactions) &&
-          sales_transactions.length > 0
-        ) {
-          const transactions = sales_transactions.map((s: any) => ({
-            ...sanitizeSalesTransaction(s),
-            importLogId: logId,
-          }));
-          await tx.insert(schema.salesTransactions).values(transactions);
+        const transactions = sales_transactions.map((s: any) => ({
+          ...sanitizeSalesTransaction(s),
+          importLogId: logId,
+        }));
+        await tx.insert(schema.salesTransactions).values(transactions);
 
+        const currentSettings = await tx.select().from(schema.settings).limit(1);
+        const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
+        if (shouldAutoDeduct) {
           // Process stock reduction based on recipes
           const allRecipes = await tx.select().from(schema.recipes);
           const allIngredients = await tx.select().from(schema.ingredients);
@@ -3502,12 +3917,13 @@ async function startServer() {
                 const dbIngredient = allIngredients.find(i => i.id === reqIng.ingredientId);
                 if (dbIngredient) {
                   const qtyToDeduct = reqIng.quantity * s.quantitySold;
+                  const nextStock = Number((Number(dbIngredient.currentStock) - qtyToDeduct).toFixed(4));
                   // Deduct current stock
                   await tx.update(schema.ingredients)
-                    .set({ currentStock: Number(dbIngredient.currentStock) - qtyToDeduct })
+                    .set({ currentStock: nextStock })
                     .where(eq(schema.ingredients.id, reqIng.ingredientId));
                   // Update local copy to prevent sequential overwriting
-                  dbIngredient.currentStock = Number(dbIngredient.currentStock) - qtyToDeduct;
+                  dbIngredient.currentStock = nextStock;
 
                   // Add stock movement log
                   stockMovementsToInsert.push({
@@ -3515,10 +3931,10 @@ async function startServer() {
                     ingredientId: reqIng.ingredientId,
                     type: "OUT",
                     quantity: qtyToDeduct,
-                    date: new Date().toISOString(),
+                    date: nowIso,
                     note: `Auto deduction for sales: ${s.menuName} (${s.quantitySold}x)`,
-                    unitCost: dbIngredient.costPerUnit,
-                    totalCost: Number(dbIngredient.costPerUnit) * qtyToDeduct,
+                    unitCost: Math.round(Number(dbIngredient.costPerUnit) || 0),
+                    totalCost: Math.round((Number(dbIngredient.costPerUnit) || 0) * qtyToDeduct),
                     referenceId: s.id,
                     location: null,
                     createdBy: "System"
@@ -3533,6 +3949,7 @@ async function startServer() {
           }
         }
       });
+      bumpDataVersion();
       res.json({ success: true, logId });
     } catch (e) {
       console.error("Import sales error:", e);
@@ -3647,6 +4064,7 @@ async function startServer() {
 
   app.post("/api/ai/parse-receipt", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE"]))) return;
       const { text, imageBase64, mimeType, fileName, storeContext } = req.body;
       const apiKey = await resolveGeminiApiKey();
 
@@ -3863,6 +4281,7 @@ Instruksi Ekstraksi Nota Campuran & Akuntansi Ketat:
   // ─── NATURAL LANGUAGE DATA ENTRY API ───────────────────────────────────────
   app.post("/api/ai/parse-natural-entry", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE"]))) return;
       const { text, storeContext } = req.body;
       if (!text || typeof text !== "string" || !text.trim()) {
         return res.status(400).json({ error: "Teks catatan belanja tidak boleh kosong" });
@@ -3959,6 +4378,7 @@ Aturan Pemrosesan Ketat:
   // ─── EXECUTIVE AI MANAGEMENT INSIGHTS API ──────────────────────────────────
   app.post("/api/ai/executive-insights", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE", "OWNER"]))) return;
       const { metrics } = req.body;
       const apiKey = await resolveGeminiApiKey();
 
@@ -4092,6 +4512,7 @@ ${
 
   app.post("/api/ai/ask-advisor", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE", "OWNER"]))) return;
       const { message, chatHistory = [], storeContext } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Pesan tidak boleh kosong" });
@@ -4537,6 +4958,7 @@ ${
   // 1. Get POS Menu & Live Stock Availability
   app.get("/api/pos/menu", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       let allRecipes: any[] = [];
       let allIngredients: any[] = [];
       let allProducts: any[] = [];
@@ -4665,6 +5087,7 @@ ${
   // 2. Create Order (Open Bill or Paid Pay-First)
   app.post("/api/pos/orders", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const {
         idempotencyKey,
         orderType = "DINE_IN",
@@ -4688,6 +5111,18 @@ ${
         appliedPromotionId,
         appliedPromotionName,
       } = req.body;
+
+      const orderValidation = validatePosOrderPayload({
+        items,
+        status,
+        subtotal,
+        discountAmount,
+        taxAmount,
+        totalAmount,
+      });
+      if ("error" in orderValidation) {
+        return res.status(400).json({ error: orderValidation.error });
+      }
 
       // Idempotency check: prevent duplicate orders
       if (idempotencyKey) {
@@ -4987,6 +5422,7 @@ ${
   // 3. Settle / Pay Open Bill
   app.post("/api/pos/orders/:id/pay", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const orderId = req.params.id;
       const {
         paymentMethod = "CASH",
@@ -5096,15 +5532,19 @@ ${
         const effectiveShiftId = shiftId || currentOrder.shiftId || null;
         const targetAccId = await resolveDbPaymentAccount(tx, paymentMethod, cashAccountId, effectiveShiftId);
 
-        // 1. Update order status
-        await tx
+        // 1. Klaim order secara atomik agar pembayaran ganda konkuren ditolak
+        const claimedOrders = await tx
           .update(schema.orders)
           .set({
             status: "PAID",
             paidAt: nowIso,
             updatedAt: nowIso,
           })
-          .where(eq(schema.orders.id, orderId));
+          .where(and(eq(schema.orders.id, orderId), eq(schema.orders.status, "OPEN")))
+          .returning();
+        if (claimedOrders.length === 0) {
+          throw new Error("ORDER_ALREADY_SETTLED");
+        }
 
         // 2. Insert payment
         await tx.insert(schema.payments).values({
@@ -5177,6 +5617,9 @@ ${
         message: "Order berhasil dilunasi",
       });
     } catch (e: any) {
+      if (e?.message === "ORDER_ALREADY_SETTLED") {
+        return res.status(400).json({ error: "Order sudah lunas atau tidak lagi aktif" });
+      }
       console.error("Pay order error:", e);
       res.status(500).json({ error: e?.message || "Failed to settle order" });
     }
@@ -5185,6 +5628,7 @@ ${
   // 3b. Split Bill / Pecah Tagihan Meja
   app.post("/api/pos/orders/:id/split", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const parentOrderId = req.params.id;
       const {
         splitMode = "ITEMS",
@@ -5215,15 +5659,17 @@ ${
         if (!parentOrder) {
           return res.status(404).json({ error: "Order utama tidak ditemukan." });
         }
-        if (parentOrder.status === "VOID" || parentOrder.status === "CANCELLED") {
-          return res.status(400).json({ error: `Order utama berstatus ${parentOrder.status}` });
+        if (parentOrder.status !== "OPEN") {
+          return res.status(400).json({ error: `Hanya tagihan berstatus OPEN yang dapat dipecah. Status saat ini: ${parentOrder.status}` });
         }
 
         const splitOrderId = crypto.randomUUID();
         const splitReceiptNo = `${parentOrder.receiptNo}-S${randomSuffix}`;
         let splitSubtotal = 0;
+        let splitTax = 0;
         let splitTotal = 0;
         const insertedSplitItems: any[] = [];
+        let evenlyFinalParentItems: any[] = [];
 
         if (splitMode === "ITEMS") {
           const parentItems = offlineState.order_items.filter((it: any) => it.orderId === parentOrderId);
@@ -5233,7 +5679,7 @@ ${
             const splitQty = Math.min(Number(sIt.quantity) || 1, Number(pItem.quantity) || 1);
             if (splitQty <= 0) continue;
 
-            const itemSubtotal = (Number(pItem.unitPrice) || 0) * splitQty;
+            const itemSubtotal = Math.round((Number(pItem.unitPrice) || 0) * splitQty);
             splitSubtotal += itemSubtotal;
 
             const newSplitItem = {
@@ -5243,7 +5689,7 @@ ${
               recipeId: pItem.recipeId || null,
               variantName: pItem.variantName || null,
               quantity: splitQty,
-              unitPrice: Number(pItem.unitPrice) || 0,
+              unitPrice: Math.round(Number(pItem.unitPrice) || 0),
               subtotal: itemSubtotal,
               modifiers: pItem.modifiers || [],
               notes: pItem.notes || null,
@@ -5264,8 +5710,11 @@ ${
             }
           }
 
+          if (insertedSplitItems.length === 0) {
+            return res.status(400).json({ error: "Pilih minimal 1 item valid untuk dipecah." });
+          }
+
           const taxRate = Number(parentOrder.taxPercent) || 0;
-          let splitTax = 0;
           if (taxRate > 0) {
             splitTax = parentOrder.taxMode === "INCLUSIVE"
               ? Math.round((splitSubtotal * taxRate) / (100 + taxRate))
@@ -5295,12 +5744,20 @@ ${
           }
         } else {
           // EVENLY split
-          splitTotal = Number(splitAmount) || Number(payment.amount) || 0;
+          const splitCheck = validateEvenlySplitAmount(
+            Number(parentOrder.totalAmount) || 0,
+            Number(splitAmount) || Number(payment.amount) || 0
+          );
+          if ("error" in splitCheck) {
+            return res.status(400).json({ error: splitCheck.error });
+          }
+          splitTotal = splitCheck.splitTotal;
           splitSubtotal = splitTotal;
-          parentOrder.totalAmount = Math.max(0, (Number(parentOrder.totalAmount) || 0) - splitTotal);
+          parentOrder.totalAmount = splitCheck.newParentTotal;
           if (parentOrder.totalAmount <= 0) {
             parentOrder.status = "PAID";
             parentOrder.paidAt = nowIso;
+            evenlyFinalParentItems = offlineState.order_items.filter((it: any) => it.orderId === parentOrderId);
           }
           parentOrder.updatedAt = nowIso;
         }
@@ -5319,7 +5776,7 @@ ${
           discountAmount: 0,
           discountReason: null,
           taxPercent: parentOrder.taxPercent || 0,
-          taxAmount: 0,
+          taxAmount: splitTax,
           taxMode: parentOrder.taxMode || "EXCLUSIVE",
           totalAmount: splitTotal,
           notes: `Split dari #${parentOrder.receiptNo}`,
@@ -5363,7 +5820,8 @@ ${
           });
         }
 
-        for (const sItem of insertedSplitItems) {
+        const itemsForSalesAndStock = splitMode === "ITEMS" ? insertedSplitItems : evenlyFinalParentItems;
+        for (const sItem of itemsForSalesAndStock) {
           offlineState.sales_transactions.push({
             id: crypto.randomUUID(),
             date: nowIso,
@@ -5376,11 +5834,11 @@ ${
           });
         }
 
-        // Deduct inventory for split items
+        // Deduct inventory for split items (or final parent items on closing evenly split)
         const rawOffSt = Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings;
         const shouldAutoDeduct = rawOffSt?.autoDeductStockOnSale !== false;
-        if (shouldAutoDeduct) {
-          applyOfflineOrderStock(insertedSplitItems, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
+        if (shouldAutoDeduct && itemsForSalesAndStock.length > 0) {
+          applyOfflineOrderStock(itemsForSalesAndStock, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
         }
 
         bumpDataVersion();
@@ -5400,15 +5858,17 @@ ${
         return res.status(404).json({ error: "Order utama tidak ditemukan." });
       }
       const parentOrder = parentOrderList[0];
-      if (parentOrder.status === "VOID" || parentOrder.status === "CANCELLED") {
-        return res.status(400).json({ error: `Order utama berstatus ${parentOrder.status}` });
+      if (parentOrder.status !== "OPEN") {
+        return res.status(400).json({ error: `Hanya tagihan berstatus OPEN yang dapat dipecah. Status saat ini: ${parentOrder.status}` });
       }
 
       const splitOrderId = crypto.randomUUID();
       const splitReceiptNo = `${parentOrder.receiptNo}-S${randomSuffix}`;
       let splitSubtotal = 0;
+      let splitTax = 0;
       let splitTotal = 0;
       const insertedSplitItems: any[] = [];
+      let evenlyFinalParentItems: any[] = [];
 
       await db.transaction(async (tx) => {
         if (splitMode === "ITEMS") {
@@ -5451,8 +5911,11 @@ ${
             }
           }
 
+          if (insertedSplitItems.length === 0) {
+            throw new Error("EMPTY_SPLIT_ITEMS");
+          }
+
           const taxRate = Number(parentOrder.taxPercent) || 0;
-          let splitTax = 0;
           if (taxRate > 0) {
             splitTax = parentOrder.taxMode === "INCLUSIVE"
               ? Math.round((splitSubtotal * taxRate) / (100 + taxRate))
@@ -5488,15 +5951,28 @@ ${
           }
         } else {
           // EVENLY split
-          splitTotal = Math.round(Number(splitAmount) || Number(payment.amount) || 0);
+          const splitCheck = validateEvenlySplitAmount(
+            Number(parentOrder.totalAmount) || 0,
+            Number(splitAmount) || Number(payment.amount) || 0
+          );
+          if ("error" in splitCheck) {
+            throw new Error(`INVALID_SPLIT_AMOUNT:${splitCheck.error}`);
+          }
+          splitTotal = splitCheck.splitTotal;
           splitSubtotal = splitTotal;
-          const newParentTotal = Math.max(0, Math.round(Number(parentOrder.totalAmount) || 0) - splitTotal);
+          const newParentTotal = splitCheck.newParentTotal;
           await tx.update(schema.orders).set({
             totalAmount: newParentTotal,
             status: newParentTotal <= 0 ? "PAID" : parentOrder.status,
             paidAt: newParentTotal <= 0 ? nowIso : parentOrder.paidAt,
             updatedAt: nowIso,
           }).where(eq(schema.orders.id, parentOrderId));
+          if (newParentTotal <= 0) {
+            evenlyFinalParentItems = await tx
+              .select()
+              .from(schema.orderItems)
+              .where(eq(schema.orderItems.orderId, parentOrderId));
+          }
         }
 
         const splitPayMethod = payment.paymentMethod || "CASH";
@@ -5518,7 +5994,7 @@ ${
           discountAmount: 0,
           discountReason: null,
           taxPercent: parentOrder.taxPercent || 0,
-          taxAmount: 0,
+          taxAmount: splitTax,
           taxMode: parentOrder.taxMode || "EXCLUSIVE",
           totalAmount: splitTotal,
           notes: `Split dari #${parentOrder.receiptNo}`,
@@ -5558,7 +6034,8 @@ ${
           });
         }
 
-        for (const sItem of insertedSplitItems) {
+        const itemsForSalesAndStock = splitMode === "ITEMS" ? insertedSplitItems : evenlyFinalParentItems;
+        for (const sItem of itemsForSalesAndStock) {
           await tx.insert(schema.salesTransactions).values({
             id: crypto.randomUUID(),
             date: nowIso,
@@ -5574,8 +6051,8 @@ ${
         // Deduct inventory
         const currentSettings = await tx.select().from(schema.settings).limit(1);
         const shouldAutoDeduct = currentSettings[0]?.autoDeductStockOnSale !== false;
-        if (shouldAutoDeduct) {
-          await applyDbOrderStock(tx, insertedSplitItems, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
+        if (shouldAutoDeduct && itemsForSalesAndStock.length > 0) {
+          await applyDbOrderStock(tx, itemsForSalesAndStock, "USAGE", `Split POS #${splitReceiptNo}`, cashierName || "Kasir", splitOrderId, nowIso);
         }
       });
 
@@ -5595,6 +6072,12 @@ ${
         remainingItemsCount: remainingItems.length,
       });
     } catch (e: any) {
+      if (e?.message === "EMPTY_SPLIT_ITEMS") {
+        return res.status(400).json({ error: "Pilih minimal 1 item valid untuk dipecah." });
+      }
+      if (typeof e?.message === "string" && e.message.startsWith("INVALID_SPLIT_AMOUNT:")) {
+        return res.status(400).json({ error: e.message.slice("INVALID_SPLIT_AMOUNT:".length) });
+      }
       console.error("Split order error:", e);
       res.status(500).json({ error: e?.message || "Failed to split order" });
     }
@@ -5603,6 +6086,7 @@ ${
   // 4. Void / Cancel Order with Manager PIN Approval
   app.post("/api/pos/orders/:id/void", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const orderId = req.params.id;
       const { managerPin, voidReason } = req.body;
 
@@ -5628,7 +6112,14 @@ ${
         if (!targetOrder) {
           return res.status(404).json({ error: "Order tidak ditemukan" });
         }
-        if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED") {
+        const voidOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+        const closedSetVoidOffline = await getActiveClosedPeriodSet();
+        if (voidOrderPeriod && closedSetVoidOffline.has(voidOrderPeriod)) {
+          return res.status(400).json({
+            error: `Order berada pada periode tutup buku (${voidOrderPeriod}) dan tidak dapat di-void.`,
+          });
+        }
+        if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED" || targetOrder.status === "REFUNDED") {
           return res.status(400).json({ error: `Order sudah dalam status ${targetOrder.status}` });
         }
 
@@ -5647,16 +6138,17 @@ ${
 
           const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === orderId);
           for (const pay of existingPayments) {
+            const payMethod = pay.paymentMethod || pay.method || "CASH";
             const accId =
               pay.cashAccountId ||
-              resolveOfflinePaymentAccount(pay.method || "CASH", undefined, targetOrder.shiftId);
+              resolveOfflinePaymentAccount(payMethod, undefined, targetOrder.shiftId);
             offlineState.cash_transactions.push({
               id: crypto.randomUUID(),
               accountId: accId,
               type: "CASH_OUT",
               date: nowIso,
               amount: Math.round(Number(pay.amount) || 0),
-              description: `VOID/Refund ${pay.method || "CASH"} POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
+              description: `VOID/Refund ${payMethod} POS #${targetOrder.receiptNo} (${voidReason || "Dibatalkan"})`,
               category: "PENGELUARAN",
               referenceId: orderId,
             });
@@ -5703,14 +6195,41 @@ ${
       }
       const targetOrder = orderList[0];
 
-      if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED") {
+      const voidOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+      const closedSetVoidDb = await getActiveClosedPeriodSet();
+      if (voidOrderPeriod && closedSetVoidDb.has(voidOrderPeriod)) {
+        return res.status(400).json({
+          error: `Order berada pada periode tutup buku (${voidOrderPeriod}) dan tidak dapat di-void.`,
+        });
+      }
+
+      if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED" || targetOrder.status === "REFUNDED") {
         return res.status(400).json({ error: `Order sudah dalam status ${targetOrder.status}` });
       }
 
       const nowIso = new Date().toISOString();
+      const wasPaid = targetOrder.status === "PAID";
 
       await db.transaction(async (tx) => {
-        if (targetOrder.status === "PAID") {
+        const nextStatus = wasPaid ? "VOID" : "CANCELLED";
+        const nextReason = wasPaid
+          ? voidReason || "Void oleh manager"
+          : voidReason || "Dibatalkan kasir/manager";
+        const claimed = await tx
+          .update(schema.orders)
+          .set({
+            status: nextStatus,
+            voidReason: nextReason,
+            voidApprovedBy: approver.name,
+            updatedAt: nowIso,
+          })
+          .where(and(eq(schema.orders.id, orderId), eq(schema.orders.status, targetOrder.status)))
+          .returning();
+        if (claimed.length === 0) {
+          throw new Error("ORDER_ALREADY_VOIDED");
+        }
+
+        if (wasPaid) {
           const items = await tx
             .select()
             .from(schema.orderItems)
@@ -5756,26 +6275,6 @@ ${
                 eq(schema.salesTransactions.importLogId, `POS-${targetOrder.receiptNo}`)
               )
             );
-
-          await tx
-            .update(schema.orders)
-            .set({
-              status: "VOID",
-              voidReason: voidReason || "Void oleh manager",
-              voidApprovedBy: approver.name,
-              updatedAt: nowIso,
-            })
-            .where(eq(schema.orders.id, orderId));
-        } else {
-          await tx
-            .update(schema.orders)
-            .set({
-              status: "CANCELLED",
-              voidReason: voidReason || "Dibatalkan kasir/manager",
-              voidApprovedBy: approver.name,
-              updatedAt: nowIso,
-            })
-            .where(eq(schema.orders.id, orderId));
         }
 
         await tx.insert(schema.auditLogs).values({
@@ -5792,10 +6291,13 @@ ${
 
       res.json({
         success: true,
-        message: `Order #${targetOrder.receiptNo} berhasil ${targetOrder.status === "PAID" ? "di-VOID dan stok dikembalikan" : "dibatalkan"}`,
+        message: `Order #${targetOrder.receiptNo} berhasil ${wasPaid ? "di-VOID dan stok dikembalikan" : "dibatalkan"}`,
         approvedBy: approver.name,
       });
     } catch (e: any) {
+      if (e?.message === "ORDER_ALREADY_VOIDED") {
+        return res.status(400).json({ error: "Order sudah dibatalkan atau diproses sebelumnya" });
+      }
       console.error("Void order error:", e);
       res.status(500).json({ error: e?.message || "Failed to void order" });
     }
@@ -5804,6 +6306,7 @@ ${
   // 4b. Refund Paid Order with Manager PIN Approval & Inventory Strategy
   app.post("/api/pos/orders/:id/refund", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const orderId = req.params.id;
       const {
         managerPin,
@@ -5839,13 +6342,18 @@ ${
         if (!targetOrder) {
           return res.status(404).json({ error: "Order tidak ditemukan" });
         }
+        const refundOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+        const closedSetRefundOffline = await getActiveClosedPeriodSet();
+        if (refundOrderPeriod && closedSetRefundOffline.has(refundOrderPeriod)) {
+          return res.status(400).json({
+            error: `Order berada pada periode tutup buku (${refundOrderPeriod}) dan tidak dapat di-refund.`,
+          });
+        }
         if (targetOrder.status !== "PAID") {
           return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
         }
 
-        const finalRefundAmount = Math.round(
-          Number(customRefundAmount) > 0 ? Number(customRefundAmount) : Number(targetOrder.totalAmount) || 0
-        );
+        const finalRefundAmount = resolveCappedRefundAmount(targetOrder.totalAmount, customRefundAmount);
 
         const items = (offlineState.order_items || []).filter((it: any) => it.orderId === orderId);
         if (refundRestockOption === "RETURN_TO_STOCK") {
@@ -5921,15 +6429,39 @@ ${
       }
       const targetOrder = orderList[0];
 
+      const refundOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+      const closedSetRefundDb = await getActiveClosedPeriodSet();
+      if (refundOrderPeriod && closedSetRefundDb.has(refundOrderPeriod)) {
+        return res.status(400).json({
+          error: `Order berada pada periode tutup buku (${refundOrderPeriod}) dan tidak dapat di-refund.`,
+        });
+      }
+
       if (targetOrder.status !== "PAID") {
         return res.status(400).json({ error: `Hanya pesanan berstatus LUNAS (PAID) yang dapat di-refund. Status order saat ini: ${targetOrder.status}` });
       }
 
-      const finalRefundAmount = Math.round(
-        Number(customRefundAmount) > 0 ? Number(customRefundAmount) : Number(targetOrder.totalAmount) || 0
-      );
+      const finalRefundAmount = resolveCappedRefundAmount(targetOrder.totalAmount, customRefundAmount);
 
       await db.transaction(async (tx) => {
+        const claimed = await tx
+          .update(schema.orders)
+          .set({
+            status: "REFUNDED",
+            refundReason: refundReason.trim(),
+            refundApprovedBy: approver.name,
+            refundAmount: finalRefundAmount,
+            refundMethod,
+            refundAt: nowIso,
+            refundRestockOption,
+            updatedAt: nowIso,
+          })
+          .where(and(eq(schema.orders.id, orderId), eq(schema.orders.status, "PAID")))
+          .returning();
+        if (claimed.length === 0) {
+          throw new Error("ORDER_ALREADY_REFUNDED");
+        }
+
         const items = await tx
           .select()
           .from(schema.orderItems)
@@ -5980,20 +6512,6 @@ ${
           referenceId: orderId,
         });
 
-        await tx
-          .update(schema.orders)
-          .set({
-            status: "REFUNDED",
-            refundReason: refundReason.trim(),
-            refundApprovedBy: approver.name,
-            refundAmount: finalRefundAmount,
-            refundMethod,
-            refundAt: nowIso,
-            refundRestockOption,
-            updatedAt: nowIso,
-          })
-          .where(eq(schema.orders.id, orderId));
-
         await tx.insert(schema.auditLogs).values({
           id: crypto.randomUUID(),
           userId: approver.id,
@@ -6012,6 +6530,9 @@ ${
         approvedBy: approver.name,
       });
     } catch (e: any) {
+      if (e?.message === "ORDER_ALREADY_REFUNDED") {
+        return res.status(400).json({ error: "Order sudah di-refund atau tidak lagi berstatus PAID" });
+      }
       console.error("Refund order error:", e);
       res.status(500).json({ error: e?.message || "Failed to refund order" });
     }
@@ -6020,6 +6541,7 @@ ${
   // 4c. Remote In-App Approval: Kasir Request Otorisasi ke HP/Dashboard Manager
   app.post("/api/pos/approvals/request", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR", "LEADER"]))) return;
       const {
         orderId,
         receiptNo,
@@ -6037,15 +6559,33 @@ ${
         return res.status(400).json({ error: "Order ID dan alasan wajib disertakan." });
       }
 
+      const targetOrder = !isDbConnected && offlineState
+        ? (offlineState.orders || []).find((o: any) => o.id === orderId)
+        : (await db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).limit(1))[0];
+
+      if (!targetOrder) {
+        return res.status(404).json({ error: "Order tidak ditemukan." });
+      }
+
+      const reqValidation = validateApprovalRequestInput({
+        type,
+        orderStatus: targetOrder.status,
+        orderTotalAmount: targetOrder.totalAmount,
+        requestedAmount: amount,
+      });
+      if ("error" in reqValidation) {
+        return res.status(400).json({ error: reqValidation.error });
+      }
+
       const nowIso = new Date().toISOString();
       const requestId = crypto.randomUUID();
 
       const newRequest = {
         id: requestId,
         orderId,
-        receiptNo,
-        type,
-        amount: Number(amount) || 0,
+        receiptNo: receiptNo || targetOrder.receiptNo,
+        type: reqValidation.type,
+        amount: reqValidation.normalizedAmount,
         reason: reason.trim(),
         cashierName,
         tableNumber,
@@ -6078,6 +6618,7 @@ ${
   // 4d. Remote In-App Approval: Get Pending Requests (Untuk Dashboard Manager)
   app.get("/api/pos/approvals/pending", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "OWNER", "MANAGER"]))) return;
       if (!isDbConnected && offlineState) {
         const list = (offlineState.manager_approval_requests || [])
           .filter((r: any) => r.status === "PENDING")
@@ -6101,6 +6642,7 @@ ${
   // 4e. Remote In-App Approval: Get Single Request Status (Polling Kasir)
   app.get("/api/pos/approvals/:id/status", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       const { id } = req.params;
 
       if (!isDbConnected && offlineState) {
@@ -6129,6 +6671,7 @@ ${
   // 4f. Remote In-App Approval: Get Approval History (Untuk Audit Log Dashboard)
   app.get("/api/pos/approvals/history", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "OWNER", "MANAGER"]))) return;
       if (!isDbConnected && offlineState) {
         const history = (offlineState.manager_approval_requests || [])
           .filter((r: any) => r.status !== "PENDING")
@@ -6162,6 +6705,12 @@ ${
       if (!authUser) {
         return res.status(401).json({
           error: "Unauthorized: Sesi login diperlukan untuk merespons permintaan otorisasi.",
+        });
+      }
+
+      if (authUser.isSuspended) {
+        return res.status(403).json({
+          error: "Forbidden: Akun Anda sedang ditangguhkan (suspended).",
         });
       }
 
@@ -6206,113 +6755,130 @@ ${
           return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
         }
 
-        // Action is APPROVE -> Execute Refund / Void
+        // Action is APPROVE -> Validasi order sebelum mengklaim & mengeksekusi
+        const targetOrder = (offlineState.orders || []).find((o: any) => o.id === reqItem.orderId);
+        if (!targetOrder) {
+          return res.status(404).json({ error: "Order terkait tidak ditemukan" });
+        }
+        const approvalOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+        const closedSetApprovalOffline = await getActiveClosedPeriodSet();
+        if (approvalOrderPeriod && closedSetApprovalOffline.has(approvalOrderPeriod)) {
+          return res.status(400).json({
+            error: `Order berada pada periode tutup buku (${approvalOrderPeriod}) dan tidak dapat diproses.`,
+          });
+        }
+        if (reqItem.type === "REFUND" && targetOrder.status !== "PAID") {
+          return res.status(400).json({ error: `Order sudah tidak berstatus PAID (status saat ini: ${targetOrder.status})` });
+        }
+        if (
+          reqItem.type === "VOID" &&
+          (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED" || targetOrder.status === "REFUNDED")
+        ) {
+          return res.status(400).json({ error: `Order sudah dalam status final (${targetOrder.status})` });
+        }
+
         reqItem.status = "APPROVED";
         reqItem.respondedAt = nowIso;
         reqItem.respondedBy = managerName;
         reqItem.responseNote = responseNote;
 
-        const targetOrder = (offlineState.orders || []).find((o: any) => o.id === reqItem.orderId);
-        if (targetOrder) {
-          const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
+        const items = (offlineState.order_items || []).filter((it: any) => it.orderId === targetOrder.id);
 
-          if (reqItem.type === "REFUND") {
-            const finalRefundAmount = Math.round(
-              Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0
+        if (reqItem.type === "REFUND") {
+          const finalRefundAmount = resolveCappedRefundAmount(targetOrder.totalAmount, reqItem.amount);
+          if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
+            applyOfflineOrderStock(
+              items,
+              "RETURN",
+              `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
             );
-            if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
-              applyOfflineOrderStock(
-                items,
-                "RETURN",
-                `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-            } else if (reqItem.refundRestockOption === "WASTE") {
-              applyOfflineOrderStock(
-                items,
-                "WASTE",
-                `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-            }
-
-            const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
-            const cashAccId = resolveOfflinePaymentAccount(
-              reqItem.refundMethod || "CASH",
-              existingPayments[0]?.cashAccountId,
-              targetOrder.shiftId
+          } else if (reqItem.refundRestockOption === "WASTE") {
+            applyOfflineOrderStock(
+              items,
+              "WASTE",
+              `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
             );
-            offlineState.cash_transactions.push({
-              id: crypto.randomUUID(),
-              accountId: cashAccId,
-              type: "CASH_OUT",
-              date: nowIso,
-              amount: finalRefundAmount,
-              description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-              category: "PENGELUARAN",
-              referenceId: targetOrder.id,
-            });
-
-            targetOrder.status = "REFUNDED";
-            targetOrder.refundReason = reqItem.reason;
-            targetOrder.refundApprovedBy = managerName;
-            targetOrder.refundAmount = finalRefundAmount;
-            targetOrder.refundMethod = reqItem.refundMethod || "CASH";
-            targetOrder.refundRestockOption = reqItem.refundRestockOption;
-            targetOrder.refundAt = nowIso;
-            targetOrder.updatedAt = nowIso;
-          } else if (reqItem.type === "VOID") {
-            if (targetOrder.status === "PAID") {
-              applyOfflineOrderStock(
-                items,
-                "RETURN",
-                `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-              const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
-              for (const pay of existingPayments) {
-                const accId =
-                  pay.cashAccountId ||
-                  resolveOfflinePaymentAccount(pay.method || "CASH", undefined, targetOrder.shiftId);
-                offlineState.cash_transactions.push({
-                  id: crypto.randomUUID(),
-                  accountId: accId,
-                  type: "CASH_OUT",
-                  date: nowIso,
-                  amount: Math.round(Number(pay.amount) || 0),
-                  description: `Remote VOID/Refund ${pay.method || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                  category: "PENGELUARAN",
-                  referenceId: targetOrder.id,
-                });
-              }
-              offlineState.sales_transactions = offlineState.sales_transactions.filter(
-                (st: any) => st.orderId !== targetOrder.id && st.importLogId !== `POS-${targetOrder.receiptNo}`
-              );
-              targetOrder.status = "VOID";
-            } else {
-              targetOrder.status = "CANCELLED";
-            }
-            targetOrder.voidReason = reqItem.reason;
-            targetOrder.voidApprovedBy = managerName;
-            targetOrder.updatedAt = nowIso;
           }
 
-          offlineState.audit_logs.push({
+          const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
+          const cashAccId = resolveOfflinePaymentAccount(
+            reqItem.refundMethod || "CASH",
+            existingPayments[0]?.cashAccountId,
+            targetOrder.shiftId
+          );
+          offlineState.cash_transactions.push({
             id: crypto.randomUUID(),
-            userId: authUser.id,
-            userName: managerName,
-            action: reqItem.type,
-            tableName: "orders",
-            recordId: targetOrder.id,
-            timestamp: nowIso,
+            accountId: cashAccId,
+            type: "CASH_OUT",
+            date: nowIso,
+            amount: finalRefundAmount,
+            description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+            category: "PENGELUARAN",
+            referenceId: targetOrder.id,
           });
+
+          targetOrder.status = "REFUNDED";
+          targetOrder.refundReason = reqItem.reason;
+          targetOrder.refundApprovedBy = managerName;
+          targetOrder.refundAmount = finalRefundAmount;
+          targetOrder.refundMethod = reqItem.refundMethod || "CASH";
+          targetOrder.refundRestockOption = reqItem.refundRestockOption;
+          targetOrder.refundAt = nowIso;
+          targetOrder.updatedAt = nowIso;
+        } else if (reqItem.type === "VOID") {
+          if (targetOrder.status === "PAID") {
+            applyOfflineOrderStock(
+              items,
+              "RETURN",
+              `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
+            );
+            const existingPayments = (offlineState.payments || []).filter((p: any) => p.orderId === targetOrder.id);
+            for (const pay of existingPayments) {
+              const payMethod = pay.paymentMethod || pay.method || "CASH";
+              const accId =
+                pay.cashAccountId ||
+                resolveOfflinePaymentAccount(payMethod, undefined, targetOrder.shiftId);
+              offlineState.cash_transactions.push({
+                id: crypto.randomUUID(),
+                accountId: accId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: Math.round(Number(pay.amount) || 0),
+                description: `Remote VOID/Refund ${payMethod} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                category: "PENGELUARAN",
+                referenceId: targetOrder.id,
+              });
+            }
+            offlineState.sales_transactions = offlineState.sales_transactions.filter(
+              (st: any) => st.orderId !== targetOrder.id && st.importLogId !== `POS-${targetOrder.receiptNo}`
+            );
+            targetOrder.status = "VOID";
+          } else {
+            targetOrder.status = "CANCELLED";
+          }
+          targetOrder.voidReason = reqItem.reason;
+          targetOrder.voidApprovedBy = managerName;
+          targetOrder.updatedAt = nowIso;
         }
+
+        offlineState.audit_logs.push({
+          id: crypto.randomUUID(),
+          userId: authUser.id,
+          userName: managerName,
+          action: reqItem.type,
+          tableName: "orders",
+          recordId: targetOrder.id,
+          timestamp: nowIso,
+        });
 
         bumpDataVersion();
         return res.json({ success: true, status: "APPROVED", message: `Permintaan ${reqItem.type} berhasil disetujui` });
@@ -6335,7 +6901,7 @@ ${
       }
 
       if (action === "REJECT") {
-        await db
+        const rejectedRows = await db
           .update(schema.managerApprovalRequests)
           .set({
             status: "REJECTED",
@@ -6343,159 +6909,19 @@ ${
             respondedBy: managerName,
             responseNote: responseNote,
           })
-          .where(eq(schema.managerApprovalRequests.id, id));
+          .where(and(eq(schema.managerApprovalRequests.id, id), eq(schema.managerApprovalRequests.status, "PENDING")))
+          .returning();
+        if (rejectedRows.length === 0) {
+          return res.status(400).json({ error: "Permintaan sudah diproses sebelumnya" });
+        }
 
         bumpDataVersion();
         return res.json({ success: true, status: "REJECTED", message: "Permintaan ditolak" });
       }
 
-      // Action is APPROVE
+      // Action is APPROVE -> Atomik di dalam transaksi DB
       await db.transaction(async (tx) => {
-        const orderList = await tx.select().from(schema.orders).where(eq(schema.orders.id, reqItem.orderId)).limit(1);
-        if (orderList.length > 0) {
-          const targetOrder = orderList[0];
-          const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
-
-          if (reqItem.type === "REFUND") {
-            const finalRefundAmount = Math.round(
-              Number(reqItem.amount) || Number(targetOrder.totalAmount) || 0
-            );
-
-            if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
-              await applyDbOrderStock(
-                tx,
-                items,
-                "RETURN",
-                `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-            } else if (reqItem.refundRestockOption === "WASTE") {
-              await applyDbOrderStock(
-                tx,
-                items,
-                "WASTE",
-                `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-            }
-
-            const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
-            const cashAccId = await resolveDbPaymentAccount(
-              tx,
-              reqItem.refundMethod || "CASH",
-              existingPayments[0]?.cashAccountId,
-              targetOrder.shiftId
-            );
-
-            await tx.insert(schema.cashTransactions).values({
-              id: crypto.randomUUID(),
-              accountId: cashAccId,
-              type: "CASH_OUT",
-              date: nowIso,
-              amount: finalRefundAmount,
-              description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-              category: "PENGELUARAN",
-              referenceId: targetOrder.id,
-            });
-
-            await tx
-              .update(schema.orders)
-              .set({
-                status: "REFUNDED",
-                refundReason: reqItem.reason,
-                refundApprovedBy: managerName,
-                refundAmount: finalRefundAmount,
-                refundMethod: reqItem.refundMethod || "CASH",
-                refundAt: nowIso,
-                refundRestockOption: reqItem.refundRestockOption,
-                updatedAt: nowIso,
-              })
-              .where(eq(schema.orders.id, targetOrder.id));
-
-            await tx.insert(schema.auditLogs).values({
-              id: crypto.randomUUID(),
-              userId: authUser.id,
-              action: "REFUND",
-              tableName: "orders",
-              recordId: targetOrder.id,
-              timestamp: nowIso,
-            });
-          } else if (reqItem.type === "VOID") {
-            if (targetOrder.status === "PAID") {
-              await applyDbOrderStock(
-                tx,
-                items,
-                "RETURN",
-                `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
-                managerName,
-                targetOrder.id,
-                nowIso
-              );
-
-              const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
-              for (const pay of existingPayments) {
-                const payMethod = pay.paymentMethod || (pay as any).method || "CASH";
-                const accId =
-                  pay.cashAccountId ||
-                  (await resolveDbPaymentAccount(tx, payMethod, undefined, targetOrder.shiftId));
-                await tx.insert(schema.cashTransactions).values({
-                  id: crypto.randomUUID(),
-                  accountId: accId,
-                  type: "CASH_OUT",
-                  date: nowIso,
-                  amount: Math.round(Number(pay.amount) || 0),
-                  description: `Remote VOID/Refund ${payMethod} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
-                  category: "PENGELUARAN",
-                  referenceId: targetOrder.id,
-                });
-              }
-
-              await tx
-                .delete(schema.salesTransactions)
-                .where(
-                  or(
-                    eq(schema.salesTransactions.orderId, targetOrder.id),
-                    eq(schema.salesTransactions.importLogId, `POS-${targetOrder.receiptNo}`)
-                  )
-                );
-
-              await tx
-                .update(schema.orders)
-                .set({
-                  status: "VOID",
-                  voidReason: reqItem.reason,
-                  voidApprovedBy: managerName,
-                  updatedAt: nowIso,
-                })
-                .where(eq(schema.orders.id, targetOrder.id));
-            } else {
-              await tx
-                .update(schema.orders)
-                .set({
-                  status: "CANCELLED",
-                  voidReason: reqItem.reason,
-                  voidApprovedBy: managerName,
-                  updatedAt: nowIso,
-                })
-                .where(eq(schema.orders.id, targetOrder.id));
-            }
-
-            await tx.insert(schema.auditLogs).values({
-              id: crypto.randomUUID(),
-              userId: authUser.id,
-              action: "VOID",
-              tableName: "orders",
-              recordId: targetOrder.id,
-              timestamp: nowIso,
-            });
-          }
-        }
-
-        await tx
+        const claimedRequests = await tx
           .update(schema.managerApprovalRequests)
           .set({
             status: "APPROVED",
@@ -6503,7 +6929,163 @@ ${
             respondedBy: managerName,
             responseNote: responseNote,
           })
-          .where(eq(schema.managerApprovalRequests.id, id));
+          .where(and(eq(schema.managerApprovalRequests.id, id), eq(schema.managerApprovalRequests.status, "PENDING")))
+          .returning();
+        if (claimedRequests.length === 0) {
+          throw new Error("APPROVAL_ALREADY_PROCESSED");
+        }
+
+        const orderList = await tx.select().from(schema.orders).where(eq(schema.orders.id, reqItem.orderId)).limit(1);
+        if (orderList.length === 0) {
+          throw new Error("APPROVAL_ORDER_NOT_FOUND");
+        }
+        const targetOrder = orderList[0];
+        const approvalOrderPeriod = getLocalPeriodFromTimestamp(targetOrder.createdAt);
+        const closedSetApprovalDb = await getActiveClosedPeriodSet(tx);
+        if (approvalOrderPeriod && closedSetApprovalDb.has(approvalOrderPeriod)) {
+          throw new Error(`APPROVAL_ORDER_CLOSED_PERIOD:${approvalOrderPeriod}`);
+        }
+        const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, targetOrder.id));
+
+        if (reqItem.type === "REFUND") {
+          const finalRefundAmount = resolveCappedRefundAmount(targetOrder.totalAmount, reqItem.amount);
+
+          const claimedOrder = await tx
+            .update(schema.orders)
+            .set({
+              status: "REFUNDED",
+              refundReason: reqItem.reason,
+              refundApprovedBy: managerName,
+              refundAmount: finalRefundAmount,
+              refundMethod: reqItem.refundMethod || "CASH",
+              refundAt: nowIso,
+              refundRestockOption: reqItem.refundRestockOption,
+              updatedAt: nowIso,
+            })
+            .where(and(eq(schema.orders.id, targetOrder.id), eq(schema.orders.status, "PAID")))
+            .returning();
+          if (claimedOrder.length === 0) {
+            throw new Error("APPROVAL_ORDER_INVALID_STATE");
+          }
+
+          if (reqItem.refundRestockOption === "RETURN_TO_STOCK") {
+            await applyDbOrderStock(
+              tx,
+              items,
+              "RETURN",
+              `Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
+            );
+          } else if (reqItem.refundRestockOption === "WASTE") {
+            await applyDbOrderStock(
+              tx,
+              items,
+              "WASTE",
+              `Kerusakan Remote Refund #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
+            );
+          }
+
+          const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
+          const cashAccId = await resolveDbPaymentAccount(
+            tx,
+            reqItem.refundMethod || "CASH",
+            existingPayments[0]?.cashAccountId,
+            targetOrder.shiftId
+          );
+
+          await tx.insert(schema.cashTransactions).values({
+            id: crypto.randomUUID(),
+            accountId: cashAccId,
+            type: "CASH_OUT",
+            date: nowIso,
+            amount: finalRefundAmount,
+            description: `Remote Refund ${reqItem.refundMethod || "CASH"} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+            category: "PENGELUARAN",
+            referenceId: targetOrder.id,
+          });
+
+          await tx.insert(schema.auditLogs).values({
+            id: crypto.randomUUID(),
+            userId: authUser.id,
+            action: "REFUND",
+            tableName: "orders",
+            recordId: targetOrder.id,
+            timestamp: nowIso,
+          });
+        } else if (reqItem.type === "VOID") {
+          if (targetOrder.status === "VOID" || targetOrder.status === "CANCELLED" || targetOrder.status === "REFUNDED") {
+            throw new Error("APPROVAL_ORDER_INVALID_STATE");
+          }
+
+          const wasPaid = targetOrder.status === "PAID";
+          const nextVoidStatus = wasPaid ? "VOID" : "CANCELLED";
+          const claimedOrder = await tx
+            .update(schema.orders)
+            .set({
+              status: nextVoidStatus,
+              voidReason: reqItem.reason,
+              voidApprovedBy: managerName,
+              updatedAt: nowIso,
+            })
+            .where(and(eq(schema.orders.id, targetOrder.id), eq(schema.orders.status, targetOrder.status)))
+            .returning();
+          if (claimedOrder.length === 0) {
+            throw new Error("APPROVAL_ORDER_INVALID_STATE");
+          }
+
+          if (wasPaid) {
+            await applyDbOrderStock(
+              tx,
+              items,
+              "RETURN",
+              `Remote VOID #${targetOrder.receiptNo} (${reqItem.reason})`,
+              managerName,
+              targetOrder.id,
+              nowIso
+            );
+
+            const existingPayments = await tx.select().from(schema.payments).where(eq(schema.payments.orderId, targetOrder.id));
+            for (const pay of existingPayments) {
+              const payMethod = pay.paymentMethod || (pay as any).method || "CASH";
+              const accId =
+                pay.cashAccountId ||
+                (await resolveDbPaymentAccount(tx, payMethod, undefined, targetOrder.shiftId));
+              await tx.insert(schema.cashTransactions).values({
+                id: crypto.randomUUID(),
+                accountId: accId,
+                type: "CASH_OUT",
+                date: nowIso,
+                amount: Math.round(Number(pay.amount) || 0),
+                description: `Remote VOID/Refund ${payMethod} POS #${targetOrder.receiptNo}: ${reqItem.reason}`,
+                category: "PENGELUARAN",
+                referenceId: targetOrder.id,
+              });
+            }
+
+            await tx
+              .delete(schema.salesTransactions)
+              .where(
+                or(
+                  eq(schema.salesTransactions.orderId, targetOrder.id),
+                  eq(schema.salesTransactions.importLogId, `POS-${targetOrder.receiptNo}`)
+                )
+              );
+          }
+
+          await tx.insert(schema.auditLogs).values({
+            id: crypto.randomUUID(),
+            userId: authUser.id,
+            action: "VOID",
+            tableName: "orders",
+            recordId: targetOrder.id,
+            timestamp: nowIso,
+          });
+        }
       });
 
       bumpDataVersion();
@@ -6514,6 +7096,19 @@ ${
         message: `Permintaan ${reqItem.type} #${reqItem.receiptNo} berhasil disetujui`,
       });
     } catch (e: any) {
+      if (e?.message === "APPROVAL_ALREADY_PROCESSED") {
+        return res.status(400).json({ error: "Permintaan sudah diproses sebelumnya" });
+      }
+      if (e?.message === "APPROVAL_ORDER_NOT_FOUND") {
+        return res.status(404).json({ error: "Order terkait tidak ditemukan" });
+      }
+      if (e?.message === "APPROVAL_ORDER_INVALID_STATE") {
+        return res.status(400).json({ error: "Status order sudah berubah dan tidak memenuhi syarat untuk diproses" });
+      }
+      if (typeof e?.message === "string" && e.message.startsWith("APPROVAL_ORDER_CLOSED_PERIOD:")) {
+        const closedP = e.message.slice("APPROVAL_ORDER_CLOSED_PERIOD:".length);
+        return res.status(400).json({ error: `Order berada pada periode tutup buku (${closedP}) dan tidak dapat diproses.` });
+      }
       console.error("Respond approval error:", e);
       res.status(500).json({ error: e?.message || "Failed to respond to approval" });
     }
@@ -6522,6 +7117,7 @@ ${
   // 5. Get Active Open Bills
   app.get("/api/pos/orders/active", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       if (!isDbConnected && offlineState) {
         const activeOrders = (offlineState.orders || [])
           .filter((o: any) => o.status === "OPEN")
@@ -6561,6 +7157,7 @@ ${
   // 6. Get POS Orders Today / History Summary (MUST be before /:id)
   app.get("/api/pos/orders/today", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       const todayLocal = getLocalDateString();
       const { startUtcIso, endUtcIso } = getLocalDayUtcBounds(todayLocal);
 
@@ -6605,6 +7202,7 @@ ${
   // 6b. Get All POS Orders with Filters (MUST be before /:id)
   app.get("/api/pos/orders/all", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE", "KASIR"]))) return;
       const { startDate, endDate, status } = req.query as {
         startDate?: string;
         endDate?: string;
@@ -6713,6 +7311,7 @@ ${
   // 7. Get Order Details by ID (for receipt reprint or detail view)
   app.get("/api/pos/orders/:id", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       if (!isDbConnected && offlineState) {
         const ord = (offlineState.orders || []).find((o: any) => o.id === req.params.id);
         if (!ord) {
@@ -6738,6 +7337,7 @@ ${
   // 8. POS Printers Configuration API
   app.get("/api/pos/printers", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res))) return;
       if (!isDbConnected && offlineState) {
         return res.json(offlineState.pos_printers || []);
       }
@@ -6750,6 +7350,7 @@ ${
 
   app.post("/api/pos/printers", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "KASIR"]))) return;
       const {
         id = crypto.randomUUID(),
         name,
@@ -6761,6 +7362,10 @@ ${
         paperWidth = "80mm",
         isActive = true,
       } = req.body;
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ error: "Nama printer wajib diisi" });
+      }
 
       if (!isDbConnected && offlineState) {
         offlineState.pos_printers = offlineState.pos_printers || [];
@@ -6917,11 +7522,18 @@ ${
   // 2. Update Single Order Item Status (QUEUED -> PREPARING -> READY -> SERVED)
   app.post("/api/kds/items/:id/status", async (req, res) => {
     try {
+      const authUser = await resolveAuthUser(req);
+      if (authUser?.role === "OWNER" || authUser?.isSuspended) {
+        return res.status(403).json({ error: "Forbidden: Akun tidak diizinkan mengubah status KDS" });
+      }
       const itemId = req.params.id;
       const { status } = req.body;
 
       if (!status) {
         return res.status(400).json({ error: "Status wajib diisi" });
+      }
+      if (!isValidKitchenStatus(status)) {
+        return res.status(400).json({ error: "Status KDS tidak valid" });
       }
 
       if (!isDbConnected && offlineState) {
@@ -6977,11 +7589,18 @@ ${
   // 3. Update Entire Order Kitchen Status
   app.post("/api/kds/orders/:id/status", async (req, res) => {
     try {
+      const authUser = await resolveAuthUser(req);
+      if (authUser?.role === "OWNER" || authUser?.isSuspended) {
+        return res.status(403).json({ error: "Forbidden: Akun tidak diizinkan mengubah status KDS" });
+      }
       const orderId = req.params.id;
       const { status } = req.body;
 
       if (!status) {
         return res.status(400).json({ error: "Status wajib diisi" });
+      }
+      if (!isValidKitchenStatus(status)) {
+        return res.status(400).json({ error: "Status KDS tidak valid" });
       }
 
       if (!isDbConnected && offlineState) {
@@ -7024,6 +7643,7 @@ ${
   // ─── AI Status & Test Connection API ───────────────────────────────────────
   app.get("/api/ai/status", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER", "FINANCE", "OWNER"]))) return;
       let apiKey = process.env.GEMINI_API_KEY || null;
       if (isDbConnected) {
         try {
@@ -7054,6 +7674,7 @@ ${
 
   app.post("/api/ai/test-key", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "MANAGER"]))) return;
       const { apiKey: customKey } = req.body;
       let keyToTest = customKey;
       if (!keyToTest) {
@@ -7102,6 +7723,7 @@ ${
   // ─── Dashboard Summary API ─────────────────────────────────────────────────
   app.get("/api/dashboard/summary", async (req, res) => {
     try {
+      if (!(await requireAuth(req, res, ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE"]))) return;
       const now = new Date();
       const currentPeriod = getLocalPeriodString(now);
       const [curYear, curMonth] = currentPeriod.split("-").map(Number);
@@ -7140,8 +7762,9 @@ ${
         return Number.isNaN(d.getTime()) ? rawDate.slice(0, 7) : getLocalPeriodString(d);
       };
 
-      const currentTx = transactions.filter((t) => getTxPeriod(t.date) === currentPeriod);
-      const prevTx = transactions.filter((t) => getTxPeriod(t.date) === prevPeriod);
+      const operationalTransactions = transactions.filter((t) => !isNonOperationalCashTransaction(t));
+      const currentTx = operationalTransactions.filter((t) => getTxPeriod(t.date) === currentPeriod);
+      const prevTx = operationalTransactions.filter((t) => getTxPeriod(t.date) === prevPeriod);
 
       const sumIn = (txs: any[]) => txs.filter((t) => t.type === "CASH_IN").reduce((s, t) => s + (Number(t.amount) || 0), 0);
       const sumOut = (txs: any[]) => txs.filter((t) => t.type === "CASH_OUT").reduce((s, t) => s + (Number(t.amount) || 0), 0);
@@ -7206,6 +7829,9 @@ ${
       if (!requestUser) {
         return res.status(401).json({ error: "Sesi tidak valid. Silakan login ulang." });
       }
+      if (requestUser.isSuspended) {
+        return res.status(403).json({ error: "Akun sedang ditangguhkan (suspended)." });
+      }
       if (requestUser.role !== "SUPER_ADMIN") {
         return res.status(403).json({ error: "Hanya Super Admin yang boleh mereset data." });
       }
@@ -7242,13 +7868,14 @@ ${
         offlineState.stock_movements = [];
         offlineState.stock_opnames = [];
         offlineState.stock_opname_items = [];
-        offlineState.daily_attendances = [];
-        offlineState.daily_checklists = [];
-        offlineState.attendance_records = [];
+        offlineState.dailyAttendances = [];
+        offlineState.dailyChecklists = [];
+        offlineState.attendances = [];
         offlineState.audit_logs = [resetAudit];
         offlineState.payroll_records = [];
-        offlineState.kpi_records = [];
+        offlineState.kpiRecords = [];
         offlineState.batch_preparations = [];
+        offlineState.manager_approval_requests = [];
         bumpDataVersion();
         return res.json({ success: true, message: "Data transaksional berhasil dibersihkan (Offline Mode)." });
       }

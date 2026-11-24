@@ -22,14 +22,25 @@ import { CustomSelect } from "./common/CustomSelect";
 
 const TABLE_LABELS: Record<string, string> = {
   users: "Pengguna & PIN",
+  settings: "Pengaturan Sistem",
   employees: "Data Karyawan",
   contracts: "Kontrak Kerja",
   attendances: "Presensi",
   daily_attendances: "Presensi Harian",
   kpi_records: "Nilai KPI",
+  kpi_tasks: "Tugas KPI",
+  kpi_bonus_rules: "Aturan Bonus KPI",
   cash_accounts: "Akun Kas / Bank",
   cash_transactions: "Buku Kas / Transaksi",
+  expense_categories: "Pos Kategori Keuangan",
+  budgets: "Anggaran / Budget",
+  bank_reconciliations: "Rekonsiliasi Bank",
+  bank_statement_lines: "Mutasi Rekening Koran",
+  daily_sales_recaps: "Rekap Penjualan Harian",
+  closed_periods: "Tutup Buku Periode",
   ingredients: "Bahan Baku",
+  stock_opnames: "Stok Opname",
+  stock_opname_items: "Detail Stok Opname",
   recipes: "Resep Menu",
   products: "Katalog Produk",
   batch_preparations: "Batch Cook",
@@ -42,6 +53,7 @@ const TABLE_LABELS: Record<string, string> = {
   orders: "Order Kasir (Void & Refund)",
   manager_approval_requests: "Otorisasi Manager (Remote)",
   promotions: "Promo & Diskon Kasir",
+  RESET_DATA_UJI_COBA: "Reset Data Uji Coba",
 };
 
 type DateFilterType =
@@ -148,10 +160,12 @@ export const AuditLogViewer = () => {
     let creates = 0;
     let updates = 0;
     let deletes = 0;
+    let others = 0;
     dateFilteredLogs.forEach((log) => {
       if (log.action === "CREATE") creates++;
       else if (log.action === "UPDATE") updates++;
       else if (log.action === "DELETE") deletes++;
+      else others++;
     });
     return {
       total: dateFilteredLogs.length,
@@ -159,6 +173,7 @@ export const AuditLogViewer = () => {
       creates,
       updates,
       deletes,
+      others,
     };
   }, [dateFilteredLogs, auditLogs.length]);
 
@@ -169,7 +184,9 @@ export const AuditLogViewer = () => {
         const user = users.find((u) => u.id === log.userId);
 
         // Filter Aksi
-        if (selectedAction !== "ALL" && log.action !== selectedAction) {
+        if (selectedAction === "OTHER") {
+          if (["CREATE", "UPDATE", "DELETE"].includes(log.action)) return false;
+        } else if (selectedAction !== "ALL" && log.action !== selectedAction) {
           return false;
         }
 
@@ -422,6 +439,9 @@ export const AuditLogViewer = () => {
               { id: "CREATE", label: `Tambah (${stats.creates})` },
               { id: "UPDATE", label: `Ubah (${stats.updates})` },
               { id: "DELETE", label: `Hapus (${stats.deletes})` },
+              ...(stats.others > 0
+                ? [{ id: "OTHER", label: `Keamanan / Lainnya (${stats.others})` }]
+                : []),
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -510,12 +530,15 @@ export const AuditLogViewer = () => {
                               ? "bg-amber-50 text-amber-700 border border-amber-200"
                               : log.action === "DELETE"
                                 ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                : "bg-slate-100 text-slate-800"
+                                : String(log.action).includes("SUSPEND")
+                                  ? "bg-brand-50 text-brand-700 border border-brand-200"
+                                  : "bg-slate-100 text-slate-800 border border-slate-200"
                         }`}
                       >
                         {log.action === "CREATE" && <PlusCircle className="w-3 h-3" />}
                         {log.action === "UPDATE" && <Edit3 className="w-3 h-3" />}
                         {log.action === "DELETE" && <Trash2 className="w-3 h-3" />}
+                        {!["CREATE", "UPDATE", "DELETE"].includes(log.action) && <Shield className="w-3 h-3" />}
                         {log.action}
                       </span>
                     </td>

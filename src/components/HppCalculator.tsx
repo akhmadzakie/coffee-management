@@ -3,10 +3,20 @@ import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
+import { authFetch } from "../utils/authHeaders";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { calculateHppWithOverheadPercentage } from "../utils/financeMetrics";
-import { isPackagingIngredient } from "../utils/productSalesAnalytics";
+import {
+  getDivisionMenuCategories,
+  isPackagingIngredient,
+} from "../utils/productSalesAnalytics";
+import {
+  resolveDivisionStorageLocation,
+  mergeDuplicateRecipeIngredients,
+  splitRecipeItemsAndPackaging,
+  computeSignedMarginMetrics,
+} from "../utils/syncSanitizers";
 import {
   ViewState,
   Recipe,
@@ -46,6 +56,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Search,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -315,6 +326,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     settings,
     updateSettings,
     currentUser,
+    isReadOnly,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<"simulator" | "catalog">("simulator");
@@ -424,7 +436,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
             ? Boolean(prev.isIncluded)
             : includePresetDefaults
               ? Boolean(preset.isIncluded)
-              : Boolean(preset.isIncluded),
+              : false,
       };
     });
 
@@ -460,14 +472,27 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     );
   }, [selectedDivision, stockPackagingItems]);
 
+  const publishCategoryOptions = useMemo(
+    () => getDivisionMenuCategories(selectedDivision, settings?.menuCategories, products),
+    [selectedDivision, settings?.menuCategories, products]
+  );
+
   const handleDivisionChange = (div: ProductDivision) => {
     setSelectedDivision(div);
     setPackagingList(
       buildSyncedPackagingList(div, [], stockPackagingItems, true)
     );
+    const nextCats = getDivisionMenuCategories(div, settings?.menuCategories, products);
+    if (nextCats.length > 0 && !nextCats.includes(publishCategory.trim().toUpperCase())) {
+      setPublishCategory(nextCats[0]);
+    }
   };
 
   const handleQuickAddPackagingStock = () => {
+    if (isReadOnly) {
+      toast.warning("Akun Owner berstatus Read-Only dan tidak dapat menambah stok gudang.");
+      return;
+    }
     const cleanName = newPackName.trim();
     if (!cleanName) {
       toast.warning("Masukkan nama item kemasan terlebih dahulu.");
@@ -485,12 +510,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
         minStock: 50,
         category: "Packaging & Cup",
         costPerUnit: Math.max(0, Math.round(newPackCost)),
-        storageLocation:
-          selectedDivision === "KITCHEN"
-            ? "KITCHEN"
-            : selectedDivision === "BAKER"
-              ? "BAKERY"
-              : "BAR",
+        storageLocation: resolveDivisionStorageLocation(selectedDivision),
       });
 
     setPackagingList((prev) => {
@@ -666,26 +686,18 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
                 )
               );
 
-        const packIngIdsInRecipe = new Set<string>();
-        const nonPackItems: RecipeIngredientItem[] = [];
-        rawRecipeList.forEach((ri: any, idx: number) => {
-          const ing = ingredients.find((i) => i.id === ri.ingredientId);
-          if (ing && isPackagingIngredient(ing)) {
-            packIngIdsInRecipe.add(ing.id);
-          } else {
-            nonPackItems.push({
-              id: `item-${Date.now()}-${idx}`,
-              ingredientId: ri.ingredientId,
-              name: ing ? ing.name : "Bahan Resep",
-              quantity: ri.quantity,
-              unit: ing ? ing.unit : "satuan",
-              costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
-            });
-          }
+        const { materialItems, packagingIngredientIds } = splitRecipeItemsAndPackaging({
+          rawRecipe: rawRecipeList,
+          ingredients,
+          isPackagingCheck: isPackagingIngredient,
         });
-        if (nonPackItems.length > 0) {
-          setItems(nonPackItems);
-        }
+        const packIngIdsInRecipe = new Set<string>(packagingIngredientIds);
+        setItems(
+          materialItems.map((m, idx) => ({
+            id: `item-${Date.now()}-${idx}`,
+            ...m,
+          }))
+        );
 
         const notesLower = String(variant.packagingNotes || "").toLowerCase();
         setPackagingList(
@@ -719,33 +731,51 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     const matchedProd = products.find(
       (p) => p.name.trim().toLowerCase() === r.menuName.trim().toLowerCase()
     );
+    const targetDivision: ProductDivision = matchedProd?.division || selectedDivision;
     if (matchedProd) {
       if (matchedProd.division) setSelectedDivision(matchedProd.division);
       if (matchedProd.category) setPublishCategory(matchedProd.category);
-      const firstVar = matchedProd.variants?.[0];
-      if (firstVar) {
-        if (firstVar.name) setServingNote(firstVar.name);
-        if (firstVar.price > 0) setTargetSellingPrice(firstVar.price);
+    }
+    const firstVar = matchedProd?.variants?.[0];
+    if (firstVar) {
+      if (firstVar.name) setServingNote(firstVar.name);
+      if (firstVar.price > 0) setTargetSellingPrice(firstVar.price);
+      if (firstVar.wastagePercent !== undefined) {
+        setWastagePercent(Number(firstVar.wastagePercent));
+      }
+      if (firstVar.overheadPercent !== undefined) {
+        setOverheadPercent(Number(firstVar.overheadPercent));
       }
     }
 
-    // Map ingredients from store
-    const safeIngs = getSafeRecipeIngredients(r);
-    const mappedItems: RecipeIngredientItem[] = safeIngs.map((ri, idx) => {
-      const ing = ingredients.find((i) => i.id === ri.ingredientId);
-      return {
-        id: `item-${Date.now()}-${idx}`,
-        ingredientId: ri.ingredientId,
-        name: ing ? ing.name : "Bahan Terhapus",
-        quantity: ri.quantity,
-        unit: ing ? ing.unit : "satuan",
-        costPerUnit: ing ? Number(ing.costPerUnit || 0) : 0,
-      };
+    const { materialItems, packagingIngredientIds } = splitRecipeItemsAndPackaging({
+      rawRecipe: r.ingredients,
+      ingredients,
+      isPackagingCheck: isPackagingIngredient,
     });
+    const packIngIdsSet = new Set<string>(packagingIngredientIds);
+    const notesLower = String(firstVar?.packagingNotes || "").toLowerCase();
 
-    if (mappedItems.length > 0) {
-      setItems(mappedItems);
-    }
+    setItems(
+      materialItems.map((m, idx) => ({
+        id: `item-${Date.now()}-${idx}`,
+        ...m,
+      }))
+    );
+    setPackagingList(
+      buildSyncedPackagingList(
+        targetDivision,
+        [],
+        stockPackagingItems,
+        false
+      ).map((p) => ({
+        ...p,
+        isIncluded: Boolean(
+          (p.ingredientId && packIngIdsSet.has(p.ingredientId)) ||
+            (notesLower && notesLower.includes(p.name.toLowerCase()))
+        ),
+      }))
+    );
     setSaveSuccessMessage(`Berhasil memuat resep "${r.menuName}"`);
     setTimeout(() => setSaveSuccessMessage(null), 3000);
   };
@@ -831,9 +861,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
   const totalHpp = hppCalculation.totalHpp;
 
   // Margin & Food Cost
-  const grossProfit = Math.max(0, targetSellingPrice - totalHpp);
-  const grossMarginPercent = targetSellingPrice > 0 ? (grossProfit / targetSellingPrice) * 100 : 0;
-  const foodCostPercent = targetSellingPrice > 0 ? (totalHpp / targetSellingPrice) * 100 : 0;
+  const { grossProfit, grossMarginPercent, foodCostPercent, isLoss } = useMemo(
+    () => computeSignedMarginMetrics(targetSellingPrice, totalHpp),
+    [targetSellingPrice, totalHpp]
+  );
 
   // Rekomendasi Harga dari Target Food Cost (dibulatkan ke kelipatan Rp 500)
   const recommendedSellingPrice = useMemo(() => {
@@ -936,12 +967,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
                 ? "Bakery"
                 : "Bahan Bar",
           costPerUnit: Number(it.costPerUnit) || 0,
-          storageLocation:
-            selectedDivision === "KITCHEN"
-              ? "KITCHEN"
-              : selectedDivision === "BAKER"
-                ? "BAKERY"
-                : "BAR",
+          storageLocation: resolveDivisionStorageLocation(selectedDivision),
         });
         updatedUiItems[idx] = { ...it, ingredientId: newIngId };
         hasNewCustomIng = true;
@@ -982,12 +1008,7 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
             minStock: 100,
             category: "Packaging & Cup",
             costPerUnit: Math.max(0, Math.round(p.cost || 0)),
-            storageLocation:
-              selectedDivision === "KITCHEN"
-                ? "KITCHEN"
-                : selectedDivision === "BAKER"
-                  ? "BAKERY"
-                  : "BAR",
+            storageLocation: resolveDivisionStorageLocation(selectedDivision),
           });
         }
         if (targetId && !alreadyIncludedIds.has(targetId)) {
@@ -1000,6 +1021,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
 
   // Simpan ke Master Resep Toko
   const handleSaveToStoreRecipes = () => {
+    if (isReadOnly) {
+      toast.warning("Akun Owner berstatus Read-Only dan tidak dapat menyimpan perubahan resep.");
+      return;
+    }
     if (!menuName.trim()) {
       toast.warning("Nama menu tidak boleh kosong.");
       return;
@@ -1012,7 +1037,10 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
     const baseIngredients = ensureRecipeIngredientsRegistered();
     const seenIds = new Set(baseIngredients.map((i) => i.ingredientId));
     const packIngredients = resolveIncludedPackagingIngredients(seenIds);
-    const validIngredients = [...baseIngredients, ...packIngredients];
+    const validIngredients = mergeDuplicateRecipeIngredients([
+      ...baseIngredients,
+      ...packIngredients,
+    ]);
 
     if (validIngredients.length === 0) {
       toast.warning("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
@@ -1043,14 +1071,25 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
 
   // Terbitkan Langsung ke Katalog Produk Toko (Database Menu + Master Resep + Bahan & Kemasan Stok)
   const handlePublishToProductCatalog = () => {
+    if (isReadOnly) {
+      toast.warning("Akun Owner berstatus Read-Only dan tidak dapat menerbitkan produk ke katalog.");
+      return;
+    }
     if (!menuName.trim()) {
       toast.warning("Nama menu tidak boleh kosong.");
+      return;
+    }
+    if (!(targetSellingPrice > 0)) {
+      toast.warning("Masukkan rencana harga jual lebih dari Rp 0.");
       return;
     }
     const baseIngredients = ensureRecipeIngredientsRegistered();
     const seenIds = new Set(baseIngredients.map((i) => i.ingredientId));
     const packIngredients = resolveIncludedPackagingIngredients(seenIds);
-    const validIngredients = [...baseIngredients, ...packIngredients];
+    const validIngredients = mergeDuplicateRecipeIngredients([
+      ...baseIngredients,
+      ...packIngredients,
+    ]);
 
     const existingProd = products.find(
       (p) => p.name.trim().toLowerCase() === menuName.trim().toLowerCase()
@@ -1156,34 +1195,68 @@ export const HppCalculator: React.FC<HppCalculatorProps> = ({ onNavigate }) => {
 
   // Simpan Sebagai Resep Kondimen Olahan (Batch Prep)
   const handleSaveAsBatchPrep = () => {
-    if (!menuName.trim()) {
+    if (isReadOnly) {
+      toast.warning("Akun Owner berstatus Read-Only dan tidak dapat menyimpan resep batch.");
+      return;
+    }
+    const cleanName = menuName.trim();
+    if (!cleanName) {
       toast.warning("Nama olahan tidak boleh kosong.");
       return;
     }
-    const validIngredients = items
-      .filter((it) => it.ingredientId && it.quantity > 0)
-      .map((it) => ({
-        ingredientId: it.ingredientId,
-        quantity: it.quantity,
-      }));
-
-    if (validIngredients.length === 0) {
-      toast.warning("Minimal 1 bahan baku harus dipilih dari master inventori.");
+    if (!(batchYieldQty > 0)) {
+      toast.warning("Hasil jadi (yield) per batch harus lebih dari 0.");
       return;
     }
 
+    const validIngredients = mergeDuplicateRecipeIngredients(
+      ensureRecipeIngredientsRegistered()
+    );
+
+    if (validIngredients.length === 0) {
+      toast.warning("Harap isi minimal 1 bahan baku dengan takaran lebih dari 0.");
+      return;
+    }
+
+    const cleanUnit = batchYieldUnit.trim() || "ml";
+    const existingTargetIng = ingredients.find(
+      (i) => i.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (
+      existingTargetIng &&
+      validIngredients.some((ri) => ri.ingredientId === existingTargetIng.id)
+    ) {
+      toast.error(
+        `Bahan "${cleanName}" tidak dapat dijadikan hasil jadi sekaligus bahan mentah dalam batch yang sama.`
+      );
+      return;
+    }
+
+    const unitCostEstimate = Math.round(rawMaterialCost / batchYieldQty);
+    const targetIngredientId =
+      existingTargetIng?.id ||
+      addIngredient({
+        name: cleanName,
+        unit: cleanUnit,
+        currentStock: 0,
+        minStock: Math.max(1, Math.round(batchYieldQty * 0.5)),
+        category: "Bahan Olahan",
+        costPerUnit: Math.max(0, unitCostEstimate),
+        storageLocation: resolveDivisionStorageLocation(selectedDivision),
+      });
+
     addBatchPreparation({
-      name: menuName.trim(),
+      name: cleanName,
       division: selectedDivision,
-      targetIngredientId: `ing-prep-${Date.now()}`,
-      targetIngredientName: menuName.trim(),
+      targetIngredientId,
+      targetIngredientName: existingTargetIng?.name || cleanName,
       yieldQuantity: Number(batchYieldQty),
-      yieldUnit: batchYieldUnit.trim(),
+      yieldUnit: cleanUnit,
       ingredients: validIngredients,
       notes: `Resep kondimen batch dari formulasi HPP. Catatan: ${servingNote}`,
     });
 
-    setSaveSuccessMessage(`Resep olahan batch "${menuName}" berhasil disimpan ke Dapur Olahan!`);
+    setSaveSuccessMessage(`Resep olahan batch "${cleanName}" berhasil disimpan ke Dapur Olahan!`);
     setIsBatchPrepModalOpen(false);
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
@@ -1228,13 +1301,13 @@ Tolong berikan analisis singkat dan tajam (3-4 poin padat):
 3. Rekomendasi pricing kompetitif dan strategi upselling atau bundling (misal pairing pastry) agar omset kafe maksimal.
 Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
-      const response = await fetch("/api/ai/ask-advisor", {
+      const response = await authFetch("/api/ai/ask-advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: prompt,
           storeContext: {
-            role: "MANAGER",
+            role: currentUser?.role || "MANAGER",
             feature: "HPP_CALCULATOR",
             menuName,
             totalHpp,
@@ -1279,11 +1352,16 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
     }
   };
 
-  const handleCopyAiResult = () => {
+  const handleCopyAiResult = async () => {
     if (!aiAnalysisResult) return;
-    navigator.clipboard.writeText(aiAnalysisResult);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2500);
+    try {
+      await navigator.clipboard.writeText(aiAnalysisResult);
+      setIsCopied(true);
+      toast.success("Hasil analisis AI berhasil disalin.");
+      setTimeout(() => setIsCopied(false), 2500);
+    } catch {
+      toast.error("Gagal menyalin ke clipboard.");
+    }
   };
 
   // Filtered recipes for catalog audit
@@ -1321,6 +1399,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
           <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-auto overflow-hidden">
             <button
+              type="button"
               onClick={() => setActiveTab("simulator")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
                 activeTab === "simulator" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
@@ -1337,6 +1416,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               <span className="relative z-10">Simulator HPP & Laba</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab("catalog")}
               className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer ${
                 activeTab === "catalog" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
@@ -1356,12 +1436,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
           {onNavigate && (
             <button
+              type="button"
               onClick={() => onNavigate("menu_management")}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs w-full sm:w-auto"
+              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs w-full sm:w-auto cursor-pointer"
             >
-              <UtensilsCrossed className="w-3.5 h-3.5 text-brand-300" />
+              <UtensilsCrossed className="w-3.5 h-3.5 text-brand-100" />
               <span>Katalog Menu & Dapur Olahan</span>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-brand-200" />
             </button>
           )}
         </div>
@@ -1833,41 +1914,43 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
               </div>
 
               {/* Tambah Item Kemasan Baru Langsung ke Stok Packaging & Cup */}
-              <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2">
-                <span className="text-[11px] font-bold text-slate-700 block">
-                  + Tambah Kemasan Baru ke Stok Gudang (Packaging &amp; Cup)
-                </span>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    value={newPackName}
-                    onChange={(e) => setNewPackName(e.target.value)}
-                    placeholder="Contoh: Cup Oval 14oz + Logo / Paper Bowl 500ml"
-                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-brand-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-28">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                        Rp
-                      </span>
-                      <CurrencyInput
-                        emptyWhenZero
-                        value={newPackCost}
-                        onValueChange={(_, num) => setNewPackCost(Math.max(0, Math.round(num)))}
-                        placeholder="0"
-                        className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-right text-slate-900"
-                      />
+              {!isReadOnly && (
+                <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-200/80 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-700 block">
+                    + Tambah Kemasan Baru ke Stok Gudang (Packaging &amp; Cup)
+                  </span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={newPackName}
+                      onChange={(e) => setNewPackName(e.target.value)}
+                      placeholder="Contoh: Cup Oval 14oz + Logo / Paper Bowl 500ml"
+                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-brand-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-28">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          Rp
+                        </span>
+                        <CurrencyInput
+                          emptyWhenZero
+                          value={newPackCost}
+                          onValueChange={(_, num) => setNewPackCost(Math.max(0, Math.round(num)))}
+                          placeholder="0"
+                          className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-right text-slate-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleQuickAddPackagingStock}
+                        className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
+                      >
+                        + Tambah
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleQuickAddPackagingStock}
-                      className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
-                    >
-                      + Tambah
-                    </button>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
                 <span className="font-semibold text-slate-500">Subtotal Biaya Kemasan:</span>
@@ -2091,14 +2174,14 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80">
+                  <div className={`p-4 rounded-2xl border ${isLoss ? "border-rose-200 bg-rose-50/80" : "border-slate-200 bg-slate-50/80"}`}>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
-                      Laba Kotor (Margin)
+                      {isLoss ? "Rugi Bersih (Margin)" : "Laba Kotor (Margin)"}
                     </p>
-                    <p className="text-xl font-black font-mono text-emerald-700">
-                      +{formatCurrency(grossProfit)}
+                    <p className={`text-xl font-black font-mono tabular-nums ${isLoss ? "text-rose-700" : "text-emerald-700"}`}>
+                      {grossProfit >= 0 ? `+${formatCurrency(grossProfit)}` : formatCurrency(grossProfit)}
                     </p>
-                    <p className="text-[10px] font-bold text-slate-600 mt-1">
+                    <p className={`text-[10px] font-bold mt-1 tabular-nums ${isLoss ? "text-rose-700" : "text-slate-600"}`}>
                       {grossMarginPercent.toFixed(1)}% dari omset
                     </p>
                   </div>
@@ -2134,6 +2217,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     <div className="flex items-center gap-1">
                       {[25, 28, 30, 32].map((fc) => (
                         <button
+                          type="button"
                           key={fc}
                           onClick={() => setTargetFoodCostPercent(fc)}
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer ${
@@ -2154,8 +2238,10 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     </span>
                   </div>
                   <button
+                    type="button"
+                    disabled={recommendedSellingPrice <= 0}
                     onClick={() => setTargetSellingPrice(recommendedSellingPrice)}
-                    className="w-full py-2 bg-white hover:bg-brand-100/60 active:scale-[0.98] text-brand-900 border border-brand-300 rounded-xl text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                    className="w-full py-2 bg-white hover:bg-brand-100/60 active:scale-[0.98] text-brand-900 border border-brand-300 rounded-xl text-[11px] font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-45 disabled:cursor-not-allowed"
                   >
                     Gunakan Harga Rekomendasi Ini
                   </button>
@@ -2182,14 +2268,14 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   />
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                      <p className="text-[10px] text-slate-500">Laba Kotor/Hari:</p>
-                      <p className="font-bold font-mono tabular-nums text-slate-900">
+                      <p className="text-[10px] text-slate-500">{isLoss ? "Rugi Kotor/Hari:" : "Laba Kotor/Hari:"}</p>
+                      <p className={`font-bold font-mono tabular-nums ${isLoss ? "text-rose-700" : "text-slate-900"}`}>
                         {formatCurrency(dailyGrossProfit)}
                       </p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                      <p className="text-[10px] text-slate-500">Laba Kotor/Bulan (30h):</p>
-                      <p className="font-bold font-mono tabular-nums text-emerald-700">
+                      <p className="text-[10px] text-slate-500">{isLoss ? "Rugi Kotor/Bulan (30h):" : "Laba Kotor/Bulan (30h):"}</p>
+                      <p className={`font-bold font-mono tabular-nums ${isLoss ? "text-rose-700" : "text-emerald-700"}`}>
                         {formatCurrency(monthlyGrossProfit)}
                       </p>
                     </div>
@@ -2214,32 +2300,41 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
 
                 {/* Action Buttons: Terbitkan Produk, Kondimen Olahan, Simpan Resep & Konsultasi AI */}
                 <div className="space-y-2 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPublishProductModalOpen(true)}
-                      className="w-full py-3 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                    >
-                      <UtensilsCrossed className="w-4 h-4 text-brand-200" />
-                      Simpan ke Database Menu
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsBatchPrepModalOpen(true)}
-                      className="w-full py-3 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                    >
-                      <Flame className="w-4 h-4 text-amber-400" />
-                      Simpan sbg Kondimen
-                    </button>
-                  </div>
+                  {isReadOnly ? (
+                    <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-[11px] font-semibold flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Mode Simulasi &amp; Evaluasi (Owner Read-Only) — perubahan hanya berlaku sebagai simulasi.</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsPublishProductModalOpen(true)}
+                          className="w-full py-3 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        >
+                          <UtensilsCrossed className="w-4 h-4 text-brand-200" />
+                          Simpan ke Database Menu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsBatchPrepModalOpen(true)}
+                          className="w-full py-3 bg-amber-600 hover:bg-amber-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        >
+                          <Flame className="w-4 h-4 text-amber-100" />
+                          Simpan sbg Kondimen
+                        </button>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={handleSaveToStoreRecipes}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" /> Simpan Sebagai Resep Pokok Toko
-                  </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveToStoreRecipes}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <Save className="w-4 h-4" /> Simpan Sebagai Resep Pokok Toko
+                      </button>
+                    </>
+                  )}
 
                   <button
                     type="button"
@@ -2270,6 +2365,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     </div>
                     {aiAnalysisResult && (
                       <button
+                        type="button"
                         onClick={handleCopyAiResult}
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 text-xs flex items-center gap-1 cursor-pointer"
                         title="Salin Catatan AI"
@@ -2319,10 +2415,21 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   placeholder="Cari resep menu..."
-                  className="w-full pl-9 pr-3 py-2 text-base sm:text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full pl-9 pr-7 py-2 text-base sm:text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
+                {catalogSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCatalogSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                    title="Bersihkan pencarian"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setMenuName("Menu Baru Racikan");
                   setItems([]);
@@ -2398,6 +2505,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <button
+                          type="button"
                           onClick={() => {
                             handleLoadExistingRecipe(r.id);
                             setActiveTab("simulator");
@@ -2482,6 +2590,7 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     )}
 
                     <button
+                      type="button"
                       onClick={() => {
                         handleLoadExistingRecipe(r.id);
                         setActiveTab("simulator");
@@ -2515,96 +2624,100 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsPublishProductModalOpen(false);
+                }}
+                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
                 >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
+                <div className="w-8 h-8 rounded-xl bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-300 flex items-center justify-center border border-brand-100 dark:border-brand-500/30">
                   <UtensilsCrossed className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-slate-900 text-base">Terbitkan ke Katalog Produk</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">Terbitkan ke Katalog Produk</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsPublishProductModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-2">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-slate-500 font-medium">Nama Produk:</span>
-                  <span className="font-bold text-slate-900 text-sm">{menuName}</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">Nama Produk:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{menuName}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Divisi Operasional:</span>
-                  <span className="font-bold px-2 py-0.5 rounded-md bg-brand-50 text-brand-800 border border-brand-200 text-[11px]">
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">Divisi Operasional:</span>
+                  <span className="font-bold px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-500/15 text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 text-[11px]">
                     {selectedDivision}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Nama Varian:</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">Nama Varian:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
                     {servingNote || (selectedDivision === "BAR" ? "Iced 16oz" : "Reguler")}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1.5">
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
                   Kategori Menu Toko
                 </label>
                 <CustomSelect
                   value={publishCategory}
                   onChange={setPublishCategory}
-                  options={[
-                    { value: "COFFEE", label: "☕ COFFEE (Espresso-based, Cold Brew)" },
-                    { value: "NON_COFFEE", label: "🍵 NON_COFFEE (Matcha, Tea, Chocolate)" },
-                    { value: "FOOD", label: "🍳 FOOD (Makanan Berat, Rice Bowl)" },
-                    { value: "SNACK", label: "🍟 SNACK (Camilan, Finger Food)" },
-                    { value: "PASTRY", label: "🥐 PASTRY (Croissant, Cake, Bakery)" },
-                  ]}
-                  buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 hover:bg-white"
+                  options={(publishCategoryOptions.includes(publishCategory)
+                    ? publishCategoryOptions
+                    : [publishCategory, ...publishCategoryOptions].filter(Boolean)
+                  ).map((cat) => ({
+                    value: cat,
+                    label: cat,
+                  }))}
+                  buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 hover:bg-white"
                 />
               </div>
 
               {/* Rincian Finansial yang Diterbitkan */}
-              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200/70 space-y-2">
-                <div className="flex justify-between text-slate-700">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 dark:bg-brand-500/15 border border-brand-200/70 dark:border-brand-500/30 space-y-2">
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
                   <span>HPP Terkalkulasi (Bahan + Kemasan):</span>
-                  <span className="font-bold font-mono text-brand-950">{formatCurrency(totalHpp)}</span>
+                  <span className="font-bold font-mono text-brand-950 dark:text-brand-200 tabular-nums">{formatCurrency(totalHpp)}</span>
                 </div>
-                <div className="flex justify-between text-slate-700">
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
                   <span>Harga Jual Resmi Menu:</span>
-                  <span className="font-extrabold font-mono text-slate-900">{formatCurrency(targetSellingPrice)}</span>
+                  <span className="font-extrabold font-mono text-slate-900 dark:text-slate-100 tabular-nums">{formatCurrency(targetSellingPrice)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-800 font-bold pt-1 border-t border-brand-200">
-                  <span>Proyeksi Gross Margin:</span>
-                  <span className="font-mono">
+                <div className={`flex justify-between font-bold pt-1 border-t border-brand-200 dark:border-brand-500/30 ${isLoss ? "text-rose-700 dark:text-rose-300" : "text-emerald-800 dark:text-emerald-300"}`}>
+                  <span>{isLoss ? "Proyeksi Rugi:" : "Proyeksi Gross Margin:"}</span>
+                  <span className="font-mono tabular-nums">
                     {formatCurrency(grossProfit)} ({grossMarginPercent.toFixed(1)}%)
                   </span>
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                 Produk ini akan terdaftar di <b>Katalog Menu Toko</b> lengkap dengan harga jual resmi, estimasi laba, dan live ketersediaan porsi berdasarkan stok bahan baku.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsPublishProductModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
@@ -2634,37 +2747,41 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsBatchPrepModalOpen(false);
+                }}
+                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 8 }}
                   transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-2xl max-w-lg w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-5 sm:p-6 space-y-5"
                 >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center border border-amber-200 dark:border-amber-500/30">
                   <Flame className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-slate-900 text-base">Simpan Resep Kondimen Olahan</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">Simpan Resep Kondimen Olahan</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsBatchPrepModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <p className="text-slate-500 leading-relaxed">
+              <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
                 Resep ini akan disimpan sebagai formula <b>Dapur Olahan (Batch Prep)</b>. Tim barista/kitchen dapat memasak batch ini kapan saja untuk menghasilkan kondimen siap pakai (seperti Sirup Gula Aren Racikan, Sambal Matah, Cold Brew Concentrate) dengan HPP unit otomatis.
               </p>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
                   Nama Kondimen / Olahan
                 </label>
                 <input
@@ -2672,13 +2789,13 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                   value={menuName}
                   onChange={(e) => setMenuName(e.target.value)}
                   placeholder="e.g. Sirup Gula Aren Racikan Toko"
-                  className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
                     Hasil Jadi (Yield Qty)
                   </label>
                   <CurrencyInput
@@ -2689,11 +2806,11 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                     onBlur={() => {
                       if (batchYieldQty <= 0) setBatchYieldQty(1);
                     }}
-                    className="w-full text-base sm:text-xs font-bold font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    className="w-full text-base sm:text-xs font-bold font-mono px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
                     Satuan Hasil (Unit)
                   </label>
                   <CustomSelect
@@ -2704,40 +2821,40 @@ Format jawaban dengan markdown rapi dan angka-angka yang jelas.`;
                       { value: "gr", label: "gr (Gram)" },
                       { value: "porsi", label: "porsi (Porsi/Pcs)" },
                     ]}
-                    buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 hover:bg-white"
+                    buttonClassName="w-full text-base sm:text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 hover:bg-white"
                   />
                 </div>
               </div>
 
               {/* Rincian Modal Bahan Baku Batch */}
-              <div className="p-3.5 rounded-2xl bg-brand-50/70 border border-brand-200/70 space-y-2">
-                <div className="flex justify-between text-slate-700">
+              <div className="p-3.5 rounded-2xl bg-brand-50/70 dark:bg-brand-500/15 border border-brand-200/70 dark:border-brand-500/30 space-y-2">
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
                   <span>Total Biaya Bahan Baku Pokok:</span>
-                  <span className="font-bold font-mono text-brand-950">{formatCurrency(rawMaterialCost)}</span>
+                  <span className="font-bold font-mono text-brand-950 dark:text-brand-200 tabular-nums">{formatCurrency(rawMaterialCost)}</span>
                 </div>
-                <div className="flex justify-between text-slate-700 font-bold pt-1 border-t border-brand-200">
+                <div className="flex justify-between text-slate-700 dark:text-slate-300 font-bold pt-1 border-t border-brand-200 dark:border-brand-500/30">
                   <span>Estimasi HPP per {batchYieldUnit}:</span>
-                  <span className="font-extrabold font-mono text-emerald-800">
+                  <span className="font-extrabold font-mono text-emerald-800 dark:text-emerald-300 tabular-nums">
                     {formatCurrency(Math.round(batchYieldQty > 0 ? rawMaterialCost / batchYieldQty : 0))} / {batchYieldUnit}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsBatchPrepModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleSaveAsBatchPrep}
-                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Simpan ke Dapur Olahan
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" /> Simpan ke Dapur Olahan
               </button>
             </div>
                 </motion.div>

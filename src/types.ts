@@ -1,4 +1,4 @@
-type LocationType = "MAIN" | "BAR" | "KITCHEN";
+type LocationType = "MAIN" | "BAR" | "KITCHEN" | "BAKERY" | "BAKER" | "FINANCE";
 
 export type Role =
   | "SUPER_ADMIN"
@@ -78,15 +78,6 @@ export interface ExpenseCategory {
   sortOrder: number;
   // UI-only: children populated from flat list
   children?: ExpenseCategory[];
-}
-
-export interface Budget {
-  id: string;
-  categoryId: string;
-  period: string; // YYYY-MM
-  targetAmount: number;
-  createdBy: string;
-  createdAt: string;
 }
 
 // ─── Payroll (Fase 4) ───────────────────────────────────────────────────────────
@@ -184,6 +175,8 @@ export interface Budget {
   amount: number;
   notes: string | null;
   createdAt: string;
+  targetAmount?: number;
+  createdBy?: string;
 }
 
 export interface Employee {
@@ -276,6 +269,7 @@ export interface DailyChecklist {
 export interface KPIRecord {
   id: string;
   employeeId: string;
+  period?: string;
   month: number; // 1-12
   year: number;
   targets: KPITarget[];
@@ -401,8 +395,12 @@ export interface Settings {
   autoDeductStockOnSale?: boolean;
   allowNegativeStockSale?: boolean;
   ingredientCategories?: string[];
+  menuCategories?: Partial<Record<ProductDivision, string[]>>;
   dailySalesRecaps?: DailySalesRecap[];
   defaultOverheadPercent?: number;
+  profitShareOwnerPercent?: number;
+  profitShareReservePercent?: number;
+  profitShareInvestorPercent?: number;
 }
 
 export interface CashAccount {
@@ -685,12 +683,35 @@ export interface ShiftSession {
   teamMembers?: string[];
 }
 
+export interface ClosedPeriodSnapshot {
+  netSales: number;
+  effectiveCOGS: number;
+  grossProfit: number;
+  totalOPEX: number;
+  netProfit: number;
+  ownerPriveTotal: number;
+  savingsDepositTotal: number;
+  capexExpense: number;
+  ownerSharePercent: number;
+  reserveSharePercent: number;
+  investorSharePercent: number;
+  ownerShareAmount: number;
+  reserveShareAmount: number;
+  investorShareAmount: number;
+  ownerRemainingEntitlement: number;
+  endingOperationalBalance: number;
+  endingSavingsBalance: number;
+  capturedAt: string;
+}
+
 export interface ClosedPeriod {
   id: string;
   period: string; // YYYY-MM
   closedAt: string;
   closedBy: string;
   notes?: string;
+  snapshot?: ClosedPeriodSnapshot | null;
+  snapshotJson?: string | null;
 }
 
 // ─── POS & Transaksi Kasir ──────────────────────────────────────────────────

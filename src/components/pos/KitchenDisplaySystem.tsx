@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { authFetch } from "../../utils/authHeaders";
+import { toast } from "../../context/ToastContext";
 import { ThemeToggleButton } from "../../context/ThemeContext";
 import { KitchenStatus, PrintDestination } from "../../types";
 import { PosQuickWasteModal } from "./PosQuickWasteModal";
@@ -145,7 +147,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch(`/api/kds/tickets?station=${stationFilter}`);
+      const res = await authFetch(`/api/kds/tickets?station=${stationFilter}`);
       if (res.ok) {
         const data: KdsTicket[] = await res.json();
         // Cek jika ada tiket baru masuk (dibandingkan sebelumnya)
@@ -188,32 +190,36 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
   // Update item status
   const handleUpdateItemStatus = async (itemId: string, newStatus: KitchenStatus) => {
     try {
-      const res = await fetch(`/api/kds/items/${itemId}/status`, {
+      const res = await authFetch(`/api/kds/items/${itemId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        fetchTickets();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal memperbarui status item");
       }
-    } catch (e) {
-      alert("Gagal memperbarui status item");
+      fetchTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Gagal memperbarui status item");
     }
   };
 
   // Update entire order status
   const handleUpdateOrderStatus = async (orderId: string, newStatus: KitchenStatus) => {
     try {
-      const res = await fetch(`/api/kds/orders/${orderId}/status`, {
+      const res = await authFetch(`/api/kds/orders/${orderId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        fetchTickets();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Gagal memperbarui status order");
       }
-    } catch (e) {
-      alert("Gagal memperbarui status order");
+      fetchTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Gagal memperbarui status order");
     }
   };
 
@@ -594,7 +600,7 @@ export const KitchenDisplaySystem: React.FC<{ onNavigateBack?: () => void }> = (
                     ) : (
                       <button
                         onClick={() => handleUpdateOrderStatus(ticket.id, "SERVED")}
-                        className="w-full min-h-[44px] py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        className="w-full min-h-[44px] py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                         <span>Selesai / Sudah Diantar (Tutup)</span>

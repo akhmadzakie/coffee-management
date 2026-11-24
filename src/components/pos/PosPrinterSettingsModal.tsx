@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
+import { toast } from "../../context/ToastContext";
+import { authFetch } from "../../utils/authHeaders";
 import { PosPrinter, PrintDestination } from "../../types";
 import {
   Printer,
@@ -48,7 +50,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
   const fetchPrinters = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pos/printers");
+      const res = await authFetch("/api/pos/printers");
       if (res.ok) {
         const data = await res.json();
         setPrinters(data);
@@ -78,7 +80,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
         isActive: true,
       };
 
-      const res = await fetch("/api/pos/printers", {
+      const res = await authFetch("/api/pos/printers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -88,10 +90,10 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
         throw new Error("Gagal menyimpan konfigurasi printer");
       }
 
-      alert("Konfigurasi printer berhasil disimpan.");
+      toast.success("Konfigurasi printer berhasil disimpan.");
       fetchPrinters();
     } catch (e: any) {
-      alert(`Error: ${e.message}`);
+      toast.error(`Error: ${e.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -103,7 +105,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -279,7 +281,7 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                 type="button"
                 onClick={async () => {
                   if (!("bluetooth" in navigator)) {
-                    alert("Browser tablet ini belum mengizinkan Web Bluetooth. Gunakan Google Chrome pada Android/Windows.");
+                    toast.warning("Browser tablet ini belum mengizinkan Web Bluetooth. Gunakan Google Chrome pada Android/Windows.");
                     return;
                   }
                   try {
@@ -292,11 +294,11 @@ export const PosPrinterSettingsModal: React.FC<PosPrinterSettingsModalProps> = (
                         name: device.name || "Printer Bluetooth",
                         ipAddress: `BT-${device.name || device.id}`,
                       }));
-                      alert(`Printer Bluetooth terhubung: ${device.name || device.id}`);
+                      toast.success(`Printer Bluetooth terhubung: ${device.name || device.id}`);
                     }
                   } catch (e: any) {
                     if (e.name !== "NotFoundError") {
-                      alert(`Gagal menghubungkan Bluetooth: ${e.message}`);
+                      toast.error(`Gagal menghubungkan Bluetooth: ${e.message}`);
                     }
                   }
                 }}

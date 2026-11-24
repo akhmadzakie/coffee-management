@@ -1,12 +1,24 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
 import { ConfirmModal } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
+import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
+import { ClosedPeriodSnapshot } from "../types";
+import {
+  addDaysToLocalDate,
+  computeBudgetVsActual,
+  getLocalPeriodFromTimestamp,
+} from "../utils/syncSanitizers";
 import {
   calculateFnbHealthMetrics,
   computeCashLiquidityBreakdown,
+  computeOwnerProfitAllocation,
   computePeriodFinancialSummary,
+  getPreviousPeriodString,
+  isCapexCashTransaction,
   isNonOperationalCashTransaction,
 } from "../utils/financeMetrics";
 import {
@@ -22,43 +34,35 @@ import {
   Clock,
   PieChart as PieChartIcon,
   CheckCircle2,
-  Calendar,
   Layers,
-  ArrowRight,
   Receipt,
   CreditCard,
   Building2,
   ShoppingBag,
+  Package,
   Users,
   Zap,
-  FileSpreadsheet,
   FileText,
-  ChevronDown,
-  ChevronRight,
   BarChart3,
-  Activity,
-  ShieldCheck,
-  HelpCircle,
-  ArrowUpRight,
-  ArrowDownRight,
-  Package,
-  Droplets,
-  Coffee,
   Eye,
   Scale,
-  Landmark,
-  Smartphone,
-  RefreshCw,
   AlertCircle,
   Info,
-  ShieldAlert,
-  Check,
-  X,
   Target,
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  Calendar,
+  KeyRound,
+  ShieldCheck,
 } from "lucide-react";
 import { ExportModal } from "./ExportModal";
 import { motion, AnimatePresence } from "motion/react";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
+import { CustomDatePicker } from "./common/CustomDatePicker";
+import { CustomSelect } from "./common/CustomSelect";
+import { CurrencyInput } from "./common/CurrencyInput";
 
 const FinanceReports: React.FC = () => {
   const {
@@ -68,7 +72,6 @@ const FinanceReports: React.FC = () => {
     cashTransactions,
     expenseCategories,
     purchaseOrders,
-    suppliers,
     payrollRecords,
     dailySalesRecaps = [],
     salesTransactions,
@@ -80,9 +83,13 @@ const FinanceReports: React.FC = () => {
     bankReconciliations,
     bankStatementLines,
     budgets,
+    addBudget,
+    updateBudget,
+    deleteBudget,
     closedPeriods,
     closePeriod,
     reopenPeriod,
+    settings,
   } = useStore();
 
   const isOwner = currentUser?.role === "OWNER" || isReadOnly;
@@ -91,17 +98,44 @@ const FinanceReports: React.FC = () => {
       !isOwner &&
       ["FINANCE", "MANAGER", "SUPER_ADMIN"].includes(currentUser.role)
   );
+  const canReopenPeriod = Boolean(
+    currentUser &&
+      !isOwner &&
+      ["MANAGER", "SUPER_ADMIN"].includes(currentUser.role)
+  );
 
-  const [period, setPeriod] = useState<string>(
-    new Date().toISOString().substring(0, 7) // YYYY-MM
+  const [filterMode, setFilterMode] = useState<"monthly" | "range">("monthly");
+  const [period, setPeriod] = useState<string>(() => getLocalPeriodString());
+  const [rangeStartDate, setRangeStartDate] = useState<string>(() =>
+    addDaysToLocalDate(getLocalDateString(), -6)
+  );
+  const [rangeEndDate, setRangeEndDate] = useState<string>(() =>
+    getLocalDateString()
   );
   const [activeTab, setActiveTab] = useState<"pnl" | "budget" | "reconciliation">("pnl");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [periodConfirmAction, setPeriodConfirmAction] = useState<"close" | "reopen" | null>(null);
+  const [closeNotes, setCloseNotes] = useState<string>("");
+  const [reopenReason, setReopenReason] = useState<string>("");
+  const [reopenPin, setReopenPin] = useState<string>("");
+  const [reopenError, setReopenError] = useState<string | null>(null);
+  const [isVerifyingReopen, setIsVerifyingReopen] = useState(false);
 
-  const isPeriodClosed = useMemo(() => {
-    return closedPeriods.some((p) => p.period === period);
+  // Budget CRUD modal & confirmation state
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [budgetCategoryId, setBudgetCategoryId] = useState<string>("");
+  const [budgetAmountInput, setBudgetAmountInput] = useState<string>("");
+  const [budgetNotes, setBudgetNotes] = useState<string>("");
+  const [budgetToDeleteId, setBudgetToDeleteId] = useState<string | null>(null);
+
+  const activeClosedRecord = useMemo(() => {
+    return closedPeriods.find((p) => p.period === period) || null;
   }, [closedPeriods, period]);
+
+  const isPeriodClosed = Boolean(activeClosedRecord);
+
+  const canEditBudget = !isOwner && !isPeriodClosed;
 
   // ─── CATEGORY MAPPING HELPERS ─────────────────────────────────────────────
   const getCategoryType = (categoryId?: string | null): string => {
@@ -116,45 +150,75 @@ const FinanceReports: React.FC = () => {
     return "PENGELUARAN";
   };
 
-  const getCategoryName = (categoryId?: string | null, fallback = "Lainnya"): string => {
-    if (!categoryId) return fallback;
-    const cat = expenseCategories.find((c) => c.id === categoryId);
-    return cat ? cat.name : fallback;
+  // ─── FILTER DATA BY PERIOD OR DATE RANGE (ZONA WAKTU WITA) ───────────────
+  const normalizedRangeStart =
+    rangeStartDate <= rangeEndDate ? rangeStartDate : rangeEndDate;
+  const normalizedRangeEnd =
+    rangeStartDate <= rangeEndDate ? rangeEndDate : rangeStartDate;
+
+  const matchesFilterDate = (rawDate: string | undefined | null): boolean => {
+    if (!rawDate) return false;
+    if (filterMode === "range") {
+      const day = getLocalDateString(new Date(rawDate));
+      return Boolean(
+        day &&
+          (!normalizedRangeStart || day >= normalizedRangeStart) &&
+          (!normalizedRangeEnd || day <= normalizedRangeEnd)
+      );
+    }
+    return getLocalPeriodFromTimestamp(rawDate) === period;
   };
 
-  // ─── FILTER DATA BY PERIOD ────────────────────────────────────────────────
-  const periodTransactions = useMemo(() => {
-    return cashTransactions.filter((t) => {
-      if (!t.date.startsWith(period)) return false;
-      if (isNonOperationalCashTransaction(t)) return false;
-      return true;
-    });
-  }, [cashTransactions, period]);
+  const activeFilterLabel =
+    filterMode === "monthly"
+      ? period
+      : `${normalizedRangeStart} s.d. ${normalizedRangeEnd}`;
 
-  const periodSales = useMemo(() => {
-    return salesTransactions.filter((s) => s.date.startsWith(period));
-  }, [salesTransactions, period]);
+  const periodAllCashTransactions = useMemo(() => {
+    return cashTransactions.filter((t) => matchesFilterDate(t.date));
+  }, [cashTransactions, filterMode, period, normalizedRangeStart, normalizedRangeEnd]);
+
+  const periodTransactions = useMemo(() => {
+    return periodAllCashTransactions.filter((t) => !isNonOperationalCashTransaction(t));
+  }, [periodAllCashTransactions]);
 
   const periodRecaps = useMemo(() => {
-    return dailySalesRecaps.filter((r) => r.date.startsWith(period));
-  }, [dailySalesRecaps, period]);
+    return dailySalesRecaps.filter((r) => matchesFilterDate(r.date));
+  }, [dailySalesRecaps, filterMode, period, normalizedRangeStart, normalizedRangeEnd]);
 
   const periodPayrolls = useMemo(() => {
+    if (filterMode === "range") {
+      const startPeriod = normalizedRangeStart.slice(0, 7);
+      const endPeriod = normalizedRangeEnd.slice(0, 7);
+      return payrollRecords.filter(
+        (p) => p.period >= startPeriod && p.period <= endPeriod
+      );
+    }
     return payrollRecords.filter((p) => p.period === period);
-  }, [payrollRecords, period]);
+  }, [payrollRecords, filterMode, period, normalizedRangeStart, normalizedRangeEnd]);
 
   const periodPurchaseOrders = useMemo(() => {
-    return purchaseOrders.filter((po) => po.date.startsWith(period));
-  }, [purchaseOrders, period]);
+    return purchaseOrders.filter((po) => matchesFilterDate(po.date));
+  }, [purchaseOrders, filterMode, period, normalizedRangeStart, normalizedRangeEnd]);
 
-  const periodBankRecon = useMemo(() => {
-    return bankReconciliations.find((r) => r.period === period) || null;
-  }, [bankReconciliations, period]);
+  const periodBankRecons = useMemo(() => {
+    if (filterMode === "range") {
+      const startPeriod = normalizedRangeStart.slice(0, 7);
+      const endPeriod = normalizedRangeEnd.slice(0, 7);
+      return bankReconciliations.filter(
+        (r) => r.period >= startPeriod && r.period <= endPeriod
+      );
+    }
+    return bankReconciliations.filter((r) => r.period === period);
+  }, [bankReconciliations, filterMode, period, normalizedRangeStart, normalizedRangeEnd]);
 
   // ─── I. PENDAPATAN OPERASIONAL (REVENUE) TERPUSAT ───────────────────────────
   const unifiedPeriodSummary = useMemo(() => {
     return computePeriodFinancialSummary({
-      period,
+      period: filterMode === "monthly" ? period : "ALL",
+      ...(filterMode === "range"
+        ? { startDate: normalizedRangeStart, endDate: normalizedRangeEnd }
+        : {}),
       salesTransactions,
       dailySalesRecaps,
       cashTransactions,
@@ -169,7 +233,10 @@ const FinanceReports: React.FC = () => {
       cashAccounts,
     });
   }, [
+    filterMode,
     period,
+    normalizedRangeStart,
+    normalizedRangeEnd,
     salesTransactions,
     dailySalesRecaps,
     cashTransactions,
@@ -252,8 +319,15 @@ const FinanceReports: React.FC = () => {
     ];
     return periodTransactions.filter((t) => {
       if (t.type !== "CASH_OUT") return false;
+      if (isCapexCashTransaction(t, expenseCategories)) return false;
       const catType = getCategoryType(t.categoryId);
       const catText = (t.category || "").toLowerCase();
+      const isBahan =
+        catType === "BAHAN_BAKU" ||
+        t.categoryId === "cat-bahan-baku" ||
+        catText.includes("bahan") ||
+        catText.includes("cogs");
+      if (isBahan) return false;
       return (
         catType === "HRD" ||
         t.categoryId === "cat-hrd" ||
@@ -293,6 +367,27 @@ const FinanceReports: React.FC = () => {
   // ─── V. LABA BERSIH OPERASIONAL (NET OPERATING PROFIT) ────────────────────
   const netOperatingProfit = unifiedPeriodSummary.netProfit;
   const netProfitMargin = unifiedPeriodSummary.netMarginPercent;
+
+  // ─── V-A. ALOKASI KEUNTUNGAN & BAGI HASIL OWNER ──────────────────────────
+  const profitAllocation = useMemo(() => {
+    return computeOwnerProfitAllocation({
+      netProfit: netOperatingProfit,
+      cashTransactions: periodAllCashTransactions,
+      cashAccounts,
+      expenseCategories,
+      ownerPercent: settings.profitShareOwnerPercent,
+      reservePercent: settings.profitShareReservePercent,
+      investorPercent: settings.profitShareInvestorPercent,
+    });
+  }, [
+    netOperatingProfit,
+    periodAllCashTransactions,
+    cashAccounts,
+    expenseCategories,
+    settings.profitShareOwnerPercent,
+    settings.profitShareReservePercent,
+    settings.profitShareInvestorPercent,
+  ]);
 
   // ─── V-B. INDIKATOR KESEHATAN BIAYA F&B & BEP OMZET ───────────────────────
   const fnbHealth = useMemo(() => {
@@ -409,34 +504,98 @@ const FinanceReports: React.FC = () => {
 
   // ─── VII. REALISASI VS ANGGARAN (BUDGET COMPARISON) ──────────────────────
   const budgetComparison = useMemo(() => {
-    const periodBudgets = budgets.filter((b) => b.period === period);
-    const expenseByCategory: Record<string, number> = {};
-    periodTransactions
-      .filter((t) => t.type === "CASH_OUT" && t.categoryId)
-      .forEach((t) => {
-        const catId = t.categoryId!;
-        expenseByCategory[catId] = (expenseByCategory[catId] || 0) + t.amount;
-      });
+    return computeBudgetVsActual({
+      period,
+      budgets,
+      cashTransactions,
+      expenseCategories,
+    });
+  }, [period, budgets, cashTransactions, expenseCategories]);
 
+  const eligibleBudgetCategories = useMemo(() => {
+    const existingBudgetCatIds = new Set(
+      budgets
+        .filter((b) => b.period === period && b.id !== editingBudgetId)
+        .map((b) => b.categoryId)
+        .filter(Boolean) as string[],
+    );
+    const byId = new Map(expenseCategories.map((c) => [c.id, c]));
     return expenseCategories
-      .map((cat) => {
-        const budget = periodBudgets.find((b) => b.categoryId === cat.id);
-        const budgetAmount = budget ? budget.amount : 0;
-        const actualAmount = expenseByCategory[cat.id] || 0;
-        const variance = budgetAmount - actualAmount;
-        const usagePercentage = budgetAmount > 0 ? (actualAmount / budgetAmount) * 100 : 0;
-
+      .filter(
+        (c) =>
+          c.type !== "PENDAPATAN" &&
+          c.isActive !== false &&
+          !existingBudgetCatIds.has(c.id),
+      )
+      .map((c) => {
+        const parent = c.parentId ? byId.get(c.parentId) : undefined;
         return {
-          category: cat.name,
-          catType: cat.type,
-          budgetAmount,
-          actualAmount,
-          variance,
-          usagePercentage,
+          value: c.id,
+          label: parent ? `${parent.name} ▸ ${c.name}` : c.name,
         };
-      })
-      .filter((item) => item.budgetAmount > 0 || item.actualAmount > 0);
-  }, [budgets, periodTransactions, expenseCategories, period]);
+      });
+  }, [expenseCategories, budgets, period, editingBudgetId]);
+
+  const openBudgetModal = (opts?: {
+    budgetId?: string | null;
+    categoryId?: string;
+    amount?: number;
+  }) => {
+    if (!canEditBudget) return;
+    if (opts?.budgetId) {
+      const existing = budgets.find((b) => b.id === opts.budgetId);
+      setEditingBudgetId(opts.budgetId);
+      setBudgetCategoryId(existing?.categoryId || opts.categoryId || "");
+      setBudgetAmountInput(String(Math.round(existing?.amount ?? opts.amount ?? 0)));
+      setBudgetNotes(existing?.notes || "");
+    } else {
+      setEditingBudgetId(null);
+      setBudgetCategoryId(opts?.categoryId || eligibleBudgetCategories[0]?.value || "");
+      setBudgetAmountInput(opts?.amount && opts.amount > 0 ? String(Math.round(opts.amount)) : "");
+      setBudgetNotes("");
+    }
+    setIsBudgetModalOpen(true);
+  };
+
+  const handleSaveBudget = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEditBudget) return;
+    const amt = Math.round(Number(budgetAmountInput) || 0);
+    if (!budgetCategoryId) {
+      toast.warning("Pilih kategori biaya terlebih dahulu.");
+      return;
+    }
+    if (amt <= 0) {
+      toast.warning("Plafon anggaran harus lebih dari Rp 0.");
+      return;
+    }
+    if (editingBudgetId) {
+      const prev = budgets.find((b) => b.id === editingBudgetId);
+      updateBudget({
+        id: editingBudgetId,
+        categoryId: budgetCategoryId,
+        period,
+        amount: amt,
+        notes: budgetNotes.trim() || null,
+        createdAt: prev?.createdAt || new Date().toISOString(),
+        createdBy: prev?.createdBy || currentUser?.name || "Finance",
+      });
+      toast.success("Plafon anggaran periode berhasil diperbarui.");
+    } else {
+      addBudget({
+        id: `bdg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        categoryId: budgetCategoryId,
+        period,
+        amount: amt,
+        notes: budgetNotes.trim() || null,
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser?.name || "Finance",
+      });
+      toast.success("Plafon anggaran baru berhasil ditambahkan.");
+    }
+    setIsBudgetModalOpen(false);
+    setEditingBudgetId(null);
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -483,10 +642,10 @@ const FinanceReports: React.FC = () => {
                   })
                 );
               }}
-              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+              className="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 dark:bg-brand-500/15 dark:hover:bg-brand-500/25 text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
               title="Catat pemasukan atau pengeluaran kas secara cepat via AI"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300 shrink-0" />
               <span>Catat Cepat AI</span>
             </button>
           )}
@@ -503,22 +662,129 @@ const FinanceReports: React.FC = () => {
                 })
               );
             }}
-            className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             title="Audit kinerja Laba Rugi & biaya operasional dengan AI"
           >
-            <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 shrink-0" />
             <span>Audit AI P&amp;L</span>
           </button>
 
-          <CustomMonthPicker
-            value={period}
-            onChange={setPeriod}
-            allowClear={false}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center p-0.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setFilterMode("monthly")}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  filterMode === "monthly"
+                    ? "bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                Bulan
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode("range")}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  filterMode === "range"
+                    ? "bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                Rentang Hari
+              </button>
+            </div>
+
+            {filterMode === "monthly" ? (
+              <CustomMonthPicker
+                value={period}
+                onChange={setPeriod}
+                allowClear={false}
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs">
+                <CustomDatePicker
+                  value={rangeStartDate}
+                  onChange={setRangeStartDate}
+                  placeholder="Dari"
+                />
+                <span className="text-slate-400 font-semibold">–</span>
+                <CustomDatePicker
+                  value={rangeEndDate}
+                  onChange={setRangeEndDate}
+                  placeholder="Sampai"
+                />
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+              {[
+                {
+                  label: "Hari Ini",
+                  active:
+                    filterMode === "range" &&
+                    normalizedRangeStart === getLocalDateString() &&
+                    normalizedRangeEnd === getLocalDateString(),
+                  onClick: () => {
+                    const today = getLocalDateString();
+                    setFilterMode("range");
+                    setRangeStartDate(today);
+                    setRangeEndDate(today);
+                  },
+                },
+                {
+                  label: "7 Hari",
+                  active:
+                    filterMode === "range" &&
+                    normalizedRangeStart === addDaysToLocalDate(getLocalDateString(), -6) &&
+                    normalizedRangeEnd === getLocalDateString(),
+                  onClick: () => {
+                    const today = getLocalDateString();
+                    setFilterMode("range");
+                    setRangeStartDate(addDaysToLocalDate(today, -6));
+                    setRangeEndDate(today);
+                  },
+                },
+                {
+                  label: "Bulan Ini",
+                  active:
+                    filterMode === "monthly" && period === getLocalPeriodString(),
+                  onClick: () => {
+                    setFilterMode("monthly");
+                    setPeriod(getLocalPeriodString());
+                  },
+                },
+                {
+                  label: "Bulan Lalu",
+                  active:
+                    filterMode === "monthly" &&
+                    period === getPreviousPeriodString(getLocalPeriodString()),
+                  onClick: () => {
+                    setFilterMode("monthly");
+                    setPeriod(getPreviousPeriodString(getLocalPeriodString()));
+                  },
+                },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={preset.onClick}
+                  className={`px-2.5 py-1.5 rounded-xl font-semibold border transition-all cursor-pointer whitespace-nowrap ${
+                    preset.active
+                      ? "bg-brand-600 text-white border-brand-600 shadow-2xs"
+                      : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <button
+            type="button"
             onClick={() => setIsExportOpen(true)}
-            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-sm shadow-brand-600/20 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5 text-white shrink-0" />
             <span>Ekspor Laporan</span>
@@ -547,7 +813,25 @@ const FinanceReports: React.FC = () => {
       )}
 
       {/* ── PERIOD MANAGEMENT BANNER (FINANCE / MANAGER / SUPER_ADMIN) ─── */}
-      {canManagePeriod && (
+      {canManagePeriod && filterMode === "range" && (
+        <div className="p-4 rounded-2xl bg-brand-50/60 dark:bg-brand-500/10 border border-brand-200/80 dark:border-brand-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-200">
+            <Calendar className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0" />
+            <span>
+              Sedang meninjau rentang <strong>{activeFilterLabel}</strong>. Aksi Tutup Buku hanya berlaku pada mode <strong>Bulan</strong>.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFilterMode("monthly")}
+            className="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer shrink-0"
+          >
+            Buka Mode Bulanan ({period})
+          </button>
+        </div>
+      )}
+
+      {canManagePeriod && filterMode === "monthly" && (
         <div
           className={`p-4 sm:p-5 rounded-3xl border transition-all space-y-3 ${
             isPeriodClosed
@@ -573,24 +857,41 @@ const FinanceReports: React.FC = () => {
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {isPeriodClosed
-                    ? "Periode ini telah dikunci resmi. Seluruh mutasi kas, transaksi penjualan, opname, dan payroll tidak dapat diubah."
-                    : "Kunci periode ini jika seluruh pembukuan bulan ini sudah final untuk mengunci angka laporan dari modifikasi tidak disengaja."}
+                    ? `Dikunci oleh ${activeClosedRecord?.closedBy || "Admin"} — mutasi kas, penjualan, opname, dan payroll bulan ini terkunci (absensi staf harian tetap berjalan).`
+                    : "Kunci periode ini jika pembukuan bulan ini sudah final untuk membekukan angka laporan dan mencegah perubahan data masa lalu."}
                 </p>
               </div>
             </div>
 
             <div className="shrink-0">
               {isPeriodClosed ? (
-                <button
-                  onClick={() => setPeriodConfirmAction("reopen")}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
-                >
-                  <Unlock className="w-3.5 h-3.5" />
-                  <span>Buka Kembali Buku</span>
-                </button>
+                canReopenPeriod ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReopenReason("");
+                      setReopenPin("");
+                      setReopenError(null);
+                      setPeriodConfirmAction("reopen");
+                    }}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Buka Buku (PIN Manager)</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-100/80 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200 text-[11px] font-bold">
+                    <Lock className="w-3.5 h-3.5" />
+                    Buka Buku Khusus Manager
+                  </span>
+                )
               ) : (
                 <button
-                  onClick={() => setPeriodConfirmAction("close")}
+                  type="button"
+                  onClick={() => {
+                    setCloseNotes("");
+                    setPeriodConfirmAction("close");
+                  }}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-xs shadow-brand-600/20 transition-all cursor-pointer active:scale-95"
                 >
                   <Lock className="w-3.5 h-3.5" />
@@ -600,7 +901,59 @@ const FinanceReports: React.FC = () => {
             </div>
           </div>
 
-          {/* Checklist Kesiapan Tutup Buku (Informatif) */}
+          {isPeriodClosed && activeClosedRecord?.snapshot && (
+            <div className="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-rose-200/80 dark:border-rose-500/30 p-3.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  Arsip Snapshot Terkunci
+                </span>
+                {activeClosedRecord.notes && (
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Catatan: {activeClosedRecord.notes}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Omzet Bersih</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatCurrency(activeClosedRecord.snapshot.netSales)}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Laba Bersih</span>
+                  <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+                    {formatCurrency(activeClosedRecord.snapshot.netProfit)}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                    Hak Owner ({activeClosedRecord.snapshot.ownerSharePercent}%)
+                  </span>
+                  <strong className="font-mono tabular-nums text-brand-700 dark:text-brand-300">
+                    {formatCurrency(activeClosedRecord.snapshot.ownerShareAmount)}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                    Tabungan ({activeClosedRecord.snapshot.reserveSharePercent}%)
+                  </span>
+                  <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                    {formatCurrency(activeClosedRecord.snapshot.reserveShareAmount)}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Prive Owner</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatCurrency(activeClosedRecord.snapshot.ownerPriveTotal)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Checklist Kesiapan Tutup Buku (Soft Warning) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/60">
             {closingChecklist.map((chk) => (
               <div
@@ -624,25 +977,27 @@ const FinanceReports: React.FC = () => {
       )}
 
       {/* ── TAB NAVIGATION BAR ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-1 overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-1 overflow-x-auto no-scrollbar">
         <button
+          type="button"
           onClick={() => setActiveTab("pnl")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "pnl"
-              ? "bg-brand-600 text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              ? "bg-brand-600 text-white shadow-sm shadow-brand-600/20"
+              : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Laporan Laba Rugi (P&L)</span>
+          <span>Laporan Laba Rugi (P&amp;L)</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab("budget")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "budget"
-              ? "bg-brand-600 text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              ? "bg-brand-600 text-white shadow-sm shadow-brand-600/20"
+              : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
           <PieChartIcon className="w-4 h-4" />
@@ -650,15 +1005,16 @@ const FinanceReports: React.FC = () => {
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab("reconciliation")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "reconciliation"
-              ? "bg-brand-600 text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              ? "bg-brand-600 text-white shadow-sm shadow-brand-600/20"
+              : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
           <Scale className="w-4 h-4" />
-          <span>Audit & Rekonsiliasi Kas</span>
+          <span>Audit &amp; Rekonsiliasi Kas</span>
         </button>
       </div>
 
@@ -818,6 +1174,93 @@ const FinanceReports: React.FC = () => {
                     Net Margin: {netProfitMargin.toFixed(1)}%
                   </span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── REKAP KEUNTUNGAN & BAGI HASIL OWNER ───────────────────────── */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
+                  <span>Rekap Keuntungan &amp; Bagi Hasil Owner ({activeFilterLabel})</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Laba bersih dikurangi penarikan Prive Owner, beserta alokasi cadangan Tabungan Kedai &amp; CapEx periode ini.
+                </p>
+              </div>
+              <span className="self-start sm:self-auto px-3 py-1 rounded-full text-[11px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30">
+                Owner {profitAllocation.ownerSharePercent}% • Tabungan {profitAllocation.reserveSharePercent}%
+                {profitAllocation.investorSharePercent > 0 ? ` • Investor ${profitAllocation.investorSharePercent}%` : ""}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* 1. Porsi Owner & Sisa Hak */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 border border-brand-200/70 dark:border-brand-500/30 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span>Sisa Hak Owner ({profitAllocation.ownerSharePercent}%)</span>
+                  <Wallet className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                </div>
+                <p className={`text-xl font-black font-mono tabular-nums ${profitAllocation.ownerRemainingEntitlement >= 0 ? "text-brand-700 dark:text-brand-300" : "text-rose-600 dark:text-rose-300"}`}>
+                  {formatCurrency(profitAllocation.ownerRemainingEntitlement)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Porsi: {formatCurrency(profitAllocation.ownerShareAmount)} − Prive: {formatCurrency(profitAllocation.ownerPriveTotal)}
+                </p>
+              </div>
+
+              {/* 2. Cadangan Tabungan Kedai */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/70 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 border border-amber-200/70 dark:border-amber-500/30 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span>Tabungan Kedai ({profitAllocation.reserveSharePercent}%)</span>
+                  <PiggyBank className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300" />
+                </div>
+                <p className="text-xl font-black font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                  {formatCurrency(profitAllocation.reserveShareAmount)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Tersetor: {formatCurrency(profitAllocation.netSavingsAllocation)} • Sisa target: {formatCurrency(profitAllocation.reserveRemainingToTransfer)}
+                </p>
+              </div>
+
+              {/* 3. Laba Ditahan Setelah Prive */}
+              <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span>Laba Ditahan Bersih</span>
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />
+                </div>
+                <p className={`text-xl font-black font-mono tabular-nums ${profitAllocation.retainedProfitAfterPrive >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>
+                  {formatCurrency(profitAllocation.retainedProfitAfterPrive)}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  Laba Bersih {formatCurrency(profitAllocation.netProfit)} − Prive
+                </p>
+              </div>
+
+              {/* 4. CapEx / Investor */}
+              <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span>
+                    {profitAllocation.investorSharePercent > 0
+                      ? `Porsi Investor (${profitAllocation.investorSharePercent}%) & CapEx`
+                      : "Pengeluaran CapEx Terpisah"}
+                  </span>
+                  <Building2 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                </div>
+                <p className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                  {formatCurrency(
+                    profitAllocation.investorSharePercent > 0
+                      ? profitAllocation.investorShareAmount
+                      : profitAllocation.capexExpense
+                  )}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  {profitAllocation.investorSharePercent > 0
+                    ? `CapEx periode: ${formatCurrency(profitAllocation.capexExpense)}`
+                    : "Pembelian alat/aset tidak memotong Net Profit"}
+                </p>
               </div>
             </div>
           </div>
@@ -1077,49 +1520,53 @@ const FinanceReports: React.FC = () => {
                       I. Pendapatan Operasional (Revenue)
                     </td>
                   </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="p-3 sm:px-6 pl-8 text-slate-700">
+                  <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                    <td className="p-3 sm:px-6 pl-8 text-slate-700 dark:text-slate-300">
                       Penjualan Toko / Omzet Kotor (Gross Sales)
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">
                       {formatCurrency(grossSales)}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 text-center text-slate-400">100.0%</td>
+                    <td className="p-3 text-center text-slate-500 dark:text-slate-400 tabular-nums">
+                      {netSales > 0 ? `${((grossSales / netSales) * 100).toFixed(1)}%` : "0.0%"}
+                    </td>
                   </tr>
-                  <tr className="hover:bg-slate-50/50 text-slate-500">
+                  <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 text-slate-500 dark:text-slate-400">
                     <td className="p-3 sm:px-6 pl-8">
                       Potongan Penjualan / Diskon Promo (-)
                     </td>
-                    <td className="p-3 text-right font-mono tabular-nums text-rose-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-rose-600 dark:text-rose-400">
                       {totalDiscountAmount > 0 ? `-${formatCurrency(totalDiscountAmount)}` : "Rp 0"}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 text-center text-slate-400">
-                      {netSales > 0 ? ((totalDiscountAmount / netSales) * 100).toFixed(1) : 0}%
+                    <td className="p-3 text-center text-slate-400 tabular-nums">
+                      {netSales > 0 ? `${((totalDiscountAmount / netSales) * 100).toFixed(1)}%` : "0.0%"}
                     </td>
                   </tr>
-                  <tr className="hover:bg-slate-50/50 text-slate-500">
+                  <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 text-slate-500 dark:text-slate-400">
                     <td className="p-3 sm:px-6 pl-8">
                       Pengembalian Dana / Refund / Void POS (-)
                     </td>
-                    <td className="p-3 text-right font-mono tabular-nums text-rose-600">
+                    <td className="p-3 text-right font-mono tabular-nums text-rose-600 dark:text-rose-400">
                       {totalRefundAmount > 0 ? `-${formatCurrency(totalRefundAmount)}` : "Rp 0"}
                     </td>
                     <td className="p-3 sm:px-6 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 text-center text-slate-400">
-                      {netSales > 0 ? ((totalRefundAmount / netSales) * 100).toFixed(1) : 0}%
+                    <td className="p-3 text-center text-slate-400 tabular-nums">
+                      {netSales > 0 ? `${((totalRefundAmount / netSales) * 100).toFixed(1)}%` : "0.0%"}
                     </td>
                   </tr>
-                  <tr className="bg-emerald-50/40 font-bold text-emerald-950 border-t border-b border-emerald-100">
+                  <tr className="bg-emerald-50/40 dark:bg-emerald-500/10 font-bold text-emerald-950 dark:text-emerald-200 border-t border-b border-emerald-100 dark:border-emerald-500/30">
                     <td className="p-3.5 sm:px-6">
                       = Total Penjualan Bersih (Net Revenue)
                     </td>
                     <td className="p-3 text-right font-mono text-slate-400">-</td>
-                    <td className="p-3 sm:px-6 text-right font-mono tabular-nums text-emerald-700 text-sm font-black">
+                    <td className="p-3 sm:px-6 text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-300 text-sm font-black">
                       {formatCurrency(netSales)}
                     </td>
-                    <td className="p-3 text-center font-bold text-emerald-700">100.0%</td>
+                    <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                      {netSales > 0 ? "100.0%" : "0.0%"}
+                    </td>
                   </tr>
 
                   {/* ── BAGIAN II: HARGA POKOK PENJUALAN (HPP / COGS — OPSI A PERIODIK) ── */}
@@ -1460,20 +1907,33 @@ const FinanceReports: React.FC = () => {
       {/* ── TAB 2: REALISASI VS ANGGARAN (BUDGET VS ACTUAL) ─────────────── */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === "budget" && (
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm overflow-hidden">
+          <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <PieChartIcon className="w-5 h-5 text-brand-600" />
+              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
+                <PieChartIcon className="w-5 h-5 text-brand-600 dark:text-brand-300" />
                 <span>Realisasi Pengeluaran vs Anggaran (Budget vs Actual)</span>
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Pantau plafon anggaran per pos biaya kafe dan deteksi potensi pemborosan sebelum overbudget.
               </p>
             </div>
-            <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-              Periode: {period}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                Periode: {period}
+              </span>
+              {canEditBudget && (
+                <button
+                  type="button"
+                  onClick={() => openBudgetModal()}
+                  disabled={eligibleBudgetCategories.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow-sm shadow-brand-600/20 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Atur Plafon Anggaran</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {budgetComparison.length > 0 ? (
@@ -1482,27 +1942,39 @@ const FinanceReports: React.FC = () => {
               <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                    <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px]">
                       <th className="p-4 sm:px-6">Kategori Pengeluaran</th>
                       <th className="p-4 text-right">Plafon Anggaran</th>
                       <th className="p-4 text-right">Realisasi Kas</th>
                       <th className="p-4 text-right">Sisa Anggaran (Variance)</th>
                       <th className="p-4 text-center">Persentase Penggunaan</th>
+                      {canEditBudget && <th className="p-4 text-center">Aksi</th>}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {budgetComparison.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="p-4 sm:px-6 font-bold text-slate-900">{item.category}</td>
-                        <td className="p-4 text-right font-mono text-slate-600">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {budgetComparison.map((item) => (
+                      <tr key={item.categoryId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="p-4 sm:px-6 font-bold text-slate-900 dark:text-slate-100">
+                          <span>{item.category}</span>
+                          {item.parentName && (
+                            <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/70 dark:border-slate-700">
+                              {item.parentName}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">
                           {item.budgetAmount > 0 ? formatCurrency(item.budgetAmount) : "-"}
                         </td>
-                        <td className="p-4 text-right font-mono font-bold text-slate-900">
+                        <td className="p-4 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
                           {formatCurrency(item.actualAmount)}
                         </td>
                         <td
-                          className={`p-4 text-right font-mono font-bold ${
-                            item.variance < 0 ? "text-rose-600" : "text-emerald-600"
+                          className={`p-4 text-right font-mono tabular-nums font-bold ${
+                            item.budgetAmount === 0
+                              ? "text-slate-400"
+                              : item.variance < 0
+                                ? "text-rose-600 dark:text-rose-400"
+                                : "text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
                           {item.budgetAmount > 0 ? (
@@ -1516,21 +1988,23 @@ const FinanceReports: React.FC = () => {
                         <td className="p-4 text-center">
                           {item.budgetAmount > 0 ? (
                             <div className="flex items-center justify-center gap-2 max-w-[200px] mx-auto">
-                              <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200/60">
+                              <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-200/60 dark:border-slate-700">
                                 <div
                                   className={`h-full rounded-full transition-all ${
                                     item.usagePercentage > 100
                                       ? "bg-rose-500"
                                       : item.usagePercentage > 85
-                                      ? "bg-amber-500"
-                                      : "bg-brand-600"
+                                        ? "bg-amber-500"
+                                        : "bg-brand-600"
                                   }`}
                                   style={{ width: `${Math.min(item.usagePercentage, 100)}%` }}
                                 />
                               </div>
                               <span
-                                className={`text-[11px] font-bold font-mono w-12 text-right ${
-                                  item.usagePercentage > 100 ? "text-rose-600" : "text-slate-700"
+                                className={`text-[11px] font-bold font-mono tabular-nums w-12 text-right ${
+                                  item.usagePercentage > 100
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : "text-slate-700 dark:text-slate-200"
                                 }`}
                               >
                                 {item.usagePercentage.toFixed(0)}%
@@ -1540,6 +2014,37 @@ const FinanceReports: React.FC = () => {
                             <span className="text-[11px] text-slate-400 italic">Tanpa plafon</span>
                           )}
                         </td>
+                        {canEditBudget && (
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openBudgetModal({
+                                    budgetId: item.budgetId,
+                                    categoryId: item.categoryId,
+                                    amount: item.budgetAmount,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 text-[11px] font-bold transition cursor-pointer"
+                                title={item.budgetId ? "Edit Plafon Anggaran" : "Tetapkan Plafon"}
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>{item.budgetId ? "Edit" : "+ Plafon"}</span>
+                              </button>
+                              {item.budgetId && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBudgetToDeleteId(item.budgetId)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition cursor-pointer"
+                                  title="Hapus Plafon Anggaran"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1547,28 +2052,37 @@ const FinanceReports: React.FC = () => {
               </div>
 
               {/* MOBILE VIEW: Ergonomic Card Feed */}
-              <div className="block sm:hidden divide-y divide-slate-100">
-                {budgetComparison.map((item, idx) => (
-                  <div key={idx} className="p-4 space-y-2.5 hover:bg-slate-50/50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 text-xs">{item.category}</span>
-                      <span className="font-mono text-xs font-black text-slate-900">
+              <div className="block sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                {budgetComparison.map((item) => (
+                  <div key={item.categoryId} className="p-4 space-y-2.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 text-xs block truncate">
+                          {item.category}
+                        </span>
+                        {item.parentName && (
+                          <span className="text-[10px] text-slate-400">{item.parentName}</span>
+                        )}
+                      </div>
+                      <span className="font-mono tabular-nums text-xs font-black text-slate-900 dark:text-slate-100 shrink-0">
                         {formatCurrency(item.actualAmount)}
                       </span>
                     </div>
 
                     {item.budgetAmount > 0 ? (
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                           <span>
                             Anggaran:{" "}
-                            <strong className="font-mono text-slate-700">
+                            <strong className="font-mono tabular-nums text-slate-700 dark:text-slate-200">
                               {formatCurrency(item.budgetAmount)}
                             </strong>
                           </span>
                           <span
-                            className={`font-mono font-bold ${
-                              item.variance < 0 ? "text-rose-600" : "text-emerald-600"
+                            className={`font-mono tabular-nums font-bold ${
+                              item.variance < 0
+                                ? "text-rose-600 dark:text-rose-400"
+                                : "text-emerald-600 dark:text-emerald-400"
                             }`}
                           >
                             Sisa:{" "}
@@ -1579,21 +2093,23 @@ const FinanceReports: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200/60">
+                          <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-200/60 dark:border-slate-700">
                             <div
                               className={`h-full rounded-full ${
                                 item.usagePercentage > 100
                                   ? "bg-rose-500"
                                   : item.usagePercentage > 85
-                                  ? "bg-amber-500"
-                                  : "bg-brand-600"
+                                    ? "bg-amber-500"
+                                    : "bg-brand-600"
                               }`}
                               style={{ width: `${Math.min(item.usagePercentage, 100)}%` }}
                             />
                           </div>
                           <span
-                            className={`text-[10px] font-mono font-bold ${
-                              item.usagePercentage > 100 ? "text-rose-600" : "text-slate-700"
+                            className={`text-[10px] font-mono tabular-nums font-bold ${
+                              item.usagePercentage > 100
+                                ? "text-rose-600 dark:text-rose-400"
+                                : "text-slate-700 dark:text-slate-200"
                             }`}
                           >
                             {item.usagePercentage.toFixed(0)}%
@@ -1605,14 +2121,51 @@ const FinanceReports: React.FC = () => {
                         Kategori ini belum memiliki plafon anggaran tetap.
                       </span>
                     )}
+
+                    {canEditBudget && (
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openBudgetModal({
+                              budgetId: item.budgetId,
+                              categoryId: item.categoryId,
+                              amount: item.budgetAmount,
+                            })
+                          }
+                          className="text-[11px] font-bold text-brand-600 dark:text-brand-300 cursor-pointer"
+                        >
+                          {item.budgetId ? "Edit Plafon" : "+ Atur Plafon"}
+                        </button>
+                        {item.budgetId && (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetToDeleteId(item.budgetId)}
+                            className="text-[11px] font-bold text-rose-500 cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </>
           ) : (
-            <div className="p-12 text-center text-slate-400 text-xs space-y-2">
+            <div className="p-12 text-center text-slate-400 text-xs space-y-3">
               <PieChartIcon className="w-8 h-8 text-slate-300 mx-auto" />
               <p>Belum ada data anggaran atau realisasi pengeluaran pada periode {period}.</p>
+              {canEditBudget && (
+                <button
+                  type="button"
+                  onClick={() => openBudgetModal()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-sm shadow-brand-600/20 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Atur Plafon Anggaran Pertama</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1731,7 +2284,11 @@ const FinanceReports: React.FC = () => {
                       : "bg-amber-50 text-amber-700 border-amber-200"
                   }`}
                 >
-                  {payrollStats.isMatch ? "✓ Selaras (Match)" : "Perlu Pencairan"}
+                  {payrollStats.isMatch
+                    ? "✓ Selaras (Match)"
+                    : payrollStats.diff < 0
+                      ? "Belum Tercatat di Kas"
+                      : "Ada Biaya SDM Non-Slip"}
                 </span>
               </div>
 
@@ -1830,49 +2387,74 @@ const FinanceReports: React.FC = () => {
             </div>
 
             {/* 4. REKONSILIASI BANK & MUTASI IMPORT */}
-            <div className="p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-2xs space-y-4">
+            <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                  <div className="w-9 h-9 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300">
                     <CreditCard className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-slate-900">Rekonsiliasi Bank</h3>
-                    <p className="text-[11px] text-slate-500">Kesesuaian Catatan Penjualan vs Rekening Koran</p>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Rekonsiliasi Bank</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Kesesuaian Catatan Penjualan vs Rekening Koran ({periodBankRecons.length} akun)
+                    </p>
                   </div>
                 </div>
                 <span
                   className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
-                    periodBankRecon && periodBankRecon.status === "FINAL"
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
+                    periodBankRecons.length > 0 && periodBankRecons.every((r) => r.status === "FINAL")
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                      : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
                   }`}
                 >
-                  {periodBankRecon ? `Status: ${periodBankRecon.status}` : "Belum Direkonsiliasi"}
+                  {periodBankRecons.length === 0
+                    ? "Belum Direkonsiliasi"
+                    : `${periodBankRecons.filter((r) => r.status === "FINAL").length}/${periodBankRecons.length} FINAL`}
                 </span>
               </div>
 
-              {periodBankRecon ? (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Rekening Bank:</span>
-                    <strong className="text-slate-800">{periodBankRecon.bankName}</strong>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Saldo Awal:</span>
-                    <span className="font-mono font-bold text-slate-800">
-                      {formatCurrency(periodBankRecon.openingBalance)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-200/80">
-                    <span className="font-bold text-slate-800">Saldo Akhir:</span>
-                    <span className="font-mono font-black text-brand-600 text-sm">
-                      {formatCurrency(periodBankRecon.closingBalance)}
-                    </span>
-                  </div>
+              {periodBankRecons.length > 0 ? (
+                <div className="space-y-2.5">
+                  {periodBankRecons.map((recon) => {
+                    const lines = bankStatementLines.filter((l) => l.reconciliationId === recon.id);
+                    const matchedCnt = lines.filter((l) => l.isMatched).length;
+                    return (
+                      <div
+                        key={recon.id}
+                        className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/70 dark:border-slate-700 space-y-1.5 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <strong className="text-slate-800 dark:text-slate-100 truncate">
+                            {recon.bankName}
+                          </strong>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              recon.status === "FINAL"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30"
+                                : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30"
+                            }`}
+                          >
+                            {recon.status} ({matchedCnt}/{lines.length} cocok)
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-500 dark:text-slate-400">Saldo Awal:</span>
+                          <span className="font-mono tabular-nums font-bold text-slate-800 dark:text-slate-200">
+                            {formatCurrency(recon.openingBalance)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70 dark:border-slate-700">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">Saldo Akhir:</span>
+                          <span className="font-mono tabular-nums font-black text-brand-600 dark:text-brand-300 text-sm">
+                            {formatCurrency(recon.closingBalance)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="p-6 bg-slate-50/70 rounded-2xl border border-slate-100 text-center text-slate-400 text-xs">
+                <div className="p-6 bg-slate-50/70 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 text-center text-slate-400 text-xs">
                   <p>Belum ada data rekonsiliasi bank resmi yang tersimpan untuk periode {period}.</p>
                   <p className="text-[10px] text-slate-400 mt-1">
                     Gunakan modul Rekonsiliasi Bank untuk mencocokkan mutasi rekening koran hasil import.
@@ -1880,8 +2462,8 @@ const FinanceReports: React.FC = () => {
                 </div>
               )}
 
-              <p className="text-[11px] text-slate-500">
-                Pencocokan rekening koran menjamin keabsahan bukti pembayaran non-tunai (QRIS & EDC).
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Pencocokan rekening koran menjamin keabsahan bukti pembayaran non-tunai (QRIS &amp; EDC).
               </p>
             </div>
           </div>
@@ -1978,40 +2560,456 @@ const FinanceReports: React.FC = () => {
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         defaultModule="finance"
+        defaultPeriod={period}
       />
 
-      {/* ── CONFIRM MODAL TUTUP / BUKA BUKU PERIODE ──────────────────────── */}
+      {/* ── BUDGET ADD/EDIT MODAL ────────────────────────────────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isBudgetModalOpen && (
+              <motion.div
+                key="budget-modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setIsBudgetModalOpen(false);
+                    setEditingBudgetId(null);
+                  }
+                }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden"
+                >
+                  <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/70">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {editingBudgetId ? "Edit Plafon Anggaran" : "Atur Plafon Anggaran Baru"}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Periode Pembukuan: {period}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBudgetModalOpen(false);
+                        setEditingBudgetId(null);
+                      }}
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      aria-label="Tutup modal anggaran"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveBudget} className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Kategori Pengeluaran
+                      </label>
+                      <CustomSelect
+                        value={budgetCategoryId}
+                        onChange={setBudgetCategoryId}
+                        disabled={Boolean(editingBudgetId)}
+                        options={
+                          editingBudgetId
+                            ? expenseCategories
+                                .filter((c) => c.id === budgetCategoryId)
+                                .map((c) => ({ value: c.id, label: c.name }))
+                            : [
+                                { value: "", label: "-- Pilih Kategori Pengeluaran --" },
+                                ...eligibleBudgetCategories,
+                              ]
+                        }
+                        placeholder="Pilih Kategori Pengeluaran"
+                        buttonClassName="w-full px-3.5 py-2.5 rounded-xl border-slate-200 dark:border-slate-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Plafon Anggaran Bulanan (Rp)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
+                          Rp
+                        </span>
+                        <CurrencyInput
+                          value={budgetAmountInput}
+                          onValueChange={setBudgetAmountInput}
+                          placeholder="0"
+                          required
+                          className="w-full pl-9 pr-3.5 py-2.5 text-sm font-extrabold font-mono tabular-nums border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Catatan (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={budgetNotes}
+                        onChange={(e) => setBudgetNotes(e.target.value)}
+                        placeholder="Contoh: Batas maksimal belanja listrik & gas..."
+                        className="w-full px-3.5 py-2.5 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                    </div>
+
+                    <div className="flex gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBudgetModalOpen(false);
+                          setEditingBudgetId(null);
+                        }}
+                        className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-700 text-white shadow-sm shadow-brand-600/20 cursor-pointer"
+                      >
+                        {editingBudgetId ? "Simpan Perubahan" : "Simpan Anggaran"}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      {/* ── CONFIRM DELETE BUDGET ─────────────────────────────────────────── */}
       <ConfirmModal
-        isOpen={periodConfirmAction !== null}
-        variant={periodConfirmAction === "close" ? "danger" : "warning"}
-        title={
-          periodConfirmAction === "close"
-            ? `Kunci & Tutup Buku Periode ${period}?`
-            : `Buka Kembali Pembukuan ${period}?`
-        }
-        message={
-          periodConfirmAction === "close"
-            ? "Pastikan seluruh transaksi kas, payroll, dan inventori sudah selesai. Setelah dikunci, data bulan ini tidak dapat diubah staf."
-            : "Pembukaan kembali periode akan mengizinkan perubahan pembukuan dan dicatat otomatis pada audit log sistem."
-        }
-        confirmLabel={periodConfirmAction === "close" ? "Ya, Kunci Periode" : "Ya, Buka Buku"}
+        isOpen={Boolean(budgetToDeleteId)}
+        variant="danger"
+        title="Hapus Plafon Anggaran?"
+        message={`Plafon anggaran untuk periode ${period} pada kategori ini akan dihapus. Realisasi transaksi kas tetap aman dan tidak ikut terhapus.`}
+        confirmLabel="Ya, Hapus Plafon"
         cancelLabel="Batal"
         onConfirm={() => {
-          if (periodConfirmAction === "close") {
-            closePeriod(
-              period,
-              currentUser?.name || currentUser?.role || "Finance",
-              "Tutup buku rutin"
-            );
-            toast.success(`Pembukuan periode ${period} berhasil dikunci.`);
-          } else if (periodConfirmAction === "reopen") {
-            reopenPeriod(period, "Permintaan koreksi/Buka buku");
-            toast.info(`Pembukuan periode ${period} dibuka kembali.`);
+          if (canEditBudget && budgetToDeleteId) {
+            deleteBudget(budgetToDeleteId);
+            toast.success("Plafon anggaran berhasil dihapus.");
           }
-          setPeriodConfirmAction(null);
+          setBudgetToDeleteId(null);
         }}
-        onCancel={() => setPeriodConfirmAction(null)}
+        onCancel={() => setBudgetToDeleteId(null)}
       />
+
+      {/* ── MODAL TUTUP BUKU (SNAPSHOT) & BUKA BUKU (PIN MANAGER) ────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {periodConfirmAction !== null && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs"
+                onClick={() => {
+                  if (!isVerifyingReopen) setPeriodConfirmAction(null);
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
+                >
+                  <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                          periodConfirmAction === "close"
+                            ? "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300"
+                            : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                        }`}
+                      >
+                        {periodConfirmAction === "close" ? (
+                          <Lock className="w-5 h-5" />
+                        ) : (
+                          <KeyRound className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-slate-100">
+                          {periodConfirmAction === "close"
+                            ? `Kunci & Tutup Buku Periode ${period}`
+                            : `Buka Kembali Pembukuan ${period}`}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {periodConfirmAction === "close"
+                            ? "Snapshot angka akhir akan dibekukan sebagai arsip resmi."
+                            : "Khusus Manager / Super Admin — wajib isi alasan dan verifikasi PIN."}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isVerifyingReopen}
+                      onClick={() => setPeriodConfirmAction(null)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {periodConfirmAction === "close" ? (
+                    <div className="p-5 sm:p-6 space-y-4">
+                      {/* Soft-warning checklist status */}
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Status Kesiapan (Soft Warning)
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {closingChecklist.map((chk) => (
+                            <div
+                              key={chk.label}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                                chk.done
+                                  ? "bg-emerald-50/70 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-500/30"
+                                  : "bg-amber-50/70 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-200/80 dark:border-amber-500/30"
+                              }`}
+                            >
+                              {chk.done ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span className="truncate">{chk.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Ringkasan Snapshot yang akan dibekukan */}
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Omzet Bersih</span>
+                          <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                            {formatCurrency(netSales)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Laba Bersih</span>
+                          <strong className="font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+                            {formatCurrency(netOperatingProfit)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                            Hak Owner ({profitAllocation.ownerSharePercent}%)
+                          </span>
+                          <strong className="font-mono tabular-nums text-brand-700 dark:text-brand-300">
+                            {formatCurrency(profitAllocation.ownerShareAmount)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                            Tabungan Kedai ({profitAllocation.reserveSharePercent}%)
+                          </span>
+                          <strong className="font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                            {formatCurrency(profitAllocation.reserveShareAmount)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Catatan Penutupan (Opsional)
+                        </label>
+                        <input
+                          type="text"
+                          value={closeNotes}
+                          onChange={(e) => setCloseNotes(e.target.value)}
+                          placeholder="Contoh: Tutup buku November final setelah opname & payroll lunas"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2.5 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setPeriodConfirmAction(null)}
+                          className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canManagePeriod) {
+                              setPeriodConfirmAction(null);
+                              return;
+                            }
+                            const snapshot: ClosedPeriodSnapshot = {
+                              netSales,
+                              effectiveCOGS,
+                              grossProfit,
+                              totalOPEX,
+                              netProfit: netOperatingProfit,
+                              ownerPriveTotal: profitAllocation.ownerPriveTotal,
+                              savingsDepositTotal: profitAllocation.savingsDepositTotal,
+                              capexExpense: profitAllocation.capexExpense,
+                              ownerSharePercent: profitAllocation.ownerSharePercent,
+                              reserveSharePercent: profitAllocation.reserveSharePercent,
+                              investorSharePercent: profitAllocation.investorSharePercent,
+                              ownerShareAmount: profitAllocation.ownerShareAmount,
+                              reserveShareAmount: profitAllocation.reserveShareAmount,
+                              investorShareAmount: profitAllocation.investorShareAmount,
+                              ownerRemainingEntitlement: profitAllocation.ownerRemainingEntitlement,
+                              endingOperationalBalance: operationalBalance,
+                              endingSavingsBalance: savingsBalance,
+                              capturedAt: new Date().toISOString(),
+                            };
+                            closePeriod(
+                              period,
+                              currentUser?.name || currentUser?.role || "Finance",
+                              closeNotes.trim() || "Penutupan buku akhir bulan resmi",
+                              snapshot
+                            );
+                            toast.success(`Pembukuan periode ${period} berhasil dikunci & snapshot tersimpan.`);
+                            setPeriodConfirmAction(null);
+                          }}
+                          className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                        >
+                          Ya, Kunci &amp; Simpan Snapshot
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!canReopenPeriod) {
+                          setReopenError("Hanya Manager atau Super Admin yang berwenang membuka kembali buku.");
+                          return;
+                        }
+                        if (reopenReason.trim().length < 5) {
+                          setReopenError("Alasan buka buku wajib diisi minimal 5 karakter.");
+                          return;
+                        }
+                        if (!/^\d{4,8}$/.test(reopenPin.trim())) {
+                          setReopenError("Masukkan PIN Manager/Super Admin (4–8 digit angka).");
+                          return;
+                        }
+                        setIsVerifyingReopen(true);
+                        setReopenError(null);
+                        try {
+                          const res = await authFetch("/api/closed-periods/verify-reopen-pin", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ pin: reopenPin.trim() }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            setReopenError(data?.error || "Verifikasi PIN buka buku gagal.");
+                            return;
+                          }
+                          reopenPeriod(period, reopenReason.trim());
+                          toast.info(`Pembukuan periode ${period} dibuka kembali.`);
+                          setPeriodConfirmAction(null);
+                        } catch {
+                          setReopenError("Gagal menghubungi server untuk verifikasi PIN.");
+                        } finally {
+                          setIsVerifyingReopen(false);
+                        }
+                      }}
+                      className="p-5 sm:p-6 space-y-4"
+                    >
+                      <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                        <span>
+                          Pembukaan kembali buku mengizinkan modifikasi transaksi periode <strong>{period}</strong> dan seluruh aktivitas dicatat di Audit Log.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Alasan Buka Kembali Buku (Wajib, min. 5 karakter)
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          minLength={5}
+                          value={reopenReason}
+                          onChange={(e) => {
+                            setReopenReason(e.target.value);
+                            setReopenError(null);
+                          }}
+                          placeholder="Contoh: Koreksi faktur supplier susu tertinggal tgl 29"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          PIN Otorisasi Manager / Super Admin
+                        </label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          required
+                          value={reopenPin}
+                          onChange={(e) => {
+                            setReopenPin(e.target.value.replace(/\D/g, "").slice(0, 8));
+                            setReopenError(null);
+                          }}
+                          placeholder="••••"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-mono tracking-widest text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                      </div>
+
+                      {reopenError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>{reopenError}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-end gap-2.5 pt-2">
+                        <button
+                          type="button"
+                          disabled={isVerifyingReopen}
+                          onClick={() => setPeriodConfirmAction(null)}
+                          className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isVerifyingReopen || !canReopenPeriod}
+                          className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-60"
+                        >
+                          {isVerifyingReopen ? "Memverifikasi PIN..." : "Verifikasi & Buka Buku"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 };

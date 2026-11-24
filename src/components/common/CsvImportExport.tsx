@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Upload, Download, FileSpreadsheet, ChevronDown, Database, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "../../context/ToastContext";
 import { GenericImportModal } from "./GenericImportModal";
 import {
   buildTemplateWithDropdown,
@@ -100,7 +101,7 @@ export const CsvImportExport: React.FC<CsvImportExportProps> = ({
       await fn();
     } catch (err: any) {
       console.error(err);
-      alert("Gagal membuat template Excel: " + (err?.message || err));
+      toast.error("Gagal membuat template Excel: " + (err?.message || err));
     } finally {
       setIsGenerating(false);
       setIsOpen(false);

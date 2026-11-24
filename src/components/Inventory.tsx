@@ -8,10 +8,19 @@ import { formatCurrency } from "../utils/format";
 import { getLocalDateString } from "../utils/dateUtils";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import {
+  applyDeleteIngredientCategory,
+  applyRenameIngredientCategory,
+  buildIngredientCategoryList,
   DEFAULT_INGREDIENT_CATEGORIES,
   matchesIngredientCategory,
   normalizeIngredientCategoryName,
 } from "../utils/financeMetrics";
+import {
+  recomputeOpnameItemsWithLiveStock,
+  computeMovementActualQuantityAndCost,
+  convertStockInputOnUnitToggle,
+  resolveDefaultTransferStation,
+} from "../utils/syncSanitizers";
 import {
   Plus,
   Search,
@@ -212,6 +221,81 @@ export const getRecipeIngredients = (recipe?: Recipe | null): RecipeIngredient[]
   return [];
 };
 
+const getMovementDisplayMeta = (mov: { type: string; referenceId?: string | null }) => {
+  switch (mov.type) {
+    case "IN":
+      return {
+        label: "Stok Masuk",
+        mobileLabel: "Masuk",
+        prefix: "+",
+        isPositive: true,
+        isWaste: false,
+        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        qtyClass: "text-emerald-700",
+      };
+    case "RETURN":
+      return {
+        label: "Retur Masuk",
+        mobileLabel: "Retur",
+        prefix: "+",
+        isPositive: true,
+        isWaste: false,
+        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        qtyClass: "text-emerald-700",
+      };
+    case "WASTE":
+      return {
+        label: "Terbuang / Rusak",
+        mobileLabel: "Waste",
+        prefix: "-",
+        isPositive: false,
+        isWaste: true,
+        badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+        qtyClass: "text-rose-600",
+      };
+    case "TRANSFER":
+      return {
+        label: "Transfer Stasiun",
+        mobileLabel: "Transfer",
+        prefix: "⇄ ",
+        isPositive: false,
+        isWaste: false,
+        badgeClass: "bg-brand-50 text-brand-700 border-brand-200",
+        qtyClass: "text-brand-700",
+      };
+    case "USAGE":
+      return {
+        label: mov.referenceId ? "Penjualan (Order)" : "Pemakaian Harian",
+        mobileLabel: mov.referenceId ? "Penjualan" : "Pemakaian",
+        prefix: "-",
+        isPositive: false,
+        isWaste: false,
+        badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+        qtyClass: "text-slate-800",
+      };
+    case "ADJUSTMENT":
+      return {
+        label: "Penyesuaian",
+        mobileLabel: "Penyesuaian",
+        prefix: "",
+        isPositive: false,
+        isWaste: false,
+        badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+        qtyClass: "text-slate-800",
+      };
+    default:
+      return {
+        label: mov.type === "OUT" ? "Stok Keluar" : mov.type,
+        mobileLabel: mov.type === "OUT" ? "Keluar" : mov.type,
+        prefix: "-",
+        isPositive: false,
+        isWaste: false,
+        badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+        qtyClass: "text-slate-800",
+      };
+  }
+};
+
 export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) => {
   const {
     ingredients,
@@ -246,6 +330,17 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     userRole === "MANAGER" ||
     userRole === "OWNER" ||
     userRole === "FINANCE";
+  const canManageCategories = !isReadOnly && userRole !== "LEADER";
+  const canNavigateToHpp =
+    Boolean(onNavigate) &&
+    (userRole === "SUPER_ADMIN" || userRole === "OWNER" || userRole === "MANAGER");
+  const canNavigateToPurchases =
+    Boolean(onNavigate) &&
+    !isReadOnly &&
+    (userRole === "SUPER_ADMIN" ||
+      userRole === "MANAGER" ||
+      userRole === "FINANCE" ||
+      userRole === "LEADER");
 
   const userEmployee = useMemo(() => {
     if (!currentUser) return null;
@@ -375,6 +470,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     initialTab || "ingredients"
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [movementSearch, setMovementSearch] = useState("");
+  const [recipeSearch, setRecipeSearch] = useState("");
   const [selectedDivision, setSelectedDivision] = useState<"ALL" | "BAR" | "KITCHEN" | "BAKERY" | "OPERATIONAL">(defaultDivisionFilter);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedLocation, setSelectedLocation] = useState<string>("ALL");
@@ -392,11 +489,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   const [wasteSearch, setWasteSearch] = useState("");
 
   const handleOpenQuickWaste = (targetId?: string) => {
+    if (isReadOnly) return;
+    if (!targetId && accessibleIngredients.length === 0) {
+      toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+      return;
+    }
     const id = targetId || (accessibleIngredients.length > 0 ? accessibleIngredients[0].id : "");
     setWasteIngredientId(id);
-    const ing = ingredients.find((i) => i.id === id);
-    const conv = ing ? getIngredientUnitConversion(ing) : null;
-    setWasteUnitMode(conv?.hasConversion ? "BASE" : "BASE");
+    setWasteUnitMode("BASE");
     setWasteQuantity(1);
     setWasteReason("KALIBRASI");
     setWasteCustomNote("");
@@ -405,19 +505,25 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
   const handleSaveQuickWaste = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wasteIngredientId || wasteQuantity <= 0) return;
+    if (isReadOnly) return;
+    if (!wasteIngredientId || wasteQuantity <= 0) {
+      toast.error("Pilih bahan baku dan masukkan jumlah yang valid (> 0).");
+      return;
+    }
 
     const ing = ingredients.find((i) => i.id === wasteIngredientId);
     if (!ing) return;
 
     const conv = getIngredientUnitConversion(ing);
-    let actualQty = Number(wasteQuantity);
-    if (wasteUnitMode === "PURCHASE" && conv.hasConversion) {
-      actualQty = Number(wasteQuantity) * conv.conversionFactor;
-    }
+    const { actualQuantity: actualQty, unitCost, totalCost: totalLoss } =
+      computeMovementActualQuantityAndCost({
+        quantity: Number(wasteQuantity),
+        unitMode: wasteUnitMode,
+        hasConversion: conv.hasConversion,
+        conversionFactor: conv.conversionFactor,
+        costPerUnit: ing.costPerUnit || 0,
+      });
 
-    const unitCost = ing.costPerUnit || 0;
-    const totalLoss = Math.round(actualQty * unitCost);
     const reasonObj = WASTE_REASONS_DETAIL.find((r) => r.id === wasteReason) || { label: wasteReason };
     const fullNote = `[${wasteReason}] ${reasonObj.label}${wasteCustomNote.trim() ? ` • ${wasteCustomNote.trim()}` : ""}`;
 
@@ -427,12 +533,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       quantity: actualQty,
       date: new Date().toISOString(),
       note: fullNote,
-      unitCost: unitCost,
+      unitCost,
       totalCost: totalLoss,
       createdBy: currentUser?.name || "Staff Barista",
       location: (ing.storageLocation as any) || "BAR",
     } as any);
 
+    toast.success(`Waste "${ing.name}" (${actualQty.toLocaleString("id-ID")} ${ing.unit}) berhasil dicatat.`);
     setIsQuickWasteOpen(false);
     setWasteQuantity(1);
     setWasteCustomNote("");
@@ -447,6 +554,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   // Modals state
   const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  const [ingredientToDelete, setIngredientToDelete] = useState<Ingredient | null>(null);
+  const [recipeToDelete, setRecipeToDelete] = useState<Recipe | null>(null);
   const [isAddMovementOpen, setIsAddMovementOpen] = useState(false);
   const [isAddRecipeOpen, setIsAddRecipeOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
@@ -460,11 +569,21 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
   // Quick Open Transfer Modal (Ambil dari Gudang ke Bar / Dapur)
   const handleOpenTransferModal = (ingredientId?: string) => {
+    if (isReadOnly) return;
+    if (!ingredientId && accessibleIngredients.length === 0) {
+      toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+      return;
+    }
     const targetId = ingredientId || (accessibleIngredients.length > 0 ? accessibleIngredients[0].id : "");
     setSelectedIngredientForMove(targetId);
     setMovementType("TRANSFER");
-    setMovementTargetStation(userDivision !== "ALL" ? userDivision : "BAR");
     const ing = ingredients.find((i) => i.id === targetId);
+    setMovementTargetStation(
+      resolveDefaultTransferStation({
+        ingredientStorageLocation: ing?.storageLocation,
+        userDivision,
+      })
+    );
     const conv = ing ? getIngredientUnitConversion(ing) : null;
     setMovementUnitMode(conv?.hasConversion ? "PURCHASE" : "BASE");
     setMovementQuantity(1);
@@ -473,29 +592,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     setIsAddMovementOpen(true);
   };
 
-  // Kategori Bahan Dinamis (termasuk Bahan Olahan & kustom dari Settings)
-  const ingredientCategoriesList = useMemo(() => {
-    const base =
-      Array.isArray(settings?.ingredientCategories) && settings.ingredientCategories.length > 0
-        ? settings.ingredientCategories
-        : DEFAULT_INGREDIENT_CATEGORIES;
-    const seen = new Set<string>();
-    const result: string[] = [];
-    const addUnique = (name: string) => {
-      const clean = String(name || "").trim();
-      if (!clean) return;
-      const key = clean.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(clean);
-      }
-    };
-    base.forEach(addUnique);
-    if (!seen.has("bahan olahan")) addUnique("Bahan Olahan");
-    ingredients.forEach((ing) => addUnique(normalizeIngredientCategoryName(ing.category)));
-    if (!seen.has("lainnya")) addUnique("Lainnya");
-    return result;
-  }, [settings?.ingredientCategories, ingredients]);
+  // Kategori Bahan Dinamis (dari Settings + kategori aktual pada daftar bahan)
+  const ingredientCategoriesList = useMemo(
+    () => buildIngredientCategoryList(settings?.ingredientCategories, ingredients),
+    [settings?.ingredientCategories, ingredients]
+  );
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -517,6 +618,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const handleAddCategory = (rawName: string): string | null => {
+    if (!canManageCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori bahan.");
+      return null;
+    }
     const clean = rawName.trim();
     if (!clean) {
       toast.error("Nama kategori tidak boleh kosong.");
@@ -532,13 +637,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     const baseWithoutLainnya = ingredientCategoriesList.filter(
       (c) => c.toLowerCase() !== "lainnya"
     );
-    const next = [...baseWithoutLainnya, clean, "Lainnya"];
+    const hasLainnya = ingredientCategoriesList.some(
+      (c) => c.toLowerCase() === "lainnya"
+    );
+    const next = hasLainnya
+      ? [...baseWithoutLainnya, clean, "Lainnya"]
+      : [...baseWithoutLainnya, clean];
     persistCategories(next);
     toast.success(`Kategori "${clean}" ditambahkan.`);
     return clean;
   };
 
   const handleSaveRenameCategory = (oldName: string) => {
+    if (!canManageCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori bahan.");
+      return;
+    }
     const cleanNew = editingCatNew.trim();
     if (!cleanNew) {
       toast.error("Nama kategori baru tidak boleh kosong.");
@@ -551,13 +665,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       toast.error(`Kategori "${cleanNew}" sudah digunakan.`);
       return;
     }
-    const next = ingredientCategoriesList.map((c) => (c === oldName ? cleanNew : c));
-    persistCategories(next);
-    ingredients.forEach((ing) => {
-      if (ing.category.trim().toLowerCase() === oldName.toLowerCase()) {
-        updateIngredient({ ...ing, category: cleanNew });
-      }
+    const { updatedCategories, updatedIngredients } = applyRenameIngredientCategory({
+      currentList: ingredientCategoriesList,
+      oldName,
+      newName: cleanNew,
+      ingredients,
     });
+    persistCategories(updatedCategories);
+    updatedIngredients.forEach((updatedIng) => updateIngredient(updatedIng));
     if (selectedCategory === oldName) setSelectedCategory(cleanNew);
     setEditingCatOld(null);
     setEditingCatNew("");
@@ -565,21 +680,29 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const handleConfirmDeleteCategory = () => {
+    if (!canManageCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori bahan.");
+      setCatToDelete(null);
+      return;
+    }
     if (!catToDelete) return;
     if (catToDelete.toLowerCase() === "lainnya") {
       toast.error('Kategori "Lainnya" adalah cadangan bawaan dan tidak dapat dihapus.');
       setCatToDelete(null);
       return;
     }
-    const next = ingredientCategoriesList.filter((c) => c !== catToDelete);
-    persistCategories(next);
-    ingredients.forEach((ing) => {
-      if (ing.category.trim().toLowerCase() === catToDelete.toLowerCase()) {
-        updateIngredient({ ...ing, category: "Lainnya" });
-      }
-    });
+    const { updatedCategories, updatedIngredients, fallbackCategory } =
+      applyDeleteIngredientCategory({
+        currentList: ingredientCategoriesList,
+        targetName: catToDelete,
+        ingredients,
+      });
+    persistCategories(updatedCategories);
+    updatedIngredients.forEach((updatedIng) => updateIngredient(updatedIng));
     if (selectedCategory === catToDelete) setSelectedCategory("ALL");
-    toast.success(`Kategori "${catToDelete}" dihapus. Bahan terkait dipindahkan ke "Lainnya".`);
+    toast.success(
+      `Kategori "${catToDelete}" dihapus. Bahan terkait dipindahkan ke "${fallbackCategory}".`
+    );
     setCatToDelete(null);
   };
 
@@ -613,6 +736,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   const [rowUnitModes, setRowUnitModes] = useState<Record<string, "PURCHASE" | "BASE">>({});
   const [opnameInputDrafts, setOpnameInputDrafts] = useState<Record<string, string>>({});
   const [selectedOpnameForView, setSelectedOpnameForView] = useState<StockOpname | null>(null);
+  const [draftToDeleteId, setDraftToDeleteId] = useState<string | null>(null);
+  const [isCancelOpnameConfirmOpen, setIsCancelOpnameConfirmOpen] = useState(false);
+  const [isFinalizeOpnameConfirmOpen, setIsFinalizeOpnameConfirmOpen] = useState(false);
 
   // Accessible ingredients according to user's station
   const accessibleIngredients = useMemo(() => {
@@ -715,10 +841,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   // Auto calculate costPerUnit when purchasePrice / conversionFactor or OLAHAN batch changes
   const computedCostPerUnit = useMemo(() => {
     if (ingredientEntryMode === "OLAHAN") {
-      if (batchYieldOutput > 0 && batchTotalCost > 0) {
-        return Math.round(batchTotalCost / batchYieldOutput);
+      if (batchYieldOutput > 0) {
+        return Math.round(Math.max(0, batchTotalCost) / batchYieldOutput);
       }
-      return Number(ingredientForm.costPerUnit) || 0;
+      return 0;
     }
     if (!ingredientForm.usePurchaseUnit) {
       return Number(ingredientForm.costPerUnit) || 0;
@@ -753,6 +879,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   // Submit Add / Edit Ingredient
   const handleSubmitIngredient = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!ingredientForm.name.trim()) {
       toast.error("Nama bahan baku tidak boleh kosong.");
       return;
@@ -859,23 +986,36 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   }, [accessibleIngredients]);
 
   const filteredRecipes = useMemo(() => {
-    return recipes.filter((r) => r.menuName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [recipes, searchTerm]);
+    const q = recipeSearch.trim().toLowerCase();
+    if (!q) return recipes;
+    return recipes.filter((r) => r.menuName.toLowerCase().includes(q));
+  }, [recipes, recipeSearch]);
 
   const filteredMovements = useMemo(() => {
+    const q = movementSearch.trim().toLowerCase();
     return stockMovements
       .filter((m) => {
         const ingredient = ingredients.find((i) => i.id === m.ingredientId);
         if (!ingredient) return false;
-        return ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
+        if (!isIngredientAllowedForUser(ingredient, userDivision)) return false;
+        if (!q) return true;
+        return (
+          ingredient.name.toLowerCase().includes(q) ||
+          (m.note && m.note.toLowerCase().includes(q)) ||
+          (m.createdBy && m.createdBy.toLowerCase().includes(q))
+        );
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [stockMovements, ingredients, searchTerm]);
+  }, [stockMovements, ingredients, movementSearch, userDivision]);
 
-  // Waste Analytics & Incident Logs
+  // Waste Analytics & Incident Logs (scoped to user division)
   const wasteMovements = useMemo(() => {
     return stockMovements
-      .filter((m) => m.type === "WASTE")
+      .filter((m) => {
+        if (m.type !== "WASTE") return false;
+        const ing = ingredients.find((i) => i.id === m.ingredientId);
+        return ing ? isIngredientAllowedForUser(ing, userDivision) : isManagerOrAdmin;
+      })
       .map((m) => {
         const ing = ingredients.find((i) => i.id === m.ingredientId);
         const qty = Math.abs(Number(m.quantity) || 0);
@@ -911,7 +1051,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [stockMovements, ingredients]);
+  }, [stockMovements, ingredients, userDivision, isManagerOrAdmin]);
 
   // Scoped & Filtered Waste Movements
   const filteredWasteMovements = useMemo(() => {
@@ -1024,6 +1164,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
   // Export Waste Logs to CSV
   const handleExportWasteCsv = () => {
+    if (filteredWasteMovements.length === 0) {
+      toast.warning("Tidak ada catatan waste untuk diekspor.");
+      return;
+    }
+
     const headers = [
       "Tanggal",
       "Waktu",
@@ -1060,22 +1205,28 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       ];
     });
 
-    const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" +
-      [headers.join(","), ...rows.map((e) => e.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))].join(
-        "\n"
-      );
-    const encodedUri = encodeURI(csvContent);
+    const csvLines = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvLines], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `laporan_waste_kerusakan_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `laporan_waste_kerusakan_${getLocalDateString()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success(`${filteredWasteMovements.length} catatan waste berhasil diekspor ke CSV.`);
   };
 
   // Import CSV / Excel
   const handleImportIngredients = (data: any[]) => {
+    if (isReadOnly || userRole === "LEADER") return;
     let imported = 0;
     let updated = 0;
 
@@ -1136,25 +1287,31 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     });
 
     if (imported > 0 || updated > 0) {
-      alert(`Berhasil menambahkan ${imported} data bahan baru dan memperbarui ${updated} data.`);
+      toast.success(`Berhasil menambahkan ${imported} data bahan baru dan memperbarui ${updated} data.`);
     } else {
-      alert("Tidak ada data valid yang diimpor. Pastikan file Excel/CSV berisi kolom 'Nama Bahan' dan 'Satuan Resep'.");
+      toast.warning("Tidak ada data valid yang diimpor. Pastikan file Excel/CSV berisi kolom 'Nama Bahan' dan 'Satuan Resep'.");
     }
   };
 
   // Handle Add Movement
   const handleAddMovement = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!selectedIngredientForMove || movementQuantity <= 0) {
-      alert("Pilih bahan baku dan masukkan jumlah yang valid.");
+      toast.error("Pilih bahan baku dan masukkan jumlah yang valid (> 0).");
       return;
     }
 
     const ing = ingredients.find((i) => i.id === selectedIngredientForMove);
     const conv = ing ? getIngredientUnitConversion(ing) : null;
-    const factor = (conv?.hasConversion && movementUnitMode === "PURCHASE") ? conv.conversionFactor : 1;
-    const actualQuantity = movementQuantity * factor;
-    const cost = (ing?.costPerUnit || 0) * actualQuantity;
+    const { actualQuantity, unitCost, totalCost: cost } =
+      computeMovementActualQuantityAndCost({
+        quantity: movementQuantity,
+        unitMode: movementUnitMode,
+        hasConversion: Boolean(conv?.hasConversion),
+        conversionFactor: conv?.conversionFactor,
+        costPerUnit: ing?.costPerUnit || 0,
+      });
 
     let defaultNote = "Mutasi Operasional";
     if (movementType === "TRANSFER") {
@@ -1171,12 +1328,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       quantity: actualQuantity,
       date: new Date().toISOString(),
       note: movementNote.trim() || defaultNote,
-      unitCost: ing?.costPerUnit || 0,
+      unitCost,
       totalCost: cost,
       createdBy: currentUser?.name || "Barista / Cook",
       location: (movementTargetStation as any) || (ing?.storageLocation as any) || "BAR",
     } as any);
 
+    toast.success(`Mutasi "${ing?.name || "Bahan"}" (${actualQuantity.toLocaleString("id-ID")} ${ing?.unit || "unit"}) berhasil dicatat.`);
     setIsAddMovementOpen(false);
     setMovementQuantity(1);
     setMovementNote("");
@@ -1184,17 +1342,23 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
   // Stock Opname
   const startOpname = () => {
+    if (isReadOnly) return;
+    // Filter relevant ingredients according to user's division permissions
+    const relevantIngredients = isManagerOrAdmin
+      ? ingredients
+      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
+
+    if (relevantIngredients.length === 0) {
+      toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+      return;
+    }
+
     const newId =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : "op_" + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
     setOpnameId(newId);
     setOpnameDate(getLocalDateString());
-
-    // Filter relevant ingredients according to user's division permissions
-    const relevantIngredients = isManagerOrAdmin
-      ? ingredients
-      : ingredients.filter((ing) => isIngredientAllowedForUser(ing, userDivision));
 
     setOpnameItems(
       relevantIngredients.map((ing) => ({
@@ -1224,6 +1388,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const handleResumeDraft = (draft: StockOpname) => {
+    if (isReadOnly) return;
     setOpnameId(draft.id);
     setOpnameDate((draft.date || "").slice(0, 10) || getLocalDateString());
     const draftItems = stockOpnameItems.filter((i) => i.opnameId === draft.id);
@@ -1235,10 +1400,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     const populatedItems = relevantIngredients.map((ing) => {
       const foundDraftItem = draftItems.find((di) => di.ingredientId === ing.id);
       if (foundDraftItem) {
+        const physicalStock = Math.max(0, Number(foundDraftItem.physicalStock) || 0);
         return {
           ingredientId: ing.id,
-          physicalStock: foundDraftItem.physicalStock,
-          difference: foundDraftItem.difference,
+          physicalStock,
+          difference: physicalStock - ing.currentStock,
           notes: foundDraftItem.notes || "",
         };
       }
@@ -1274,13 +1440,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const handleDeleteDraft = (draftId: string) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus draf stok opname ini? Data draf yang belum difinalisasi akan dihapus permanen.")) {
-      return;
-    }
-    deleteStockOpname(draftId);
-    if (selectedOpnameForView?.id === draftId) {
-      setSelectedOpnameForView(null);
-    }
+    if (isReadOnly) return;
+    setDraftToDeleteId(draftId);
   };
 
   const handleToggleGlobalOpnameMode = () => {
@@ -1375,6 +1536,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
   };
 
   const saveOpname = (status: "DRAFT" | "FINAL") => {
+    if (isReadOnly) return;
     const chosenDate = (opnameDate || getLocalDateString()).slice(0, 10);
     if (
       status === "FINAL" &&
@@ -1408,9 +1570,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       addStockOpname(opname);
     }
 
-    const itemsToSave: StockOpnameItem[] = opnameItems.map((item) => {
-      const ing = ingredients.find((i) => i.id === item.ingredientId);
-      const existingItem = stockOpnameItems.find((oi) => oi.opnameId === opnameId && oi.ingredientId === item.ingredientId);
+    const liveItems = recomputeOpnameItemsWithLiveStock(opnameItems, ingredients);
+
+    const itemsToSave: StockOpnameItem[] = liveItems.map((item) => {
+      const existingItem = stockOpnameItems.find(
+        (oi) => oi.opnameId === opnameId && oi.ingredientId === item.ingredientId
+      );
       const itemId = existingItem
         ? existingItem.id
         : typeof crypto !== "undefined" && crypto.randomUUID
@@ -1421,10 +1586,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         id: itemId,
         opnameId: opname.id,
         ingredientId: item.ingredientId,
-        systemStock: ing ? ing.currentStock : 0,
+        systemStock: item.systemStock,
         physicalStock: item.physicalStock,
         difference: item.difference,
-        unitCost: Number(ing?.costPerUnit) || 0,
+        unitCost: item.unitCost,
         notes: item.notes || null,
       };
     });
@@ -1432,7 +1597,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
     bulkAddStockOpnameItems(itemsToSave);
 
     if (status === "FINAL") {
-      opnameItems.forEach((item) => {
+      liveItems.forEach((item) => {
         const ing = ingredients.find((i) => i.id === item.ingredientId);
         if (item.difference !== 0) {
           addStockMovement({
@@ -1440,8 +1605,12 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             type: item.difference > 0 ? ("IN" as any) : ("OUT" as any),
             quantity: Math.abs(item.difference),
             date: opnameTimestamp,
-            note: `Koreksi Hasil Opname (Sistem: ${ing?.currentStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
+            note: `Koreksi Hasil Opname (Sistem: ${item.systemStock}, Fisik: ${item.physicalStock})${item.notes ? ` - ${item.notes}` : ""}`,
+            unitCost: item.unitCost,
+            totalCost: item.adjustmentTotalCost,
+            referenceId: opname.id,
             createdBy: currentUser?.name || "System",
+            location: (ing?.storageLocation as any) || "BAR",
           });
 
           if (ing) {
@@ -1559,9 +1728,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               </p>
               <span className="text-xs text-slate-500">resep terdaftar</span>
             </div>
-            {onNavigate ? (
+            {canNavigateToHpp ? (
               <button
-                onClick={() => onNavigate("hpp_calculator")}
+                type="button"
+                onClick={() => onNavigate?.("hpp_calculator")}
                 className="mt-1 text-[11px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1 cursor-pointer transition-colors"
               >
                 Buka Kalkulator HPP <ChevronRight className="w-3 h-3" />
@@ -1578,7 +1748,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         {/* Animated Sliding Pill Tab Switcher */}
         <div className="flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 shadow-inner overflow-x-auto no-scrollbar max-w-full w-full xl:w-auto">
           {[
-            { id: "ingredients", label: `Daftar Bahan Baku (${ingredients.length})` },
+            { id: "ingredients", label: `Daftar Bahan Baku (${accessibleIngredients.length})` },
             { id: "categories", label: `Kategori Bahan (${ingredientCategoriesList.length})` },
             { id: "movements", label: "Mutasi & Pemakaian" },
             { id: "opnames", label: "Stok Opname" },
@@ -1649,11 +1819,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   "2. 'Satuan Beli Supplier' adalah kemasan saat Anda belanja: Kg, Liter, Karton, Dus, Botol.",
                   "3. 'Isi per Kemasan Beli' adalah rasio isi: 1 Kg = 1000 gr, 1 Karton Susu = 12000 ml, 1 Dus Cup = 500 pcs.",
                   "4. 'Harga per Satuan Resep (HPP)' adalah modal per gr/ml/pcs. Jika kosong, sistem otomatis menghitung: Harga Beli Kemasan ÷ Isi Kemasan.",
-                  "5. 'Lokasi Simpan' pilih antara: BAR, CHILLER, DRY_STORAGE, KITCHEN, atau BAKERY.",
+                  "5. 'Lokasi Simpan' pilih antara: BAR, CHILLER, DRY_STORAGE, KITCHEN, BAKERY, atau OPERATIONAL.",
                 ]}
                 templateDropdowns={{
                   Kategori: ingredientCategoriesList,
-                  "Lokasi Simpan": ["BAR", "CHILLER", "DRY_STORAGE", "KITCHEN", "BAKERY"],
+                  "Lokasi Simpan": ["BAR", "CHILLER", "DRY_STORAGE", "KITCHEN", "BAKERY", "OPERATIONAL"],
                   "Satuan Resep (Terkecil)": ["gr", "ml", "pcs", "portion"],
                   "Satuan Beli Supplier": [
                     "Kg",
@@ -1678,7 +1848,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   "Kode Bahan": "Kode SKU atau barcode unik (opsional, contoh: BB-001)",
                   "Nama Bahan": "Nama lengkap bahan baku",
                   "Kategori": "Pilih dari dropdown kategori",
-                  "Lokasi Simpan": "Pilih BAR, CHILLER, DRY_STORAGE, KITCHEN, atau BAKERY",
+                  "Lokasi Simpan": "Pilih BAR, CHILLER, DRY_STORAGE, KITCHEN, BAKERY, atau OPERATIONAL",
                   "Satuan Resep (Terkecil)": "gr (gram), ml (mililiter), pcs (gelas/sedotan), portion (porsi)",
                   "Stok Fisik Saat Ini": "Saldo fisik bahan dalam satuan resep (contoh: 5000 gr, bukan 5 kg)",
                   "Batas Minimum (Alert)": "Batas peringatan stok menipis (contoh: 1000 gr)",
@@ -1705,17 +1875,19 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 }))}
               />
               )}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
-                type="button"
-                onClick={() => setIsCategoryModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
-                title="Tambah, ubah nama, atau hapus kategori bahan baku & olahan"
-              >
-                <Sliders className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-                <span>Atur Kategori</span>
-              </motion.button>
+              {canManageCategories && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                  title="Tambah, ubah nama, atau hapus kategori bahan baku & olahan"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                  <span>Atur Kategori</span>
+                </motion.button>
+              )}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -1789,9 +1961,21 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 whileTap={{ scale: 0.96 }}
                 type="button"
                 onClick={() => {
-                  if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
-                  setSelectedIngredientForMove(accessibleIngredients[0].id);
+                  if (accessibleIngredients.length === 0) {
+                    toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+                    return;
+                  }
+                  const firstIng = accessibleIngredients[0];
+                  setSelectedIngredientForMove(firstIng.id);
                   setMovementType("WASTE");
+                  setMovementUnitMode("BASE");
+                  setMovementQuantity(1);
+                  setMovementTargetStation(
+                    resolveDefaultTransferStation({
+                      ingredientStorageLocation: firstIng.storageLocation,
+                      userDivision,
+                    })
+                  );
                   setMovementNote("Kalibrasi Grinder Pagi");
                   setIsAddMovementOpen(true);
                 }}
@@ -1806,13 +1990,25 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 whileTap={{ scale: 0.96 }}
                 type="button"
                 onClick={() => {
-                  if (accessibleIngredients.length === 0) return alert("Belum ada bahan baku terdaftar untuk stasiun Anda.");
-                  setSelectedIngredientForMove(accessibleIngredients[0].id);
+                  if (accessibleIngredients.length === 0) {
+                    toast.warning("Belum ada bahan baku terdaftar untuk stasiun Anda.");
+                    return;
+                  }
+                  const firstIng = accessibleIngredients[0];
+                  setSelectedIngredientForMove(firstIng.id);
                   setMovementType("USAGE");
+                  setMovementUnitMode("BASE");
+                  setMovementQuantity(1);
+                  setMovementTargetStation(
+                    resolveDefaultTransferStation({
+                      ingredientStorageLocation: firstIng.storageLocation,
+                      userDivision,
+                    })
+                  );
                   setMovementNote("");
                   setIsAddMovementOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Catat Pemakaian Harian</span>
@@ -1967,7 +2163,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
             {/* Row 2: Category Horizontal Scrolling Pills (Atur Kategori selalu terlihat di kiri) */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {!isReadOnly && (
+              {canManageCategories && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("categories")}
@@ -1982,8 +2178,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 const IconComponent = cat.id === "ALL" ? Package : getIngredientCategoryIcon(cat.id);
                 const isSelected = selectedCategory === cat.id;
                 const count = cat.id === "ALL"
-                  ? ingredients.length
-                  : ingredients.filter((i) => matchesIngredientCategory(i.category, cat.id)).length;
+                  ? accessibleIngredients.length
+                  : accessibleIngredients.filter((i) => matchesIngredientCategory(i.category, cat.id)).length;
 
                 return (
                   <button
@@ -2062,11 +2258,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => {
-                                if (confirm(`Hapus bahan baku "${item.name}"? Pastikan bahan tidak sedang dipakai di resep aktif.`)) {
-                                  deleteIngredient(item.id);
-                                }
-                              }}
+                              type="button"
+                              onClick={() => setIngredientToDelete(item)}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                               title="Hapus Bahan Baku"
                             >
@@ -2151,18 +2344,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         )}
 
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleOpenTransferModal(item.id)}
-                            className="px-2 py-1 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors active:scale-[0.98]"
-                            title="Keluarkan bahan ini ke stasiun Bar/Kitchen"
-                          >
-                            <ArrowRight className="w-3 h-3 text-brand-600" />
-                            <span>Ambil ke Bar</span>
-                          </button>
-
-                          {(isLow || isOutOfStock) && onNavigate && (
+                          {!isReadOnly && (
                             <button
-                              onClick={() => onNavigate("purchases")}
+                              type="button"
+                              onClick={() => handleOpenTransferModal(item.id)}
+                              className="px-2 py-1 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors active:scale-[0.98]"
+                              title="Keluarkan bahan ini ke stasiun operasional"
+                            >
+                              <ArrowRight className="w-3 h-3 text-brand-600" />
+                              <span>Ambil Stok</span>
+                            </button>
+                          )}
+
+                          {(isLow || isOutOfStock) && canNavigateToPurchases && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigate?.("purchases")}
                               className="px-2.5 py-1 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs active:scale-[0.98]"
                               title="Buka Pembelian untuk order bahan ini"
                             >
@@ -2221,7 +2418,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               )}
             </div>
 
-            {!isReadOnly && (
+            {canManageCategories && (
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -2250,7 +2447,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {ingredientCategoriesList.map((catName) => {
                 const CatIcon = getIngredientCategoryIcon(catName);
-                const itemCount = ingredients.filter((i) =>
+                const itemCount = accessibleIngredients.filter((i) =>
                   matchesIngredientCategory(i.category, catName)
                 ).length;
                 const isEditing = editingCatOld === catName;
@@ -2320,7 +2517,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                               </p>
                             </div>
                           </div>
-                          {!isReadOnly && (
+                          {canManageCategories && (
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
@@ -2387,16 +2584,38 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       {/* ── TAB 2: STOCK MOVEMENTS & USAGE ──────────────────────────────── */}
       {activeTab === "movements" && (
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Riwayat Mutasi & Pemakaian Bahan</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Audit otomatis setiap bahan yang keluar untuk penjualan/order, terbuang (waste), atau masuk dari PO.
               </p>
             </div>
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
-              {filteredMovements.length} Transaksi Tercatat
-            </span>
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              <div className="relative flex-1 md:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari bahan, catatan, operator..."
+                  value={movementSearch}
+                  onChange={(e) => setMovementSearch(e.target.value)}
+                  className="w-full pl-8 pr-7 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50/70 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition-all"
+                />
+                {movementSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setMovementSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                    title="Bersihkan pencarian"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60 whitespace-nowrap tabular-nums">
+                {filteredMovements.length} Transaksi Tercatat
+              </span>
+            </div>
           </div>
 
           {/* DESKTOP & TABLET VIEW: Structured Table */}
@@ -2417,8 +2636,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
               <tbody className="divide-y divide-slate-100">
                 {filteredMovements.map((mov) => {
                   const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
-                  const isPositive = mov.type === "IN" || mov.type === "RETURN";
-                  const isWaste = mov.type === "WASTE";
+                  const meta = getMovementDisplayMeta(mov);
 
                   return (
                     <tr key={mov.id} className="hover:bg-slate-50/70 transition-colors">
@@ -2435,24 +2653,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       </td>
                       <td className="p-4">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                            mov.type === "IN"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : mov.type === "USAGE"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : mov.type === "WASTE"
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : "bg-slate-100 text-slate-700 border-slate-200"
-                          }`}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${meta.badgeClass}`}
                         >
-                          {mov.type === "USAGE" ? "Penjualan (Order)" : mov.type === "WASTE" ? "Terbuang / Rusak" : mov.type}
+                          {meta.label}
                         </span>
                       </td>
                       <td className="p-4 text-slate-600">{(mov as any).location || "BAR"}</td>
-                      <td className={`p-4 font-mono font-bold text-right ${isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-slate-800"}`}>
-                        {isPositive ? "+" : "-"}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
+                      <td className={`p-4 font-mono font-bold text-right tabular-nums ${meta.qtyClass}`}>
+                        {meta.prefix}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
                       </td>
-                      <td className="p-4 font-mono text-slate-600 text-right">
+                      <td className="p-4 font-mono text-slate-600 text-right tabular-nums">
                         {mov.totalCost ? formatCurrency(mov.totalCost) : "-"}
                       </td>
                       <td className="p-4 text-slate-600 max-w-xs truncate">{mov.note || "-"}</td>
@@ -2476,8 +2686,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
           <div className="block md:hidden divide-y divide-slate-100">
             {filteredMovements.map((mov) => {
               const ingredient = ingredients.find((i) => i.id === mov.ingredientId);
-              const isPositive = mov.type === "IN" || mov.type === "RETURN";
-              const isWaste = mov.type === "WASTE";
+              const meta = getMovementDisplayMeta(mov);
 
               return (
                 <div key={mov.id} className="p-4 space-y-2 hover:bg-slate-50/50 transition-colors">
@@ -2485,16 +2694,16 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     <div className="flex items-center gap-2.5">
                       <div
                         className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 border ${
-                          isPositive
+                          meta.isPositive
                             ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                            : isWaste
+                            : meta.isWaste
                             ? "bg-rose-50 text-rose-600 border-rose-100"
-                            : "bg-blue-50 text-blue-600 border-blue-100"
+                            : "bg-brand-50 text-brand-600 border-brand-100"
                         }`}
                       >
-                        {isPositive ? (
+                        {meta.isPositive ? (
                           <Plus className="w-4 h-4 stroke-[2.5]" />
-                        ) : isWaste ? (
+                        ) : meta.isWaste ? (
                           <AlertTriangle className="w-4 h-4 stroke-[2.2]" />
                         ) : (
                           <Layers className="w-4 h-4 stroke-[2.2]" />
@@ -2506,17 +2715,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         </h4>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span
-                            className={`px-2 py-0.2 rounded-md text-[9px] font-bold uppercase tracking-wider border ${
-                              mov.type === "IN"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : mov.type === "USAGE"
-                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : mov.type === "WASTE"
-                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                : "bg-slate-100 text-slate-700 border-slate-200"
-                            }`}
+                            className={`px-2 py-0.2 rounded-md text-[9px] font-bold uppercase tracking-wider border ${meta.badgeClass}`}
                           >
-                            {mov.type === "USAGE" ? "Penjualan" : mov.type === "WASTE" ? "Waste" : mov.type}
+                            {meta.mobileLabel}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
                             • {(mov as any).location || "BAR"}
@@ -2526,15 +2727,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p
-                        className={`text-sm font-extrabold font-mono ${
-                          isPositive ? "text-emerald-700" : isWaste ? "text-rose-600" : "text-slate-900"
-                        }`}
-                      >
-                        {isPositive ? "+" : "-"}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
+                      <p className={`text-sm font-extrabold font-mono tabular-nums ${meta.qtyClass}`}>
+                        {meta.prefix}{mov.quantity.toLocaleString("id-ID")} {ingredient?.unit}
                       </p>
                       {mov.totalCost ? (
-                        <p className="text-[10px] font-mono text-slate-500">
+                        <p className="text-[10px] font-mono text-slate-500 tabular-nums">
                           {formatCurrency(mov.totalCost)}
                         </p>
                       ) : null}
@@ -2649,32 +2846,22 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <button
-                    onClick={() => {
-                      if (confirm("Batalkan sesi opname ini? Angka yang belum disimpan akan hilang.")) {
-                        setIsOpnameMode(false);
-                      }
-                    }}
+                    type="button"
+                    onClick={() => setIsCancelOpnameConfirmOpen(true)}
                     className="flex-1 sm:flex-initial px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-all active:scale-[0.98]"
                   >
                     Batal
                   </button>
                   <button
+                    type="button"
                     onClick={() => saveOpname("DRAFT")}
                     className="flex-1 sm:flex-initial px-4 py-2 bg-brand-100 text-brand-900 border border-brand-200 rounded-xl text-xs font-bold hover:bg-brand-200 cursor-pointer transition-all active:scale-[0.98]"
                   >
                     Simpan Draft
                   </button>
                   <button
-                    onClick={() => {
-                      const diffCount = opnameItems.filter((i) => i.difference !== 0).length;
-                      const msg =
-                        diffCount > 0
-                          ? `Terdapat ${diffCount} bahan dengan selisih stok. Sistem akan otomatis memperbarui stok riil dan mencatat mutasi koreksi. Lanjutkan finalisasi?`
-                          : "Semua stok fisik sesuai dengan sistem. Lanjutkan finalisasi?";
-                      if (confirm(msg)) {
-                        saveOpname("FINAL");
-                      }
-                    }}
+                    type="button"
+                    onClick={() => setIsFinalizeOpnameConfirmOpen(true)}
                     className="w-full sm:w-auto px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -3073,20 +3260,35 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
-                    <button
-                      onClick={() => handleResumeDraft(latestDraft)}
-                      className="flex-1 md:flex-initial px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>Lanjutkan Draf Terakhir</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteDraft(latestDraft.id)}
-                      className="p-2.5 bg-white border border-slate-200 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
-                      title="Hapus draf ini"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!isReadOnly ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleResumeDraft(latestDraft)}
+                          className="flex-1 md:flex-initial px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Lanjutkan Draf Terakhir</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDraft(latestDraft.id)}
+                          className="p-2.5 bg-white border border-slate-200 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                          title="Hapus draf ini"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOpnameForView(latestDraft)}
+                        className="flex-1 md:flex-initial px-5 py-2.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-900 rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Lihat Rincian Draf</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -3243,9 +3445,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                 </td>
                                 <td className="p-3.5 text-center">
                                   <div className="flex items-center justify-center gap-1.5">
-                                    {op.status === "DRAFT" && (
+                                    {op.status === "DRAFT" && !isReadOnly && (
                                       <>
                                         <button
+                                          type="button"
                                           onClick={() => handleResumeDraft(op)}
                                           className="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs active:scale-[0.98]"
                                           title="Lanjutkan pengisian draf ini"
@@ -3254,6 +3457,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                           <span>Lanjutkan</span>
                                         </button>
                                         <button
+                                          type="button"
                                           onClick={() => handleDeleteDraft(op.id)}
                                           className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl transition-all cursor-pointer"
                                           title="Hapus draf ini"
@@ -3335,9 +3539,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                             </div>
 
                             <div className="flex items-center justify-end gap-2 pt-1">
-                              {op.status === "DRAFT" && (
+                              {op.status === "DRAFT" && !isReadOnly && (
                                 <>
                                   <button
+                                    type="button"
                                     onClick={() => handleResumeDraft(op)}
                                     className="px-3 py-1.5 bg-brand-600 text-white rounded-xl text-xs font-bold flex items-center gap-1 active:scale-[0.98]"
                                   >
@@ -3345,6 +3550,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                     <span>Lanjutkan</span>
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => handleDeleteDraft(op.id)}
                                     className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl"
                                   >
@@ -3374,12 +3580,32 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
       {/* ── TAB 4: RECIPES (BOM) ─────────────────────────────────────────── */}
       {activeTab === "recipes" && (
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Resep Takaran Menu (Bill of Materials)</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Setiap resep menentukan bahan apa saja yang otomatis dipotong saat pesanan penjualan dicatat atau diimpor.
               </p>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari nama menu resep..."
+                value={recipeSearch}
+                onChange={(e) => setRecipeSearch(e.target.value)}
+                className="w-full pl-8 pr-7 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50/70 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition-all"
+              />
+              {recipeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setRecipeSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Bersihkan pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -3426,11 +3652,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Hapus resep untuk menu "${recipe.menuName}"?`)) {
-                                deleteRecipe(recipe.id);
-                              }
-                            }}
+                            type="button"
+                            onClick={() => setRecipeToDelete(recipe)}
                             className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                             title="Hapus Resep"
                           >
@@ -3472,11 +3695,8 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm(`Hapus resep untuk menu "${recipe.menuName}"?`)) {
-                            deleteRecipe(recipe.id);
-                          }
-                        }}
+                        type="button"
+                        onClick={() => setRecipeToDelete(recipe)}
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                         title="Hapus Resep"
                       >
@@ -3711,10 +3931,11 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 Filter Alasan:
               </span>
               <button
+                type="button"
                 onClick={() => setWasteFilterReason("ALL")}
                 className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   wasteFilterReason === "ALL"
-                    ? "bg-slate-900 text-white shadow-2xs"
+                    ? "bg-brand-600 text-white shadow-2xs"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
@@ -4010,7 +4231,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-bold text-slate-700">Kategori</label>
-                    {!isReadOnly && (
+                    {canManageCategories && (
                       <div className="flex items-center gap-2.5">
                         <button
                           type="button"
@@ -4322,18 +4543,40 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       <div className="flex gap-1 text-[10px]">
                         <button
                           type="button"
-                          onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "BASE" })}
-                          className={`px-1.5 py-0.5 rounded transition-colors ${
-                            ingredientForm.initialStockUnit === "BASE" ? "bg-slate-800 text-white font-bold" : "text-slate-500 hover:text-slate-700"
+                          onClick={() =>
+                            setIngredientForm((prev) => ({
+                              ...prev,
+                              initialStockUnit: "BASE",
+                              stockInput: convertStockInputOnUnitToggle({
+                                currentValue: prev.stockInput,
+                                fromUnit: prev.initialStockUnit,
+                                toUnit: "BASE",
+                                conversionFactor: prev.conversionFactor,
+                              }),
+                            }))
+                          }
+                          className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                            ingredientForm.initialStockUnit === "BASE" ? "bg-brand-600 text-white font-bold" : "text-slate-500 hover:text-slate-700"
                           }`}
                         >
                           {ingredientForm.unit}
                         </button>
                         <button
                           type="button"
-                          onClick={() => setIngredientForm({ ...ingredientForm, initialStockUnit: "PURCHASE" })}
-                          className={`px-1.5 py-0.5 rounded transition-colors ${
-                            ingredientForm.initialStockUnit === "PURCHASE" ? "bg-slate-800 text-white font-bold" : "text-slate-500 hover:text-slate-700"
+                          onClick={() =>
+                            setIngredientForm((prev) => ({
+                              ...prev,
+                              initialStockUnit: "PURCHASE",
+                              stockInput: convertStockInputOnUnitToggle({
+                                currentValue: prev.stockInput,
+                                fromUnit: prev.initialStockUnit,
+                                toUnit: "PURCHASE",
+                                conversionFactor: prev.conversionFactor,
+                              }),
+                            }))
+                          }
+                          className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                            ingredientForm.initialStockUnit === "PURCHASE" ? "bg-brand-600 text-white font-bold" : "text-slate-500 hover:text-slate-700"
                           }`}
                         >
                           {ingredientForm.purchaseUnit}
@@ -4480,6 +4723,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAddMovementOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
               >
@@ -4496,7 +4740,13 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     setMovementType("TRANSFER");
                     const ing = ingredients.find((i) => i.id === selectedIngredientForMove);
                     const conv = ing ? getIngredientUnitConversion(ing) : null;
-                    if (conv?.hasConversion) setMovementUnitMode("PURCHASE");
+                    setMovementUnitMode(conv?.hasConversion ? "PURCHASE" : "BASE");
+                    setMovementTargetStation(
+                      resolveDefaultTransferStation({
+                        ingredientStorageLocation: ing?.storageLocation,
+                        userDivision,
+                      })
+                    );
                   }}
                   className={`flex-1 min-w-[90px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                     movementType === "TRANSFER" ? "bg-brand-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
@@ -4506,7 +4756,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMovementType("WASTE")}
+                  onClick={() => {
+                    setMovementType("WASTE");
+                    setMovementUnitMode("BASE");
+                  }}
                   className={`flex-1 min-w-[80px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                     movementType === "WASTE" ? "bg-rose-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
@@ -4515,7 +4768,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMovementType("USAGE")}
+                  onClick={() => {
+                    setMovementType("USAGE");
+                    setMovementUnitMode("BASE");
+                  }}
                   className={`flex-1 min-w-[70px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                     movementType === "USAGE" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
                   }`}
@@ -4525,7 +4781,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 {currentUser?.role !== "LEADER" && (
                   <button
                     type="button"
-                    onClick={() => setMovementType("IN")}
+                    onClick={() => {
+                      setMovementType("IN");
+                      setMovementUnitMode("BASE");
+                    }}
                     className={`flex-1 min-w-[70px] py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                       movementType === "IN" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
                     }`}
@@ -4545,8 +4804,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                     setSelectedIngredientForMove(newId);
                     const ing = ingredients.find((i) => i.id === newId);
                     const conv = ing ? getIngredientUnitConversion(ing) : null;
-                    if (conv?.hasConversion && movementType === "TRANSFER") {
-                      setMovementUnitMode("PURCHASE");
+                    setMovementUnitMode(conv?.hasConversion && movementType === "TRANSFER" ? "PURCHASE" : "BASE");
+                    if (movementType === "TRANSFER") {
+                      setMovementTargetStation(
+                        resolveDefaultTransferStation({
+                          ingredientStorageLocation: ing?.storageLocation,
+                          userDivision,
+                        })
+                      );
                     }
                   }}
                   options={accessibleIngredients.map((ing) => ({
@@ -4572,6 +4837,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                         { value: "CHILLER", label: "Kulkas / Chiller Bar" },
                         { value: "KITCHEN", label: "Kitchen / Dapur Makanan" },
                         { value: "BAKERY", label: "Bakery & Pastry Station" },
+                        { value: "OPERATIONAL", label: "Operasional & Kebersihan" },
                       ]}
                       buttonClassName="w-full px-3 py-2 rounded-xl border border-brand-200 bg-white font-bold text-base sm:text-xs text-brand-950"
                     />
@@ -4688,16 +4954,25 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   </div>
 
                   {/* Estimated Loss Display */}
-                  {movementQuantity > 0 && selectedIngredientForMove && (
-                    <div className="mt-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 flex justify-between items-center text-[11px]">
-                      <span className="text-rose-800 font-semibold">Taksiran Nilai Kerugian:</span>
-                      <span className="font-mono font-black text-rose-700 text-sm">
-                        {formatCurrency(
-                          movementQuantity * (ingredients.find((i) => i.id === selectedIngredientForMove)?.costPerUnit || 0)
-                        )}
-                      </span>
-                    </div>
-                  )}
+                  {movementQuantity > 0 && selectedIngredientForMove && (() => {
+                    const targetIng = ingredients.find((i) => i.id === selectedIngredientForMove);
+                    const targetConv = targetIng ? getIngredientUnitConversion(targetIng) : null;
+                    const { totalCost: estimatedLoss } = computeMovementActualQuantityAndCost({
+                      quantity: movementQuantity,
+                      unitMode: movementUnitMode,
+                      hasConversion: Boolean(targetConv?.hasConversion),
+                      conversionFactor: targetConv?.conversionFactor,
+                      costPerUnit: targetIng?.costPerUnit || 0,
+                    });
+                    return (
+                      <div className="mt-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 flex justify-between items-center text-[11px]">
+                        <span className="text-rose-800 font-semibold">Taksiran Nilai Kerugian:</span>
+                        <span className="font-mono font-black text-rose-700 text-sm tabular-nums">
+                          {formatCurrency(estimatedLoss)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -4731,7 +5006,7 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                       ? "bg-rose-600 hover:bg-rose-700"
                       : movementType === "IN"
                       ? "bg-emerald-600 hover:bg-emerald-700"
-                      : "bg-slate-900 hover:bg-black"
+                      : "bg-brand-600 hover:bg-brand-700"
                   }`}
                 >
                   {movementType === "TRANSFER"
@@ -4756,11 +5031,14 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         onClose={() => setIsAddRecipeOpen(false)}
         editingRecipe={editingRecipe}
         ingredients={ingredients}
+        existingRecipes={recipes}
         onSave={(recipeData) => {
           if (editingRecipe) {
-            updateRecipe(editingRecipe.id, recipeData);
+            updateRecipe({ ...editingRecipe, ...recipeData });
+            toast.success(`Resep "${recipeData.menuName}" berhasil diperbarui.`);
           } else {
             addRecipe(recipeData);
+            toast.success(`Resep "${recipeData.menuName}" berhasil ditambahkan.`);
           }
         }}
       />
@@ -4907,8 +5185,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
             <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-2 shrink-0">
               <div>
-                {selectedOpnameForView.status === "DRAFT" && (
+                {selectedOpnameForView.status === "DRAFT" && !isReadOnly && (
                   <button
+                    type="button"
                     onClick={() => handleDeleteDraft(selectedOpnameForView.id)}
                     className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 border border-rose-200 transition-all active:scale-95"
                   >
@@ -4918,8 +5197,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {selectedOpnameForView.status === "DRAFT" && (
+                {selectedOpnameForView.status === "DRAFT" && !isReadOnly && (
                   <button
+                    type="button"
                     onClick={() => handleResumeDraft(selectedOpnameForView)}
                     className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
                   >
@@ -4928,8 +5208,9 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={() => setSelectedOpnameForView(null)}
-                  className="px-5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl cursor-pointer transition-colors active:scale-95"
+                  className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors active:scale-95"
                 >
                   Tutup
                 </button>
@@ -4992,7 +5273,10 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                 <CustomSelect
                   required
                   value={wasteIngredientId}
-                  onChange={setWasteIngredientId}
+                  onChange={(val) => {
+                    setWasteIngredientId(val);
+                    setWasteUnitMode("BASE");
+                  }}
                   options={accessibleIngredients.map((ing) => ({
                     value: ing.id,
                     label: `${ing.name} (Stok: ${ing.currentStock.toLocaleString("id-ID")} ${ing.unit})`,
@@ -5212,35 +5496,37 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
 
                   <div className="p-4 sm:p-6 space-y-4 text-xs">
                     {/* Form Tambah Kategori Baru */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const added = handleAddCategory(newCategoryName);
-                        if (added) setNewCategoryName("");
-                      }}
-                      className="flex items-center gap-2 p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30"
-                    >
-                      <input
-                        type="text"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        placeholder="Nama kategori baru (mis. Topping, Frozen Food)..."
-                        className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                    {canManageCategories && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const added = handleAddCategory(newCategoryName);
+                          if (added) setNewCategoryName("");
+                        }}
+                        className="flex items-center gap-2 p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Tambah</span>
-                      </button>
-                    </form>
+                        <input
+                          type="text"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="Nama kategori baru (mis. Topping, Frozen Food)..."
+                          className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah</span>
+                        </button>
+                      </form>
+                    )}
 
                     {/* Daftar Kategori Eksisting */}
                     <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
                       {ingredientCategoriesList.map((catName) => {
                         const CatIcon = getIngredientCategoryIcon(catName);
-                        const itemCount = ingredients.filter((i) =>
+                        const itemCount = accessibleIngredients.filter((i) =>
                           matchesIngredientCategory(i.category, catName)
                         ).length;
                         const isEditing = editingCatOld === catName;
@@ -5293,29 +5579,31 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
                                     </p>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingCatOld(catName);
-                                      setEditingCatNew(catName);
-                                    }}
-                                    className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                    title="Ubah nama kategori"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  {!isProtected && (
+                                {canManageCategories && (
+                                  <div className="flex items-center gap-1 shrink-0">
                                     <button
                                       type="button"
-                                      onClick={() => setCatToDelete(catName)}
-                                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer"
-                                      title="Hapus kategori"
+                                      onClick={() => {
+                                        setEditingCatOld(catName);
+                                        setEditingCatNew(catName);
+                                      }}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                      title="Ubah nama kategori"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Edit2 className="w-3.5 h-3.5" />
                                     </button>
-                                  )}
-                                </div>
+                                    {!isProtected && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setCatToDelete(catName)}
+                                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                        title="Hapus kategori"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </>
                             )}
                           </div>
@@ -5339,6 +5627,95 @@ export const Inventory: React.FC<InventoryProps> = ({ onNavigate, initialTab }) 
         variant="danger"
         onConfirm={handleConfirmDeleteCategory}
         onCancel={() => setCatToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(ingredientToDelete)}
+        title="Hapus Bahan Baku?"
+        message={`Hapus bahan baku "${ingredientToDelete?.name || ""}" dari daftar stok? Pastikan bahan tidak sedang digunakan dalam resep menu aktif.`}
+        confirmLabel="Ya, Hapus Bahan"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={() => {
+          if (ingredientToDelete) {
+            deleteIngredient(ingredientToDelete.id);
+            toast.success(`Bahan "${ingredientToDelete.name}" berhasil dihapus.`);
+            setIngredientToDelete(null);
+          }
+        }}
+        onCancel={() => setIngredientToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(recipeToDelete)}
+        title="Hapus Resep Menu?"
+        message={`Hapus resep takaran untuk menu "${recipeToDelete?.menuName || ""}"?`}
+        confirmLabel="Ya, Hapus Resep"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={() => {
+          if (recipeToDelete) {
+            deleteRecipe(recipeToDelete.id);
+            toast.success(`Resep "${recipeToDelete.menuName}" berhasil dihapus.`);
+            setRecipeToDelete(null);
+          }
+        }}
+        onCancel={() => setRecipeToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(draftToDeleteId)}
+        title="Hapus Draf Stok Opname?"
+        message="Apakah Anda yakin ingin menghapus draf stok opname ini? Data draf yang belum difinalisasi akan dihapus permanen."
+        confirmLabel="Ya, Hapus Draf"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={() => {
+          if (draftToDeleteId) {
+            deleteStockOpname(draftToDeleteId);
+            if (selectedOpnameForView?.id === draftToDeleteId) {
+              setSelectedOpnameForView(null);
+            }
+            toast.success("Draf stok opname berhasil dihapus.");
+            setDraftToDeleteId(null);
+          }
+        }}
+        onCancel={() => setDraftToDeleteId(null)}
+      />
+
+      <ConfirmModal
+        isOpen={isCancelOpnameConfirmOpen}
+        title="Batalkan Sesi Opname?"
+        message="Batalkan sesi opname ini? Angka hitungan fisik yang belum disimpan sebagai draf akan hilang."
+        confirmLabel="Ya, Batalkan Sesi"
+        cancelLabel="Kembali Menghitung"
+        variant="warning"
+        onConfirm={() => {
+          setIsCancelOpnameConfirmOpen(false);
+          setIsOpnameMode(false);
+        }}
+        onCancel={() => setIsCancelOpnameConfirmOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={isFinalizeOpnameConfirmOpen}
+        title="Finalisasi & Sesuaikan Stok?"
+        message={(() => {
+          const liveDiffCount = recomputeOpnameItemsWithLiveStock(opnameItems, ingredients).filter(
+            (i) => i.difference !== 0
+          ).length;
+          return liveDiffCount > 0
+            ? `Terdapat ${liveDiffCount} bahan dengan selisih stok terhadap saldo terkini. Sistem akan otomatis memperbarui stok riil dan mencatat mutasi koreksi. Lanjutkan finalisasi?`
+            : "Semua stok fisik sesuai dengan saldo sistem terkini. Lanjutkan finalisasi sesi opname ini?";
+        })()}
+        confirmLabel="Ya, Finalisasi Sekarang"
+        cancelLabel="Periksa Kembali"
+        variant="info"
+        onConfirm={() => {
+          setIsFinalizeOpnameConfirmOpen(false);
+          saveOpname("FINAL");
+        }}
+        onCancel={() => setIsFinalizeOpnameConfirmOpen(false)}
       />
     </div>
   );

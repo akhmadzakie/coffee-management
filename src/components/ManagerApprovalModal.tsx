@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "../context/ToastContext";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import { ManagerApprovalRequest } from "../types";
@@ -42,7 +46,7 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
   const fetchPending = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/pos/approvals/pending");
+      const res = await authFetch("/api/pos/approvals/pending");
       if (res.ok) {
         const data = await res.json();
         setRequests(data);
@@ -71,12 +75,10 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
     setActionMessage(null);
 
     try {
-      const token = localStorage.getItem("node_session_id");
-      const res = await fetch(`/api/pos/approvals/${reqId}/respond`, {
+      const res = await authFetch(`/api/pos/approvals/${reqId}/respond`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action,
@@ -96,16 +98,18 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
         await fetchPending();
         onProcessed?.();
       } else {
-        alert(result.error || "Gagal memproses otorisasi");
+        toast.error(result.error || "Gagal memproses otorisasi.");
       }
     } catch (e: any) {
-      alert(e?.message || "Terjadi kesalahan jaringan");
+      toast.error(e?.message || "Terjadi kesalahan jaringan.");
     } finally {
       setProcessingId(null);
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -113,14 +117,16 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="fixed inset-0 z-70 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+          onClick={onClose}
+          className="fixed inset-0 z-70 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: "spring", damping: 28, stiffness: 360 }}
-            className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
           >
         {/* Header */}
         <div className="p-4 px-6 bg-gradient-to-r from-amber-500 to-rose-600 text-white flex items-center justify-between">
@@ -172,9 +178,10 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
             </div>
           ) : (
             requests.map((req) => {
-              const reqTime = new Date(req.requestedAt).toLocaleTimeString([], {
+              const reqTime = new Date(req.requestedAt).toLocaleTimeString("id-ID", {
                 hour: "2-digit",
                 minute: "2-digit",
+                timeZone: DEFAULT_STORE_TIMEZONE,
               });
               const isProcessing = processingId === req.id;
 
@@ -312,6 +319,7 @@ export const ManagerApprovalModal: React.FC<ManagerApprovalModalProps> = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

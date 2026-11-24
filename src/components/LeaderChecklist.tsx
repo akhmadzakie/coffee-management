@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
+import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 import { 
-  CheckSquare, Square, Save, AlertCircle, Calendar, 
-  CheckCircle2, Clock, XCircle, Plus, Trash2, RotateCcw, 
-  Coffee, Utensils, Croissant, Users, ClipboardList, 
-  Sliders, TrendingUp, Check, Layers, ChevronDown, ChevronUp,
-  Sun, Moon, Sunset, Award, Sparkles, Filter,
+  CheckSquare, Square, Save, Calendar, 
+  CheckCircle2, XCircle, Plus, Trash2, RotateCcw, 
+  Coffee, Utensils, Croissant, ClipboardList, 
+  Sliders, TrendingUp, Check, Sun, Moon, Sunset, Award, Sparkles, Filter,
   Lock, Edit2, ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getLocalDateString } from "../utils/dateUtils";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "../utils/dateUtils";
+import { getWitaTimeMinutes, resolveCanonicalEmployeeId } from "../utils/attendanceRecap";
 import { TaskCategoryGroup, TaskItemDetail, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
-import { formatCurrency } from "../utils/format";
 import { CustomMonthPicker } from "./common/CustomMonthPicker";
 import { CustomSelect } from "./common/CustomSelect";
 import { CustomDatePicker } from "./common/CustomDatePicker";
@@ -167,7 +169,7 @@ export const getTaskText = (item: string | TaskItemDetail): string => {
 
 export const matchesShift = (
   item: string | TaskItemDetail,
-  shift: "PAGI" | "MIDDLE" | "SORE" | "ALL" | "OFF"
+  shift: string
 ): boolean => {
   if (shift === "OFF") return false;
   const detail = normalizeTaskItem(item);
@@ -271,6 +273,8 @@ export const LeaderChecklist: React.FC = () => {
   } = useStore();
 
   const isSupervisor = currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "OWNER";
+  const canEditSettings = (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN") && !isReadOnly;
+  const confirmModal = useConfirm();
   const [activeTab, setActiveTab] = useState<"monitoring" | "monthly" | "settings">("monitoring");
 
   // Selected date for monitoring (defaults to today)
@@ -320,6 +324,10 @@ export const LeaderChecklist: React.FC = () => {
   });
 
   const handleSaveAllowanceRules = (newRules: LeaderAllowanceRule[]) => {
+    if (!canEditSettings) {
+      toast.warning("Mode pengawasan (Read-Only): Anda tidak dapat mengubah aturan tunjangan.");
+      return;
+    }
     setAllowanceRules(newRules);
     updateSettings({
       ...settings,
@@ -327,9 +335,11 @@ export const LeaderChecklist: React.FC = () => {
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
+    toast.success("Aturan grade tunjangan Leader berhasil disimpan.");
   };
 
   const handleToggleRuleStatus = (ruleId: string) => {
+    if (!canEditSettings) return;
     const updated = allowanceRules.map((r) =>
       r.id === ruleId ? { ...r, isActive: r.isActive === false ? true : false } : r
     );
@@ -337,17 +347,34 @@ export const LeaderChecklist: React.FC = () => {
   };
 
   const handleDeleteRule = (ruleId: string) => {
-    if (!window.confirm("Hapus aturan rentang grade ini?")) return;
-    const updated = allowanceRules.filter((r) => r.id !== ruleId);
-    handleSaveAllowanceRules(updated);
+    if (!canEditSettings) return;
+    confirmModal.open({
+      title: "Hapus Aturan Grade?",
+      message: "Aturan rentang skor pencairan tunjangan Leader ini akan dihapus.",
+      confirmLabel: "Ya, Hapus",
+      variant: "danger",
+      onConfirm: () => {
+        const updated = allowanceRules.filter((r) => r.id !== ruleId);
+        handleSaveAllowanceRules(updated);
+      },
+    });
   };
 
   const handleResetRulesToDefault = () => {
-    if (!window.confirm("Kembalikan aturan batas persenan ke standar sistem (Grade A/B/C/D)?")) return;
-    handleSaveAllowanceRules(DEFAULT_LEADER_ALLOWANCE_RULES);
+    if (!canEditSettings) return;
+    confirmModal.open({
+      title: "Reset Aturan ke Standar Sistem?",
+      message: "Aturan batas persenan akan dikembalikan ke standar Grade A/B/C/D.",
+      confirmLabel: "Ya, Reset Standar",
+      variant: "warning",
+      onConfirm: () => {
+        handleSaveAllowanceRules(DEFAULT_LEADER_ALLOWANCE_RULES);
+      },
+    });
   };
 
   const handleOpenAddRule = () => {
+    if (!canEditSettings) return;
     setEditingRule(null);
     setRuleForm({
       grade: "Grade Baru",
@@ -360,6 +387,7 @@ export const LeaderChecklist: React.FC = () => {
   };
 
   const handleOpenEditRule = (rule: LeaderAllowanceRule) => {
+    if (!canEditSettings) return;
     setEditingRule(rule);
     setRuleForm({
       id: rule.id,
@@ -373,8 +401,25 @@ export const LeaderChecklist: React.FC = () => {
   };
 
   const handleSaveRuleForm = () => {
-    if (Number(ruleForm.minScore) > Number(ruleForm.maxScore)) {
-      alert("Skor minimal tidak boleh lebih besar dari skor maksimal!");
+    if (!canEditSettings) return;
+    const cleanGrade = ruleForm.grade.trim();
+    if (!cleanGrade) {
+      toast.warning("Nama Grade wajib diisi.");
+      return;
+    }
+    const minScore = Number(ruleForm.minScore);
+    const maxScore = Number(ruleForm.maxScore);
+    const payoutPct = Number(ruleForm.payoutPercentage);
+    if (!Number.isFinite(minScore) || !Number.isFinite(maxScore) || minScore < 0 || maxScore > 100) {
+      toast.warning("Skor minimal dan maksimal harus berada di antara 0 hingga 100.");
+      return;
+    }
+    if (minScore > maxScore) {
+      toast.warning("Skor minimal tidak boleh lebih besar dari skor maksimal!");
+      return;
+    }
+    if (!Number.isFinite(payoutPct) || payoutPct < 0 || payoutPct > 100) {
+      toast.warning("Persentase tunjangan cair harus berada di antara 0 hingga 100%.");
       return;
     }
     let updated: LeaderAllowanceRule[];
@@ -383,22 +428,22 @@ export const LeaderChecklist: React.FC = () => {
         r.id === editingRule.id
           ? {
               ...r,
-              grade: ruleForm.grade,
-              minScore: Number(ruleForm.minScore),
-              maxScore: Number(ruleForm.maxScore),
-              payoutPercentage: Number(ruleForm.payoutPercentage),
-              label: ruleForm.label,
+              grade: cleanGrade,
+              minScore,
+              maxScore,
+              payoutPercentage: payoutPct,
+              label: ruleForm.label.trim(),
             }
           : r
       );
     } else {
       const newRule: LeaderAllowanceRule = {
         id: "lar_" + Date.now().toString(36),
-        grade: ruleForm.grade,
-        minScore: Number(ruleForm.minScore),
-        maxScore: Number(ruleForm.maxScore),
-        payoutPercentage: Number(ruleForm.payoutPercentage),
-        label: ruleForm.label,
+        grade: cleanGrade,
+        minScore,
+        maxScore,
+        payoutPercentage: payoutPct,
+        label: ruleForm.label.trim(),
         isActive: true,
       };
       updated = [...allowanceRules, newRule];
@@ -467,30 +512,36 @@ export const LeaderChecklist: React.FC = () => {
     return ensureCategoryArray(bakerCategories, DEFAULT_BAKER_CATEGORIES);
   };
 
-  // Helper to detect division from checklist record
+  // Helper to detect division from checklist record (checks employeeId via users & employees)
   const getDivisionForChecklist = (c: any): Division => {
-    const user = users.find((u) => u.id === c.employeeId);
-    if (user?.role === "KITCHEN" || user?.department === "KITCHEN") return "KITCHEN";
-    if (user?.role === "BAKER") return "BAKER";
-    if (user?.role === "BAR" || user?.department === "BAR") return "BAR";
-
     if (c.notes?.includes("[KITCHEN]")) return "KITCHEN";
     if (c.notes?.includes("[BAKER]")) return "BAKER";
     if (c.notes?.includes("[BAR]")) return "BAR";
 
+    const canonEmpId = resolveCanonicalEmployeeId(c.employeeId, employees || [], users || []);
+    const emp = (employees || []).find((e) => e.id === canonEmpId);
+    const user = (users || []).find((u) => u.id === c.employeeId || u.employeeId === canonEmpId);
+
+    const deptPos = `${user?.department || ""} ${emp?.department || ""} ${emp?.position || ""} ${user?.role || ""}`.toUpperCase();
+    if (deptPos.includes("KITCHEN") || deptPos.includes("DAPUR") || deptPos.includes("COOK")) return "KITCHEN";
+    if (deptPos.includes("BAKER") || deptPos.includes("PASTRY") || deptPos.includes("ROTI")) return "BAKER";
     return "BAR";
   };
 
-  // ─── USER ACTIVE SHIFT FOR TODAY ─────────────────────────────────────────
-  const userEmpId = currentUser?.employeeId || userEmployee?.id || currentUser?.id;
-  const todayShiftRecord = (employeeShifts || []).find(
-    (s: any) => s.employeeId === userEmpId && s.date === today
+  // ─── USER ACTIVE SHIFT FOR TODAY (WITA) ──────────────────────────────────
+  const userEmpId = resolveCanonicalEmployeeId(
+    currentUser?.employeeId || userEmployee?.id || currentUser?.id || "",
+    employees || [],
+    users || []
   );
-  // Auto-detect based on current time if employee is not explicitly scheduled in roster
-  const currentHour = new Date().getHours();
+  const todayShiftRecord = (employeeShifts || []).find(
+    (s: any) => resolveCanonicalEmployeeId(s.employeeId, employees || [], users || []) === userEmpId && s.date === today
+  );
+  // Auto-detect based on current WITA time if employee is not explicitly scheduled in roster
+  const currentHour = Math.floor(getWitaTimeMinutes() / 60);
   const defaultShiftByTime: "PAGI" | "MIDDLE" | "SORE" = 
     currentHour >= 15 ? "SORE" : currentHour >= 11 ? "MIDDLE" : "PAGI";
-  const userScheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || defaultShiftByTime;
+  const userScheduledShift: string = todayShiftRecord?.shiftType || defaultShiftByTime;
 
   const [shiftFilter, setShiftFilter] = useState<"MY_SHIFT" | "ALL">(
     userScheduledShift === "OFF" ? "ALL" : "MY_SHIFT"
@@ -560,6 +611,7 @@ export const LeaderChecklist: React.FC = () => {
 
     setLeaderSaved(true);
     setTimeout(() => setLeaderSaved(false), 3000);
+    toast.success("Checklist supervisi berhasil disimpan!");
   };
 
   // Filter categories displayed based on shiftFilter & roleFilter (STAFF tasks hidden)
@@ -690,6 +742,7 @@ export const LeaderChecklist: React.FC = () => {
         completedCount,
         percentage,
         isSubmitted: !!leaderChecklist,
+        submittersCount: divChecklists.length,
         leaderName,
         checklist: leaderChecklist,
         cleanNotes,
@@ -892,6 +945,7 @@ export const LeaderChecklist: React.FC = () => {
     editingDivision === "KITCHEN" ? kitchenCategories : bakerCategories;
 
   const setCurrentEditingCategories = (newCats: TaskCategoryGroup[]) => {
+    if (!canEditSettings) return;
     setIsTasksDirty(true);
     if (editingDivision === "BAR") setBarCategories(newCats);
     else if (editingDivision === "KITCHEN") setKitchenCategories(newCats);
@@ -1006,14 +1060,27 @@ export const LeaderChecklist: React.FC = () => {
   };
 
   const handleResetToDefault = () => {
-    if (!window.confirm("Kembalikan daftar kategori & sub-tugas divisi ini ke standar sistem?")) return;
-    setIsTasksDirty(true);
-    if (editingDivision === "BAR") setBarCategories(DEFAULT_BAR_CATEGORIES);
-    else if (editingDivision === "KITCHEN") setKitchenCategories(DEFAULT_KITCHEN_CATEGORIES);
-    else setBakerCategories(DEFAULT_BAKER_CATEGORIES);
+    if (!canEditSettings) return;
+    confirmModal.open({
+      title: "Reset Daftar SOP ke Standar Sistem?",
+      message: "Daftar kategori dan sub-tugas untuk divisi ini akan dikembalikan ke template standar sistem.",
+      confirmLabel: "Ya, Reset Standar",
+      variant: "warning",
+      onConfirm: () => {
+        setIsTasksDirty(true);
+        if (editingDivision === "BAR") setBarCategories(DEFAULT_BAR_CATEGORIES);
+        else if (editingDivision === "KITCHEN") setKitchenCategories(DEFAULT_KITCHEN_CATEGORIES);
+        else setBakerCategories(DEFAULT_BAKER_CATEGORIES);
+        toast.info("Daftar SOP dikembalikan ke standar (klik Simpan untuk menerapkan permanen).");
+      },
+    });
   };
 
   const handleSaveSettings = () => {
+    if (!canEditSettings) {
+      toast.warning("Mode pengawasan (Read-Only): Anda tidak dapat mengubah pengaturan SOP.");
+      return;
+    }
     setIsTasksDirty(false);
     updateSettings({
       ...settings,
@@ -1024,6 +1091,7 @@ export const LeaderChecklist: React.FC = () => {
     });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 3000);
+    toast.success("Master SOP & jobdesk Leader berhasil disimpan!");
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1092,44 +1160,45 @@ export const LeaderChecklist: React.FC = () => {
         {activeTab === "monitoring" && (
           <div className="space-y-6">
             {/* Filter Tanggal & Ringkasan Rata-rata */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 text-white p-5 rounded-2xl shadow-sm">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-brand-gradient text-white p-5 rounded-2xl shadow-sm">
               <div className="flex items-center gap-3">
-                <Calendar className="w-5 h-5 text-amber-400" />
+                <Calendar className="w-5 h-5 text-amber-300" />
                 <div>
-                  <p className="text-xs text-slate-400 font-medium">Tanggal Pantauan Laporan</p>
+                  <p className="text-xs text-brand-100 font-medium">Tanggal Pantauan Laporan</p>
                   <div className="flex items-center gap-2 mt-0.5 shrink-0 flex-nowrap">
                     <CustomDatePicker
                       value={selectedDate}
                       onChange={setSelectedDate}
                       allowClear={false}
                       placeholder="Pilih Tanggal"
-                      buttonClassName="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 rounded-xl py-1.5 px-3"
+                      buttonClassName="bg-white/15 border border-white/25 text-white hover:bg-white/25 rounded-xl py-1.5 px-3"
                     />
                     <button
+                      type="button"
                       onClick={() => {
                         const ym = selectedDate.slice(0, 7);
                         setSelectedMonth(ym);
                         setActiveTab("monthly");
                       }}
-                      className="whitespace-nowrap shrink-0 text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg text-sky-300 hover:text-white border border-slate-600 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="whitespace-nowrap shrink-0 text-xs bg-white/15 hover:bg-white/25 px-2.5 py-1.5 rounded-lg text-white border border-white/25 transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Beralih ke tampilan rekapitulasi satu bulan penuh"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                      <TrendingUp className="w-3.5 h-3.5 text-brand-100 shrink-0" />
                       <span>Rekap 1 Bulan</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 border-t sm:border-t-0 sm:border-l border-slate-800 pt-3 sm:pt-0 sm:pl-6 w-full sm:w-auto justify-between sm:justify-start">
+              <div className="flex items-center gap-4 border-t sm:border-t-0 sm:border-l border-white/20 pt-3 sm:pt-0 sm:pl-6 w-full sm:w-auto justify-between sm:justify-start">
                 <div>
-                  <p className="text-xs text-slate-400">Rata-rata Terlaksana</p>
-                  <p className="text-2xl font-black text-amber-400">{overallPercentage}%</p>
+                  <p className="text-xs text-brand-100">Rata-rata Terlaksana</p>
+                  <p className="text-2xl font-black text-amber-300 tabular-nums">{overallPercentage}%</p>
                 </div>
-                <div className="w-28 bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
+                <div className="w-28 bg-white/20 rounded-full h-3 overflow-hidden border border-white/25">
                   <div
                     className={`h-full transition-all duration-500 ${
-                      overallPercentage === 100 ? "bg-emerald-500" : overallPercentage > 50 ? "bg-amber-400" : "bg-blue-400"
+                      overallPercentage === 100 ? "bg-emerald-400" : overallPercentage > 50 ? "bg-amber-300" : "bg-sky-300"
                     }`}
                     style={{ width: `${overallPercentage}%` }}
                   />
@@ -1386,62 +1455,66 @@ export const LeaderChecklist: React.FC = () => {
         {activeTab === "monthly" && (
           <div className="space-y-6">
             {/* Filter Bulan & Overview Kartu Atas */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-900 text-white p-5 rounded-2xl shadow-sm">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-brand-gradient text-white p-5 rounded-2xl shadow-sm">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs shrink-0">
+                  <div className="p-2.5 bg-white/15 text-white rounded-xl shadow-xs shrink-0 border border-white/20">
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-1">Bulan Periode Evaluasi</p>
+                    <p className="text-xs text-brand-100 font-medium mb-1">Bulan Periode Evaluasi</p>
                     <CustomMonthPicker
                       value={selectedMonth}
                       onChange={setSelectedMonth}
                       allowClear={false}
                       placeholder="Pilih Bulan Evaluasi"
-                      buttonClassName="bg-slate-800 border border-slate-600 text-white hover:bg-slate-700 hover:border-slate-500 rounded-xl"
+                      buttonClassName="bg-white/15 border border-white/25 text-white hover:bg-white/25 rounded-xl"
                     />
                   </div>
                 </div>
 
                 {/* Filter Divisi */}
-                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700 sm:ml-4 mt-2 sm:mt-0 text-xs shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-1 bg-white/15 p-1 rounded-xl border border-white/20 sm:ml-4 mt-2 sm:mt-0 text-xs shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
                   <button
+                    type="button"
                     onClick={() => setMonthlyDivisionFilter("ALL")}
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "ALL"
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "text-slate-200 hover:text-white"
+                        ? "bg-white text-brand-700 shadow-xs"
+                        : "text-white/90 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     Semua Divisi
                   </button>
                   <button
+                    type="button"
                     onClick={() => setMonthlyDivisionFilter("BAR")}
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAR"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "text-slate-200 hover:text-white"
+                        ? "bg-amber-500 text-white shadow-xs"
+                        : "text-white/90 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     Bar
                   </button>
                   <button
+                    type="button"
                     onClick={() => setMonthlyDivisionFilter("KITCHEN")}
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "KITCHEN"
-                        ? "bg-orange-600 text-white shadow-xs"
-                        : "text-slate-200 hover:text-white"
+                        ? "bg-orange-500 text-white shadow-xs"
+                        : "text-white/90 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     Kitchen
                   </button>
                   <button
+                    type="button"
                     onClick={() => setMonthlyDivisionFilter("BAKER")}
                     className={`whitespace-nowrap shrink-0 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
                       monthlyDivisionFilter === "BAKER"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "text-slate-200 hover:text-white"
+                        ? "bg-emerald-500 text-white shadow-xs"
+                        : "text-white/90 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     Baker
@@ -1450,16 +1523,16 @@ export const LeaderChecklist: React.FC = () => {
               </div>
 
               {/* Stat Ringkasan Rata-rata Bulanan */}
-              <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-slate-800 pt-3 lg:pt-0 lg:pl-6 w-full lg:w-auto justify-between lg:justify-start">
+              <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-white/20 pt-3 lg:pt-0 lg:pl-6 w-full lg:w-auto justify-between lg:justify-start tabular-nums">
                 <div>
-                  <p className="text-xs text-slate-400">Total Checklist Masuk</p>
+                  <p className="text-xs text-brand-100">Total Checklist Masuk</p>
                   <p className="text-xl font-black text-white font-mono">
-                    {totalMonthlySubmissions} <span className="text-xs font-normal text-slate-400">checklist</span>
+                    {totalMonthlySubmissions} <span className="text-xs font-normal text-brand-100">checklist</span>
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Rata-rata Skor Efektif</p>
-                  <p className="text-2xl font-black text-amber-400 font-mono">{overallMonthlyScore}%</p>
+                  <p className="text-xs text-brand-100">Rata-rata Skor Efektif</p>
+                  <p className="text-2xl font-black text-amber-300 font-mono">{overallMonthlyScore}%</p>
                 </div>
               </div>
             </div>
@@ -1578,9 +1651,9 @@ export const LeaderChecklist: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-100">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-blue-600" />
-                    Matriks Pengisian Checklist Harian ({new Date(selectedMonth + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })})
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                    Matriks Pengisian Checklist Harian ({new Date(`${selectedMonth}-15T12:00:00+08:00`).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, month: "long", year: "numeric" })})
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Klik kotak tanggal mana pun untuk langsung memeriksa rincian tugas yang diselesaikan pada tanggal tersebut.
@@ -1763,7 +1836,15 @@ export const LeaderChecklist: React.FC = () => {
 
         {/* TAB 2: PENGATURAN KATEGORI, RINCIAN TUGAS & TARGET BONUS JOBDESK */}
         {activeTab === "settings" && (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-6 shadow-xs space-y-6 overflow-hidden min-w-0 max-w-full">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-6 shadow-xs space-y-6 overflow-hidden min-w-0 max-w-full">
+            {!canEditSettings && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2.5">
+                <Lock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  <strong>Mode Pantau (Read-Only):</strong> Anda dapat meninjau master SOP & batas persenan tunjangan, namun perubahan hanya dapat dilakukan oleh Manager atau Super Admin.
+                </span>
+              </div>
+            )}
             {/* Sub-Navigasi Pengaturan Manager: SOP Tugas vs Aturan Tunjangan Jabatan */}
             <div className="flex bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200 w-full sm:w-auto self-start overflow-x-auto no-scrollbar flex-nowrap gap-1">
               <button
@@ -1838,23 +1919,27 @@ export const LeaderChecklist: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                    <button
-                      type="button"
-                      onClick={handleResetRulesToDefault}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                      title="Kembalikan ke standar sistem (Grade A/B/C/D)"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reset Standar (A/B/C/D)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenAddRule}
-                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Tambah Grade Baru</span>
-                    </button>
+                    {canEditSettings && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleResetRulesToDefault}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                          title="Kembalikan ke standar sistem (Grade A/B/C/D)"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Reset Standar (A/B/C/D)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddRule}
+                          className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Grade Baru</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1909,8 +1994,11 @@ export const LeaderChecklist: React.FC = () => {
                             <td className="py-3 px-4 text-center">
                               <button
                                 type="button"
+                                disabled={!canEditSettings}
                                 onClick={() => handleToggleRuleStatus(rule.id)}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                                  canEditSettings ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                                } ${
                                   rule.isActive !== false
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                     : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200"
@@ -1920,24 +2008,28 @@ export const LeaderChecklist: React.FC = () => {
                               </button>
                             </td>
                             <td className="py-3 px-4 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditRule(rule)}
-                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Edit aturan ini"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteRule(rule.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Hapus aturan"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              {canEditSettings ? (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditRule(rule)}
+                                    className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Edit aturan ini"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRule(rule.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Hapus aturan"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -2125,19 +2217,22 @@ export const LeaderChecklist: React.FC = () => {
                       </span>
                       <input
                         type="text"
+                        disabled={!canEditSettings}
                         value={cat.category}
                         onChange={(e) => handleUpdateCategoryName(catIdx, e.target.value)}
-                        className="flex-1 font-bold text-slate-900 bg-white px-3 py-1.5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-2xs transition-all"
+                        className="flex-1 font-bold text-slate-900 bg-white px-3 py-1.5 border border-slate-200 hover:border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 shadow-2xs transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                         placeholder="Nama Kategori (contoh: Kebersihan & Sanitasi Area)..."
                       />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCategory(catIdx)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0 cursor-pointer"
-                        title="Hapus seluruh kategori ini"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEditSettings && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCategory(catIdx)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0 cursor-pointer"
+                          title="Hapus seluruh kategori ini"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Sub-tugas Items inside this category */}
@@ -2177,9 +2272,10 @@ export const LeaderChecklist: React.FC = () => {
 
                                   <input
                                     type="text"
+                                    disabled={!canEditSettings}
                                     value={detail.text}
                                     onChange={(e) => handleUpdateSubTaskText(catIdx, originalIdx, e.target.value)}
-                                    className="flex-1 min-w-0 px-2 py-1 bg-transparent hover:bg-slate-50 focus:bg-slate-50 border border-transparent focus:border-amber-300 rounded-lg text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none transition-colors placeholder:text-slate-400 placeholder:font-normal"
+                                    className="flex-1 min-w-0 px-2 py-1 bg-transparent hover:bg-slate-50 focus:bg-slate-50 border border-transparent focus:border-amber-300 rounded-lg text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none transition-colors placeholder:text-slate-400 placeholder:font-normal disabled:opacity-75 disabled:cursor-not-allowed"
                                     placeholder="Rincian sub-tugas supervisi Leader..."
                                   />
                                 </div>
@@ -2188,6 +2284,7 @@ export const LeaderChecklist: React.FC = () => {
                                 <div className="flex items-center gap-1.5 flex-wrap shrink-0 pl-7 sm:pl-0">
                                   {/* Pilihan Shift Tag */}
                                   <CustomSelect
+                                    disabled={!canEditSettings}
                                     value={detail.shift || "ALL"}
                                     onChange={(val) =>
                                       handleUpdateSubTaskShift(catIdx, originalIdx, val as any)
@@ -2218,8 +2315,11 @@ export const LeaderChecklist: React.FC = () => {
                                   {/* Tombol Toggle Aktif / Nonaktif */}
                                   <button
                                     type="button"
+                                    disabled={!canEditSettings}
                                     onClick={() => handleToggleSubTaskActive(catIdx, originalIdx)}
-                                    className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border cursor-pointer ${
+                                    className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border ${
+                                      canEditSettings ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                                    } ${
                                       detail.isActive
                                         ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
                                         : "bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200"
@@ -2233,30 +2333,34 @@ export const LeaderChecklist: React.FC = () => {
                               </div>
 
                               {/* Tombol Hapus Sub-tugas */}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSubTask(catIdx, originalIdx)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 self-center"
-                                title="Hapus sub-tugas ini"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {canEditSettings && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSubTask(catIdx, originalIdx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 self-center"
+                                  title="Hapus sub-tugas ini"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           );
                         })
                       )}
 
                       {/* Tombol Tambah Sub-Tugas Supervisi Leader */}
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAddSubTask(catIdx, "LEADER")}
-                          className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold text-amber-900 bg-amber-500/10 hover:bg-amber-500/20 border border-dashed border-amber-300/90 transition-all cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Tambah Sub-Tugas Supervisi / QC (Leader)
-                        </button>
-                      </div>
+                      {canEditSettings && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAddSubTask(catIdx, "LEADER")}
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold text-amber-900 bg-amber-500/10 hover:bg-amber-500/20 border border-dashed border-amber-300/90 transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Tambah Sub-Tugas Supervisi / QC (Leader)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -2264,12 +2368,13 @@ export const LeaderChecklist: React.FC = () => {
             </div>
 
             {/* Bottom Actions */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            {canEditSettings && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleAddCategory}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors border border-blue-200 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold transition-colors border border-brand-200 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Tambah Kategori Baru
@@ -2293,44 +2398,51 @@ export const LeaderChecklist: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSaveSettings}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold shadow-sm transition-colors cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   Simpan Master Jobdesk Leader
                 </button>
               </div>
             </div>
+            )}
             </>
           )}
 
           {/* Modal Tambah / Edit Aturan Tunjangan */}
-          <AnimatePresence>
-            {isRuleModalOpen && (
-              <motion.div
-                key="leader-rule-modal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-black/50 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
-              >
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                  className="my-auto bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
-                >
-                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+          {typeof document !== "undefined" &&
+            createPortal(
+              <AnimatePresence>
+                {isRuleModalOpen && (
+                  <motion.div
+                    key="leader-rule-modal"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) setIsRuleModalOpen(false);
+                    }}
+                    className="fixed inset-0 z-50 flex justify-center items-start sm:items-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                      transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                      className="my-auto bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+                    >
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-emerald-600" />
-                    <h3 className="font-bold text-slate-900 text-base">
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
                       {editingRule ? "Edit Aturan Grade Tunjangan" : "Tambah Grade Tunjangan Baru"}
                     </h3>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setIsRuleModalOpen(false)}
-                    className="text-slate-400 hover:text-slate-600 p-1"
+                    className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                   >
                     <XCircle className="w-5 h-5" />
                   </button>
@@ -2338,7 +2450,7 @@ export const LeaderChecklist: React.FC = () => {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                       Nama Grade / Tingkat:
                     </label>
                     <input
@@ -2346,13 +2458,13 @@ export const LeaderChecklist: React.FC = () => {
                       value={ruleForm.grade}
                       onChange={(e) => setRuleForm({ ...ruleForm, grade: e.target.value })}
                       placeholder="Contoh: Grade A, Grade B..."
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                         Skor Minimal (%):
                       </label>
                       <input
@@ -2361,11 +2473,11 @@ export const LeaderChecklist: React.FC = () => {
                         max="100"
                         value={ruleForm.minScore}
                         onChange={(e) => setRuleForm({ ...ruleForm, minScore: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 tabular-nums"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                         Skor Maksimal (%):
                       </label>
                       <input
@@ -2374,13 +2486,13 @@ export const LeaderChecklist: React.FC = () => {
                         max="100"
                         value={ruleForm.maxScore}
                         onChange={(e) => setRuleForm({ ...ruleForm, maxScore: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 tabular-nums"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                       Persentase Tunjangan Jabatan Cair (%):
                     </label>
                     <div className="relative">
@@ -2390,7 +2502,7 @@ export const LeaderChecklist: React.FC = () => {
                         max="100"
                         value={ruleForm.payoutPercentage}
                         onChange={(e) => setRuleForm({ ...ruleForm, payoutPercentage: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8 tabular-nums"
                       />
                       <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
                     </div>
@@ -2400,7 +2512,7 @@ export const LeaderChecklist: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
                       Label / Keterangan:
                     </label>
                     <input
@@ -2408,33 +2520,36 @@ export const LeaderChecklist: React.FC = () => {
                       value={ruleForm.label}
                       onChange={(e) => setRuleForm({ ...ruleForm, label: e.target.value })}
                       placeholder="Contoh: Sangat Baik (Cair Penuh 100%)"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setIsRuleModalOpen(false)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="button"
                     onClick={handleSaveRuleForm}
-                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors"
+                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer"
                   >
                     Simpan Aturan
                   </button>
                 </div>
-                </motion.div>
-              </motion.div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>,
+              document.body
             )}
-          </AnimatePresence>
         </div>
       )}
+      <ConfirmModal {...confirmModal.modalProps} />
       </div>
     );
   }
@@ -2540,8 +2655,8 @@ export const LeaderChecklist: React.FC = () => {
               <span className="p-1.5 rounded-lg bg-amber-500 text-white shadow-2xs">
                 <Award className="w-4 h-4" />
               </span>
-              <h4 className="text-sm font-bold text-slate-800">
-                Akumulasi Jobdesk Anda Bulan Ini ({new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })})
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                Akumulasi Jobdesk Anda Bulan Ini ({new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, month: "long", year: "numeric" })})
               </h4>
             </div>
             <p className="text-xs text-slate-600">
@@ -2584,8 +2699,8 @@ export const LeaderChecklist: React.FC = () => {
                   Supervisi Leader & QC
                 </span>
             </h3>
-            <span className="text-xs text-slate-500">
-              {new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </span>
           </div>
 
@@ -2680,7 +2795,7 @@ export const LeaderChecklist: React.FC = () => {
                         key={itemIdx}
                         onClick={() => {
                           if (isShiftLocked) {
-                            alert(`🔒 Tugas ini khusus untuk Shift ${itemDetail.shift}. Anda dijadwalkan pada Shift ${userScheduledShift}, sehingga tugas ini terkunci.`);
+                            toast.info(`Tugas ini khusus untuk Shift ${itemDetail.shift}. Anda dijadwalkan pada Shift ${userScheduledShift}.`);
                             return;
                           }
                           toggleLeaderTask(cat.category, item);
@@ -2785,8 +2900,9 @@ export const LeaderChecklist: React.FC = () => {
         {!isReadOnly && (
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">
             <button
+              type="button"
               onClick={handleSaveLeaderChecklist}
-              className="flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-colors shadow-sm"
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold transition-colors shadow-sm cursor-pointer"
             >
               <Save className="w-5 h-5" />
               Simpan Checklist Shift Hari Ini

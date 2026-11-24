@@ -56,6 +56,127 @@ export const MENU_CATEGORY_PRESETS: Record<ProductDivision, string[]> = {
   ],
 };
 
+/** Menyusun daftar kategori menu per divisi dari Settings + produk aktual yang terdaftar. */
+export function getDivisionMenuCategories(
+  division: ProductDivision,
+  menuCategoriesMap?: Partial<Record<ProductDivision, string[]>> | null,
+  products: Product[] = []
+): string[] {
+  const configured =
+    menuCategoriesMap && Array.isArray(menuCategoriesMap[division])
+      ? menuCategoriesMap[division]!
+      : MENU_CATEGORY_PRESETS[division] || [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  const addUnique = (raw: string | undefined | null) => {
+    const clean = String(raw || "").trim().toUpperCase();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    result.push(clean);
+  };
+
+  configured.forEach(addUnique);
+  products.forEach((p) => {
+    if (p.division === division) addUnique(p.category);
+  });
+
+  return result;
+}
+
+/** Memastikan map kategori menu untuk 3 divisi terisi lengkap sebelum disimpan ke Settings. */
+export function buildMenuCategoriesSettingsMap(
+  currentMap?: Partial<Record<ProductDivision, string[]>> | null
+): Record<ProductDivision, string[]> {
+  return {
+    BAR: Array.isArray(currentMap?.BAR) ? [...currentMap!.BAR] : [...MENU_CATEGORY_PRESETS.BAR],
+    KITCHEN: Array.isArray(currentMap?.KITCHEN)
+      ? [...currentMap!.KITCHEN]
+      : [...MENU_CATEGORY_PRESETS.KITCHEN],
+    BAKER: Array.isArray(currentMap?.BAKER)
+      ? [...currentMap!.BAKER]
+      : [...MENU_CATEGORY_PRESETS.BAKER],
+  };
+}
+
+/** Mengubah nama kategori menu pada suatu divisi & menyinkronkan produk terkait. */
+export function applyRenameMenuCategory(params: {
+  division: ProductDivision;
+  currentCategories: string[];
+  oldName: string;
+  newName: string;
+  products: Product[];
+}): { updatedCategories: string[]; updatedProducts: Product[] } {
+  const { division, currentCategories, oldName, newName, products } = params;
+  const cleanOld = String(oldName || "").trim().toUpperCase();
+  const cleanNew = String(newName || "").trim().toUpperCase();
+  const seen = new Set<string>();
+  const updatedCategories: string[] = [];
+
+  currentCategories.forEach((cat) => {
+    const norm = String(cat || "").trim().toUpperCase();
+    const candidate = norm === cleanOld ? cleanNew : norm;
+    if (!candidate || seen.has(candidate)) return;
+    seen.add(candidate);
+    updatedCategories.push(candidate);
+  });
+
+  if (cleanNew && !seen.has(cleanNew)) {
+    updatedCategories.push(cleanNew);
+  }
+
+  const updatedProducts = products
+    .filter(
+      (p) =>
+        p.division === division &&
+        String(p.category || "").trim().toUpperCase() === cleanOld
+    )
+    .map((p) => ({ ...p, category: cleanNew }));
+
+  return { updatedCategories, updatedProducts };
+}
+
+/** Menghapus kategori menu pada suatu divisi & memindahkan produk terkait ke fallback. */
+export function applyDeleteMenuCategory(params: {
+  division: ProductDivision;
+  currentCategories: string[];
+  targetName: string;
+  products: Product[];
+  fallbackCategory?: string;
+}): {
+  updatedCategories: string[];
+  updatedProducts: Product[];
+  fallbackCategory: string;
+} {
+  const { division, currentCategories, targetName, products, fallbackCategory } = params;
+  const cleanTarget = String(targetName || "").trim().toUpperCase();
+  const updatedCategories = currentCategories
+    .map((c) => String(c || "").trim().toUpperCase())
+    .filter((c) => c && c !== cleanTarget);
+
+  const fallback = String(
+    fallbackCategory ||
+      updatedCategories.find((c) => c === "LAINNYA") ||
+      "LAINNYA"
+  )
+    .trim()
+    .toUpperCase();
+
+  const updatedProducts = products
+    .filter(
+      (p) =>
+        p.division === division &&
+        String(p.category || "").trim().toUpperCase() === cleanTarget
+    )
+    .map((p) => ({ ...p, category: fallback }));
+
+  if (updatedProducts.length > 0 && !updatedCategories.includes(fallback)) {
+    updatedCategories.push(fallback);
+  }
+
+  return { updatedCategories, updatedProducts, fallbackCategory: fallback };
+}
+
 export type DateFilterMode = "SINGLE_DAY" | "DATE_RANGE" | "ALL";
 export type ProductSortBy =
   | "QTY_DESC"
@@ -242,9 +363,7 @@ export function calculateVariantUnitHpp(
 
   const manualPackCost = Number(variant?.packagingCost) || 0;
   const effectivePackagingCost =
-    stockPackagingCost > 0
-      ? Math.max(stockPackagingCost, manualPackCost)
-      : manualPackCost;
+    stockPackagingCost > 0 ? stockPackagingCost : manualPackCost;
 
   if (rawMaterialCost > 0 || stockPackagingCost > 0) {
     const baseCost = rawMaterialCost + effectivePackagingCost;
@@ -578,6 +697,7 @@ export interface ComputeProductSalesAnalyticsParams {
   products: Product[];
   recipes: Recipe[];
   ingredients: Ingredient[];
+  menuCategoriesByDivision?: Partial<Record<ProductDivision, string[]>> | null;
   dateMode: DateFilterMode;
   singleDate: string;
   startDate: string;
@@ -598,6 +718,7 @@ export function computeProductSalesAnalytics(
     products = [],
     recipes = [],
     ingredients = [],
+    menuCategoriesByDivision,
     dateMode,
     singleDate,
     startDate,
@@ -609,19 +730,38 @@ export function computeProductSalesAnalytics(
     sortBy = "QTY_DESC",
   } = params;
 
+  const effStart =
+    startDate && endDate && startDate > endDate ? endDate : startDate;
+  const effEnd =
+    startDate && endDate && startDate > endDate ? startDate : endDate;
+
   const isDateIncluded = (dateStr: string | undefined | null): boolean => {
     const key = toSaleLocalDateKey(dateStr);
     if (!key) return false;
     if (dateMode === "ALL") return true;
     if (dateMode === "SINGLE_DAY") return !singleDate || key === singleDate;
-    if (startDate && key < startDate) return false;
-    if (endDate && key > endDate) return false;
+    if (effStart && key < effStart) return false;
+    if (effEnd && key > effEnd) return false;
     return true;
   };
 
-  // Cascading filter options from catalog + sales
+  // Cascading filter options from catalog + configured menu categories + sales
   const groupSet = new Set<string>(PRODUCT_GROUP_OPTIONS);
   const categorySet = new Set<string>();
+
+  if (menuCategoriesByDivision && division !== "UNMAPPED") {
+    const targetDivs: ProductDivision[] =
+      division === "ALL" ? ["BAR", "KITCHEN", "BAKER"] : [division];
+    targetDivs.forEach((div) => {
+      const list = menuCategoriesByDivision[div];
+      if (Array.isArray(list) && productGroup === "ALL") {
+        list.forEach((cat) => {
+          const clean = String(cat || "").trim().toUpperCase();
+          if (clean) categorySet.add(clean);
+        });
+      }
+    });
+  }
 
   products.forEach((p) => {
     if (division !== "ALL" && division !== "UNMAPPED" && p.division !== division) {

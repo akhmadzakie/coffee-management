@@ -3,8 +3,27 @@ import { FEATURES } from "../config/features";
 import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
+import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 import { formatCurrency } from "../utils/format";
-import { getLocalDateString } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
+import {
+  DEFAULT_STORE_TIMEZONE,
+  getLocalDateString,
+  getLocalPeriodString,
+} from "../utils/dateUtils";
+import {
+  classifyDailyAttendanceStatus,
+  formatWitaTimeHm,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
+import {
+  addDaysToLocalDate,
+  extractWitaHour,
+  getPromotionRuntimeStatus,
+  getWitaWeekStartDate,
+  validatePayrollMutation,
+} from "../utils/syncSanitizers";
 import { ViewState, DailyAttendance } from "../types";
 import {
   AreaChart,
@@ -86,10 +105,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     updateSettings,
     employeeShifts,
     currentUser,
+    isReadOnly,
+    closedPeriods,
     updateDailyAttendance,
     promotions,
   } = useStore();
 
+  const canEditManager =
+    !isReadOnly &&
+    (currentUser?.role === "MANAGER" || currentUser?.role === "SUPER_ADMIN");
+  const confirmModal = useConfirm();
   const [selectedAttendancePhoto, setSelectedAttendancePhoto] = useState<DailyAttendance | null>(null);
   const [activeDashboardTab, setActiveDashboardTab] = useState<
     "overview" | "sales" | "inventory" | "team"
@@ -102,8 +127,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   const fetchApprovalsData = async () => {
     try {
       const [resPending, resHistory] = await Promise.all([
-        fetch("/api/pos/approvals/pending"),
-        fetch("/api/pos/approvals/history"),
+        authFetch("/api/pos/approvals/pending"),
+        authFetch("/api/pos/approvals/history"),
       ]);
       if (resPending.ok) {
         setPendingApprovals(await resPending.json());
@@ -172,24 +197,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     };
   }, [recipes, ingredients]);
 
-  // Deteksi Jadwal Shift yang Menunggu ACC Manajer
+  // Deteksi Jadwal Shift yang Menunggu ACC Manajer (zona waktu WITA)
   const scheduleApprovalAlerts = useMemo(() => {
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    const day = today.getDay(); // 0 = Sunday, 1 = Monday
-    const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
-
-    // Minggu Ini
-    const thisMonday = new Date(today);
-    thisMonday.setDate(diffToMonday);
-
-    // Minggu Depan
-    const nextMonday = new Date(thisMonday);
-    nextMonday.setDate(nextMonday.getDate() + 7);
+    const thisMonday = getWitaWeekStartDate();
+    const thisMondayKey = getLocalDateString(thisMonday);
+    const nextMondayKey = addDaysToLocalDate(thisMondayKey, 7);
+    const nextMonday = new Date(`${nextMondayKey}T12:00:00+08:00`);
 
     const weeks = [
-      { key: getLocalDateString(thisMonday), label: "Minggu Ini", start: thisMonday },
-      { key: getLocalDateString(nextMonday), label: "Minggu Depan", start: nextMonday },
+      { key: thisMondayKey, label: "Minggu Ini", start: thisMonday },
+      { key: nextMondayKey, label: "Minggu Depan", start: nextMonday },
     ];
 
     const alerts: {
@@ -203,14 +220,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     }[] = [];
 
     weeks.forEach((w) => {
-      const endSunday = new Date(w.start);
-      endSunday.setDate(endSunday.getDate() + 6);
+      const startDateStr = w.key;
+      const endDateStr = addDaysToLocalDate(startDateStr, 6);
+      const endSunday = new Date(`${endDateStr}T12:00:00+08:00`);
 
       const approval = (settings?.scheduleApprovals as any)?.[w.key];
       const isApproved = approval?.status === "APPROVED";
-
-      const startDateStr = w.key;
-      const endDateStr = getLocalDateString(endSunday);
 
       const weekShifts = employeeShifts.filter((s) => {
         if (s.date < startDateStr || s.date > endDateStr || s.shiftType === "OFF") return false;
@@ -244,7 +259,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           }
         });
 
-        const dateRangeStr = `${w.start.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - ${endSunday.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`;
+        const dateRangeStr = `${w.start.toLocaleDateString("id-ID", {
+          timeZone: DEFAULT_STORE_TIMEZONE,
+          day: "numeric",
+          month: "short",
+        })} - ${endSunday.toLocaleDateString("id-ID", {
+          timeZone: DEFAULT_STORE_TIMEZONE,
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}`;
 
         alerts.push({
           weekKey: w.key,
@@ -261,9 +285,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     return alerts;
   }, [settings?.scheduleApprovals, employeeShifts, employees]);
 
-  const [approvedToast, setApprovedToast] = useState<string | null>(null);
-
   const handleQuickApproveSchedule = (weekKey: string, weekLabel: string) => {
+    if (!canEditManager) return;
     const existing = (settings?.scheduleApprovals as any)?.[weekKey] || {};
     const newApprovals = {
       ...((settings?.scheduleApprovals as any) || {}),
@@ -279,8 +302,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       ...settings,
       scheduleApprovals: newApprovals,
     });
-    setApprovedToast(`Jadwal ${weekLabel} berhasil disahkan & brief terkirim ke karyawan!`);
-    setTimeout(() => setApprovedToast(null), 4000);
+    toast.success(`Jadwal ${weekLabel} berhasil disahkan & brief terkirim ke karyawan!`);
   };
 
   const handleNavigateToSchedule = () => {
@@ -288,14 +310,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     onNavigate("hr");
   };
 
-  // Tanggal hari ini YYYY-MM-DD
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }, []);
+  // Tanggal hari ini YYYY-MM-DD (zona waktu WITA)
+  const todayStr = useMemo(() => getLocalDateString(), []);
 
   // Shift Kasir Hari Ini
   const activeShift = shifts.find((s) => s.status === "OPEN");
@@ -333,11 +349,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     });
   }, [employees]);
 
-  // Statistik Kehadiran Hari Ini
+  // Statistik Kehadiran Hari Ini (konsisten dengan classifyDailyAttendanceStatus)
   const attendanceStats = useMemo(() => {
-    const hadir = todayAttendances.filter((a) => a.status === "HADIR").length;
-    const terlambat = todayAttendances.filter((a) => a.status === "TERLAMBAT").length;
-    const izinSakit = todayAttendances.filter((a) => a.status === "IZIN" || a.status === "SAKIT").length;
+    let hadir = 0;
+    let terlambat = 0;
+    let izinSakit = 0;
+    todayAttendances.forEach((a) => {
+      const cls = classifyDailyAttendanceStatus(a);
+      if (cls === "HADIR") hadir++;
+      else if (cls === "TERLAMBAT") terlambat++;
+      else if (cls === "IZIN" || cls === "SAKIT") izinSakit++;
+    });
     const belumHadir = Math.max(0, activeEmployees.length - (hadir + terlambat + izinSakit));
 
     return { hadir, terlambat, izinSakit, belumHadir, total: activeEmployees.length };
@@ -369,7 +391,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         return e.position.toLowerCase().includes("kasir");
       });
 
-      const checklists = todayChecklists.filter((c) => empInDiv.some((e) => e.id === c.employeeId));
+      const checklists = todayChecklists.filter((c) => {
+        const canonicalId = resolveCanonicalEmployeeId(c.employeeId, employees, users);
+        return empInDiv.some((e) => e.id === canonicalId || e.id === c.employeeId);
+      });
 
       const totalItems = checklists.reduce((acc, c) => {
         let count = 2; // cleaningDone + equipmentChecked
@@ -408,31 +433,27 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       .sort((a, b) => a.currentStock / (a.minStock || 1) - b.currentStock / (b.minStock || 1));
   }, [ingredients]);
 
-  // Kontrak Karyawan yang Hampir Habis / Kedaluwarsa
-  const todayDate = new Date();
-  todayDate.setHours(0, 0, 0, 0);
-  const thirtyDaysLater = new Date();
-  thirtyDaysLater.setDate(todayDate.getDate() + 30);
-
+  // Kontrak Karyawan yang Hampir Habis / Kedaluwarsa (zona waktu WITA)
   const expiringContracts = useMemo(() => {
+    const limitStr = addDaysToLocalDate(todayStr, 30);
     return contracts.filter((c) => {
       const emp = employees.find((e) => e.id === c.employeeId);
       const isAktif = !emp ? false : emp.status === "AKTIF" || (emp.status as any) === "ACTIVE";
       if (!isAktif || c.status !== "ACTIVE" || !c.endDate) return false;
-      const end = new Date(c.endDate);
-      return end >= todayDate && end <= thirtyDaysLater;
+      const endYmd = c.endDate.slice(0, 10);
+      return endYmd >= todayStr && endYmd <= limitStr;
     });
-  }, [contracts, employees]);
+  }, [contracts, employees, todayStr]);
 
   const expiredContracts = useMemo(() => {
     return contracts.filter((c) => {
       const emp = employees.find((e) => e.id === c.employeeId);
       const isAktif = !emp ? false : emp.status === "AKTIF" || (emp.status as any) === "ACTIVE";
       if (!isAktif || c.status !== "ACTIVE" || !c.endDate) return false;
-      const end = new Date(c.endDate);
-      return end < todayDate;
+      const endYmd = c.endDate.slice(0, 10);
+      return endYmd < todayStr;
     });
-  }, [contracts, employees]);
+  }, [contracts, employees, todayStr]);
 
   // Top 5 Produk Terlaris Hari Ini
   const bestSellersToday = useMemo(() => {
@@ -452,13 +473,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     return purchaseOrders.filter((po) => po.deliveryStatus === "PENDING");
   }, [purchaseOrders]);
 
-  // Bulan ini YYYY-MM
-  const currentMonthStr = useMemo(() => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}`;
-  }, []);
+  // Bulan ini YYYY-MM (zona waktu WITA)
+  const currentMonthStr = useMemo(() => getLocalPeriodString(), []);
 
   // Transaksi & Omzet Hari Ini
   const todaySalesList = useMemo(() => {
@@ -492,15 +508,18 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     return { cash, qris, transfer, total: todayRevenue };
   }, [todaySalesList, todayRevenue]);
 
-  // Tren Omzet 7 Hari Terakhir
+  // Tren Omzet 7 Hari Terakhir (zona waktu WITA)
   const last7DaysChartData = useMemo(() => {
     const data = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = getLocalDateString(d);
-      const dayLabel = d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" });
-      const daySales = salesTransactions.filter((s) => s.date.startsWith(dateStr));
+      const dateStr = addDaysToLocalDate(todayStr, -i);
+      const d = new Date(`${dateStr}T12:00:00+08:00`);
+      const dayLabel = d.toLocaleDateString("id-ID", {
+        timeZone: DEFAULT_STORE_TIMEZONE,
+        weekday: "short",
+        day: "numeric",
+      });
+      const daySales = salesTransactions.filter((s) => getLocalDateString(new Date(s.date)) === dateStr);
       const omzet = daySales.reduce((sum, s) => sum + s.totalPrice, 0);
       data.push({
         name: dayLabel,
@@ -509,9 +528,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       });
     }
     return data;
-  }, [salesTransactions]);
+  }, [salesTransactions, todayStr]);
 
-  // Jam Ramai Toko Hari Ini (Hourly Traffic 08:00 - 22:00)
+  // Jam Ramai Toko Hari Ini (Hourly Traffic 08:00 - 22:00 WITA)
   const hourlyTrafficData = useMemo(() => {
     const hoursMap: Record<number, { omzet: number; transaksi: number }> = {};
     for (let h = 8; h <= 22; h++) {
@@ -519,8 +538,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
     }
     todaySalesList.forEach((s) => {
       try {
-        const timePart = s.time || (s.date.includes("T") ? s.date.split("T")[1] : "");
-        const hour = timePart ? parseInt(timePart.split(":")[0], 10) : new Date(s.date).getHours();
+        const explicitHour = s.time ? parseInt(String(s.time).split(":")[0], 10) : NaN;
+        const hour = Number.isFinite(explicitHour)
+          ? explicitHour
+          : (extractWitaHour(s.date) ?? new Date(s.date).getHours());
         if (hour >= 8 && hour <= 22) {
           hoursMap[hour].omzet += s.totalPrice;
           hoursMap[hour].transaksi += 1;
@@ -583,25 +604,26 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header Banner */}
-      <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-amber-100 text-amber-800 uppercase border border-amber-200">
               Operational Command Center
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Dashboard Operasional Manajer
           </h1>
-          <p className="text-xs text-stone-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Pantau kehadiran selfie staf, progres checklist jobdesk divisi, dan stok bahan baku toko.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-2xl px-4 py-2 text-xs font-semibold text-stone-700 shadow-2xs">
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs">
           <Clock className="w-4 h-4 text-amber-700" />
           <span>
             {new Date().toLocaleDateString("id-ID", {
+              timeZone: DEFAULT_STORE_TIMEZONE,
               weekday: "long",
               day: "numeric",
               month: "long",
@@ -645,20 +667,20 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         {/* Card 1: Penjualan Hari Ini */}
         <div
           onClick={() => setActiveDashboardTab("sales")}
-          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-emerald-300 transition-all cursor-pointer group"
+          className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee hover:border-emerald-300 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Omzet Hari Ini
             </span>
             <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
               <RupiahSign className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
+          <p className="text-2xl font-black font-mono text-slate-900 tracking-tight">
             {formatCurrency(todayRevenue)}
           </p>
-          <div className="flex items-center justify-between text-xs text-stone-500 mt-2">
+          <div className="flex items-center justify-between text-xs text-slate-500 mt-2">
             <span>{todaySalesList.length} baris penjualan</span>
             <span className="text-emerald-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
               Lihat Tren <ArrowRight className="w-3 h-3" />
@@ -669,21 +691,21 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         {/* Card 2: Valuasi Stok Toko */}
         <div
           onClick={() => setActiveDashboardTab("inventory")}
-          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-amber-300 transition-all cursor-pointer group"
+          className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee hover:border-amber-300 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Aset Bahan Baku
             </span>
             <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200">
               <Package className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
+          <p className="text-2xl font-black font-mono text-slate-900 tracking-tight">
             {formatCurrency(stockValuation.totalValue)}
           </p>
           <div className="flex items-center justify-between text-xs mt-2">
-            <span className={stockValuation.criticalCount > 0 ? "text-rose-600 font-bold" : "text-stone-500"}>
+            <span className={stockValuation.criticalCount > 0 ? "text-rose-600 font-bold" : "text-slate-500"}>
               {stockValuation.criticalCount > 0
                 ? `⚠️ ${stockValuation.criticalCount} bahan menipis!`
                 : "Semua stok aman"}
@@ -697,20 +719,20 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         {/* Card 3: Disiplin Kehadiran Staf */}
         <div
           onClick={() => setActiveDashboardTab("team")}
-          className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee hover:border-indigo-300 transition-all cursor-pointer group"
+          className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee hover:border-indigo-300 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Kehadiran Staf
             </span>
             <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black font-mono text-stone-900 tracking-tight">
-            {attendanceStats.hadir} <span className="text-sm font-normal text-stone-500">/ {attendanceStats.total} Hadir</span>
+          <p className="text-2xl font-black font-mono text-slate-900 tracking-tight">
+            {attendanceStats.hadir} <span className="text-sm font-normal text-slate-500">/ {attendanceStats.total} Hadir</span>
           </p>
-          <div className="flex items-center justify-between text-xs text-stone-500 mt-2">
+          <div className="flex items-center justify-between text-xs text-slate-500 mt-2">
             <span>
               {attendanceStats.terlambat > 0 ? `${attendanceStats.terlambat} telat` : "Tepat waktu"}
               {pendingToday.length > 0 && ` · ${pendingToday.length} perlu ACC`}
@@ -722,26 +744,26 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
         </div>
 
         {/* Card 4: Store Health Score */}
-        <div className="p-5 bg-gradient-to-br from-[#241813] to-[#3a2820] text-white rounded-3xl border border-stone-700 shadow-coffee flex flex-col justify-between">
+        <div className="p-5 bg-gradient-to-br from-brand-50/70 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 rounded-3xl border border-brand-200/80 dark:border-brand-500/30 shadow-coffee flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-200/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300">
                 Skor Operasional Toko
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30">
                 Smart AI
               </span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black font-mono text-white tracking-tight">
+              <span className="text-3xl font-black font-mono text-slate-900 dark:text-slate-100 tracking-tight tabular-nums">
                 {storeHealthScore}%
               </span>
-              <span className="text-xs font-semibold text-emerald-400">
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                 {storeHealthScore >= 85 ? "Optimal" : storeHealthScore >= 70 ? "Baik" : "Perhatian"}
               </span>
             </div>
           </div>
-          <p className="text-[11px] text-stone-300 mt-2">
+          <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-2">
             {storeHealthScore >= 85
               ? "Semua divisi berjalan lancar sesuai SOP."
               : "Periksa bahan menipis dan tugas checklist yang tertunda."}
@@ -750,9 +772,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       </div>
 
       {/* ─── Manager AI Copilot Hub (Operational & Inventory Intelligence) ─── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1c1917] via-[#292524] to-[#44403c] text-white p-5 sm:p-6 shadow-xl border border-stone-800">
-        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-amber-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-orange-500/15 blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-3xl bg-brand-gradient text-white p-5 sm:p-6 shadow-xl border border-brand-700/60">
+        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-amber-400/15 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -769,7 +791,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     </span>
                   </h3>
                 </div>
-                <p className="text-xs text-stone-300">
+                <p className="text-xs text-slate-300">
                   Audit stok bahan kritis, simulasi resep & optimasi HPP, serta konsultasi manajemen shift & SOP kafe.
                 </p>
               </div>
@@ -800,7 +822,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               value={managerAiInput}
               onChange={(e) => setManagerAiInput(e.target.value)}
               placeholder="Tanya SOP shift, cara cegah susu basi, atau strategi margin HPP kopi..."
-              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-stone-400 focus:outline-none"
+              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none"
             />
             <button
               type="submit"
@@ -814,7 +836,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
           {/* Manager Action Pills */}
           <div className="flex items-center gap-2 flex-wrap pt-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mr-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
               Aksi Manajer:
             </span>
             <button
@@ -865,13 +887,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       </div>
 
       {/* Smart Dashboard Tab Switcher */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-stone-100 rounded-2xl border border-stone-200">
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
         <button
           onClick={() => setActiveDashboardTab("overview")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeDashboardTab === "overview"
-              ? "bg-white text-stone-900 shadow-sm"
-              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
           }`}
         >
           <Activity className="w-4 h-4 text-amber-700" />
@@ -881,8 +903,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           onClick={() => setActiveDashboardTab("sales")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeDashboardTab === "sales"
-              ? "bg-white text-stone-900 shadow-sm"
-              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
           }`}
         >
           <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -892,8 +914,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           onClick={() => setActiveDashboardTab("inventory")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeDashboardTab === "inventory"
-              ? "bg-white text-stone-900 shadow-sm"
-              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
           }`}
         >
           <Package className="w-4 h-4 text-brand-600" />
@@ -908,8 +930,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           onClick={() => setActiveDashboardTab("team")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeDashboardTab === "team"
-              ? "bg-white text-stone-900 shadow-sm"
-              : "text-stone-600 hover:text-stone-900 hover:bg-stone-200/60"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
           }`}
         >
           <Users className="w-4 h-4 text-indigo-600" />
@@ -924,39 +946,44 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       {/* ── TAB 1: TRACKING PENJUALAN & OMZET PINTAR ─────────────────────────── */}
       {activeDashboardTab === "sales" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="space-y-6">
           {/* Ringkasan Angka Penjualan */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Omzet Hari Ini
               </span>
               <p className="text-2xl font-black font-mono text-emerald-800">
                 {formatCurrency(todayRevenue)}
               </p>
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Dari {todaySalesList.length} transaksi penjualan toko
               </p>
             </div>
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
-                Omzet Bulan Ini ({new Date().toLocaleDateString("id-ID", { month: "long" })})
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Omzet Bulan Ini (
+                {new Date().toLocaleDateString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                  month: "long",
+                })}
+                )
               </span>
-              <p className="text-2xl font-black font-mono text-stone-900">
+              <p className="text-2xl font-black font-mono text-slate-900">
                 {formatCurrency(thisMonthRevenue)}
               </p>
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Total {thisMonthSalesList.length} pesanan bulan ini
               </p>
             </div>
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Rata-rata Nilai Pesanan (AOV)
               </span>
               <p className="text-2xl font-black font-mono text-amber-900">
                 {formatCurrency(todaySalesList.length > 0 ? Math.round(todayRevenue / todaySalesList.length) : 0)}
               </p>
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Rata-rata belanja per transaksi penjualan
               </p>
             </div>
@@ -965,14 +992,14 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           {/* Grafik Tren 7 Hari Terakhir & Jam Ramai */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Grafik Tren Omzet 7 Hari */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-emerald-600" />
                     Tren Penjualan 7 Hari Terakhir
                   </h3>
-                  <p className="text-xs text-stone-500 mt-0.5">Grafik dinamika omzet harian toko</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Grafik dinamika omzet harian toko</p>
                 </div>
               </div>
 
@@ -1012,14 +1039,14 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
 
             {/* Jam Ramai Toko (Peak Hours Traffic) */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-700" />
                     Jam Ramai Toko (Peak Hours)
                   </h3>
-                  <p className="text-xs text-stone-500 mt-0.5">Jumlah transaksi per jam hari ini</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Jumlah transaksi per jam hari ini</p>
                 </div>
               </div>
 
@@ -1046,22 +1073,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           {/* Metode Pembayaran & Top 10 Menu */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Metode Pembayaran */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="text-base font-bold text-stone-900 mb-1 flex items-center gap-2">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-coffee">
+              <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-amber-700" />
                 Metode Pembayaran
               </h3>
-              <p className="text-xs text-stone-500 mb-4">Porsi kas masuk berdasarkan jenis channel</p>
+              <p className="text-xs text-slate-500 mb-4">Porsi kas masuk berdasarkan jenis channel</p>
 
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-1">
-                    <span className="flex items-center gap-1.5 text-stone-700">
+                    <span className="flex items-center gap-1.5 text-slate-700">
                       <Banknote className="w-3.5 h-3.5 text-emerald-600" /> Tunai / Cash
                     </span>
-                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.cash)}</span>
+                    <span className="font-mono text-slate-900">{formatCurrency(paymentStats.cash)}</span>
                   </div>
-                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 rounded-full"
                       style={{
@@ -1073,12 +1100,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-1">
-                    <span className="flex items-center gap-1.5 text-stone-700">
+                    <span className="flex items-center gap-1.5 text-slate-700">
                       <QrCode className="w-3.5 h-3.5 text-sky-600" /> QRIS / Statis / Dinamis
                     </span>
-                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.qris)}</span>
+                    <span className="font-mono text-slate-900">{formatCurrency(paymentStats.qris)}</span>
                   </div>
-                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-sky-500 rounded-full"
                       style={{
@@ -1090,12 +1117,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-1">
-                    <span className="flex items-center gap-1.5 text-stone-700">
+                    <span className="flex items-center gap-1.5 text-slate-700">
                       <CreditCard className="w-3.5 h-3.5 text-purple-600" /> Transfer / EDC / Debit
                     </span>
-                    <span className="font-mono text-stone-900">{formatCurrency(paymentStats.transfer)}</span>
+                    <span className="font-mono text-slate-900">{formatCurrency(paymentStats.transfer)}</span>
                   </div>
-                  <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-purple-500 rounded-full"
                       style={{
@@ -1108,26 +1135,26 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
 
             {/* Top 10 Menu Terlaris Hari Ini */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-stone-200/80 shadow-coffee">
-              <h3 className="text-base font-bold text-stone-900 mb-1 flex items-center gap-2">
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-coffee">
+              <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
                 <Flame className="w-4 h-4 text-amber-600" />
                 10 Menu Paling Laris Hari Ini
               </h3>
-              <p className="text-xs text-stone-500 mb-4">Peringkat menu dengan volume penjualan tertinggi</p>
+              <p className="text-xs text-slate-500 mb-4">Peringkat menu dengan volume penjualan tertinggi</p>
 
               <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
                 {bestSellersTodayFull.map((item, idx) => (
                   <div
                     key={item.name}
-                    className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
+                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200/60 flex items-center justify-between text-xs hover:bg-slate-100/70 transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-[10px]">
                         #{idx + 1}
                       </span>
                       <div>
-                        <p className="font-bold text-stone-900">{item.name}</p>
-                        <p className="text-[10px] text-stone-500">{item.qty} cup/porsi terjual</p>
+                        <p className="font-bold text-slate-900">{item.name}</p>
+                        <p className="text-[10px] text-slate-500">{item.qty} cup/porsi terjual</p>
                       </div>
                     </div>
                     <span className="font-bold font-mono text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
@@ -1137,7 +1164,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 ))}
 
                 {bestSellersTodayFull.length === 0 && (
-                  <div className="py-8 text-center text-xs text-stone-400">
+                  <div className="py-8 text-center text-xs text-slate-400">
                     Belum ada menu yang terjual hari ini.
                   </div>
                 )}
@@ -1149,52 +1176,52 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       {/* ── TAB 2: TRACKING STOK & INVENTORI PINTAR ─────────────────────────── */}
       {activeDashboardTab === "inventory" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Total Nilai Aset Bahan Baku
               </span>
-              <p className="text-2xl font-black font-mono text-stone-900">
+              <p className="text-2xl font-black font-mono text-slate-900">
                 {formatCurrency(stockValuation.totalValue)}
               </p>
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Dari total {stockValuation.totalIngredients} item bahan terdaftar
               </p>
             </div>
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Status Stok Bahan
               </span>
               <p className="text-2xl font-black font-mono text-emerald-800">
-                {stockValuation.safeCount} <span className="text-sm font-normal text-stone-500">Aman</span>
+                {stockValuation.safeCount} <span className="text-sm font-normal text-slate-500">Aman</span>
               </p>
               <p className="text-xs text-rose-600 font-bold mt-1">
                 {stockValuation.criticalCount} item di bawah batas minimum
               </p>
             </div>
-            <div className="p-5 bg-white rounded-3xl border border-stone-200/80 shadow-coffee">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-coffee">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Purchase Order Berjalan
               </span>
               <p className="text-2xl font-black font-mono text-amber-900">
                 {pendingDeliveries.length} PO
               </p>
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Menunggu pengiriman & serah terima barang dari supplier
               </p>
             </div>
           </div>
 
           {/* Tabel Bahan Kritis */}
-          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
-                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
                   Daftar Bahan Baku Kritis (Perlu Restock Segera)
                 </h3>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Bahan baku yang sisa stoknya sudah di bawah batas minimum operasional
                 </p>
               </div>
@@ -1214,8 +1241,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
                 >
                   <div>
-                    <p className="font-bold text-stone-900 text-sm">{ing.name}</p>
-                    <p className="text-stone-500 mt-0.5">
+                    <p className="font-bold text-slate-900 text-sm">{ing.name}</p>
+                    <p className="text-slate-500 mt-0.5">
                       Batas Aman: {ing.minStock} {ing.unit} · Harga Satuan: ~{formatCurrency(Number(ing.costPerUnit || 0))}
                     </p>
                   </div>
@@ -1234,10 +1261,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               ))}
 
               {lowStockIngredients.length === 0 && (
-                <div className="py-12 text-center text-xs text-stone-500 bg-stone-50 rounded-2xl border border-stone-200/60">
+                <div className="py-12 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-slate-200/60">
                   <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
-                  <p className="font-bold text-stone-700 text-sm">Semua Stok Bahan Aman</p>
-                  <p className="text-stone-400 mt-0.5">Tidak ada bahan baku yang berada di bawah batas minimum.</p>
+                  <p className="font-bold text-slate-700 text-sm">Semua Stok Bahan Aman</p>
+                  <p className="text-slate-400 mt-0.5">Tidak ada bahan baku yang berada di bawah batas minimum.</p>
                 </div>
               )}
             </div>
@@ -1247,7 +1274,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       {/* ── TAB 3: TRACKING TIM & SOP PINTAR ─────────────────────────────────── */}
       {activeDashboardTab === "team" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="space-y-6">
           {/* Schedule Approval Banner */}
           {scheduleApprovalAlerts.length > 0 && (
             <div className="space-y-3">
@@ -1290,13 +1317,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       <span>Tinjau di Jadwal SDM</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
-                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>ACC Sekarang (Sah)</span>
-                    </button>
+                    {canEditManager && (
+                      <button
+                        onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
+                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>ACC Sekarang (Sah)</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1306,9 +1335,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           {/* Grid Absensi & Checklist */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Kehadiran Staf */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <Users className="w-4 h-4 text-amber-700" />
                   Presensi & Selfie Karyawan
                 </h3>
@@ -1322,21 +1351,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
               <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
                 {todayAttendances.map((att) => {
-                  const emp = employees.find((e) => e.id === att.employeeId);
+                  const canonicalEmpId = resolveCanonicalEmployeeId(att.employeeId, employees, users);
+                  const emp = employees.find((e) => e.id === canonicalEmpId || e.id === att.employeeId);
                   const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
                   return (
                     <div
                       key={att.id}
-                      className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs"
+                      className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between text-xs"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-xs">
                           {emp?.name.charAt(0) || "U"}
                         </div>
                         <div>
-                          <p className="font-bold text-stone-900">{emp?.name}</p>
-                          <p className="text-[10px] text-stone-500">
-                            {att.clockInTime ? `Masuk: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}` : "Tidak hadir"}
+                          <p className="font-bold text-slate-900">{emp?.name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {att.clockInTime ? `Masuk: ${formatWitaTimeHm(att.clockInTime)}` : "Tidak hadir"}
                           </p>
                         </div>
                       </div>
@@ -1348,7 +1378,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                         </span>
                         <button
                           onClick={() => setSelectedAttendancePhoto(att)}
-                          className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700"
+                          className="p-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
                           title="Lihat Foto Selfie & GPS"
                         >
                           <Camera className="w-3.5 h-3.5 text-amber-800" />
@@ -1361,9 +1391,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
 
             {/* Kepatuhan Checklist Jobdesk Divisi */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-amber-700" />
                   Kepatuhan Checklist Jobdesk Divisi
                 </h3>
@@ -1377,12 +1407,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
               <div className="space-y-4">
                 {divisionChecklists.map((div) => (
-                  <div key={div.id} className="p-4 rounded-2xl bg-stone-50 border border-stone-200/60">
+                  <div key={div.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/60">
                     <div className="flex justify-between items-center mb-1.5">
-                      <span className="font-bold text-xs text-stone-900">{div.name}</span>
-                      <span className="font-mono font-bold text-xs text-stone-900">{div.progress}%</span>
+                      <span className="font-bold text-xs text-slate-900">{div.name}</span>
+                      <span className="font-mono font-bold text-xs text-slate-900">{div.progress}%</span>
                     </div>
-                    <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
                           div.progress === 100 ? "bg-emerald-600" : div.progress > 50 ? "bg-amber-600" : "bg-rose-500"
@@ -1400,7 +1430,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
       {/* ── TAB 4: OVERVIEW / COMMAND CENTER (DEFAULT VIEW) ────────────────── */}
       {activeDashboardTab === "overview" && (
-        <div className="space-y-6 animate-in fade-in duration-200">
+        <div className="space-y-6">
           {/* HR Alert Banners if any */}
           {(expiredContracts.length > 0 || expiringContracts.length > 0) && (
             <div className="space-y-2">
@@ -1438,29 +1468,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               )}
             </div>
           )}
-
-          {/* Toast Notifikasi ACC Cepat */}
-          <AnimatePresence>
-            {approvedToast && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{approvedToast}</span>
-                </div>
-                <button
-                  onClick={() => setApprovedToast(null)}
-                  className="font-bold text-emerald-700 hover:text-emerald-900"
-                >
-                  Tutup
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Schedule Approval Banner for Manager */}
           {scheduleApprovalAlerts.length > 0 && (
@@ -1504,13 +1511,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       <span>Tinjau di Jadwal SDM</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
-                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>ACC Sekarang (Sah)</span>
-                    </button>
+                    {canEditManager && (
+                      <button
+                        onClick={() => handleQuickApproveSchedule(alert.weekKey, alert.weekLabel)}
+                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>ACC Sekarang (Sah)</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1571,10 +1580,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             {/* Sesi Kasir & Shift Hari Ini */}
 {FEATURES.POS && (
 <>
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     <Store className="w-4 h-4 text-amber-700" />
                     Status Shift Kasir Toko
                   </h2>
@@ -1584,7 +1593,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       KASIR BUKA
                     </span>
                   ) : (
-                    <span className="px-3 py-1 bg-stone-100 text-stone-600 border border-stone-200 text-xs font-bold rounded-full">
+                    <span className="px-3 py-1 bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold rounded-full">
                       SHIFT DITUTUP
                     </span>
                   )}
@@ -1592,38 +1601,35 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
                 {activeShift ? (
                   <div className="space-y-4">
-                    <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200/60 space-y-2">
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60 space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-stone-500 font-semibold">Penanggung Jawab (PIC):</span>
-                        <span className="font-bold text-stone-900 text-sm">
+                        <span className="text-xs text-slate-500 font-semibold">Penanggung Jawab (PIC):</span>
+                        <span className="font-bold text-slate-900 text-sm">
                           {activeShift.picEmployeeName || cashierUser?.name || "Kasir"}
                         </span>
                       </div>
                       {activeShift.teamMembers && activeShift.teamMembers.length > 0 && (
-                        <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between text-xs">
-                          <span className="text-stone-500 text-[11px]">Kru Bertugas:</span>
-                          <span className="font-semibold text-stone-700 text-[11px] truncate max-w-[200px]" title={activeShift.teamMembers.join(", ")}>
+                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                          <span className="text-slate-500 text-[11px]">Kru Bertugas:</span>
+                          <span className="font-semibold text-slate-700 text-[11px] truncate max-w-[200px]" title={activeShift.teamMembers.join(", ")}>
                             {activeShift.teamMembers.join(", ")}
                           </span>
                         </div>
                       )}
-                      <div className="flex justify-between items-center text-xs pt-1 border-t border-stone-200/40">
-                        <span className="text-stone-500">Mulai Shift:</span>
-                        <span className="font-semibold text-stone-700">
-                          {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                      <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200/40">
+                        <span className="text-slate-500">Mulai Shift:</span>
+                        <span className="font-semibold text-slate-700">
+                          {formatWitaTimeHm(activeShift.startTime)}
                         </span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="p-4 bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
-                        <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider mb-1">
+                      <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                           Modal Awal Laci
                         </p>
-                        <p className="text-lg font-bold font-mono text-stone-900">
+                        <p className="text-lg font-bold font-mono text-slate-900">
                           {formatCurrency(activeShift.startingCash)}
                         </p>
                       </div>
@@ -1638,10 +1644,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     </div>
                   </div>
                 ) : (
-                  <div className="py-8 text-center bg-stone-50/50 rounded-2xl border border-dashed border-stone-200">
-                    <Clock className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                    <p className="text-sm font-bold text-stone-700">Belum Ada Shift Kasir Berjalan</p>
-                    <p className="text-xs text-stone-400 mt-0.5">
+                  <div className="py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <Clock className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-700">Belum Ada Shift Kasir Berjalan</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
                       Laci kasir belum dibuka oleh kasir bertugas hari ini.
                     </p>
                   </div>
@@ -1657,7 +1663,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 >
                   <Store className="w-3.5 h-3.5 text-amber-400" />
                   <span>Terminal POS Kasir</span>
-                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
                 </a>
                 <a
                   href="/kds"
@@ -1675,34 +1681,56 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </>
 )}
 {/* Kehadiran Staf Hari Ini (Live Attendance) */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     <Users className="w-4 h-4 text-amber-700" />
                     Kehadiran Staf Hari Ini
                   </h2>
                   <div className="flex items-center gap-2">
-                    {pendingToday.length > 0 && (
+                    {canEditManager && pendingToday.length > 0 && (
                       <button
                         onClick={() => {
-                          if (confirm(`Sahkan / Setujui SEKALIGUS seluruh ${pendingToday.length} absensi yang menunggu verifikasi hari ini?`)) {
-                            pendingToday.forEach((att) => {
-                              updateDailyAttendance({
-                                ...att,
-                                approvalStatus: "APPROVED",
+                          confirmModal.open({
+                            title: `Sahkan ${pendingToday.length} Absensi Hari Ini?`,
+                            message: `Setujui seluruh ${pendingToday.length} catatan kehadiran staf yang menunggu verifikasi hari ini secara sekaligus.`,
+                            confirmLabel: "Ya, Sahkan Semua",
+                            variant: "info",
+                            onConfirm: () => {
+                              let blockedError: string | null = null;
+                              let approvedCount = 0;
+                              pendingToday.forEach((att) => {
+                                const periodCheck = validatePayrollMutation({
+                                  action: "UPDATE",
+                                  recordPeriod: (att.date || todayStr).slice(0, 7),
+                                  closedPeriods: closedPeriods || [],
+                                });
+                                if ("error" in periodCheck) {
+                                  blockedError = periodCheck.error;
+                                  return;
+                                }
+                                updateDailyAttendance({
+                                  ...att,
+                                  approvalStatus: "APPROVED",
+                                });
+                                approvedCount++;
                               });
-                            });
-                          }
+                              if (blockedError) toast.error(blockedError);
+                              if (approvedCount > 0) {
+                                toast.success(`${approvedCount} kehadiran staf berhasil disahkan.`);
+                              }
+                            },
+                          });
                         }}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors shadow-2xs"
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
                         title="Sahkan seluruh absensi yang masih berstatus menunggu verifikasi hari ini"
                       >
                         <CheckCheck className="w-3.5 h-3.5" />
                         <span>Sahkan Semua ({pendingToday.length})</span>
                       </button>
                     )}
-                    <span className="text-xs font-semibold text-stone-500">
+                    <span className="text-xs font-semibold text-slate-500">
                       Total: {attendanceStats.total} Karyawan
                     </span>
                   </div>
@@ -1722,23 +1750,24 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     <p className="text-lg font-black font-mono text-sky-800">{attendanceStats.izinSakit}</p>
                     <p className="text-[10px] font-bold text-sky-700 uppercase">Izin/Sakit</p>
                   </div>
-                  <div className="p-3 bg-stone-100/80 rounded-2xl border border-stone-200 text-center">
-                    <p className="text-lg font-black font-mono text-stone-700">{attendanceStats.belumHadir}</p>
-                    <p className="text-[10px] font-bold text-stone-500 uppercase">Belum</p>
+                  <div className="p-3 bg-slate-100/80 rounded-2xl border border-slate-200 text-center">
+                    <p className="text-lg font-black font-mono text-slate-700">{attendanceStats.belumHadir}</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Belum</p>
                   </div>
                 </div>
 
                 {/* List Absensi Terbaru dengan Tombol Preview Foto Selfie & Verifikasi */}
                 <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                   {todayAttendances.map((att) => {
-                    const emp = employees.find((e) => e.id === att.employeeId);
+                    const canonicalEmpId = resolveCanonicalEmployeeId(att.employeeId, employees, users);
+                    const emp = employees.find((e) => e.id === canonicalEmpId || e.id === att.employeeId);
                     const hasPhoto = Boolean(att.clockInPhotoUrl || att.clockOutPhotoUrl);
                     const appStatus = att.approvalStatus || "PENDING";
 
                     return (
                       <div
                         key={att.id}
-                        className="p-3 rounded-2xl bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs hover:bg-stone-100/70 transition-colors"
+                        className="p-3 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between text-xs hover:bg-slate-100/70 transition-colors"
                       >
                         <div
                           className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 cursor-pointer"
@@ -1749,10 +1778,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                             {emp?.name.charAt(0) || "U"}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-stone-900 truncate">{emp?.name}</p>
-                            <p className="text-[10px] text-stone-500 truncate">
+                            <p className="font-bold text-slate-900 truncate">{emp?.name}</p>
+                            <p className="text-[10px] text-slate-500 truncate">
                               {att.clockInTime
-                                ? `Clock in: ${new Date(att.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`
+                                ? `Clock in: ${formatWitaTimeHm(att.clockInTime)}`
                                 : att.notes || "Tidak hadir"}
                             </p>
                           </div>
@@ -1768,7 +1797,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                                   ? "bg-amber-100 text-amber-800"
                                   : att.status === "ALPHA"
                                     ? "bg-rose-100 text-rose-800"
-                                    : "bg-stone-200 text-stone-700"
+                                    : "bg-slate-200 text-slate-700"
                             }`}
                           >
                             {att.status}
@@ -1793,11 +1822,23 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                           )}
 
                           {/* Quick Sahkan Button if not yet approved and not alpha */}
-                          {appStatus !== "APPROVED" && att.status !== "ALPHA" && (
+                          {canEditManager && appStatus !== "APPROVED" && att.status !== "ALPHA" && (
                             <button
-                              onClick={() => updateDailyAttendance({ ...att, approvalStatus: "APPROVED" })}
+                              onClick={() => {
+                                const periodCheck = validatePayrollMutation({
+                                  action: "UPDATE",
+                                  recordPeriod: (att.date || todayStr).slice(0, 7),
+                                  closedPeriods: closedPeriods || [],
+                                });
+                                if ("error" in periodCheck) {
+                                  toast.error(periodCheck.error);
+                                  return;
+                                }
+                                updateDailyAttendance({ ...att, approvalStatus: "APPROVED" });
+                                toast.success(`Kehadiran ${emp?.name || "staf"} disahkan.`);
+                              }}
                               title="Sahkan langsung dengan 1-klik"
-                              className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs transition-colors"
+                              className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs transition-colors cursor-pointer"
                             >
                               <Check className="w-3.5 h-3.5" />
                             </button>
@@ -1807,12 +1848,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                           <button
                             onClick={() => setSelectedAttendancePhoto(att)}
                             title="Lihat Bukti Foto, GPS, & Detail Verifikasi"
-                            className="p-1.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 shadow-2xs transition-colors"
+                            className="p-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors"
                           >
                             {hasPhoto ? (
                               <Camera className="w-3.5 h-3.5 text-amber-800" />
                             ) : (
-                              <Eye className="w-3.5 h-3.5 text-stone-600" />
+                              <Eye className="w-3.5 h-3.5 text-slate-600" />
                             )}
                           </button>
                         </div>
@@ -1821,7 +1862,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   })}
 
                   {todayAttendances.length === 0 && (
-                    <div className="py-6 text-center text-xs text-stone-400">
+                    <div className="py-6 text-center text-xs text-slate-400">
                       Belum ada catatan absensi yang masuk hari ini.
                     </div>
                   )}
@@ -1830,7 +1871,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
               <button
                 onClick={() => onNavigate("hr")}
-                className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full mt-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 Buka Rekap Absensi Seluruh Karyawan <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -1840,14 +1881,14 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           {/* Progres Checklist Jobdesk Divisi & Peringatan Bahan Menipis */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Checklist Jobdesk Divisi Hari Ini */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     <ClipboardCheck className="w-4 h-4 text-amber-700" />
                     Progres Checklist Jobdesk Divisi
                   </h2>
-                  <p className="text-xs text-stone-500 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Evaluasi penyelesaian tugas operasional harian tiap tim.
                   </p>
                 </div>
@@ -1861,19 +1902,19 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
               <div className="space-y-4">
                 {divisionChecklists.map((div) => (
-                  <div key={div.id} className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60">
+                  <div key={div.id} className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60">
                     <div className="flex justify-between items-center mb-2">
                       <div>
-                        <p className="text-xs font-bold text-stone-800">{div.name}</p>
-                        <p className="text-[10px] text-stone-500">
+                        <p className="text-xs font-bold text-slate-800">{div.name}</p>
+                        <p className="text-[10px] text-slate-500">
                           {div.submittedCount} checklist tercatat ({div.staffCount} personil)
                         </p>
                       </div>
-                      <span className="text-xs font-black font-mono text-stone-900">
+                      <span className="text-xs font-black font-mono text-slate-900">
                         {div.progress}%
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all duration-500 rounded-full ${
                           div.progress === 100
@@ -1900,15 +1941,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </div>
 
             {/* Peringatan Stok Kritis & PO Bahan Baku */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-rose-600" />
                       Peringatan Bahan Baku Menipis
                     </h2>
-                    <p className="text-xs text-stone-500 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Bahan baku di bawah batas aman yang perlu segera dipesan ulang.
                     </p>
                   </div>
@@ -1924,8 +1965,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                       className="p-3 rounded-2xl bg-rose-50/50 border border-rose-200/60 flex items-center justify-between text-xs"
                     >
                       <div>
-                        <p className="font-bold text-stone-900">{ing.name}</p>
-                        <p className="text-[10px] text-stone-500">
+                        <p className="font-bold text-slate-900">{ing.name}</p>
+                        <p className="text-[10px] text-slate-500">
                           Batas Aman: {ing.minStock} {ing.unit}
                         </p>
                       </div>
@@ -1938,7 +1979,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   ))}
 
                   {lowStockIngredients.length === 0 && (
-                    <div className="py-8 text-center text-xs text-stone-400">
+                    <div className="py-8 text-center text-xs text-slate-400">
                       <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
                       Semua stok bahan baku saat ini berada di atas batas minimum aman.
                     </div>
@@ -1960,7 +2001,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
 
               <button
                 onClick={() => onNavigate("inventory")}
-                className="w-full mt-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200/80 text-stone-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full mt-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 Buka Inventori & Order Bahan <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -1972,15 +2013,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             {/* Card 1: Log Otorisasi Terkini (Void & Refund) */}
 {FEATURES.POS && (
 <>
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-rose-600" />
                       Log Otorisasi Terkini (Void & Refund)
                     </h2>
-                    <p className="text-xs text-stone-500 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Persetujuan pembatalan transaksi & pengembalian dana kasir.
                     </p>
                   </div>
@@ -2001,13 +2042,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   {approvalHistory.slice(0, 5).map((item) => {
                     const isApproved = item.status === "APPROVED";
                     const timeStr = item.respondedAt
-                      ? new Date(item.respondedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      ? formatWitaTimeHm(item.respondedAt)
                       : "-";
 
                     return (
                       <div
                         key={item.id}
-                        className="p-3 rounded-2xl bg-stone-50/80 border border-stone-200/60 flex items-center justify-between text-xs gap-3"
+                        className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/60 flex items-center justify-between text-xs gap-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span
@@ -2020,10 +2061,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                             {item.type}
                           </span>
                           <div className="truncate">
-                            <p className="font-bold text-stone-900 truncate">
+                            <p className="font-bold text-slate-900 truncate">
                               #{item.receiptNo} • {formatCurrency(item.amount)}
                             </p>
-                            <p className="text-[11px] text-stone-500 truncate">
+                            <p className="text-[11px] text-slate-500 truncate">
                               Kasir: {item.cashierName} · {item.reason}
                             </p>
                           </div>
@@ -2039,7 +2080,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                           >
                             {isApproved ? `Disetujui (${timeStr})` : `Ditolak (${timeStr})`}
                           </span>
-                          <p className="text-[10px] text-stone-400 mt-0.5">
+                          <p className="text-[10px] text-slate-400 mt-0.5">
                             Oleh: {item.respondedBy || "Manager"}
                           </p>
                         </div>
@@ -2048,7 +2089,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                   })}
 
                   {approvalHistory.length === 0 && (
-                    <div className="py-8 text-center text-xs text-stone-400">
+                    <div className="py-8 text-center text-xs text-slate-400">
                       <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       Belum ada riwayat otorisasi void atau refund yang tercatat hari ini.
                     </div>
@@ -2056,8 +2097,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-stone-100 mt-4 flex justify-between items-center text-xs">
-                <span className="text-stone-500">
+              <div className="pt-4 border-t border-slate-100 mt-4 flex justify-between items-center text-xs">
+                <span className="text-slate-500">
                   Total Log: <strong>{approvalHistory.length} Otorisasi</strong>
                 </span>
                 <button
@@ -2073,15 +2114,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
             </>
 )}
 {/* Card 2: Efektivitas Promo & Diskon POS */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee flex flex-col justify-between">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                       <Tag className="w-4 h-4 text-emerald-600" />
                       Promo & Diskon Toko Aktif
                     </h2>
-                    <p className="text-xs text-stone-500 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Promosi resmi yang berlaku untuk produk & pesanan kafe.
                     </p>
                   </div>
@@ -2095,21 +2136,23 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
 
                 <div className="space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
-                  {(promotions || []).filter((p) => p.isActive).map((promo) => (
+                  {(promotions || [])
+                    .filter((p) => getPromotionRuntimeStatus(p, todayStr) === "ACTIVE")
+                    .map((promo) => (
                     <div
                       key={promo.id}
                       className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200/60 flex items-center justify-between text-xs gap-3"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-stone-900 truncate">{promo.name}</span>
+                          <span className="font-bold text-slate-900 truncate">{promo.name}</span>
                           {promo.code && (
                             <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold">
                               {promo.code}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-stone-500 mt-0.5">
+                        <p className="text-[11px] text-slate-500 mt-0.5">
                           Potongan:{" "}
                           <strong className="text-emerald-700">
                             {promo.type === "PERCENT" ? `${promo.value}%` : formatCurrency(promo.value)}
@@ -2124,8 +2167,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                     </div>
                   ))}
 
-                  {(promotions || []).filter((p) => p.isActive).length === 0 && (
-                    <div className="py-8 text-center text-xs text-stone-400">
+                  {(promotions || []).filter((p) => getPromotionRuntimeStatus(p, todayStr) === "ACTIVE").length === 0 && (
+                    <div className="py-8 text-center text-xs text-slate-400">
                       <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       Tidak ada promo yang sedang aktif saat ini.
                     </div>
@@ -2133,8 +2176,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-stone-100 mt-4 flex justify-between items-center text-xs">
-                <span className="text-stone-500">
+              <div className="pt-4 border-t border-slate-100 mt-4 flex justify-between items-center text-xs">
+                <span className="text-slate-500">
                   Total Promo Aktif:{" "}
                   <strong>{(promotions || []).filter((p) => p.isActive).length} Promo</strong>
                 </span>
@@ -2150,14 +2193,14 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
           </div>
 
           {/* Snapshot Menu Terlaris Hari Ini */}
-          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-stone-200/80 shadow-coffee">
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-coffee">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h2 className="text-base font-bold text-stone-900 tracking-tight flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-amber-700" />
                   Menu Terlaris Hari Ini (Best Sellers)
                 </h2>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Menu yang paling banyak terjual hari ini.
                 </p>
               </div>
@@ -2173,22 +2216,22 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
               {bestSellersToday.map((item, idx) => (
                 <div
                   key={item.name}
-                  className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/60 flex flex-col justify-between"
+                  className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 flex flex-col justify-between"
                 >
                   <div>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
                       #{idx + 1}
                     </span>
-                    <p className="text-xs font-bold text-stone-900 mt-2 truncate">{item.name}</p>
+                    <p className="text-xs font-bold text-slate-900 mt-2 truncate">{item.name}</p>
                   </div>
                   <p className="text-lg font-black font-mono text-amber-950 mt-2">
-                    {item.qty} <span className="text-xs font-normal text-stone-500">cup/porsi</span>
+                    {item.qty} <span className="text-xs font-normal text-slate-500">cup/porsi</span>
                   </p>
                 </div>
               ))}
 
               {bestSellersToday.length === 0 && (
-                <div className="col-span-full py-8 text-center text-xs text-stone-400">
+                <div className="col-span-full py-8 text-center text-xs text-slate-400">
                   Belum ada data transaksi penjualan yang tercatat hari ini.
                 </div>
               )}
@@ -2198,187 +2241,245 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onNavigate }
       )}
 
       {/* Modal Preview Foto Selfie & Verifikasi Lokasi GPS Absensi */}
-      <AnimatePresence>
-        {selectedAttendancePhoto && createPortal(
-          <motion.div
-            key="attendance-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto"
-          >
-            <motion.div
-              key="attendance-card"
-              initial={{ opacity: 0, scale: 0.92, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 15 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="my-auto bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-coffee-lg border border-stone-200 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
-            >
-              <div className="p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/80">
-                <div className="flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-amber-700" />
-                  <h3 className="font-bold text-stone-900 text-sm">
-                    Verifikasi Bukti Kehadiran Staf
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setSelectedAttendancePhoto(null)}
-                  className="p-1.5 rounded-full hover:bg-stone-200/60 text-stone-500"
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {selectedAttendancePhoto && (
+              <motion.div
+                key="attendance-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setSelectedAttendancePhoto(null);
+                }}
+                className="fixed inset-0 z-[100] flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-sm overflow-y-auto"
+              >
+                <motion.div
+                  key="attendance-card"
+                  initial={{ opacity: 0, scale: 0.92, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: 15 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full overflow-hidden shadow-coffee-lg border border-slate-200 dark:border-slate-700 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4">
-                {/* Employee Details & Status */}
-                <div className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
-                  <div>
-                    <p className="font-bold text-stone-900 text-sm">
-                      {employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.name}
-                    </p>
-                    <p className="text-[11px] text-stone-500">
-                      {employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.position || "Staff"} · Tanggal: {selectedAttendancePhoto.date}
-                    </p>
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                        Verifikasi Bukti Kehadiran Staf
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAttendancePhoto(null)}
+                      className="p-1.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                      {selectedAttendancePhoto.status}
-                    </span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                      selectedAttendancePhoto.approvalStatus === "APPROVED"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : selectedAttendancePhoto.approvalStatus === "REJECTED"
-                          ? "bg-rose-100 text-rose-800"
-                          : "bg-amber-100 text-amber-800"
-                    }`}>
-                      {selectedAttendancePhoto.approvalStatus === "APPROVED"
-                        ? "Disahkan"
-                        : selectedAttendancePhoto.approvalStatus === "REJECTED"
-                          ? "Ditolak (Alpha)"
-                          : "Menunggu Review"}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Selfie Photo Preview (Clock In & Out) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-900 aspect-4/3 relative flex items-center justify-center">
-                    {selectedAttendancePhoto.clockInPhotoUrl ? (
-                      <>
-                        <img
-                          src={selectedAttendancePhoto.clockInPhotoUrl}
-                          alt="Selfie Clock In"
-                          className="w-full h-full object-cover"
-                        />
-                        <span className="absolute bottom-2 left-2 bg-emerald-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
-                          IN: {selectedAttendancePhoto.clockInTime ? new Date(selectedAttendancePhoto.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                        </span>
-                      </>
-                    ) : (
-                      <div className="text-center p-3 text-stone-400 text-xs">
-                        <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
-                        Tanpa foto Masuk
+                  <div className="p-5 space-y-4">
+                    {/* Employee Details & Status */}
+                    {(() => {
+                      const canonicalEmpId = resolveCanonicalEmployeeId(
+                        selectedAttendancePhoto.employeeId,
+                        employees,
+                        users
+                      );
+                      const photoEmp = employees.find(
+                        (e) => e.id === canonicalEmpId || e.id === selectedAttendancePhoto.employeeId
+                      );
+                      return (
+                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/70 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                              {photoEmp?.name || "Karyawan"}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {photoEmp?.position || "Staff"} · Tanggal: {selectedAttendancePhoto.date}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="font-bold text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300">
+                              {selectedAttendancePhoto.status}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              selectedAttendancePhoto.approvalStatus === "APPROVED"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                : selectedAttendancePhoto.approvalStatus === "REJECTED"
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                            }`}>
+                              {selectedAttendancePhoto.approvalStatus === "APPROVED"
+                                ? "Disahkan"
+                                : selectedAttendancePhoto.approvalStatus === "REJECTED"
+                                  ? "Ditolak (Alpha)"
+                                  : "Menunggu Review"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Selfie Photo Preview (Clock In & Out) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-950 aspect-4/3 relative flex items-center justify-center">
+                        {selectedAttendancePhoto.clockInPhotoUrl ? (
+                          <>
+                            <img
+                              src={selectedAttendancePhoto.clockInPhotoUrl}
+                              alt="Selfie Clock In"
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute bottom-2 left-2 bg-emerald-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
+                              IN: {selectedAttendancePhoto.clockInTime ? formatWitaTimeHm(selectedAttendancePhoto.clockInTime) : "-"}
+                            </span>
+                          </>
+                        ) : (
+                          <div className="text-center p-3 text-slate-400 text-xs">
+                            <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                            Tanpa foto Masuk
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl overflow-hidden border border-stone-200 bg-stone-900 aspect-4/3 relative flex items-center justify-center">
-                    {selectedAttendancePhoto.clockOutPhotoUrl ? (
-                      <>
-                        <img
-                          src={selectedAttendancePhoto.clockOutPhotoUrl}
-                          alt="Selfie Clock Out"
-                          className="w-full h-full object-cover"
-                        />
-                        <span className="absolute bottom-2 left-2 bg-rose-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
-                          OUT: {selectedAttendancePhoto.clockOutTime ? new Date(selectedAttendancePhoto.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                        </span>
-                      </>
-                    ) : (
-                      <div className="text-center p-3 text-stone-400 text-xs">
-                        <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
-                        {selectedAttendancePhoto.clockOutTime ? "Tanpa foto Pulang" : "Belum Clock Out"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* GPS Location & Coordinate Info */}
-                {selectedAttendancePhoto.clockInLocation ? (
-                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-stone-700">
-                      <MapPin className="w-4 h-4 text-amber-700 shrink-0" />
-                      <div>
-                        <p className="font-bold">Koordinat GPS Masuk:</p>
-                        <p className="font-mono text-[11px] text-stone-500">
-                          {selectedAttendancePhoto.clockInLocation.lat.toFixed(6)},{" "}
-                          {selectedAttendancePhoto.clockInLocation.lng.toFixed(6)}
-                        </p>
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-950 aspect-4/3 relative flex items-center justify-center">
+                        {selectedAttendancePhoto.clockOutPhotoUrl ? (
+                          <>
+                            <img
+                              src={selectedAttendancePhoto.clockOutPhotoUrl}
+                              alt="Selfie Clock Out"
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute bottom-2 left-2 bg-rose-600/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
+                              OUT: {selectedAttendancePhoto.clockOutTime ? formatWitaTimeHm(selectedAttendancePhoto.clockOutTime) : "-"}
+                            </span>
+                          </>
+                        ) : (
+                          <div className="text-center p-3 text-slate-400 text-xs">
+                            <Camera className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                            {selectedAttendancePhoto.clockOutTime ? "Tanpa foto Pulang" : "Belum Clock Out"}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <a
-                      href={`https://www.google.com/maps?q=${selectedAttendancePhoto.clockInLocation.lat},${selectedAttendancePhoto.clockInLocation.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[11px] font-bold text-amber-800 hover:text-amber-900 underline"
-                    >
-                      Buka Peta <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                ) : (
-                  <p className="text-xs text-stone-400 text-center italic py-1">
-                    Koordinat GPS tidak terekam pada sesi absensi ini.
-                  </p>
-                )}
 
-                {/* Notes / Reason if any */}
-                {selectedAttendancePhoto.notes && (
-                  <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/70 text-xs">
-                    <p className="font-bold text-amber-900 mb-0.5">Catatan / Alasan:</p>
-                    <p className="text-stone-700 leading-relaxed">{selectedAttendancePhoto.notes}</p>
-                  </div>
-                )}
+                    {/* GPS Location & Coordinate Info */}
+                    {selectedAttendancePhoto.clockInLocation ? (
+                      <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                          <MapPin className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                          <div>
+                            <p className="font-bold">Koordinat GPS Masuk:</p>
+                            <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                              {selectedAttendancePhoto.clockInLocation.lat.toFixed(6)},{" "}
+                              {selectedAttendancePhoto.clockInLocation.lng.toFixed(6)}
+                            </p>
+                          </div>
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps?q=${selectedAttendancePhoto.clockInLocation.lat},${selectedAttendancePhoto.clockInLocation.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:text-amber-900 underline"
+                        >
+                          Buka Peta <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center italic py-1">
+                        Koordinat GPS tidak terekam pada sesi absensi ini.
+                      </p>
+                    )}
 
-                {/* Approval Action */}
-                <div className="pt-2 flex gap-2">
-                  <button
-                    onClick={() => {
-                      updateDailyAttendance({
-                        ...selectedAttendancePhoto,
-                        approvalStatus: "APPROVED",
-                      });
-                      setSelectedAttendancePhoto(null);
-                    }}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-coffee-sm flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Verifikasi Hadir (Sah)</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      const empName = employees.find((e) => e.id === selectedAttendancePhoto.employeeId)?.name || "karyawan ini";
-                      if (confirm(`Tolak kehadiran ${empName}? Status kehadiran akan diubah menjadi ALPHA (tidak mendapat tunjangan/gaji hari ini).`)) {
-                        updateDailyAttendance({
-                          ...selectedAttendancePhoto,
-                          status: "ALPHA",
-                          approvalStatus: "REJECTED",
-                        });
-                        setSelectedAttendancePhoto(null);
-                      }
-                    }}
-                    className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl text-xs transition-colors border border-rose-200 flex items-center justify-center gap-1"
-                  >
-                    <XCircle className="w-4 h-4 text-rose-600" />
-                    <span>Tolak (Set Alpha)</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>,
+                    {/* Notes / Reason if any */}
+                    {selectedAttendancePhoto.notes && (
+                      <div className="p-3 bg-amber-50/70 dark:bg-amber-500/15 rounded-2xl border border-amber-200/70 dark:border-amber-500/30 text-xs">
+                        <p className="font-bold text-amber-900 dark:text-amber-300 mb-0.5">Catatan / Alasan:</p>
+                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed">{selectedAttendancePhoto.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Approval Action */}
+                    {canEditManager && (
+                      <div className="pt-2 flex gap-2">
+                        <button
+                          onClick={() => {
+                            const periodCheck = validatePayrollMutation({
+                              action: "UPDATE",
+                              recordPeriod: (selectedAttendancePhoto.date || todayStr).slice(0, 7),
+                              closedPeriods: closedPeriods || [],
+                            });
+                            if ("error" in periodCheck) {
+                              toast.error(periodCheck.error);
+                              return;
+                            }
+                            updateDailyAttendance({
+                              ...selectedAttendancePhoto,
+                              approvalStatus: "APPROVED",
+                            });
+                            setSelectedAttendancePhoto(null);
+                            toast.success("Kehadiran staf berhasil disahkan.");
+                          }}
+                          className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-coffee-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Verifikasi Hadir (Sah)</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            const canonicalEmpId = resolveCanonicalEmployeeId(
+                              selectedAttendancePhoto.employeeId,
+                              employees,
+                              users
+                            );
+                            const empName =
+                              employees.find(
+                                (e) => e.id === canonicalEmpId || e.id === selectedAttendancePhoto.employeeId
+                              )?.name || "karyawan ini";
+                            const targetAtt = selectedAttendancePhoto;
+                            confirmModal.open({
+                              title: `Tolak Kehadiran ${empName}?`,
+                              message:
+                                "Status kehadiran akan diubah menjadi ALPHA (tidak mendapat tunjangan/gaji hari ini).",
+                              confirmLabel: "Ya, Tolak (Set Alpha)",
+                              variant: "danger",
+                              onConfirm: () => {
+                                const periodCheck = validatePayrollMutation({
+                                  action: "UPDATE",
+                                  recordPeriod: (targetAtt.date || todayStr).slice(0, 7),
+                                  closedPeriods: closedPeriods || [],
+                                });
+                                if ("error" in periodCheck) {
+                                  toast.error(periodCheck.error);
+                                  return;
+                                }
+                                updateDailyAttendance({
+                                  ...targetAtt,
+                                  status: "ALPHA",
+                                  approvalStatus: "REJECTED",
+                                });
+                                setSelectedAttendancePhoto(null);
+                                toast.success(`Kehadiran ${empName} ditolak & ditandai ALPHA.`);
+                              },
+                            });
+                          }}
+                          className="px-4 py-3 bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-bold rounded-2xl text-xs transition-colors border border-rose-200 dark:border-rose-500/30 flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                          <span>Tolak (Set Alpha)</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
           document.body
         )}
-      </AnimatePresence>
+
+      <ConfirmModal {...confirmModal.modalProps} />
 
       {/* Modal Pusat Otorisasi Remote (Remote In-App Approval) */}
       {FEATURES.POS && (

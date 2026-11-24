@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { formatCurrency } from "../utils/format";
 import { useStore } from "../store/StoreContext";
 import {
   Plus,
-  Minus,
   Trash2,
   ShoppingBag,
   Printer,
@@ -19,20 +19,26 @@ import {
   Coins,
   Receipt,
   Sparkles,
-  ArrowRight,
   CheckCircle2,
-  ChevronRight,
   X,
   CreditCard,
-  Layers,
   Lock,
 } from "lucide-react";
-import { PurchaseOrderItem } from "../types";
+import { PurchaseOrder, PurchaseOrderItem } from "../types";
 import { CustomSelect } from "./common/CustomSelect";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { toast } from "../context/ToastContext";
 import { exportToCSV } from "../utils/export";
+import { computeCashAccountBalances } from "../utils/financeMetrics";
+import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
+import {
+  getLocalPeriodFromTimestamp,
+  addDaysToLocalDate,
+  computeDueDateStatus,
+  validatePoCheckoutInput,
+  validatePoPaymentInput,
+} from "../utils/syncSanitizers";
 import {
   calculateCashFlowHppSync,
   getIngredientPackagingChoices,
@@ -49,10 +55,10 @@ export const Purchases = () => {
     addDirectMarketPurchase,
     payPurchaseOrder,
     cashAccounts,
+    cashTransactions,
     products,
     recipes,
     batchPreparations,
-    updatePOStatus,
     markPOAsReceived,
     deletePurchaseOrder,
     closedPeriods = [],
@@ -63,20 +69,20 @@ export const Purchases = () => {
 
   const isPeriodClosed = (dateStr: string) => {
     if (!dateStr) return false;
-    const period = dateStr.slice(0, 7);
-    return closedPeriods.some((p) => p.period === period);
+    const period = getLocalPeriodFromTimestamp(dateStr);
+    return Boolean(period) && closedPeriods.some((p) => p.period === period);
   };
 
   const isFinance =
     currentUser?.role === "FINANCE" ||
     currentUser?.role === "SUPER_ADMIN";
 
-  const isManager =
-    currentUser?.role === "MANAGER" ||
-    currentUser?.role === "SUPER_ADMIN";
+  const accountBalances = useMemo(
+    () => computeCashAccountBalances(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
 
   const canProcessPayment = !isReadOnly && isFinance;
-  const canManagePurchases = !isReadOnly && (isManager || isFinance);
 
   const [activeTab, setActiveTab] = useState<"new_po" | "history" | "payables">(
     isReadOnly ? "payables" : "new_po"
@@ -85,6 +91,9 @@ export const Purchases = () => {
     "ALL" | "OVERDUE" | "DUE_SOON" | "PARTIAL" | "UNPAID"
   >("ALL");
   const [payableSupplierFilter, setPayableSupplierFilter] = useState<string>("");
+  const [historyFilter, setHistoryFilter] = useState<
+    "ALL" | "PENDING_DELIVERY" | "UNPAID" | "PAID" | "MARKET"
+  >("ALL");
 
   // Purchase Mode: Formal Distributor PO vs Direct Market/Cash Purchase
   const [purchaseMode, setPurchaseMode] = useState<"DISTRIBUTOR" | "MARKET">("DISTRIBUTOR");
@@ -96,7 +105,9 @@ export const Purchases = () => {
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [cart, setCart] = useState<PurchaseOrderItem[]>([]);
   const [deliveryOption, setDeliveryOption] = useState<"RECEIVED" | "PENDING">("RECEIVED");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [payableSearch, setPayableSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TEMPO">("CASH");
@@ -105,54 +116,32 @@ export const Purchases = () => {
   const [payAmount, setPayAmount] = useState<number>(0);
   const [payAccountId, setPayAccountId] = useState<string>("");
   const [payNotes, setPayNotes] = useState<string>("");
-  const [payDate, setPayDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
-  const [selectedPOForPay, setSelectedPOForPay] = useState<any>(null);
-  const [currentInvoiceData, setCurrentInvoiceData] = useState<any>(null);
-  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null);
-  const [poToReceive, setPoToReceive] = useState<any>(null);
-
-  // Mobile drawer toggle for cart on small phones
-  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [payDate, setPayDate] = useState<string>(() => getLocalDateString());
+  const [selectedPOForPay, setSelectedPOForPay] = useState<PurchaseOrder | null>(null);
+  const [currentInvoiceData, setCurrentInvoiceData] = useState<PurchaseOrder | null>(null);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<PurchaseOrder | null>(null);
+  const [poToReceive, setPoToReceive] = useState<PurchaseOrder | null>(null);
 
   const isIndo = settings.language === "id";
 
-  const getDueStatus = (dueDateStr?: string) => {
-    if (!dueDateStr) return { label: "Tanpa Tempo", variant: "default" as const, days: 0 };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDateStr);
-    due.setHours(0, 0, 0, 0);
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const getDueStatus = (dueDateStr?: string) => computeDueDateStatus(dueDateStr);
 
-    if (diffDays < 0) {
-      return {
-        label: `Lewat ${Math.abs(diffDays)} Hari`,
-        variant: "overdue" as const,
-        days: diffDays,
-      };
+  const openPayModal = (po: PurchaseOrder) => {
+    if (!canProcessPayment) return;
+    const remaining = Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0)));
+    if (remaining <= 0) {
+      toast.info("Tagihan PO ini sudah lunas.");
+      return;
     }
-    if (diffDays === 0) {
-      return {
-        label: "Jatuh Tempo Hari Ini",
-        variant: "due_today" as const,
-        days: 0,
-      };
-    }
-    if (diffDays <= 3) {
-      return {
-        label: `Jatuh Tempo dlm ${diffDays} Hari`,
-        variant: "due_soon" as const,
-        days: diffDays,
-      };
-    }
-    return {
-      label: `Tempo: ${new Date(dueDateStr).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}`,
-      variant: "normal" as const,
-      days: diffDays,
-    };
+    setSelectedPOForPay(po);
+    setPayAmount(remaining);
+    setPayNotes("");
+    setPayDate(getLocalDateString());
+    const validCurrent = cashAccounts.some((a) => a.id === payAccountId)
+      ? payAccountId
+      : "";
+    setPayAccountId(validCurrent || selectedCashAccountId || cashAccounts[0]?.id || "");
+    setPayModalOpen(true);
   };
 
   // AP / Debt KPI calculations
@@ -160,7 +149,7 @@ export const Purchases = () => {
     (po) => po.status === "UNPAID" || po.status === "PARTIAL"
   );
   const totalUnpaidDebt = unpaidPOs.reduce(
-    (sum, po) => sum + (po.totalAmount - (po.amountPaid || 0)),
+    (sum, po) => sum + Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0))),
     0
   );
 
@@ -169,7 +158,7 @@ export const Purchases = () => {
     return status.variant === "overdue";
   });
   const overdueDebt = overduePOs.reduce(
-    (sum, po) => sum + (po.totalAmount - (po.amountPaid || 0)),
+    (sum, po) => sum + Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0))),
     0
   );
 
@@ -182,21 +171,23 @@ export const Purchases = () => {
     (po) => po.deliveryStatus !== "RECEIVED"
   ).length;
 
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
-  const currentMonthPOs = purchaseOrders.filter((po) =>
-    po.date.startsWith(currentMonthStr)
+  const currentMonthStr = getLocalPeriodString();
+  const currentMonthPOs = purchaseOrders.filter(
+    (po) => getLocalPeriodFromTimestamp(po.date) === currentMonthStr
   );
   const currentMonthPurchasesTotal = currentMonthPOs.reduce(
-    (sum, po) => sum + po.totalAmount,
+    (sum, po) => sum + Math.round(po.totalAmount || 0),
     0
   );
 
   const filteredPayables = unpaidPOs.filter((po) => {
     const supplier = suppliers.find((s) => s.id === po.supplierId);
     const supName = supplier?.name || po.supplierName || "";
+    const q = payableSearch.trim().toLowerCase();
     const matchesSearch =
-      po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supName.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      po.poNumber.toLowerCase().includes(q) ||
+      supName.toLowerCase().includes(q);
     const matchesSupplier =
       !payableSupplierFilter || po.supplierId === payableSupplierFilter;
 
@@ -211,6 +202,39 @@ export const Purchases = () => {
 
     return matchesSearch && matchesSupplier && matchesStatus;
   });
+
+  const filteredHistoryPOs = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    return purchaseOrders
+      .filter((po) => {
+        if (historyFilter === "PENDING_DELIVERY" && po.deliveryStatus === "RECEIVED") {
+          return false;
+        }
+        if (
+          historyFilter === "UNPAID" &&
+          po.status !== "UNPAID" &&
+          po.status !== "PARTIAL"
+        ) {
+          return false;
+        }
+        if (historyFilter === "PAID" && po.status !== "PAID") {
+          return false;
+        }
+        if (historyFilter === "MARKET" && po.purchaseType !== "MARKET") {
+          return false;
+        }
+        if (!q) return true;
+        const supplier = suppliers.find((s) => s.id === po.supplierId);
+        const supName = supplier?.name || po.supplierName || "";
+        return (
+          po.poNumber.toLowerCase().includes(q) ||
+          supName.toLowerCase().includes(q) ||
+          (po.notes || "").toLowerCase().includes(q)
+        );
+      })
+      .slice()
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [purchaseOrders, suppliers, historySearch, historyFilter]);
 
   useEffect(() => {
     if (cashAccounts.length > 0 && !selectedCashAccountId) {
@@ -232,9 +256,11 @@ export const Purchases = () => {
   ];
 
   const filteredProducts = ingredients.filter((product) => {
+    const q = catalogSearch.trim().toLowerCase();
     const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.category || "").toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      product.name.toLowerCase().includes(q) ||
+      (product.category || "").toLowerCase().includes(q);
     const matchesCategory =
       selectedCategory === "ALL" || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -397,15 +423,23 @@ export const Purchases = () => {
   }, [cart, ingredients, batchPreparations, products, recipes]);
 
   const handleCheckout = (status: "PAID" | "UNPAID") => {
-    if (cart.length === 0) return;
-    if (cart.some((it) => !(it.quantity > 0))) {
-      toast.error("Pastikan jumlah seluruh item pembelian lebih dari 0.");
+    if (isReadOnly) return;
+    const effectiveCashAccountId = selectedCashAccountId || cashAccounts[0]?.id || "";
+    const validation = validatePoCheckoutInput({
+      mode: purchaseMode,
+      paymentMethod: purchaseMode === "MARKET" ? "CASH" : paymentMethod,
+      supplierId: selectedSupplier,
+      cashAccountId: effectiveCashAccountId,
+      items: cart,
+    });
+    if ("error" in validation) {
+      toast.error(validation.error);
       return;
     }
 
-    const currentPeriod = new Date().toISOString().substring(0, 7);
+    const currentPeriod = getLocalPeriodString();
     if (isPeriodClosed(currentPeriod)) {
-      alert(
+      toast.error(
         `Periode ${currentPeriod} telah ditutup buku resmi. Pembuatan Purchase Order / Belanja Pasar baru untuk periode ini dikunci.`
       );
       return;
@@ -416,111 +450,125 @@ export const Purchases = () => {
       const newPO = addDirectMarketPurchase({
         marketName: marketName.trim() || "Pasar Tradisional / Belanja Harian",
         items: cart,
-        totalAmount,
-        cashAccountId: selectedCashAccountId || cashAccounts[0]?.id,
+        totalAmount: validation.totalAmount,
+        cashAccountId: effectiveCashAccountId,
         notes: marketNotes.trim() || undefined,
       });
+      if (!newPO) return;
 
       setCurrentInvoiceData(newPO);
       setIsInvoiceModalOpen(true);
       setCart([]);
       setMarketNotes("");
-      setIsMobileCartOpen(false);
+      toast.success(
+        `Belanja pasar ${newPO.poNumber} berhasil disimpan & stok masuk.`
+      );
       return;
     }
 
     // Mode PO Distributor Formal
-    if (!selectedSupplier) return;
     const isPaid = status === "PAID";
-    const poNumber = `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const periodCompact = currentPeriod.replace("-", "");
+    const poNumber = `PO-${periodCompact}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const calculatedDueDate = isPaid
       ? undefined
-      : dueDate ||
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      : dueDate || addDaysToLocalDate(getLocalDateString(), 14);
 
-    const newPO = {
+    const supplierObj = suppliers.find((s) => s.id === selectedSupplier);
+    const newPO: Omit<PurchaseOrder, "id"> = {
       poNumber,
       supplierId: selectedSupplier,
-      supplierName: suppliers.find((s) => s.id === selectedSupplier)?.name,
-      purchaseType: "DISTRIBUTOR" as const,
+      supplierName: supplierObj?.name,
+      purchaseType: "DISTRIBUTOR",
       date: new Date().toISOString(),
       items: cart,
-      totalAmount,
-      status: isPaid ? ("PAID" as const) : ("UNPAID" as const),
+      totalAmount: validation.totalAmount,
+      status: isPaid ? "PAID" : "UNPAID",
       deliveryStatus: deliveryOption,
-      paymentMethod: isPaid ? ("CASH" as const) : ("TEMPO" as const),
+      paymentMethod: isPaid ? "CASH" : "TEMPO",
       dueDate: calculatedDueDate,
-      amountPaid: isPaid ? totalAmount : 0,
-      cashAccountId: isPaid ? (selectedCashAccountId || cashAccounts[0]?.id) : undefined,
+      amountPaid: isPaid ? validation.totalAmount : 0,
+      cashAccountId: isPaid ? effectiveCashAccountId : undefined,
     };
 
     addPurchaseOrder(newPO);
-    setCurrentInvoiceData(newPO);
+    setCurrentInvoiceData({ ...newPO, id: poNumber });
     setIsInvoiceModalOpen(true);
     setCart([]);
     setSelectedSupplier("");
     setDueDate("");
-    setIsMobileCartOpen(false);
+    toast.success(`PO ${poNumber} berhasil dibuat.`);
   };
 
   const handleExportHistory = () => {
-    const dataToExport = purchaseOrders.map((po) => {
+    if (filteredHistoryPOs.length === 0) {
+      toast.warning("Tidak ada data Purchase Order yang cocok untuk diekspor.");
+      return;
+    }
+    const dataToExport = filteredHistoryPOs.map((po) => {
       const supplier = suppliers.find((s) => s.id === po.supplierId);
       return {
         PONumber: po.poNumber,
-        Date: new Date(po.date).toLocaleDateString(),
+        Date: new Date(po.date).toLocaleDateString("id-ID"),
         Supplier: supplier?.name || po.supplierName || "Unknown",
         TotalAmount: po.totalAmount,
+        AmountPaid: po.amountPaid || 0,
         Status: po.status,
         DeliveryStatus: po.deliveryStatus,
         ItemsCount: po.items.reduce((sum, item) => sum + item.quantity, 0),
       };
     });
     exportToCSV("Node_Supply_Purchase_Orders", dataToExport);
+    toast.success(
+      `${filteredHistoryPOs.length} riwayat PO berhasil diekspor ke CSV.`
+    );
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* ─── Header Banner ────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col xl:flex-row justify-between items-start xl:items-center gap-5">
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col xl:flex-row justify-between items-start xl:items-center gap-5">
         <div className="max-w-2xl">
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 uppercase border border-brand-200/70 dark:border-brand-500/30">
               Supply Chain & Restock
             </span>
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               Procurement Center
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shadow-2xs shrink-0">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <span>{isIndo ? "Pembelian Bahan & Purchase Order" : "Procurement & Purchase Orders"}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
             Kelola PO resmi distributor, belanja pasar darurat kasir, penerimaan stok gudang, dan rekonsiliasi hutang dagang.
           </p>
         </div>
 
         {/* Tab Selector */}
-        <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full xl:w-auto shrink-0 max-w-full overflow-hidden">
+        <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 w-full xl:w-auto shrink-0 max-w-full overflow-hidden">
           {!isReadOnly && (
             <button
+              type="button"
               onClick={() => setActiveTab("new_po")}
               className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer truncate ${
-                activeTab === "new_po" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+                activeTab === "new_po"
+                  ? "text-slate-900 dark:text-slate-100"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
               {activeTab === "new_po" && (
                 <motion.div
                   layoutId="purchasesMainTab"
-                  className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                  className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700"
                   transition={{ type: "spring", stiffness: 450, damping: 32 }}
                 />
               )}
-              <Plus className="w-3.5 h-3.5 text-brand-600 relative z-10 shrink-0" />
+              <Plus className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 relative z-10 shrink-0" />
               <span className="relative z-10 truncate">
                 {isIndo ? (
                   <>
@@ -534,19 +582,22 @@ export const Purchases = () => {
           )}
 
           <button
+            type="button"
             onClick={() => setActiveTab("payables")}
             className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer truncate ${
-              activeTab === "payables" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              activeTab === "payables"
+                ? "text-slate-900 dark:text-slate-100"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             {activeTab === "payables" && (
               <motion.div
                 layoutId="purchasesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700"
                 transition={{ type: "spring", stiffness: 450, damping: 32 }}
               />
             )}
-            <CreditCard className="w-3.5 h-3.5 text-amber-600 relative z-10 shrink-0" />
+            <CreditCard className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 relative z-10 shrink-0" />
             <span className="relative z-10 truncate flex items-center gap-1.5">
               <span>{isIndo ? "Hutang Supplier" : "Accounts Payable"}</span>
               {unpaidPOs.length > 0 && (
@@ -558,19 +609,22 @@ export const Purchases = () => {
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab("history")}
             className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-none cursor-pointer truncate ${
-              activeTab === "history" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              activeTab === "history"
+                ? "text-slate-900 dark:text-slate-100"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             {activeTab === "history" && (
               <motion.div
                 layoutId="purchasesMainTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700"
                 transition={{ type: "spring", stiffness: 450, damping: 32 }}
               />
             )}
-            <Receipt className="w-3.5 h-3.5 text-brand-600 relative z-10 shrink-0" />
+            <Receipt className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 relative z-10 shrink-0" />
             <span className="relative z-10 truncate">
               {isIndo ? (
                 <>
@@ -588,121 +642,151 @@ export const Purchases = () => {
       {/* ─── 4 BENTO KPI SUMMARY CARDS ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Total Hutang Supplier */}
-        <motion.div
+        <motion.button
+          type="button"
           whileHover={{ y: -2 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+          onClick={() => {
+            setActiveTab("payables");
+            setPayableFilter("ALL");
+          }}
+          className="text-left bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-amber-300 dark:hover:border-amber-500/40 transition-colors relative overflow-hidden cursor-pointer"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Hutang Dagang (AP)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200/80 dark:border-amber-500/30 flex items-center justify-center shrink-0">
               <CreditCard className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+          <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-slate-100 font-mono tabular-nums tracking-tight">
             {formatCurrency(totalUnpaidDebt)}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-            <span className="font-bold text-amber-700">{unpaidPOs.length} tagihan</span>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
+            <span className="font-bold text-amber-700 dark:text-amber-300">{unpaidPOs.length} tagihan</span>
             <span>belum lunas</span>
           </p>
-        </motion.div>
+        </motion.button>
 
         {/* Card 2: Tagihan Lewat Tempo */}
-        <motion.div
+        <motion.button
+          type="button"
           whileHover={{ y: -2 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+          onClick={() => {
+            setActiveTab("payables");
+            setPayableFilter("OVERDUE");
+          }}
+          className="text-left bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-rose-300 dark:hover:border-rose-500/40 transition-colors relative overflow-hidden cursor-pointer"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Lewat Jatuh Tempo
             </span>
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
               overduePOs.length > 0
-                ? "bg-rose-50 text-rose-600 border-rose-200/80"
-                : "bg-slate-50 text-slate-400 border-slate-200/80"
+                ? "bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-200/80 dark:border-rose-500/30"
+                : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200/80 dark:border-slate-700"
             }`}>
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div className={`text-lg sm:text-2xl font-black font-mono tracking-tight ${
-            overduePOs.length > 0 ? "text-rose-600" : "text-slate-900"
+          <div className={`text-lg sm:text-2xl font-black font-mono tabular-nums tracking-tight ${
+            overduePOs.length > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-slate-100"
           }`}>
             {formatCurrency(overdueDebt)}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             {overduePOs.length > 0 ? (
-              <span className="font-bold text-rose-600">{overduePOs.length} faktur mendesak dibayar</span>
+              <span className="font-bold text-rose-600 dark:text-rose-400">{overduePOs.length} faktur mendesak dibayar</span>
             ) : (
               "Semua tagihan tempo aman"
             )}
           </p>
-        </motion.div>
+        </motion.button>
 
         {/* Card 3: Penerimaan Stok Menunggu */}
-        <motion.div
+        <motion.button
+          type="button"
           whileHover={{ y: -2 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+          onClick={() => {
+            setActiveTab("history");
+            setHistoryFilter("PENDING_DELIVERY");
+          }}
+          className="text-left bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-sky-300 dark:hover:border-sky-500/40 transition-colors relative overflow-hidden cursor-pointer"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Tunggu Terima Stok
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/80 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-200/80 dark:border-sky-500/30 flex items-center justify-center shrink-0">
               <Package className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+          <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-slate-100 font-mono tabular-nums tracking-tight">
             {pendingDeliveryCount} <span className="text-xs font-medium text-slate-400">PO</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             {pendingDeliveryCount > 0 ? "Menunggu verifikasi barang di outlet" : "Semua PO telah diterima"}
           </p>
-        </motion.div>
+        </motion.button>
 
         {/* Card 4: Total Belanja Bulan Ini */}
-        <motion.div
+        <motion.button
+          type="button"
           whileHover={{ y: -2 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs relative overflow-hidden"
+          onClick={() => {
+            setActiveTab("history");
+            setHistoryFilter("ALL");
+          }}
+          className="text-left bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-emerald-300 dark:hover:border-emerald-500/40 transition-colors relative overflow-hidden cursor-pointer"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Total Belanja Bulan Ini
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-500/30 flex items-center justify-center shrink-0">
               <Coins className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
+          <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-slate-100 font-mono tabular-nums tracking-tight">
             {formatCurrency(currentMonthPurchasesTotal)}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             {currentMonthPOs.length} transaksi restock bahan
           </p>
-        </motion.div>
+        </motion.button>
       </div>
 
       {/* ─── TAB 1: NEW PURCHASE (RESTOCK) ────────────────────────────────────────── */}
       {!isReadOnly && activeTab === "new_po" ? (
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Products Catalog for Restock (Left Column) */}
-          <div className="flex-1 w-full bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+          <div className="flex-1 w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col">
             {/* Search & Category Filter Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
                   placeholder={
                     isIndo
                       ? "Cari nama bahan baku, kemasan, atau kategori..."
                       : "Search ingredients for restock..."
                   }
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-2xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 bg-white outline-none"
+                  className="w-full pl-10 pr-9 py-2.5 border border-slate-200 dark:border-slate-700 rounded-2xl text-base sm:text-xs font-medium focus:ring-2 focus:ring-brand-500/20 bg-white dark:bg-slate-900 dark:text-slate-100 outline-none"
                 />
+                {catalogSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCatalogSearch("")}
+                    aria-label="Hapus pencarian bahan"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0 -mx-1 px-1">
@@ -713,8 +797,8 @@ export const Purchases = () => {
                     onClick={() => setSelectedCategory(cat)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95 ${
                       selectedCategory === cat
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        ? "bg-brand-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
                     {cat === "ALL" ? (isIndo ? "Semua" : "All") : cat}
@@ -920,7 +1004,7 @@ export const Purchases = () => {
                     onChange={setSelectedCashAccountId}
                     options={cashAccounts.map((acc) => ({
                       value: acc.id,
-                      label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                      label: `${acc.name} (${formatCurrency(accountBalances[acc.id] || 0)})`,
                     }))}
                     buttonClassName="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs bg-white font-medium"
                   />
@@ -996,9 +1080,7 @@ export const Purchases = () => {
                         setPaymentMethod("TEMPO");
                         if (!dueDate) {
                           setDueDate(
-                            new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-                              .toISOString()
-                              .split("T")[0]
+                            addDaysToLocalDate(getLocalDateString(), 14)
                           );
                         }
                       }}
@@ -1023,7 +1105,7 @@ export const Purchases = () => {
                         onChange={setSelectedCashAccountId}
                         options={cashAccounts.map((acc) => ({
                           value: acc.id,
-                          label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                          label: `${acc.name} (${formatCurrency(accountBalances[acc.id] || 0)})`,
                         }))}
                         buttonClassName="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-medium"
                       />
@@ -1048,9 +1130,7 @@ export const Purchases = () => {
                               type="button"
                               onClick={() => {
                                 setDueDate(
-                                  new Date(Date.now() + p.days * 24 * 60 * 60 * 1000)
-                                    .toISOString()
-                                    .split("T")[0]
+                                  addDaysToLocalDate(getLocalDateString(), p.days)
                                 );
                               }}
                               className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 cursor-pointer"
@@ -1344,36 +1424,41 @@ export const Purchases = () => {
         </div>
       ) : activeTab === "payables" ? (
         /* ─── TAB 2: HUTANG SUPPLIER (ACCOUNTS PAYABLE) ────────────────────────── */
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
                   Accounts Payable
                 </span>
                 <span className="text-xs text-slate-400 font-bold">•</span>
-                <span className="text-xs text-slate-500 font-medium">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                   {unpaidPOs.length} Tagihan Aktif
                 </span>
               </div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">
                 {isIndo ? "Hutang Supplier & Tempo Pengadaan" : "Supplier Payables & Credit Terms"}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Monitoring jatuh tempo faktur tempo, realisasi cicilan bertahap, dan pelunasan kas pengadaan bahan baku.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => {
-                  const dataToExport = unpaidPOs.map((po) => {
+                  if (filteredPayables.length === 0) {
+                    toast.warning("Tidak ada data hutang supplier yang cocok untuk diekspor.");
+                    return;
+                  }
+                  const dataToExport = filteredPayables.map((po) => {
                     const supplier = suppliers.find((s) => s.id === po.supplierId);
-                    const remaining = po.totalAmount - (po.amountPaid || 0);
+                    const remaining = Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0)));
                     const dueStatus = getDueStatus(po.dueDate);
                     return {
                       PONumber: po.poNumber,
-                      Date: new Date(po.date).toLocaleDateString(),
+                      Date: new Date(po.date).toLocaleDateString("id-ID"),
                       DueDate: po.dueDate || "-",
                       DueStatus: dueStatus.label,
                       Supplier: supplier?.name || po.supplierName || "Unknown",
@@ -1384,8 +1469,9 @@ export const Purchases = () => {
                     };
                   });
                   exportToCSV("Hutang_Supplier_AP", dataToExport);
+                  toast.success(`${filteredPayables.length} tagihan hutang berhasil diekspor.`);
                 }}
-                className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
+                className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
               >
                 <Download className="h-3.5 w-3.5 mr-1.5 text-slate-500 shrink-0" />
                 <span>Ekspor Hutang (CSV)</span>
@@ -1394,13 +1480,13 @@ export const Purchases = () => {
           </div>
 
           {/* Filter Bar: Status Pill & Search */}
-          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/70">
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-slate-50/70 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700/80">
             {/* Filter Status Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 md:pb-0">
               {[
                 { id: "ALL", label: `Semua (${unpaidPOs.length})` },
-                { id: "OVERDUE", label: `⚠️ Lewat Tempo (${overduePOs.length})`, alert: overduePOs.length > 0 },
-                { id: "DUE_SOON", label: `⏳ < 7 Hari (${dueSoonPOs.length})` },
+                { id: "OVERDUE", label: `Lewat Tempo (${overduePOs.length})`, alert: overduePOs.length > 0 },
+                { id: "DUE_SOON", label: `≤ 7 Hari (${dueSoonPOs.length})` },
                 { id: "PARTIAL", label: `Dicicil (${unpaidPOs.filter(p => p.status === "PARTIAL").length})` },
                 { id: "UNPAID", label: `Belum Dicicil (${unpaidPOs.filter(p => p.status === "UNPAID").length})` },
               ].map((pill) => (
@@ -1410,10 +1496,10 @@ export const Purchases = () => {
                   onClick={() => setPayableFilter(pill.id as any)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
                     payableFilter === pill.id
-                      ? "bg-slate-900 text-white shadow-xs"
+                      ? "bg-brand-600 text-white shadow-xs"
                       : pill.alert
-                      ? "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
-                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                      ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-100"
+                      : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   {pill.label}
@@ -1433,27 +1519,37 @@ export const Purchases = () => {
                     label: s.name,
                   })),
                 ]}
-                buttonClassName="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-medium"
+                buttonClassName="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-medium"
               />
 
               <div className="relative flex-1 md:w-56">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={payableSearch}
+                  onChange={(e) => setPayableSearch(e.target.value)}
                   placeholder="Cari PO / Supplier..."
-                  className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:ring-2 focus:ring-brand-500/20"
+                  className="w-full pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20"
                 />
+                {payableSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPayableSearch("")}
+                    aria-label="Hapus pencarian hutang"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
           {/* TABLE VIEW (Desktop / Tablet) */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-xs text-left">
+            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-xs text-left">
               <thead>
-                <tr className="bg-slate-50/70 text-slate-500 font-bold border-b border-slate-200">
+                <tr className="bg-slate-50/70 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
                   <th className="px-4 py-3 rounded-l-xl">No PO</th>
                   <th className="px-4 py-3">Tanggal PO</th>
                   <th className="px-4 py-3">Supplier Rekanan</th>
@@ -1465,31 +1561,31 @@ export const Purchases = () => {
                   <th className="px-4 py-3 text-center rounded-r-xl">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredPayables.map((po) => {
                   const supplier = suppliers.find((s) => s.id === po.supplierId);
-                  const remaining = po.totalAmount - (po.amountPaid || 0);
+                  const remaining = Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0)));
                   const dueStatus = getDueStatus(po.dueDate);
                   const pctPaid = Math.min(100, Math.round(((po.amountPaid || 0) / (po.totalAmount || 1)) * 100));
 
                   return (
-                    <tr key={po.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={po.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-4 py-3.5 whitespace-nowrap font-bold">
                         <div className="flex items-center gap-2">
-                          <span className="p-1 rounded-md bg-amber-50 text-amber-700">
+                          <span className="p-1 rounded-md bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300">
                             <Building2 className="w-3.5 h-3.5" />
                           </span>
-                          <span className="text-brand-700 font-mono font-bold">
+                          <span className="text-brand-700 dark:text-brand-300 font-mono font-bold">
                             {po.poNumber}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 dark:text-slate-300">
                         {new Date(po.date).toLocaleDateString("id-ID")}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <div>
-                          <p className="font-bold text-slate-800">
+                          <p className="font-bold text-slate-800 dark:text-slate-100">
                             {supplier?.name || po.supplierName || "Unknown"}
                           </p>
                           {supplier?.picName && (
@@ -1503,14 +1599,14 @@ export const Purchases = () => {
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                             dueStatus.variant === "overdue"
-                              ? "bg-rose-100 text-rose-800 border border-rose-300"
+                              ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/30"
                               : dueStatus.variant === "due_today" || dueStatus.variant === "due_soon"
-                              ? "bg-amber-100 text-amber-900 border border-amber-300"
-                              : "bg-slate-100 text-slate-700 border border-slate-200"
+                              ? "bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                           }`}
                         >
-                          {dueStatus.variant === "overdue" && <AlertTriangle className="w-3 h-3 text-rose-600" />}
-                          {dueStatus.variant === "due_today" && <Clock className="w-3 h-3 text-amber-600" />}
+                          {dueStatus.variant === "overdue" && <AlertTriangle className="w-3 h-3 text-rose-600 dark:text-rose-400" />}
+                          {dueStatus.variant === "due_today" && <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />}
                           {dueStatus.label}
                         </span>
                       </td>
@@ -1518,17 +1614,17 @@ export const Purchases = () => {
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             po.deliveryStatus === "RECEIVED"
-                              ? "bg-brand-50 text-brand-800 border border-brand-200"
-                              : "bg-slate-100 text-slate-700"
+                              ? "bg-brand-50 dark:bg-brand-500/15 text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                           }`}
                         >
                           {po.deliveryStatus === "RECEIVED" ? "Masuk Stok" : "Menunggu"}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono text-slate-700">
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono tabular-nums text-slate-700 dark:text-slate-200">
                         {formatCurrency(po.totalAmount)}
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono text-emerald-700">
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
                         <div>
                           <span>{formatCurrency(po.amountPaid || 0)}</span>
                           {pctPaid > 0 && (
@@ -1538,18 +1634,15 @@ export const Purchases = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono text-rose-600">
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono tabular-nums text-rose-600 dark:text-rose-400">
                         {formatCurrency(remaining)}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
                           {canProcessPayment && (
                             <button
-                              onClick={() => {
-                                setSelectedPOForPay(po);
-                                setPayAmount(remaining);
-                                setPayModalOpen(true);
-                              }}
+                              type="button"
+                              onClick={() => openPayModal(po)}
                               className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1"
                             >
                               <CreditCard className="w-3.5 h-3.5" />
@@ -1557,11 +1650,12 @@ export const Purchases = () => {
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => {
                               setCurrentInvoiceData(po);
                               setIsInvoiceModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-600 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-500/15 text-brand-600 dark:text-brand-400 transition-colors cursor-pointer"
                             title="Lihat Faktur PO"
                           >
                             <Printer className="w-4 h-4" />
@@ -1575,7 +1669,7 @@ export const Purchases = () => {
                 {filteredPayables.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
-                      🎉 Tidak ada hutang supplier yang cocok dengan filter saat ini.
+                      Tidak ada hutang supplier yang cocok dengan filter saat ini.
                     </td>
                   </tr>
                 )}
@@ -1587,7 +1681,7 @@ export const Purchases = () => {
           <div className="block md:hidden space-y-3">
             {filteredPayables.map((po) => {
               const supplier = suppliers.find((s) => s.id === po.supplierId);
-              const remaining = po.totalAmount - (po.amountPaid || 0);
+              const remaining = Math.max(0, Math.round(po.totalAmount - (po.amountPaid || 0)));
               const dueStatus = getDueStatus(po.dueDate);
               const pctPaid = Math.min(100, Math.round(((po.amountPaid || 0) / (po.totalAmount || 1)) * 100));
 
@@ -1651,11 +1745,8 @@ export const Purchases = () => {
                     <div className="flex items-center gap-2">
                       {canProcessPayment && (
                         <button
-                          onClick={() => {
-                            setSelectedPOForPay(po);
-                            setPayAmount(remaining);
-                            setPayModalOpen(true);
-                          }}
+                          type="button"
+                          onClick={() => openPayModal(po)}
                           className="px-3 py-1.5 bg-brand-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 flex items-center gap-1"
                         >
                           <CreditCard className="w-3 h-3" />
@@ -1663,11 +1754,12 @@ export const Purchases = () => {
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={() => {
                           setCurrentInvoiceData(po);
                           setIsInvoiceModalOpen(true);
                         }}
-                        className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                        className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer"
                       >
                         <Printer className="w-3.5 h-3.5" />
                       </button>
@@ -1686,30 +1778,78 @@ export const Purchases = () => {
         </div>
       ) : (
         /* ─── TAB 3: PURCHASE ORDERS HISTORY ───────────────────────────────────────── */
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col space-y-4 p-5 sm:p-7">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">
                 {isIndo ? "Riwayat Purchase Order (PO)" : "Purchase Order History"}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Daftar semua faktur pembelian dari distributor rekanan dan belanja eceran kafe.
               </p>
             </div>
             <button
+              type="button"
               onClick={handleExportHistory}
-              className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
+              className="whitespace-nowrap shrink-0 flex items-center px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-xs text-xs font-bold cursor-pointer"
             >
               <Download className="h-3.5 w-3.5 mr-1.5 text-slate-500 shrink-0" />
               <span>{isIndo ? "Ekspor CSV" : "Export CSV"}</span>
             </button>
           </div>
 
+          {/* Filter Bar: Status Pills & History Search */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-slate-50/70 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700/80">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+              {[
+                { id: "ALL", label: `Semua (${purchaseOrders.length})` },
+                { id: "PENDING_DELIVERY", label: `Tunggu Terima (${pendingDeliveryCount})` },
+                { id: "UNPAID", label: `Hutang (${unpaidPOs.length})` },
+                { id: "PAID", label: `Lunas (${purchaseOrders.filter((p) => p.status === "PAID").length})` },
+                { id: "MARKET", label: `Belanja Pasar (${purchaseOrders.filter((p) => p.purchaseType === "MARKET").length})` },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setHistoryFilter(pill.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                    historyFilter === pill.id
+                      ? "bg-brand-600 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex-1 md:max-w-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="Cari No PO, supplier, atau catatan..."
+                className="w-full pl-9 pr-8 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+              {historySearch && (
+                <button
+                  type="button"
+                  onClick={() => setHistorySearch("")}
+                  aria-label="Hapus pencarian riwayat"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* TABLE VIEW (Desktop / Tablet) */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-xs text-left">
+            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-xs text-left">
               <thead>
-                <tr className="bg-slate-50/70 text-slate-500 font-bold border-b border-slate-200">
+                <tr className="bg-slate-50/70 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
                   <th className="px-4 py-3 rounded-l-xl">No PO</th>
                   <th className="px-4 py-3">Tanggal</th>
                   <th className="px-4 py-3">Supplier / Toko</th>
@@ -1719,161 +1859,160 @@ export const Purchases = () => {
                   <th className="px-4 py-3 text-center rounded-r-xl">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {purchaseOrders
-                  .slice()
-                  .reverse()
-                  .map((po) => {
-                    const supplier = suppliers.find((s) => s.id === po.supplierId);
-                    return (
-                      <tr key={po.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="px-4 py-3.5 whitespace-nowrap font-bold">
-                          <div className="flex items-center gap-2">
-                            {po.purchaseType === "MARKET" ? (
-                              <span
-                                className="p-1 rounded-md bg-emerald-100 text-emerald-700"
-                                title="Belanja Pasar Langsung"
-                              >
-                                <Store className="w-3.5 h-3.5" />
-                              </span>
-                            ) : (
-                              <span
-                                className="p-1 rounded-md bg-brand-50 text-brand-700"
-                                title="PO Distributor"
-                              >
-                                <Building2 className="w-3.5 h-3.5" />
-                              </span>
-                            )}
-                            <span
-                              className={
-                                po.purchaseType === "MARKET"
-                                  ? "text-emerald-700 font-mono"
-                                  : "text-brand-700 font-mono"
-                              }
-                            >
-                              {po.poNumber}
-                            </span>
-                            {isPeriodClosed(po.date) && (
-                              <span
-                                title={`Periode ${po.date.substring(0, 7)} telah ditutup buku`}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded"
-                              >
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>Terkunci</span>
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
-                          {new Date(po.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredHistoryPOs.map((po) => {
+                  const supplier = suppliers.find((s) => s.id === po.supplierId);
+                  return (
+                    <tr key={po.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-4 py-3.5 whitespace-nowrap font-bold">
+                        <div className="flex items-center gap-2">
                           {po.purchaseType === "MARKET" ? (
-                            <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
-                              <Store className="w-3 h-3 text-emerald-600" />
-                              {po.supplierName || "Pasar Tradisional"}
+                            <span
+                              className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                              title="Belanja Pasar Langsung"
+                            >
+                              <Store className="w-3.5 h-3.5" />
                             </span>
                           ) : (
-                            <span className="font-semibold text-slate-800">
-                              {supplier?.name || po.supplierName || "Unknown Supplier"}
+                            <span
+                              className="p-1 rounded-md bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300"
+                              title="PO Distributor"
+                            >
+                              <Building2 className="w-3.5 h-3.5" />
                             </span>
                           )}
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
+                          <span
+                            className={
+                              po.purchaseType === "MARKET"
+                                ? "text-emerald-700 dark:text-emerald-300 font-mono"
+                                : "text-brand-700 dark:text-brand-300 font-mono"
+                            }
+                          >
+                            {po.poNumber}
+                          </span>
+                          {isPeriodClosed(po.date) && (
                             <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                po.status === "PAID"
-                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                  : po.status === "PARTIAL"
-                                  ? "bg-blue-50 text-blue-800 border border-blue-200"
-                                  : "bg-amber-50 text-amber-800 border border-amber-200"
-                              }`}
+                              title={`Periode ${getLocalPeriodFromTimestamp(po.date)} telah ditutup buku`}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 px-1.5 py-0.5 rounded"
                             >
-                              {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Belum Lunas"}
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>Terkunci</span>
                             </span>
-                            {(po.status === "UNPAID" || po.status === "PARTIAL") && isFinance && (
-                              <button
-                                onClick={() => {
-                                  setSelectedPOForPay(po);
-                                  setPayAmount(po.totalAmount - (po.amountPaid || 0));
-                                  setPayModalOpen(true);
-                                }}
-                                className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
-                              >
-                                {po.status === "PARTIAL" ? "Bayar/Cicil" : "Lunasi"}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                po.deliveryStatus === "RECEIVED"
-                                  ? "bg-brand-50 text-brand-800 border border-brand-200"
-                                  : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              {po.deliveryStatus === "RECEIVED" ? "Diterima (Stok Masuk)" : "Menunggu"}
-                            </span>
-                            {po.deliveryStatus !== "RECEIVED" && (
-                              isPeriodClosed(po.date) ? (
-                                <span className="text-[11px] text-slate-400 italic">Periode Ditutup</span>
-                              ) : (
-                                <button
-                                  onClick={() => setPoToReceive(po)}
-                                  className="text-brand-600 hover:text-brand-800 font-bold underline cursor-pointer"
-                                >
-                                  Terima Barang
-                                </button>
-                              )
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono text-slate-900">
-                          {formatCurrency(po.totalAmount)}
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center gap-2">
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                        {new Date(po.date).toLocaleDateString("id-ID")}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {po.purchaseType === "MARKET" ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 text-[11px]">
+                            <Store className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            {po.supplierName || "Pasar Tradisional"}
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-slate-800 dark:text-slate-100">
+                            {supplier?.name || po.supplierName || "Unknown Supplier"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              po.status === "PAID"
+                                ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+                                : po.status === "PARTIAL"
+                                ? "bg-sky-50 dark:bg-sky-500/15 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30"
+                                : "bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"
+                            }`}
+                          >
+                            {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Belum Lunas"}
+                          </span>
+                          {(po.status === "UNPAID" || po.status === "PARTIAL") && canProcessPayment && (
                             <button
-                              onClick={() => {
-                                setCurrentInvoiceData(po);
-                                setIsInvoiceModalOpen(true);
-                              }}
-                              className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-600 transition-colors cursor-pointer"
-                              title="Cetak Faktur PO"
+                              type="button"
+                              onClick={() => openPayModal(po)}
+                              className="text-brand-600 dark:text-brand-400 hover:text-brand-800 font-bold underline cursor-pointer"
                             >
-                              <Printer className="w-4 h-4" />
+                              {po.status === "PARTIAL" ? "Bayar/Cicil" : "Lunasi"}
                             </button>
-                            {!isReadOnly && (
-                              isPeriodClosed(po.date) ? (
-                                <span
-                                  className="p-1.5 text-slate-300 cursor-not-allowed"
-                                  title={`Periode ${po.date.substring(0, 7)} telah ditutup buku dan terkunci dari perubahan.`}
-                                >
-                                  <Lock className="w-4 h-4 text-slate-400" />
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => setInvoiceToDelete(po)}
-                                  className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 transition-colors cursor-pointer"
-                                  title="Hapus PO"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              po.deliveryStatus === "RECEIVED"
+                                ? "bg-brand-50 dark:bg-brand-500/15 text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            {po.deliveryStatus === "RECEIVED" ? "Diterima (Stok Masuk)" : "Menunggu"}
+                          </span>
+                          {!isReadOnly && po.deliveryStatus !== "RECEIVED" && (
+                            isPeriodClosed(po.date) ? (
+                              <span className="text-[11px] text-slate-400 italic">Periode Ditutup</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setPoToReceive(po)}
+                                className="text-brand-600 dark:text-brand-400 hover:text-brand-800 font-bold underline cursor-pointer"
+                              >
+                                Terima Barang
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-black font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                        {formatCurrency(po.totalAmount)}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentInvoiceData(po);
+                              setIsInvoiceModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-500/15 text-brand-600 dark:text-brand-400 transition-colors cursor-pointer"
+                            title="Cetak Faktur PO"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          {!isReadOnly && (
+                            isPeriodClosed(po.date) ? (
+                              <span
+                                className="p-1.5 text-slate-300 cursor-not-allowed"
+                                title={`Periode ${getLocalPeriodFromTimestamp(po.date)} telah ditutup buku dan terkunci dari perubahan.`}
+                              >
+                                <Lock className="w-4 h-4 text-slate-400" />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setInvoiceToDelete(po)}
+                                className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/15 text-rose-500 transition-colors cursor-pointer"
+                                title="Hapus PO"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
-                {purchaseOrders.length === 0 && (
+                {filteredHistoryPOs.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                      Belum ada data Purchase Order terdaftar.
+                      {purchaseOrders.length === 0
+                        ? "Belum ada data Purchase Order terdaftar."
+                        : "Tidak ada Purchase Order yang cocok dengan filter saat ini."}
                     </td>
                   </tr>
                 )}
@@ -1883,602 +2022,689 @@ export const Purchases = () => {
 
           {/* CARD FEED VIEW (Mobile Phone 360-480px) */}
           <div className="block md:hidden space-y-3">
-            {purchaseOrders
-              .slice()
-              .reverse()
-              .map((po) => {
-                const supplier = suppliers.find((s) => s.id === po.supplierId);
-                return (
-                  <div
-                    key={po.id}
-                    className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3"
-                  >
-                    <div className="flex justify-between items-start gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          {po.purchaseType === "MARKET" ? (
-                            <Store className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Building2 className="w-3.5 h-3.5 text-brand-600" />
-                          )}
-                          <span className="font-bold font-mono text-xs text-slate-900">
-                            {po.poNumber}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {new Date(po.date).toLocaleDateString()} ·{" "}
-                          {po.purchaseType === "MARKET"
-                            ? po.supplierName || "Pasar Tradisional"
-                            : supplier?.name || po.supplierName || "Distributor"}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="font-black font-mono text-sm text-brand-950 block">
-                          {formatCurrency(po.totalAmount)}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {po.items.length} items
+            {filteredHistoryPOs.map((po) => {
+              const supplier = suppliers.find((s) => s.id === po.supplierId);
+              return (
+                <div
+                  key={po.id}
+                  className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-3"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        {po.purchaseType === "MARKET" ? (
+                          <Store className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Building2 className="w-3.5 h-3.5 text-brand-600" />
+                        )}
+                        <span className="font-bold font-mono text-xs text-slate-900 dark:text-slate-100">
+                          {po.poNumber}
                         </span>
                       </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {new Date(po.date).toLocaleDateString("id-ID")} ·{" "}
+                        {po.purchaseType === "MARKET"
+                          ? po.supplierName || "Pasar Tradisional"
+                          : supplier?.name || po.supplierName || "Distributor"}
+                      </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          po.status === "PAID"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : po.status === "PARTIAL"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Hutang"}
+                    <div className="text-right">
+                      <span className="font-black font-mono tabular-nums text-sm text-brand-950 dark:text-brand-300 block">
+                        {formatCurrency(po.totalAmount)}
                       </span>
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          po.deliveryStatus === "RECEIVED"
-                            ? "bg-brand-50 text-brand-800"
-                            : "bg-slate-200 text-slate-700"
-                        }`}
-                      >
-                        {po.deliveryStatus === "RECEIVED" ? "Masuk Stok" : "Tunggu Kirim"}
+                      <span className="text-[10px] text-slate-400">
+                        {po.items.length} items
                       </span>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex items-center gap-2">
-                        {(po.status === "UNPAID" || po.status === "PARTIAL") && isFinance && (
-                          <button
-                            onClick={() => {
-                              setSelectedPOForPay(po);
-                              setPayAmount(po.totalAmount - (po.amountPaid || 0));
-                              setPayModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
-                          >
-                            {po.status === "PARTIAL" ? "Bayar Cicilan" : "Lunasi"}
-                          </button>
-                        )}
-                        {po.deliveryStatus !== "RECEIVED" && (
-                          isPeriodClosed(po.date) ? (
-                            <span className="text-[10px] text-slate-400 italic">Periode Ditutup</span>
-                          ) : (
-                            <button
-                              onClick={() => setPoToReceive(po)}
-                              className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
-                            >
-                              Terima Stok
-                            </button>
-                          )
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setCurrentInvoiceData(po);
-                            setIsInvoiceModalOpen(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          <span>Faktur</span>
-                        </button>
-                        {!isReadOnly && (
-                          isPeriodClosed(po.date) ? (
-                            <span
-                              className="p-1.5 text-slate-300 cursor-not-allowed"
-                              title={`Periode ${po.date.substring(0, 7)} telah ditutup buku.`}
-                            >
-                              <Lock className="w-3.5 h-3.5 text-slate-400" />
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => setInvoiceToDelete(po)}
-                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )
-                        )}
-                      </div>
                     </div>
                   </div>
-                );
-              })}
 
-            {purchaseOrders.length === 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/80">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        po.status === "PAID"
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                          : po.status === "PARTIAL"
+                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
+                          : "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
+                      }`}
+                    >
+                      {po.status === "PAID" ? "Lunas" : po.status === "PARTIAL" ? "Dicicil" : "Hutang"}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        po.deliveryStatus === "RECEIVED"
+                          ? "bg-brand-50 dark:bg-brand-500/15 text-brand-800 dark:text-brand-300"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      {po.deliveryStatus === "RECEIVED" ? "Masuk Stok" : "Tunggu Kirim"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      {(po.status === "UNPAID" || po.status === "PARTIAL") && canProcessPayment && (
+                        <button
+                          type="button"
+                          onClick={() => openPayModal(po)}
+                          className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                        >
+                          {po.status === "PARTIAL" ? "Bayar Cicilan" : "Lunasi"}
+                        </button>
+                      )}
+                      {!isReadOnly && po.deliveryStatus !== "RECEIVED" && (
+                        isPeriodClosed(po.date) ? (
+                          <span className="text-[10px] text-slate-400 italic">Periode Ditutup</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setPoToReceive(po)}
+                            className="px-2.5 py-1 bg-brand-600 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                          >
+                            Terima Stok
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentInvoiceData(po);
+                          setIsInvoiceModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Faktur</span>
+                      </button>
+                      {!isReadOnly && (
+                        isPeriodClosed(po.date) ? (
+                          <span
+                            className="p-1.5 text-slate-300 cursor-not-allowed"
+                            title={`Periode ${getLocalPeriodFromTimestamp(po.date)} telah ditutup buku.`}
+                          >
+                            <Lock className="w-3.5 h-3.5 text-slate-400" />
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setInvoiceToDelete(po)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredHistoryPOs.length === 0 && (
               <div className="py-8 text-center text-slate-400 text-xs">
-                Belum ada data Purchase Order terdaftar.
+                {purchaseOrders.length === 0
+                  ? "Belum ada data Purchase Order terdaftar."
+                  : "Tidak ada Purchase Order yang cocok dengan filter saat ini."}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ─── MODAL: Receive PO (Goods Arrival) ─────────────────────────────────────── */}
-      <AnimatePresence>
-        {poToReceive && (
-          <motion.div
-            key="po-receive-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4"
-            >
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
-              <PackageCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Konfirmasi Penerimaan Barang?
-              </h3>
-              <p className="text-slate-500 text-xs mt-1 leading-relaxed">
-                Barang untuk PO <strong className="text-slate-800">{poToReceive.poNumber}</strong> sudah sampai di outlet/gudang? Sistem akan secara otomatis menambahkan stok masuk ke inventori.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setPoToReceive(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  if (poToReceive) {
-                    if (isPeriodClosed(poToReceive.date)) {
-                      alert(`PO ${poToReceive.poNumber} berada pada periode ${poToReceive.date.substring(0, 7)} yang telah ditutup buku.`);
-                      setPoToReceive(null);
-                      return;
-                    }
-                    markPOAsReceived(poToReceive.id);
-                    setPoToReceive(null);
-                  }
-                }}
-                className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                Ya, Terima & Masuk Stok
-              </button>
-            </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── MODAL: View PO Invoice ────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isInvoiceModalOpen && currentInvoiceData && (
-          <motion.div
-            key="po-invoice-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 sm:p-8"
-            >
-            <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-5">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1 flex items-center gap-2">
-                  {currentInvoiceData.purchaseType === "MARKET" ? (
-                    <>
-                      <Store className="w-5 h-5 text-emerald-600" />
-                      <span>BUKTI BELANJA PASAR / ECERAN</span>
-                    </>
-                  ) : (
-                    <span>PURCHASE ORDER</span>
-                  )}
-                </h2>
-                <p className="text-slate-400 text-xs font-mono font-bold">
-                  {currentInvoiceData.poNumber}
-                </p>
-                <div className="flex gap-2 mt-2">
-                  <span
-                    className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      currentInvoiceData.status === "PAID"
-                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                        : "bg-amber-50 text-amber-800 border border-amber-200"
-                    }`}
+      {/* ─── PORTAL MODALS ─────────────────────────────────────────────────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <>
+            {/* ─── MODAL: Receive PO (Goods Arrival) ──────────────────────────────── */}
+            <AnimatePresence>
+              {poToReceive && (
+                <motion.div
+                  key="po-receive-modal"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  onClick={() => setPoToReceive(null)}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl w-full max-w-sm p-6 space-y-4"
                   >
-                    {currentInvoiceData.status === "PAID" ? "LUNAS (CASH)" : "HUTANG (TEMPO)"}
-                  </span>
-                  <span
-                    className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      currentInvoiceData.deliveryStatus === "RECEIVED"
-                        ? "bg-brand-50 text-brand-800 border border-brand-200"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {currentInvoiceData.deliveryStatus === "RECEIVED"
-                      ? "MASUK STOK (RECEIVED)"
-                      : "MENUNGGU PENGIRIMAN"}
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <h3 className="font-black text-slate-900 text-base">
-                  {settings.brandName || "Julia's Coffee & Eatery"}
-                </h3>
-                <p className="text-slate-500 text-xs max-w-xs ml-auto mt-0.5">
-                  {settings.companyAddress || "Specialty Room"}
-                </p>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                {currentInvoiceData.purchaseType === "MARKET"
-                  ? "Tempat Belanja / Toko"
-                  : "Order To (Supplier)"}
-              </p>
-              <h4 className="font-bold text-slate-900 text-base">
-                {currentInvoiceData.purchaseType === "MARKET"
-                  ? currentInvoiceData.supplierName || "Pasar Tradisional / Belanja Harian"
-                  : suppliers.find((s) => s.id === currentInvoiceData.supplierId)?.name ||
-                    currentInvoiceData.supplierName ||
-                    "Unknown Supplier"}
-              </h4>
-              {currentInvoiceData.notes && (
-                <p className="text-slate-600 text-xs mt-1 italic">
-                  Catatan: {currentInvoiceData.notes}
-                </p>
+                    <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 text-brand-600 dark:text-brand-300 flex items-center justify-center">
+                      <PackageCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                        Konfirmasi Penerimaan Barang?
+                      </h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">
+                        Barang untuk PO <strong className="text-slate-800 dark:text-slate-200">{poToReceive.poNumber}</strong> sudah sampai di outlet/gudang? Sistem akan secara otomatis menambahkan stok masuk ke inventori.
+                      </p>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setPoToReceive(null)}
+                        className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-bold cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isReadOnly || !poToReceive) {
+                            setPoToReceive(null);
+                            return;
+                          }
+                          if (isPeriodClosed(poToReceive.date) || isPeriodClosed(getLocalPeriodString())) {
+                            toast.error(
+                              `PO ${poToReceive.poNumber} atau bulan aktif berada pada periode yang telah ditutup buku.`
+                            );
+                            setPoToReceive(null);
+                            return;
+                          }
+                          markPOAsReceived(poToReceive.id);
+                          toast.success(
+                            `Barang PO ${poToReceive.poNumber} diterima & stok masuk inventori.`
+                          );
+                          setPoToReceive(null);
+                        }}
+                        className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        Ya, Terima & Masuk Stok
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
 
-            <div className="overflow-x-auto mb-6">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50">
-                    <th className="py-2.5 px-3 text-left rounded-l-lg">Deskripsi Bahan</th>
-                    <th className="py-2.5 px-3 text-center">Qty</th>
-                    <th className="py-2.5 px-3 text-right">Harga Satuan</th>
-                    <th className="py-2.5 px-3 text-right rounded-r-lg">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {currentInvoiceData.items.map((item: any, idx: number) => {
-                    const product = ingredients.find((p) => p.id === item.productId);
-                    return (
-                      <tr key={idx}>
-                        <td className="py-3 px-3 text-slate-900 font-medium">
-                          {product?.name || "Unknown Product"}
-                        </td>
-                        <td className="py-3 px-3 text-slate-600 text-center font-mono">
-                          <span>
-                            {item.quantity} {item.unit || product?.unit}
-                          </span>
-                          {Number(item.conversionFactor || 1) > 1 && (
-                            <span className="block text-[10px] text-slate-400">
-                              (= {(item.quantity * Number(item.conversionFactor)).toLocaleString("id-ID")}{" "}
-                              {product?.unit})
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-slate-600 text-right font-mono">
-                          {formatCurrency(item.unitPrice)}
-                        </td>
-                        <td className="py-3 px-3 text-slate-900 font-bold font-mono text-right">
-                          {formatCurrency(item.subtotal)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end border-t border-slate-100 pt-4 mb-6">
-              <div className="w-64 space-y-1 text-xs">
-                <div className="flex justify-between items-center text-base font-black text-slate-900 pt-1">
-                  <span>Total Tagihan:</span>
-                  <span className="text-brand-950 font-mono">
-                    {formatCurrency(currentInvoiceData.totalAmount)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center border-t border-slate-100 pt-5">
-              <p className="text-[11px] text-slate-400">
-                Tanggal: {new Date(currentInvoiceData.date).toLocaleString()}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
+            {/* ─── MODAL: View PO Invoice ─────────────────────────────────────────── */}
+            <AnimatePresence>
+              {isInvoiceModalOpen && currentInvoiceData && (
+                <motion.div
+                  key="po-invoice-modal"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
                   onClick={() => {
                     setIsInvoiceModalOpen(false);
                     setCurrentInvoiceData(null);
                   }}
-                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer"
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
                 >
-                  Tutup
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 sm:p-8"
+                  >
+                    <div className="flex justify-between items-start mb-6 border-b border-slate-100 dark:border-slate-800 pb-5">
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 mb-1 flex items-center gap-2">
+                          {currentInvoiceData.purchaseType === "MARKET" ? (
+                            <>
+                              <Store className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                              <span>BUKTI BELANJA PASAR / ECERAN</span>
+                            </>
+                          ) : (
+                            <span>PURCHASE ORDER</span>
+                          )}
+                        </h2>
+                        <p className="text-slate-400 text-xs font-mono font-bold">
+                          {currentInvoiceData.poNumber}
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              currentInvoiceData.status === "PAID"
+                                ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+                                : currentInvoiceData.status === "PARTIAL"
+                                ? "bg-sky-50 dark:bg-sky-500/15 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30"
+                                : "bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"
+                            }`}
+                          >
+                            {currentInvoiceData.status === "PAID"
+                              ? "LUNAS (CASH)"
+                              : currentInvoiceData.status === "PARTIAL"
+                                ? "DICICIL (PARTIAL)"
+                                : "HUTANG (TEMPO)"}
+                          </span>
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              currentInvoiceData.deliveryStatus === "RECEIVED"
+                                ? "bg-brand-50 dark:bg-brand-500/15 text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            {currentInvoiceData.deliveryStatus === "RECEIVED"
+                              ? "MASUK STOK (RECEIVED)"
+                              : "MENUNGGU PENGIRIMAN"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <h3 className="font-black text-slate-900 dark:text-slate-100 text-base">
+                          {settings.brandName || "Julia's Coffee & Eatery"}
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-xs max-w-xs ml-auto mt-0.5">
+                          {settings.companyAddress || "Specialty Room"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        {currentInvoiceData.purchaseType === "MARKET"
+                          ? "Tempat Belanja / Toko"
+                          : "Order To (Supplier)"}
+                      </p>
+                      <h4 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                        {currentInvoiceData.purchaseType === "MARKET"
+                          ? currentInvoiceData.supplierName || "Pasar Tradisional / Belanja Harian"
+                          : suppliers.find((s) => s.id === currentInvoiceData.supplierId)?.name ||
+                            currentInvoiceData.supplierName ||
+                            "Unknown Supplier"}
+                      </h4>
+                      {currentInvoiceData.notes && (
+                        <p className="text-slate-600 dark:text-slate-300 text-xs mt-1 italic">
+                          Catatan: {currentInvoiceData.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="overflow-x-auto mb-6">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold bg-slate-50 dark:bg-slate-800/70">
+                            <th className="py-2.5 px-3 text-left rounded-l-lg">Deskripsi Bahan</th>
+                            <th className="py-2.5 px-3 text-center">Qty</th>
+                            <th className="py-2.5 px-3 text-right">Harga Satuan</th>
+                            <th className="py-2.5 px-3 text-right rounded-r-lg">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {currentInvoiceData.items.map((item: PurchaseOrderItem, idx: number) => {
+                            const product = ingredients.find((p) => p.id === item.productId);
+                            return (
+                              <tr key={idx}>
+                                <td className="py-3 px-3 text-slate-900 dark:text-slate-100 font-medium">
+                                  {product?.name || "Unknown Product"}
+                                </td>
+                                <td className="py-3 px-3 text-slate-600 dark:text-slate-300 text-center font-mono tabular-nums">
+                                  <span>
+                                    {item.quantity} {item.unit || product?.unit}
+                                  </span>
+                                  {Number(item.conversionFactor || 1) > 1 && (
+                                    <span className="block text-[10px] text-slate-400">
+                                      (= {(item.quantity * Number(item.conversionFactor)).toLocaleString("id-ID")}{" "}
+                                      {product?.unit})
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-slate-600 dark:text-slate-300 text-right font-mono tabular-nums">
+                                  {formatCurrency(item.unitPrice)}
+                                </td>
+                                <td className="py-3 px-3 text-slate-900 dark:text-slate-100 font-bold font-mono tabular-nums text-right">
+                                  {formatCurrency(item.subtotal)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end border-t border-slate-100 dark:border-slate-800 pt-4 mb-6">
+                      <div className="w-72 space-y-1.5 text-xs">
+                        <div className="flex justify-between items-center text-base font-black text-slate-900 dark:text-slate-100 pt-1">
+                          <span>Total Tagihan:</span>
+                          <span className="text-brand-950 dark:text-brand-300 font-mono tabular-nums">
+                            {formatCurrency(currentInvoiceData.totalAmount)}
+                          </span>
+                        </div>
+                        {(currentInvoiceData.status !== "PAID" ||
+                          ((currentInvoiceData.amountPaid || 0) > 0 &&
+                            (currentInvoiceData.amountPaid || 0) < currentInvoiceData.totalAmount)) && (
+                          <>
+                            <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
+                              <span>Sudah Dibayar:</span>
+                              <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
+                                {formatCurrency(currentInvoiceData.amountPaid || 0)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-rose-600 dark:text-rose-400 font-bold">
+                              <span>Sisa Hutang:</span>
+                              <span className="font-mono tabular-nums">
+                                {formatCurrency(
+                                  Math.max(
+                                    0,
+                                    Math.round(
+                                      currentInvoiceData.totalAmount -
+                                        (currentInvoiceData.amountPaid || 0)
+                                    )
+                                  )
+                                )}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-slate-100 dark:border-slate-800 pt-5">
+                      <p className="text-[11px] text-slate-400">
+                        Tanggal: {new Date(currentInvoiceData.date).toLocaleString("id-ID")}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsInvoiceModalOpen(false);
+                            setCurrentInvoiceData(null);
+                          }}
+                          className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer"
+                        >
+                          Tutup
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.print()}
+                          className="px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 active:scale-95 font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> Cetak Faktur
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ─── MODAL: Delete Confirmation ─────────────────────────────────────── */}
+            <AnimatePresence>
+              {invoiceToDelete && (
+                <motion.div
+                  key="po-delete-modal"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  onClick={() => setInvoiceToDelete(null)}
+                  className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Cetak Faktur
-                </button>
-              </div>
-            </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── MODAL: Delete Confirmation ────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {invoiceToDelete && (
-          <motion.div
-            key="po-delete-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-sm p-6 space-y-4"
-            >
-            <h3 className="text-base font-bold text-slate-900">
-              Hapus Purchase Order?
-            </h3>
-            <p className="text-slate-500 text-xs leading-relaxed">
-              Apakah Anda yakin ingin menghapus PO <strong className="text-slate-800">{invoiceToDelete.poNumber}</strong>? Catatan inventaris dan transaksi keuangan terkait PO ini juga akan disesuaikan.
-            </p>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setInvoiceToDelete(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  if (invoiceToDelete) {
-                    if (isPeriodClosed(invoiceToDelete.date)) {
-                      alert(`PO ${invoiceToDelete.poNumber} berada pada periode ${invoiceToDelete.date.substring(0, 7)} yang telah ditutup buku dan tidak dapat dihapus.`);
-                      setInvoiceToDelete(null);
-                      return;
-                    }
-                    deletePurchaseOrder(invoiceToDelete.id);
-                    setInvoiceToDelete(null);
-                  }
-                }}
-                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                Ya, Hapus PO
-              </button>
-            </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── MODAL: Pay PO (Hutang Dagang) ─────────────────────────────────────────── */}
-      <AnimatePresence>
-        {payModalOpen && selectedPOForPay && (() => {
-          const remaining = selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0);
-          const supplier = suppliers.find((s) => s.id === selectedPOForPay.supplierId);
-          return (
-            <motion.div
-              key="po-pay-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                className="my-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4"
-              >
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-brand-600" />
-                    <span>Pembayaran Hutang Supplier</span>
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                    {selectedPOForPay.poNumber} • {supplier?.name || selectedPOForPay.supplierName || "Supplier"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPayModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Tagihan Summary Card */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
-                <div className="flex justify-between text-slate-600">
-                  <span>Total Tagihan PO:</span>
-                  <span className="font-mono font-bold text-slate-900">{formatCurrency(selectedPOForPay.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Sudah Dibayar:</span>
-                  <span className="font-mono font-bold text-emerald-600">{formatCurrency(selectedPOForPay.amountPaid || 0)}</span>
-                </div>
-                <div className="flex justify-between text-xs pt-2 border-t border-slate-200/60 items-center">
-                  <span className="font-bold text-slate-700">Sisa Hutang:</span>
-                  <span className="text-lg font-black font-mono text-rose-600">
-                    {formatCurrency(remaining)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-3.5 text-xs">
-                {/* Nominal Bayar + Presets */}
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block font-bold text-slate-700">Jumlah Dibayar (Rp)</label>
-                    <div className="flex gap-1">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl w-full max-w-sm p-6 space-y-4"
+                  >
+                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      Hapus Purchase Order?
+                    </h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">
+                      Apakah Anda yakin ingin menghapus PO <strong className="text-slate-800 dark:text-slate-200">{invoiceToDelete.poNumber}</strong>? Catatan inventaris dan transaksi keuangan terkait PO ini juga akan disesuaikan.
+                    </p>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                       <button
                         type="button"
-                        onClick={() => setPayAmount(remaining)}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 cursor-pointer"
+                        onClick={() => setInvoiceToDelete(null)}
+                        className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-bold cursor-pointer"
                       >
-                        Lunas (100%)
+                        Batal
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPayAmount(Math.round(remaining / 2))}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                        onClick={() => {
+                          if (isReadOnly || !invoiceToDelete) {
+                            setInvoiceToDelete(null);
+                            return;
+                          }
+                          if (isPeriodClosed(invoiceToDelete.date)) {
+                            toast.error(
+                              `PO ${invoiceToDelete.poNumber} berada pada periode ${getLocalPeriodFromTimestamp(invoiceToDelete.date)} yang telah ditutup buku dan tidak dapat dihapus.`
+                            );
+                            setInvoiceToDelete(null);
+                            return;
+                          }
+                          deletePurchaseOrder(invoiceToDelete.id);
+                          toast.success(`PO ${invoiceToDelete.poNumber} berhasil dihapus.`);
+                          setInvoiceToDelete(null);
+                        }}
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                       >
-                        50%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPayAmount(Math.round(remaining / 4))}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
-                      >
-                        25%
+                        Ya, Hapus PO
                       </button>
                     </div>
-                  </div>
-                  <CurrencyInput
-                    emptyWhenZero
-                    value={payAmount}
-                    onValueChange={(_, num) =>
-                      setPayAmount(Math.min(remaining, Math.max(0, Math.round(num))))
-                    }
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
-                    placeholder="Masukkan jumlah pembayaran..."
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Terbilang: {formatCurrency(payAmount || 0)}
-                  </p>
-                </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                {/* Pilih Sumber Kas / Bank */}
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Dari Akun Kas / Bank</label>
-                  <CustomSelect
-                    value={payAccountId}
-                    onChange={setPayAccountId}
-                    placeholder="-- Pilih Akun Kas/Bank --"
-                    options={[
-                      { value: "", label: "-- Pilih Akun Kas/Bank --" },
-                      ...cashAccounts.map((a) => ({
-                        value: a.id,
-                        label: `${a.name} (${formatCurrency(a.balance || 0)})`,
-                      })),
-                    ]}
-                    buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
-                  />
-                </div>
+            {/* ─── MODAL: Pay PO (Hutang Dagang) ──────────────────────────────────── */}
+            <AnimatePresence>
+              {payModalOpen && selectedPOForPay && (() => {
+                const remaining = Math.max(
+                  0,
+                  Math.round(selectedPOForPay.totalAmount - (selectedPOForPay.amountPaid || 0))
+                );
+                const supplier = suppliers.find((s) => s.id === selectedPOForPay.supplierId);
+                return (
+                  <motion.div
+                    key="po-pay-modal"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    onClick={() => setPayModalOpen(false)}
+                    className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                      transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="my-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl w-full max-w-md max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar p-6 space-y-4"
+                    >
+                      <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                            <span>Pembayaran Hutang Supplier</span>
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                            {selectedPOForPay.poNumber} • {supplier?.name || selectedPOForPay.supplierName || "Supplier"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOpen(false)}
+                          aria-label="Tutup modal pembayaran"
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
 
-                {/* Tanggal Bayar */}
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tanggal Pembayaran</label>
-                  <CustomDatePicker
-                    value={payDate}
-                    onChange={setPayDate}
-                    allowClear={false}
-                    buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-medium hover:bg-white"
-                  />
-                </div>
+                      {/* Tagihan Summary Card */}
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-xs space-y-2">
+                        <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                          <span>Total Tagihan PO:</span>
+                          <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
+                            {formatCurrency(selectedPOForPay.totalAmount)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                          <span>Sudah Dibayar:</span>
+                          <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(selectedPOForPay.amountPaid || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-2 border-t border-slate-200/60 dark:border-slate-700 items-center">
+                          <span className="font-bold text-slate-700 dark:text-slate-200">Sisa Hutang:</span>
+                          <span className="text-lg font-black font-mono tabular-nums text-rose-600 dark:text-rose-400">
+                            {formatCurrency(remaining)}
+                          </span>
+                        </div>
+                      </div>
 
-                {/* Catatan / No Referensi Transfer */}
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Catatan / Bukti Transfer (Opsional)</label>
-                  <input
-                    type="text"
-                    value={payNotes}
-                    onChange={(e) => setPayNotes(e.target.value)}
-                    placeholder="Misal: Transfer BCA Ref #88910, Cicilan ke-1..."
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:bg-white focus:ring-2 focus:ring-brand-500/20 outline-none"
-                  />
-                </div>
-              </div>
+                      <div className="space-y-3.5 text-xs">
+                        {/* Nominal Bayar + Presets */}
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block font-bold text-slate-700 dark:text-slate-200">Jumlah Dibayar (Rp)</label>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setPayAmount(remaining)}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 hover:bg-brand-100 cursor-pointer"
+                              >
+                                Lunas (100%)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPayAmount(Math.round(remaining / 2))}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                              >
+                                50%
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPayAmount(Math.round(remaining / 4))}
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                              >
+                                25%
+                              </button>
+                            </div>
+                          </div>
+                          <CurrencyInput
+                            emptyWhenZero
+                            value={payAmount}
+                            onValueChange={(_, num) =>
+                              setPayAmount(Math.min(remaining, Math.max(0, Math.round(num))))
+                            }
+                            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-bold font-mono focus:bg-white dark:focus:bg-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                            placeholder="Masukkan jumlah pembayaran..."
+                          />
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Terbilang: {formatCurrency(payAmount || 0)}
+                          </p>
+                        </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setPayModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl text-xs cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (payAmount > 0 && payAccountId) {
-                      const payPeriod = (payDate || new Date().toISOString().split("T")[0]).substring(0, 7);
-                      if (isPeriodClosed(payPeriod)) {
-                        alert(
-                          `Tanggal pembayaran (${payPeriod}) berada pada periode yang telah ditutup buku. Silakan pilih tanggal pada periode buku aktif.`
-                        );
-                        return;
-                      }
-                      payPurchaseOrder(
-                        selectedPOForPay.id,
-                        payAmount,
-                        payAccountId,
-                        payNotes.trim() || undefined,
-                        payDate ? new Date(payDate).toISOString() : undefined
-                      );
-                      setPayModalOpen(false);
-                      setPayNotes("");
-                    }
-                  }}
-                  disabled={!payAccountId || payAmount <= 0}
-                  className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 active:scale-95 transition-all text-xs disabled:opacity-40 shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Konfirmasi Pembayaran ({formatCurrency(payAmount || 0)})</span>
-                </button>
-              </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
+                        {/* Pilih Sumber Kas / Bank */}
+                        <div>
+                          <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Dari Akun Kas / Bank</label>
+                          <CustomSelect
+                            value={payAccountId}
+                            onChange={setPayAccountId}
+                            placeholder="-- Pilih Akun Kas/Bank --"
+                            options={[
+                              { value: "", label: "-- Pilih Akun Kas/Bank --" },
+                              ...cashAccounts.map((a) => ({
+                                value: a.id,
+                                label: `${a.name} (${formatCurrency(accountBalances[a.id] || 0)})`,
+                              })),
+                            ]}
+                            buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-medium hover:bg-white dark:hover:bg-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+
+                        {/* Tanggal Bayar */}
+                        <div>
+                          <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Tanggal Pembayaran</label>
+                          <CustomDatePicker
+                            value={payDate}
+                            onChange={setPayDate}
+                            allowClear={false}
+                            buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-medium hover:bg-white dark:hover:bg-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+
+                        {/* Catatan / No Referensi Transfer */}
+                        <div>
+                          <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Catatan / Bukti Transfer (Opsional)</label>
+                          <input
+                            type="text"
+                            value={payNotes}
+                            onChange={(e) => setPayNotes(e.target.value)}
+                            placeholder="Misal: Transfer BCA Ref #88910, Cicilan ke-1..."
+                            className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs focus:bg-white dark:focus:bg-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOpen(false)}
+                          className="px-4 py-2 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canProcessPayment || !selectedPOForPay) return;
+                            const activePayYmd = payDate || getLocalDateString();
+                            const payPeriod = getLocalPeriodFromTimestamp(activePayYmd);
+                            const validation = validatePoPaymentInput({
+                              poStatus: selectedPOForPay.status,
+                              totalAmount: selectedPOForPay.totalAmount,
+                              amountPaid: selectedPOForPay.amountPaid,
+                              payAmount,
+                              cashAccountId: payAccountId,
+                              payDateYmd: activePayYmd,
+                              isPeriodClosed: isPeriodClosed(payPeriod),
+                            });
+                            if ("error" in validation) {
+                              toast.error(validation.error);
+                              return;
+                            }
+                            payPurchaseOrder(
+                              selectedPOForPay.id,
+                              validation.effectiveAmount,
+                              payAccountId,
+                              payNotes.trim() || undefined,
+                              validation.payDateIso
+                            );
+                            toast.success(
+                              validation.nextStatus === "PAID"
+                                ? `PO ${selectedPOForPay.poNumber} berhasil dilunasi.`
+                                : `Cicilan ${formatCurrency(validation.effectiveAmount)} untuk PO ${selectedPOForPay.poNumber} berhasil dicatat.`
+                            );
+                            setPayModalOpen(false);
+                            setPayNotes("");
+                          }}
+                          disabled={!payAccountId || payAmount <= 0}
+                          className="px-5 py-2.5 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 active:scale-95 transition-all text-xs disabled:opacity-40 shadow-xs cursor-pointer flex items-center gap-1.5"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Konfirmasi Pembayaran ({formatCurrency(payAmount || 0)})</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+          </>,
+          document.body
+        )}
     </div>
   );
 };

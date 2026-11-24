@@ -86,7 +86,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
             setSelectedUser(null);
             onClose();
           } else {
-            setError("PIN otorisasi tidak sesuai.");
+            setError((prev) => prev || "PIN otorisasi tidak sesuai.");
             pinRef.current = "";
             setPin("");
           }
@@ -135,7 +135,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
         setSelectedUser(null);
         onClose();
       } else {
-        setError("PIN otorisasi tidak sesuai.");
+        setError((prev) => prev || "PIN otorisasi tidak sesuai.");
         pinRef.current = "";
         setPin("");
       }
@@ -209,7 +209,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <AnimatePresence>
@@ -219,18 +219,19 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
-          className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-5 bg-black/40 backdrop-blur-sm overflow-y-auto"
+          className="fixed inset-0 z-50 flex justify-center items-start sm:items-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-sm overflow-y-auto"
         >
           <motion.div
             key="switch-account-card"
             initial={{ scale: 0.94, opacity: 0, y: 15 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 15 }}
-            transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-md overflow-hidden flex flex-col text-slate-900 my-auto max-h-[85vh] sm:max-h-[88vh]"
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-700 w-full max-w-md overflow-hidden flex flex-col text-slate-900 dark:text-slate-100 my-auto max-h-[85vh] sm:max-h-[88vh]"
           >
         
         {/* Modal Header */}
@@ -356,7 +357,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
             </div>
 
             {selectedUser?.isSuspended && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl space-y-2 animate-in fade-in">
+              <div className="p-3 bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200 text-xs rounded-xl space-y-2">
                 <div className="flex items-start gap-2">
                   <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div>
@@ -382,7 +383,7 @@ export const SwitchAccountModal: React.FC<SwitchAccountModalProps> = ({
             )}
 
             {error && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl text-center flex items-center justify-center gap-1.5 animate-in fade-in">
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-200 text-xs rounded-xl text-center flex items-center justify-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                 <span>{error}</span>
               </div>

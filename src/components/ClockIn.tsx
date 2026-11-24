@@ -20,16 +20,26 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DailyAttendance, DEFAULT_SHIFT_DEFINITIONS } from "../types";
-import { getLocalDateString } from "../utils/dateUtils";
+import {
+  DEFAULT_STORE_TIMEZONE,
+  getLocalDateString,
+} from "../utils/dateUtils";
+import {
+  calculateWorkDurationHours,
+  evaluateClockInLateness,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
 
 export function ClockIn() {
   const {
     currentUser,
+    users,
     employees,
     dailyAttendances,
     addDailyAttendance,
     updateDailyAttendance,
     employeeShifts,
+    isReadOnly,
     settings,
   } = useStore();
 
@@ -50,20 +60,44 @@ export function ClockIn() {
 
   // Check today's attendance for the current user
   const todayStr = getLocalDateString();
-  const activeEmployee = employees.find((e) => e.username === currentUser?.username);
-  const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
+  const activeEmployee = employees.find(
+    (e) =>
+      e.id === currentUser?.employeeId ||
+      (e.username || "").toLowerCase() === (currentUser?.username || "").toLowerCase()
+  );
+  const activeEmployeeId = resolveCanonicalEmployeeId(
+    currentUser?.employeeId || activeEmployee?.id || currentUser?.id || "",
+    employees,
+    users
+  );
 
   const todayShift = (employeeShifts || []).find(
-    (s: any) => s.employeeId === activeEmployeeId && s.date === todayStr
+    (s: any) =>
+      resolveCanonicalEmployeeId(s.employeeId, employees, users) === activeEmployeeId &&
+      s.date === todayStr
   );
   const scheduledShift = todayShift?.shiftType || "PAGI";
+  const shiftDefs =
+    settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
+      ? settings.shiftDefinitions
+      : DEFAULT_SHIFT_DEFINITIONS;
+  const scheduledShiftDef =
+    shiftDefs.find((s: any) => s.id === scheduledShift) ||
+    DEFAULT_SHIFT_DEFINITIONS.find((s: any) => s.id === scheduledShift) ||
+    null;
 
   const todayAttendance = dailyAttendances.find(
-    (a) => a.employeeId === activeEmployeeId && a.date === todayStr
+    (a) =>
+      resolveCanonicalEmployeeId(a.employeeId, employees, users) === activeEmployeeId &&
+      a.date === todayStr
   );
 
-  const isClockedIn = !!todayAttendance?.clockInTime;
-  const isClockedOut = !!todayAttendance?.clockOutTime;
+  const isLeaveSubmitted =
+    todayAttendance?.status === "IZIN" ||
+    todayAttendance?.status === "SAKIT" ||
+    todayAttendance?.status === "ALPHA";
+  const isClockedIn = !!todayAttendance?.clockInTime && !isLeaveSubmitted;
+  const isClockedOut = !!todayAttendance?.clockOutTime && !isLeaveSubmitted;
 
   // Auto clear feedback after 4 seconds
   useEffect(() => {
@@ -176,6 +210,7 @@ export function ClockIn() {
 
     const now = new Date();
     const timeStr = now.toLocaleDateString("id-ID", {
+      timeZone: DEFAULT_STORE_TIMEZONE,
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -209,6 +244,10 @@ export function ClockIn() {
   };
 
   const handleSubmit = async () => {
+    if (isReadOnly) {
+      setFeedback({ type: "error", message: "Akun Read-Only tidak diizinkan mencatat presensi." });
+      return;
+    }
     if (!photoDataUrl) {
       setFeedback({ type: "error", message: "Harap ambil foto selfie kamera terlebih dahulu." });
       return;
@@ -217,54 +256,28 @@ export function ClockIn() {
       setFeedback({ type: "error", message: "Koordinat GPS belum didapatkan. Pastikan izin lokasi aktif." });
       return;
     }
-    if (!currentUser) return;
+    if (!currentUser || !activeEmployeeId) return;
 
     setIsLoading(true);
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
 
     try {
       if (!isClockedIn) {
         // Clock In
-        const shiftDefs =
-          settings?.shiftDefinitions && settings.shiftDefinitions.length > 0
-            ? settings.shiftDefinitions
-            : DEFAULT_SHIFT_DEFINITIONS;
-        const matchedShiftDef = shiftDefs.find((s: any) => s.id === scheduledShift);
-
-        let status: "HADIR" | "TERLAMBAT" = "HADIR";
-        let lateMinutes = 0;
-
-        if (matchedShiftDef) {
-          const [startH, startM] = (matchedShiftDef.startTime || "07:00").split(":").map(Number);
-          const shiftStartMin = startH * 60 + (startM || 0);
-          const nowObj = new Date();
-          const currentMin = nowObj.getHours() * 60 + nowObj.getMinutes();
-          const tolerance = matchedShiftDef.lateToleranceMinutes ?? 15;
-
-          if (currentMin > shiftStartMin + tolerance) {
-            status = "TERLAMBAT";
-            lateMinutes = currentMin - shiftStartMin;
-          }
-        } else {
-          const nowDecimalHour = new Date().getHours() + new Date().getMinutes() / 60;
-          if (scheduledShift === "PAGI" && nowDecimalHour > 7.25) {
-            status = "TERLAMBAT";
-            lateMinutes = Math.round((nowDecimalHour - 7) * 60);
-          } else if (scheduledShift === "MIDDLE" && nowDecimalHour > 11.25) {
-            status = "TERLAMBAT";
-            lateMinutes = Math.round((nowDecimalHour - 11) * 60);
-          } else if (scheduledShift === "SORE" && nowDecimalHour > 15.25) {
-            status = "TERLAMBAT";
-            lateMinutes = Math.round((nowDecimalHour - 15) * 60);
-          }
-        }
+        const { status, lateMinutes } = evaluateClockInLateness({
+          now: nowDate,
+          shiftId: scheduledShift,
+          shiftDefinitions: shiftDefs,
+          timeZone: DEFAULT_STORE_TIMEZONE,
+        });
 
         const lateNote = lateMinutes > 0 ? `[Terlambat ${lateMinutes} menit]` : "";
         const offNote = scheduledShift === "OFF" ? "[Shift Libur / Pengganti]" : "";
         const combinedNotes = [notes.trim(), lateNote, offNote].filter(Boolean).join(" • ");
 
         addDailyAttendance({
-          employeeId: activeEmployeeId as string,
+          employeeId: activeEmployeeId,
           date: todayStr,
           clockInTime: now,
           clockOutTime: null,
@@ -282,12 +295,13 @@ export function ClockIn() {
         });
       } else if (!isClockedOut && todayAttendance) {
         // Clock Out
+        const mergedNotes = [todayAttendance.notes, notes.trim()].filter(Boolean).join(" | ");
         updateDailyAttendance({
           ...todayAttendance,
           clockOutTime: now,
           clockOutLocation: location,
           clockOutPhotoUrl: photoDataUrl,
-          notes: todayAttendance.notes ? `${todayAttendance.notes} | ${notes.trim()}` : notes.trim(),
+          notes: mergedNotes,
         });
         setFeedback({
           type: "success",
@@ -306,6 +320,14 @@ export function ClockIn() {
   };
 
   const handleLeaveSubmit = async (leaveStatus: "IZIN" | "SAKIT") => {
+    if (isReadOnly) {
+      setFeedback({ type: "error", message: "Akun Read-Only tidak diizinkan mengajukan izin." });
+      return;
+    }
+    if (isClockedIn) {
+      setFeedback({ type: "error", message: "Anda sudah melakukan Clock In hari ini." });
+      return;
+    }
     if (!notes.trim()) {
       setFeedback({ type: "error", message: "Harap isi keterangan alasan pengajuan izin/sakit." });
       return;
@@ -313,18 +335,16 @@ export function ClockIn() {
     if (!currentUser || !activeEmployeeId) return;
 
     setIsLoading(true);
-    const now = new Date().toISOString();
-
     try {
       if (todayAttendance) {
         updateDailyAttendance({
           ...todayAttendance,
-          clockInTime: now,
-          clockOutTime: now,
-          clockInLocation: location || { lat: 0, lng: 0 },
-          clockOutLocation: location || { lat: 0, lng: 0 },
-          clockInPhotoUrl: photoDataUrl || "",
-          clockOutPhotoUrl: photoDataUrl || "",
+          clockInTime: null,
+          clockOutTime: null,
+          clockInLocation: null,
+          clockOutLocation: null,
+          clockInPhotoUrl: null,
+          clockOutPhotoUrl: null,
           status: leaveStatus,
           approvalStatus: "PENDING",
           notes: notes.trim(),
@@ -333,12 +353,12 @@ export function ClockIn() {
         addDailyAttendance({
           employeeId: activeEmployeeId,
           date: todayStr,
-          clockInTime: now,
-          clockOutTime: now,
-          clockInLocation: location || { lat: 0, lng: 0 },
-          clockOutLocation: location || { lat: 0, lng: 0 },
-          clockInPhotoUrl: photoDataUrl || "",
-          clockOutPhotoUrl: photoDataUrl || "",
+          clockInTime: null,
+          clockOutTime: null,
+          clockInLocation: null,
+          clockOutLocation: null,
+          clockInPhotoUrl: null,
+          clockOutPhotoUrl: null,
           status: leaveStatus,
           approvalStatus: "PENDING",
           notes: notes.trim(),
@@ -418,59 +438,68 @@ export function ClockIn() {
       </AnimatePresence>
 
       {/* Main Card */}
-      <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-xs border border-slate-200/80">
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-8 rounded-3xl shadow-xs border border-slate-200/80 dark:border-slate-800">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-6">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                 Absensi Kehadiran
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200/70">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/70 dark:border-brand-500/30">
                 Selfie & GPS
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               {currentUser.name} • {currentUser.role}{" "}
               {activeEmployee?.department ? `(${activeEmployee.department})` : ""}
             </p>
           </div>
 
           {/* Mode Switcher */}
-          {!isClockedOut && (
-            <div className="flex p-1 bg-slate-100 rounded-2xl text-xs font-bold self-start sm:self-auto gap-1">
+          {!isClockedOut && !isLeaveSubmitted && (
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold self-start sm:self-auto gap-1">
               <button
                 type="button"
                 onClick={() => setActiveMode("ATTENDANCE")}
                 className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  activeMode === "ATTENDANCE" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+                  activeMode === "ATTENDANCE"
+                    ? "text-slate-900 dark:text-slate-100"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                 }`}
               >
                 {activeMode === "ATTENDANCE" && (
                   <motion.div
                     layoutId="clockInModeTab"
-                    className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                    className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-600"
                     transition={{ type: "spring", stiffness: 450, damping: 32 }}
                   />
                 )}
                 <span className="relative z-10">Hadir Shift</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveMode("LEAVE")}
-                className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  activeMode === "LEAVE" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {activeMode === "LEAVE" && (
-                  <motion.div
-                    layoutId="clockInModeTab"
-                    className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
-                    transition={{ type: "spring", stiffness: 450, damping: 32 }}
-                  />
-                )}
-                <span className="relative z-10">Izin / Sakit</span>
-              </button>
+              {!isClockedIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopCamera();
+                    setActiveMode("LEAVE");
+                  }}
+                  className={`relative px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    activeMode === "LEAVE"
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  {activeMode === "LEAVE" && (
+                    <motion.div
+                      layoutId="clockInModeTab"
+                      className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-600"
+                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span className="relative z-10">Izin / Sakit</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -479,8 +508,8 @@ export function ClockIn() {
         <div
           className={`p-4 rounded-2xl border mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
             scheduledShift === "OFF"
-              ? "bg-amber-50/80 border-amber-200"
-              : "bg-gradient-to-r from-slate-50 to-brand-50/40 border-slate-200/80"
+              ? "bg-amber-50/80 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30"
+              : "bg-gradient-to-r from-slate-50 to-brand-50/40 dark:from-slate-800/80 dark:to-brand-500/10 border-slate-200/80 dark:border-slate-700"
           }`}
         >
           <div className="flex items-center gap-3">
@@ -492,75 +521,110 @@ export function ClockIn() {
                   ? "bg-brand-100 text-brand-800 border border-brand-200"
                   : scheduledShift === "SORE"
                   ? "bg-amber-100 text-amber-800 border border-amber-200"
-                  : "bg-slate-200 text-slate-800"
+                  : scheduledShift === "OFF"
+                  ? "bg-slate-200 text-slate-800"
+                  : "bg-purple-100 text-purple-800 border border-purple-200"
               }`}
             >
-              {scheduledShift === "PAGI"
+              {scheduledShift === "OFF"
+                ? "OFF"
+                : scheduledShift === "PAGI"
                 ? "PGI"
                 : scheduledShift === "MIDDLE"
                 ? "MID"
                 : scheduledShift === "SORE"
                 ? "SRE"
-                : "OFF"}
+                : scheduledShift.slice(0, 3).toUpperCase()}
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Jadwal Shift Anda Hari Ini
               </p>
-              <p className="text-sm font-bold text-slate-900">
-                {scheduledShift === "PAGI"
-                  ? "Shift Pagi (07:00 – 15:00 WIB)"
-                  : scheduledShift === "MIDDLE"
-                  ? "Shift Middle (11:00 – 19:00 WIB)"
-                  : scheduledShift === "SORE"
-                  ? "Shift Sore (15:00 – 23:00 WIB)"
-                  : "Hari Libur (OFF)"}
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                {scheduledShift === "OFF"
+                  ? "Hari Libur (OFF)"
+                  : scheduledShiftDef
+                  ? `Shift ${scheduledShiftDef.name} (${scheduledShiftDef.startTime} – ${scheduledShiftDef.endTime} WITA)`
+                  : `Shift ${scheduledShift}`}
               </p>
             </div>
           </div>
           {scheduledShift === "OFF" ? (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-white/90 px-3 py-1.5 rounded-xl border border-amber-300 self-start sm:self-auto">
-              <span>⚠️ Jadwal Libur: Presensi akan dicatat sebagai lembur / shift pengganti</span>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200 bg-white/90 dark:bg-slate-900/80 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-500/40 self-start sm:self-auto">
+              <span>Jadwal Libur: Presensi akan dicatat sebagai lembur / shift pengganti</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200/60 self-start sm:self-auto">
-              <Clock className="w-3.5 h-3.5 text-brand-600" />
-              <span>Toleransi keterlambatan 15 mnt</span>
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-300 bg-white/80 dark:bg-slate-900/70 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700 self-start sm:self-auto tabular-nums">
+              <Clock className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+              <span>Toleransi keterlambatan {scheduledShiftDef?.lateToleranceMinutes ?? 15} mnt</span>
             </div>
           )}
         </div>
 
-        {/* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */}
-        {isClockedOut ? (
-          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-brand-50/50 border border-emerald-200/80 p-6 sm:p-8 rounded-3xl flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 shadow-2xs">
+        {/* ─── STATE 0: LEAVE / ABSENCE RECORDED TODAY ─── */}
+        {isLeaveSubmitted && todayAttendance ? (
+          <div className="bg-gradient-to-br from-amber-50/80 via-white to-brand-50/40 dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 border border-amber-200/80 dark:border-amber-500/30 p-6 sm:p-8 rounded-3xl flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-3xl bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center mb-4 shadow-2xs">
+              <Info className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">
+              Status Hari Ini: {todayAttendance.status}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1.5 max-w-md">
+              {todayAttendance.notes || "Pengajuan ketidakhadiran telah tercatat di sistem."}
+            </p>
+            <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              <span>Verifikasi Manager:</span>
+              <span
+                className={
+                  todayAttendance.approvalStatus === "APPROVED"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : todayAttendance.approvalStatus === "REJECTED"
+                    ? "text-rose-600 dark:text-rose-400"
+                    : "text-amber-600 dark:text-amber-400"
+                }
+              >
+                {todayAttendance.approvalStatus === "APPROVED"
+                  ? "Disetujui"
+                  : todayAttendance.approvalStatus === "REJECTED"
+                  ? "Ditolak"
+                  : "Menunggu Verifikasi"}
+              </span>
+            </div>
+          </div>
+        ) : isClockedOut ? (
+          /* ─── STATE 1: ALREADY COMPLETED SHIFT TODAY ─── */
+          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-brand-50/50 dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/80 dark:border-emerald-500/30 p-6 sm:p-8 rounded-3xl flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-4 shadow-2xs">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-black text-slate-900">
+            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">
               Shift Anda Hari Ini Telah Selesai
             </h3>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md">
               Data kehadiran Anda telah tercatat dengan aman dan siap diverifikasi oleh Manager.
             </p>
 
             <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-6">
-              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs text-left">
+              <div className="p-3.5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xs text-left">
                 <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
                   Jam Masuk (IN)
                 </span>
-                <span className="text-base font-black text-emerald-700 font-mono">
+                <span className="text-base font-black text-emerald-700 dark:text-emerald-400 font-mono tabular-nums">
                   {new Date(todayAttendance.clockInTime!).toLocaleTimeString("id-ID", {
+                    timeZone: DEFAULT_STORE_TIMEZONE,
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </span>
               </div>
-              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs text-left">
+              <div className="p-3.5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xs text-left">
                 <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
                   Jam Pulang (OUT)
                 </span>
-                <span className="text-base font-black text-rose-700 font-mono">
+                <span className="text-base font-black text-rose-700 dark:text-rose-400 font-mono tabular-nums">
                   {new Date(todayAttendance.clockOutTime!).toLocaleTimeString("id-ID", {
+                    timeZone: DEFAULT_STORE_TIMEZONE,
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -569,16 +633,11 @@ export function ClockIn() {
             </div>
 
             {todayAttendance.clockInTime && todayAttendance.clockOutTime && (
-              <div className="mt-4 p-4 bg-white rounded-2xl border border-emerald-100 w-full max-w-sm shadow-2xs">
+              <div className="mt-4 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-emerald-100 dark:border-emerald-500/30 w-full max-w-sm shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600">Durasi Kerja Total:</span>
-                  <span className="text-lg font-black text-emerald-600 font-mono">
-                    {(
-                      (new Date(todayAttendance.clockOutTime).getTime() -
-                        new Date(todayAttendance.clockInTime).getTime()) /
-                      3600000
-                    ).toFixed(1)}{" "}
-                    Jam
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Durasi Kerja Total:</span>
+                  <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
+                    {calculateWorkDurationHours(todayAttendance.clockInTime, todayAttendance.clockOutTime).toFixed(1)} Jam
                   </span>
                 </div>
               </div>
@@ -637,18 +696,28 @@ export function ClockIn() {
             </div>
 
             {/* Camera Viewfinder */}
-            <div className="bg-slate-900 rounded-3xl overflow-hidden relative w-full max-w-sm aspect-square mx-auto flex items-center justify-center border-2 border-slate-200 shadow-inner group">
-              {/* Tombol Toggle Mirror Cermin saat kamera aktif */}
+            <div className="bg-slate-950 rounded-3xl overflow-hidden relative w-full max-w-sm aspect-square mx-auto flex items-center justify-center border-2 border-slate-200 dark:border-slate-700 shadow-inner group">
+              {/* Tombol Toggle Mirror Cermin & Tutup Kamera saat kamera aktif */}
               {isCameraActive && !photoDataUrl && (
-                <button
-                  type="button"
-                  onClick={() => setIsMirrored((prev) => !prev)}
-                  className="absolute top-3 left-3 z-20 px-3 py-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-semibold rounded-full flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
-                  title="Klik untuk membalik cermin horizontal"
-                >
-                  <FlipHorizontal className="w-3.5 h-3.5 text-brand-300" />
-                  <span>{isMirrored ? "Cermin: Aktif" : "Cermin: Mati"}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsMirrored((prev) => !prev)}
+                    className="absolute top-3 left-3 z-20 px-3 py-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-semibold rounded-full flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                    title="Klik untuk membalik cermin horizontal"
+                  >
+                    <FlipHorizontal className="w-3.5 h-3.5 text-brand-300" />
+                    <span>{isMirrored ? "Cermin: Aktif" : "Cermin: Mati"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="absolute top-3 right-3 z-20 px-3 py-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                    title="Matikan kamera"
+                  >
+                    <span>Tutup</span>
+                  </button>
+                </>
               )}
 
               {photoDataUrl ? (

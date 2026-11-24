@@ -1,22 +1,24 @@
 import { RupiahSign } from './common/RupiahSign';
 import { CustomSelect } from './common/CustomSelect';
-import React, { useState } from "react";
+import { ConfirmModal, useConfirm } from './common/ConfirmModal';
+import React, { useMemo, useState, useEffect } from "react";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
+import { computeCashAccountBalances } from "../utils/financeMetrics";
+import { computeShiftExpectedCash } from "../utils/syncSanitizers";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
+import { getWitaTimeMinutes } from "../utils/attendanceRecap";
 import {
   Play,
   Square,
   History,
   AlertCircle,
-    Clock,
+  Clock,
   TrendingUp,
   TrendingDown,
-  CheckCircle2,
-  Calendar,
-  Layers,
-  Sparkles,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import {
   BarChart,
   Bar,
@@ -27,7 +29,6 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { ShiftSession } from "../types";
 
 export const ShiftManagement = () => {
   const {
@@ -35,19 +36,29 @@ export const ShiftManagement = () => {
     openShift,
     closeShift,
     settings,
-    salesTransactions,
     cashTransactions,
     cashAccounts,
     currentUser,
-    users,
+    employees,
     isReadOnly,
   } = useStore();
+  const confirmModal = useConfirm();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
   const [startingCashInput, setStartingCashInput] = useState("");
   const [endingCashInput, setEndingCashInput] = useState("");
   const [selectedCashAccountId, setSelectedCashAccountId] = useState("");
 
   const cashOnlyAccounts = cashAccounts.filter((a) => a.type === "CASH");
+  useEffect(() => {
+    if (!selectedCashAccountId && cashOnlyAccounts.length === 1) {
+      setSelectedCashAccountId(cashOnlyAccounts[0].id);
+    }
+  }, [cashOnlyAccounts.length, selectedCashAccountId]);
+
+  const accountBalances = useMemo(
+    () => computeCashAccountBalances(cashAccounts, cashTransactions),
+    [cashAccounts, cashTransactions]
+  );
 
   const isIndo = settings.language === "id";
 
@@ -70,67 +81,98 @@ export const ShiftManagement = () => {
         new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
     );
 
-  // Calculate expected cash for current shift
-  let totalSales = 0;
-  let totalCashIn = 0;
-  let totalCashOut = 0;
+  // Calculate expected cash strictly from cashTransactions on the drawer account (no double-count / no QRIS)
+  const shiftCashSummary = useMemo(() => {
+    if (!currentShift) {
+      return {
+        totalSalesCashIn: 0,
+        totalOtherCashIn: 0,
+        totalCashOut: 0,
+        expectedEndingCash: 0,
+      };
+    }
+    return computeShiftExpectedCash({
+      startingCash: currentShift.startingCash,
+      shiftStartTime: currentShift.startTime,
+      cashAccountId: currentShift.cashAccountId,
+      cashTransactions,
+    });
+  }, [currentShift, cashTransactions]);
 
-  if (currentShift) {
-    const shiftStartTime = new Date(currentShift.startTime).getTime();
+  const totalSales = shiftCashSummary.totalSalesCashIn;
+  const totalCashIn = shiftCashSummary.totalOtherCashIn;
+  const totalCashOut = shiftCashSummary.totalCashOut;
+  const expectedEndingCash = shiftCashSummary.expectedEndingCash;
 
-    // Sum sales after shift started
-    totalSales = salesTransactions
-      .filter((t) => new Date(t.date).getTime() >= shiftStartTime)
-      .reduce((sum, t) => sum + t.totalPrice, 0);
-
-    // Sum cash transactions after shift started, ONLY for the specific cashAccountId
-    const recentCashTxs = cashTransactions.filter(
-      (t) =>
-        new Date(t.date).getTime() >= shiftStartTime &&
-        t.accountId === currentShift.cashAccountId
-    );
-
-    totalCashIn = recentCashTxs
-      .filter((t) => t.type === "CASH_IN")
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    totalCashOut = recentCashTxs
-      .filter((t) => t.type === "CASH_OUT")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }
-
-  const expectedEndingCash = currentShift
-    ? currentShift.startingCash + totalSales + totalCashIn - totalCashOut
-    : 0;
+  const actualCashCountedNum = Number(endingCashInput.replace(/\D/g, "")) || 0;
+  const liveShiftDifference = actualCashCountedNum - expectedEndingCash;
 
   const handleOpenShift = (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = Number(startingCashInput.replace(/\D/g, ""));
-    if (amount >= 0 && selectedCashAccountId) {
-      openShift({
-        userId: currentUser?.id || "unknown",
-        cashAccountId: selectedCashAccountId,
-        startTime: new Date().toISOString(),
-        endTime: null,
-        startingCash: amount,
-        expectedEndingCash: null,
-        actualEndingCash: null,
-        difference: null,
-        status: "OPEN",
-      });
-      setStartingCashInput("");
+    if (isReadOnly) {
+      toast.warning("Akun Read-Only tidak diizinkan membuka shift kasir.");
+      return;
     }
+    if (globalOpenShift) {
+      toast.warning("Masih ada shift kasir lain yang aktif. Tutup shift sebelumnya terlebih dahulu.");
+      return;
+    }
+    if (!selectedCashAccountId) {
+      toast.warning("Pilih Laci Kasir (Pos Kas Tunai) terlebih dahulu.");
+      return;
+    }
+    const amount = Math.round(Math.max(0, Number(startingCashInput.replace(/\D/g, "")) || 0));
+    const picEmp = employees.find(
+      (emp) =>
+        emp.id === currentUser?.employeeId ||
+        (emp.username || "").toLowerCase() === (currentUser?.username || "").toLowerCase()
+    );
+    openShift({
+      userId: currentUser?.id || "unknown",
+      cashAccountId: selectedCashAccountId,
+      startTime: new Date().toISOString(),
+      endTime: null,
+      startingCash: amount,
+      expectedEndingCash: null,
+      actualEndingCash: null,
+      difference: null,
+      status: "OPEN",
+      picEmployeeId: picEmp?.id || currentUser?.employeeId || currentUser?.id || null,
+      picEmployeeName: picEmp?.name || currentUser?.name || "Kasir",
+    });
+    setStartingCashInput("");
+    toast.success(`Shift kasir berhasil dibuka dengan modal awal ${formatCurrency(amount)}.`);
   };
 
   const handleCloseShift = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentShift) return;
+    if (isReadOnly || !currentShift) return;
 
-    const actual = Number(endingCashInput.replace(/\D/g, ""));
-    if (actual >= 0) {
-      closeShift(currentShift.id, actual, expectedEndingCash);
-      setEndingCashInput("");
+    const rawDigits = endingCashInput.replace(/\D/g, "");
+    if (!rawDigits) {
+      toast.warning("Masukkan nominal hitungan fisik uang di laci terlebih dahulu.");
+      return;
     }
+    const actual = Math.round(Math.max(0, Number(rawDigits) || 0));
+    const diff = actual - expectedEndingCash;
+    const diffDesc =
+      diff === 0
+        ? "Seimbang (Selisih Rp 0)"
+        : diff > 0
+        ? `Surplus +${formatCurrency(diff)}`
+        : `Kurang ${formatCurrency(diff)}`;
+
+    confirmModal.open({
+      title: "Tutup Shift & Rekonsiliasi Laci?",
+      message: `Aktual Fisik: ${formatCurrency(actual)} • Ekspektasi: ${formatCurrency(expectedEndingCash)} • Status: ${diffDesc}. Shift yang sudah ditutup tidak dapat dibuka kembali.`,
+      confirmLabel: "Ya, Akhiri Shift",
+      variant: diff < 0 ? "danger" : "warning",
+      onConfirm: () => {
+        closeShift(currentShift.id, actual, expectedEndingCash);
+        setEndingCashInput("");
+        toast.success(`Shift berhasil ditutup (${diffDesc}).`);
+      },
+    });
   };
 
   const formatNumberInput = (value: string) => {
@@ -138,15 +180,17 @@ export const ShiftManagement = () => {
     return num ? parseInt(num).toLocaleString("id-ID") : "";
   };
 
-  // Prepare data for shift history chart
+  // Prepare data for shift history chart (WITA timezone)
   const shiftChartData = pastShifts
     .slice(0, 7)
     .reverse()
     .map((shift) => {
-      const isMorning = new Date(shift.startTime).getHours() < 14;
+      const startMins = getWitaTimeMinutes(new Date(shift.startTime), DEFAULT_STORE_TIMEZONE);
+      const isMorning = startMins < 14 * 60;
       return {
         name:
           new Date(shift.startTime).toLocaleDateString("id-ID", {
+            timeZone: DEFAULT_STORE_TIMEZONE,
             weekday: "short",
             day: "numeric",
           }) + (isMorning ? " (Pagi)" : " (Mlm)"),
@@ -181,40 +225,46 @@ export const ShiftManagement = () => {
         </div>
 
         {/* Tab Selector */}
-        <div className="flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full xl:w-auto shrink-0 overflow-hidden">
+        <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 w-full xl:w-auto shrink-0 overflow-hidden">
           <button
+            type="button"
             onClick={() => setActiveTab("current")}
             className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 xl:flex-none cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === "current" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              activeTab === "current"
+                ? "text-slate-900 dark:text-slate-100"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             {activeTab === "current" && (
               <motion.div
                 layoutId="shiftSessionTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-600"
                 transition={{ type: "spring", stiffness: 450, damping: 32 }}
               />
             )}
-            <Clock className="w-3.5 h-3.5 text-brand-600 relative z-10 shrink-0" />
+            <Clock className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 relative z-10 shrink-0" />
             <span className="relative z-10">
               {isIndo ? "Shift Saat Ini" : "Current Shift"}
             </span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab("history")}
             className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-1 xl:flex-none cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === "history" ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+              activeTab === "history"
+                ? "text-slate-900 dark:text-slate-100"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             {activeTab === "history" && (
               <motion.div
                 layoutId="shiftSessionTab"
-                className="absolute inset-0 bg-white rounded-xl shadow-xs border border-slate-200/60"
+                className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-600"
                 transition={{ type: "spring", stiffness: 450, damping: 32 }}
               />
             )}
-            <History className="w-3.5 h-3.5 text-brand-600 relative z-10 shrink-0" />
-            <span className="relative z-10">
+            <History className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 relative z-10 shrink-0" />
+            <span className="relative z-10 tabular-nums">
               {isIndo ? "Riwayat Shift" : "Shift History"} ({pastShifts.length})
             </span>
           </button>
@@ -284,7 +334,7 @@ export const ShiftManagement = () => {
                           placeholder={isIndo ? "-- Pilih Pos Kas Tunai --" : "Select account..."}
                           options={cashOnlyAccounts.map((acc) => ({
                             value: acc.id,
-                            label: `${acc.name} (${formatCurrency(acc.balance || 0)})`,
+                            label: `${acc.name} (${formatCurrency(accountBalances[acc.id] || 0)})`,
                           }))}
                           buttonClassName="w-full px-4 py-3 border border-slate-200 rounded-2xl text-slate-800 font-semibold text-base sm:text-xs bg-slate-50/50 hover:bg-white"
                         />
@@ -342,18 +392,19 @@ export const ShiftManagement = () => {
                         {isIndo ? "Shift Kasir Sedang Berjalan" : "Active Shift"}
                       </h2>
                     </div>
-                    <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1 font-medium mb-1.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1 font-medium mb-1.5 tabular-nums">
                       <Clock className="w-3.5 h-3.5 text-emerald-600" />
                       {isIndo ? "Dimulai pada" : "Started at"}{" "}
                       {new Date(currentShift.startTime).toLocaleTimeString("id-ID", {
+                        timeZone: DEFAULT_STORE_TIMEZONE,
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
-                      ({new Date(currentShift.startTime).toLocaleDateString("id-ID")})
+                      ({new Date(currentShift.startTime).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })})
                     </p>
-                    <p className="text-xs font-semibold text-slate-700 bg-white inline-block px-2.5 py-1 rounded-xl border border-slate-200 shadow-2xs">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 inline-block px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
                       Laci Kasir:{" "}
-                      <span className="font-bold text-slate-900">
+                      <span className="font-bold text-slate-900 dark:text-slate-100">
                         {cashAccounts.find((a) => a.id === currentShift.cashAccountId)?.name || "Unknown"}
                       </span>
                     </p>
@@ -363,77 +414,77 @@ export const ShiftManagement = () => {
                   </div>
                 </div>
 
-                <div className="p-5 sm:p-6 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-                  <div className="p-4 sm:p-5 bg-white shadow-2xs rounded-2xl border border-slate-200/80 flex flex-col justify-between">
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                <div className="p-5 sm:p-6 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 tabular-nums">
+                  <div className="p-4 sm:p-5 bg-white dark:bg-slate-800 shadow-2xs rounded-2xl border border-slate-200/80 dark:border-slate-700 flex flex-col justify-between">
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                       {isIndo ? "Modal Awal" : "Starting Cash"}
                     </p>
-                    <p className="text-lg sm:text-xl font-black font-mono text-slate-900">
+                    <p className="text-lg sm:text-xl font-black font-mono text-slate-900 dark:text-slate-100">
                       {formatCurrency(currentShift.startingCash)}
                     </p>
                   </div>
 
-                  <div className="p-4 sm:p-5 bg-brand-50/40 shadow-2xs rounded-2xl border border-brand-200/80 flex flex-col justify-between group">
-                    <p className="text-[11px] font-bold text-brand-800 uppercase tracking-wider mb-2">
-                      {isIndo ? "Penjualan" : "Sales"}
+                  <div className="p-4 sm:p-5 bg-brand-50/40 dark:bg-brand-500/15 shadow-2xs rounded-2xl border border-brand-200/80 dark:border-brand-500/30 flex flex-col justify-between group">
+                    <p className="text-[11px] font-bold text-brand-800 dark:text-brand-300 uppercase tracking-wider mb-2">
+                      {isIndo ? "Penjualan Tunai" : "Cash Sales"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-lg sm:text-xl font-black font-mono text-brand-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-brand-950 dark:text-brand-100">
                         +{formatCurrency(totalSales)}
                       </p>
-                      <TrendingUp className="w-4 h-4 text-brand-600" />
+                      <TrendingUp className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                     </div>
                   </div>
 
-                  <div className="p-4 sm:p-5 bg-emerald-50/70 shadow-2xs rounded-2xl border border-emerald-200/70 flex flex-col justify-between group">
-                    <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-2">
-                      {isIndo ? "Kas Masuk" : "Cash In"}
+                  <div className="p-4 sm:p-5 bg-emerald-50/70 dark:bg-emerald-500/15 shadow-2xs rounded-2xl border border-emerald-200/70 dark:border-emerald-500/30 flex flex-col justify-between group">
+                    <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider mb-2">
+                      {isIndo ? "Kas Masuk Lain" : "Other Cash In"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-lg sm:text-xl font-black font-mono text-emerald-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-emerald-950 dark:text-emerald-100">
                         +{formatCurrency(totalCashIn)}
                       </p>
-                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                      <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
                   </div>
 
-                  <div className="p-4 sm:p-5 bg-rose-50/70 shadow-2xs rounded-2xl border border-rose-200/70 flex flex-col justify-between group">
-                    <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider mb-2">
+                  <div className="p-4 sm:p-5 bg-rose-50/70 dark:bg-rose-500/15 shadow-2xs rounded-2xl border border-rose-200/70 dark:border-rose-500/30 flex flex-col justify-between group">
+                    <p className="text-[11px] font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider mb-2">
                       {isIndo ? "Kas Keluar" : "Cash Out"}
                     </p>
                     <div className="flex items-end justify-between">
-                      <p className="text-lg sm:text-xl font-black font-mono text-rose-950">
+                      <p className="text-lg sm:text-xl font-black font-mono text-rose-950 dark:text-rose-100">
                         -{formatCurrency(totalCashOut)}
                       </p>
-                      <TrendingDown className="w-4 h-4 text-rose-600" />
+                      <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                     </div>
                   </div>
                 </div>
 
-                {/* Hero Expected Cash Drawer in Royal Cobalt Dark */}
-                <div className="p-6 bg-gradient-to-r from-slate-950 via-slate-900 to-brand-950 text-white flex justify-between items-center relative overflow-hidden rounded-b-3xl border-t border-slate-800">
+                {/* Hero Expected Cash Drawer */}
+                <div className="p-6 bg-brand-gradient text-white flex justify-between items-center relative overflow-hidden rounded-b-3xl">
                   <div className="relative z-10">
-                    <p className="text-brand-300 text-xs font-bold uppercase tracking-wider mb-1">
+                    <p className="text-brand-100 text-xs font-bold uppercase tracking-wider mb-1">
                       {isIndo ? "Ekspektasi Uang Fisik di Laci Kasir" : "Expected Cash in Drawer"}
                     </p>
-                    <p className="text-3xl sm:text-4xl font-black font-mono text-amber-300 drop-shadow-sm">
+                    <p className="text-3xl sm:text-4xl font-black font-mono text-white drop-shadow-sm tabular-nums">
                       {formatCurrency(expectedEndingCash)}
                     </p>
                   </div>
-                  <RupiahSign className="w-14 h-14 text-white/10 relative z-10" />
+                  <RupiahSign className="w-14 h-14 text-white/15 relative z-10" />
                 </div>
               </motion.div>
 
               {/* Close Shift Form */}
               {!isReadOnly && (
-                <div className="bg-white rounded-3xl shadow-xs border border-slate-200/80 p-6 sm:p-7">
-                  <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xs border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
                     <Square className="w-4 h-4 text-rose-600 fill-current" />
                     {isIndo ? "Tutup Shift & Rekonsiliasi Laci" : "Close Shift & Drawer Reconciliation"}
                   </h3>
                   <form onSubmit={handleCloseShift} className="space-y-4 max-w-md">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
                         {isIndo ? "Total Hitungan Fisik Uang di Laci" : "Actual Cash Counted in Drawer"}
                       </label>
                       <div className="relative">
@@ -445,10 +496,27 @@ export const ShiftManagement = () => {
                           required
                           value={endingCashInput}
                           onChange={(e) => setEndingCashInput(formatNumberInput(e.target.value))}
-                          className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none text-xl font-bold font-mono text-slate-900 transition-all bg-slate-50/50"
+                          className="w-full pl-12 pr-4 py-3.5 border border-slate-200 dark:border-slate-700 rounded-2xl focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none text-xl font-bold font-mono text-slate-900 dark:text-slate-100 transition-all bg-slate-50/50 dark:bg-slate-800 tabular-nums"
                           placeholder="0"
                         />
                       </div>
+                      {endingCashInput && (
+                        <div
+                          className={`mt-2 px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-between tabular-nums ${
+                            liveShiftDifference === 0
+                              ? "bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                              : liveShiftDifference > 0
+                              ? "bg-sky-50 dark:bg-sky-500/15 border-sky-200 dark:border-sky-500/30 text-sky-700 dark:text-sky-300"
+                              : "bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300"
+                          }`}
+                        >
+                          <span>Estimasi Selisih Laci:</span>
+                          <span className="font-mono">
+                            {liveShiftDifference > 0 ? "+" : ""}
+                            {formatCurrency(liveShiftDifference)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 flex gap-3">
                       <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -558,22 +626,22 @@ export const ShiftManagement = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100 font-mono">
                   {pastShifts.map((shift) => (
-                    <tr key={shift.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
-                        {new Date(shift.startTime).toLocaleString("id-ID")}
+                    <tr key={shift.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors tabular-nums">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300 font-sans">
+                        {new Date(shift.startTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-800 font-sans">
-                        <span className="font-bold block text-slate-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-800 dark:text-slate-200 font-sans">
+                        <span className="font-bold block text-slate-900 dark:text-slate-100">
                           {shift.picEmployeeName || "-"}
                         </span>
                         {shift.teamMembers && shift.teamMembers.length > 0 && (
-                          <span className="text-[10px] text-slate-500 block truncate max-w-[160px]">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-[160px]">
                             {shift.teamMembers.join(", ")}
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-sans">
-                        {shift.endTime ? new Date(shift.endTime).toLocaleString("id-ID") : "-"}
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 dark:text-slate-300 font-sans">
+                        {shift.endTime ? new Date(shift.endTime).toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }) : "-"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs text-right font-medium text-slate-700">
                         {formatCurrency(shift.startingCash)}
@@ -628,16 +696,17 @@ export const ShiftManagement = () => {
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="font-bold text-slate-900 block">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 block">
                         {new Date(shift.startTime).toLocaleDateString("id-ID", {
+                          timeZone: DEFAULT_STORE_TIMEZONE,
                           weekday: "short",
                           day: "numeric",
                           month: "short",
                         })}
                       </span>
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(shift.startTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} -{" "}
-                        {shift.endTime ? new Date(shift.endTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      <span className="text-[11px] text-slate-400 tabular-nums">
+                        {new Date(shift.startTime).toLocaleTimeString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, hour: "2-digit", minute: "2-digit" })} -{" "}
+                        {shift.endTime ? new Date(shift.endTime).toLocaleTimeString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, hour: "2-digit", minute: "2-digit" }) : "-"}
                       </span>
                       {shift.picEmployeeName && (
                         <div className="text-[11px] text-slate-700 mt-1">
@@ -692,6 +761,7 @@ export const ShiftManagement = () => {
           </div>
         </motion.div>
       )}
+      <ConfirmModal {...confirmModal.modalProps} />
     </div>
   );
 };

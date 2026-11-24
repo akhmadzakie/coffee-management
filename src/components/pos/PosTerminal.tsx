@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
 import { getLocalDateString } from "../../utils/dateUtils";
+import { authFetch } from "../../utils/authHeaders";
+import { getPromotionRuntimeStatus } from "../../utils/syncSanitizers";
 import { Order, OrderItem, OrderType, OrderModifier, PrintDestination } from "../../types";
 import {
   Store,
@@ -112,12 +114,9 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
   const todayStr = useMemo(() => getLocalDateString(), []);
   const activeWhitelistPromos = useMemo(() => {
-    return (promotions || []).filter((p) => {
-      if (!p.isActive) return false;
-      if (p.startDate && p.startDate.slice(0, 10) > todayStr) return false;
-      if (p.endDate && p.endDate.slice(0, 10) < todayStr) return false;
-      return true;
-    });
+    return (promotions || []).filter(
+      (p) => getPromotionRuntimeStatus(p, todayStr) === "ACTIVE"
+    );
   }, [promotions, todayStr]);
 
   // Modals
@@ -200,7 +199,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     }
 
     try {
-      const res = await fetch("/api/pos/verify-pin", {
+      const res = await authFetch("/api/pos/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -322,7 +321,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
     // 1. Flush IndexedDB Outbox
     try {
       const flushResult = await flushOfflineOutbox(async (payload) => {
-        const res = await fetch("/api/pos/orders", {
+        const res = await authFetch("/api/pos/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -345,7 +344,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       const remainingLegacy: any[] = [];
       for (const offlineOrder of legacyOrders) {
         try {
-          const res = await fetch("/api/pos/orders", {
+          const res = await authFetch("/api/pos/orders", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(offlineOrder),
@@ -393,7 +392,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const fetchMenu = async () => {
     setIsLoadingMenu(true);
     try {
-      const res = await fetch("/api/pos/menu");
+      const res = await authFetch("/api/pos/menu");
       if (res.ok) {
         const data = await res.json();
         const itemsWithPrices = (data.menu || []).map((m: MenuItem) => {
@@ -428,7 +427,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
   const fetchActiveBillsCount = async () => {
     if (!navigator.onLine) return;
     try {
-      const res = await fetch("/api/pos/orders/active");
+      const res = await authFetch("/api/pos/orders/active");
       if (res.ok) {
         const orders = await res.json();
         setActiveBillsCount(orders.length);
@@ -674,7 +673,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
       // Offline fallback check
       if (!navigator.onLine) {
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const dateStr = getLocalDateString().replace(/-/g, "");
         const randomSuffix = Math.floor(1000 + Math.random() * 9000);
         const receiptNo = `ORD-OFFLINE-${dateStr}-${randomSuffix}`;
         const offlineOrder = { ...payload, id: crypto.randomUUID(), receiptNo, createdAt: new Date().toISOString() };
@@ -696,7 +695,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
         return;
       }
 
-      const res = await fetch("/api/pos/orders", {
+      const res = await authFetch("/api/pos/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1434,23 +1433,23 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
 
       {/* ── Floating Bottom Bar for Mobile (< lg) ─────────────────────────── */}
       {cart.length > 0 && !isMobileCartOpen && (
-        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-30 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between border border-slate-800 animate-in slide-in-from-bottom duration-200">
+        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-30 bg-brand-600/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between border border-brand-500">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-sm">
               {totalCartItemCount}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+              <p className="text-[10px] text-brand-100 font-semibold uppercase tracking-wider">
                 Total Tagihan ({cart.length} menu)
               </p>
-              <p className="text-base font-black text-white font-mono truncate">
+              <p className="text-base font-black text-white font-mono truncate tabular-nums">
                 {formatCurrency(totalAmount)}
               </p>
             </div>
           </div>
           <button
             onClick={() => setIsMobileCartOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition shrink-0 cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-white hover:bg-brand-50 active:scale-95 text-brand-700 font-bold text-xs flex items-center gap-1.5 shadow-md transition shrink-0 cursor-pointer"
           >
             <span>Lihat Pesanan</span>
             <ArrowRight className="w-4 h-4" />
@@ -1600,7 +1599,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) setIsDiscountModalOpen(false);
             }}
@@ -1933,7 +1932,7 @@ export const PosTerminal: React.FC<{ onNavigateBack?: () => void }> = ({ onNavig
       {/* ── Dialog Konfirmasi Tutup Shift Sebelum Keluar (Exit Guard) ─── */}
       <AnimatePresence>
         {isExitAlertOpen && (
-          <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-60 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 14 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

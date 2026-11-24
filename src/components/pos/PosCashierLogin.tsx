@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { useTheme, ThemeToggleButton } from "../../context/ThemeContext";
 import {
   Coffee,
@@ -67,6 +68,39 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
     }
   }, [cashierUsers, selectedUser]);
 
+  const handleSubmitPin = async (pinOverride?: string) => {
+    const user = selectedUserRef.current;
+    if (!user) {
+      setError("Silakan pilih kasir yang bertugas terlebih dahulu!");
+      return;
+    }
+    if (user.isSuspended) {
+      setError(
+        "🔒 Akun ini sedang DITANGGUHKAN (Ter-suspend) karena salah memasukkan PIN 3x berturut-turut. Silakan hubungi Manager atau Super Admin."
+      );
+      return;
+    }
+    const pinToSubmit = pinOverride ?? pinRef.current;
+    if (pinToSubmit.length < 4 || isSubmittingRef.current) return;
+
+    isSubmittingRef.current = true;
+    try {
+      const success = await login(user.username, pinToSubmit);
+      if (success) {
+        onLoginSuccess?.();
+      } else {
+        setError(
+          (prev) =>
+            prev || "PIN otorisasi tidak sesuai. Silakan coba lagi!"
+        );
+        pinRef.current = "";
+        setPin("");
+      }
+    } finally {
+      isSubmittingRef.current = false;
+    }
+  };
+
   const handleKeypadPress = async (num: string) => {
     const user = selectedUserRef.current;
     if (!user) {
@@ -90,22 +124,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
       setError("");
 
       if (nextPin.length === maxLen) {
-        isSubmittingRef.current = true;
-        try {
-          const success = await login(user.username, nextPin);
-          if (success) {
-            onLoginSuccess?.();
-          } else {
-            setError(
-              (prev) =>
-                prev || "PIN otorisasi tidak sesuai. Silakan coba lagi!"
-            );
-            pinRef.current = "";
-            setPin("");
-          }
-        } finally {
-          isSubmittingRef.current = false;
-        }
+        await handleSubmitPin(nextPin);
       }
     }
   };
@@ -125,7 +144,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
     setError("");
   };
 
-  // Listener input keyboard fisik (angka 0-9, backspace, escape)
+  // Listener input keyboard fisik (angka 0-9, backspace, escape, enter)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -145,6 +164,9 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
       } else if (e.key === "Escape" || e.key === "Delete") {
         e.preventDefault();
         handleClear();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        handleSubmitPin();
       }
     };
 
@@ -192,6 +214,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
             <div className="text-right">
               <p className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono leading-none">
                 {currentTime.toLocaleTimeString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
                   hour: "2-digit",
                   minute: "2-digit",
                   second: "2-digit",
@@ -199,6 +222,7 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
               </p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                 {currentTime.toLocaleDateString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
                   weekday: "short",
                   day: "numeric",
                   month: "short",
@@ -435,6 +459,16 @@ export const PosCashierLogin: React.FC<PosCashierLoginProps> = ({ onLoginSuccess
               <Delete className="w-5 h-5" />
             </button>
           </div>
+
+          <button
+            type="button"
+            disabled={Boolean(selectedUser?.isSuspended) || pin.length < 4}
+            onClick={() => handleSubmitPin()}
+            className="mt-4 w-full max-w-[280px] py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold text-xs tracking-wide uppercase shadow-md shadow-brand-500/20 transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Masuk Terminal Kasir</span>
+          </button>
         </motion.div>
       </main>
 

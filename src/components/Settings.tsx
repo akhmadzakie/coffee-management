@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { FEATURES } from "../config/features";
 import { useStore } from "../store/StoreContext";
+import { authFetch } from "../utils/authHeaders";
+import { toast } from "../context/ToastContext";
 import {
   Upload,
   Save,
@@ -21,6 +23,7 @@ import {
   BookOpen,
   FileText,
   Download,
+  PieChart,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
 import { CustomSelect } from "./common/CustomSelect";
@@ -52,13 +55,42 @@ export const SettingsComponent = () => {
   const [showSupervisorPin, setShowSupervisorPin] = useState(false);
   const [autoDeductStockOnSale, setAutoDeductStockOnSale] = useState(settings.autoDeductStockOnSale !== false);
   const [allowNegativeStockSale, setAllowNegativeStockSale] = useState(settings.allowNegativeStockSale !== false);
+  const [profitShareOwnerPercent, setProfitShareOwnerPercent] = useState<number>(settings.profitShareOwnerPercent ?? 70);
+  const [profitShareReservePercent, setProfitShareReservePercent] = useState<number>(settings.profitShareReservePercent ?? 30);
+  const [profitShareInvestorPercent, setProfitShareInvestorPercent] = useState<number>(settings.profitShareInvestorPercent ?? 0);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [hasEdited, setHasEdited] = useState(false);
+
+  // Sinkronkan state form ketika data settings dari server selesai dimuat (kecuali user sudah mulai mengedit)
+  useEffect(() => {
+    if (hasEdited) return;
+    setBrandName(settings.brandName || "");
+    setLogoDataUrl(settings.logoDataUrl || null);
+    setCompanyAddress(settings.companyAddress || "");
+    setBankDetails(settings.bankDetails || "");
+    setSalesPerson(settings.salesPerson || "");
+    setFooterMessage(settings.footerMessage || "");
+    setGeminiApiKey(settings.geminiApiKey || "");
+    setLanguage(settings.language || "id");
+    setTaxEnabled(settings.taxEnabled ?? false);
+    setTaxRate(settings.taxRate ?? 10);
+    setTaxMode(settings.taxMode ?? "EXCLUSIVE");
+    setMaxCashierDiscount(settings.maxCashierDiscount ?? 10);
+    setPosSupervisorPin(settings.posSupervisorPin || "1234");
+    setAutoDeductStockOnSale(settings.autoDeductStockOnSale !== false);
+    setAllowNegativeStockSale(settings.allowNegativeStockSale !== false);
+    setProfitShareOwnerPercent(settings.profitShareOwnerPercent ?? 70);
+    setProfitShareReservePercent(settings.profitShareReservePercent ?? 30);
+    setProfitShareInvestorPercent(settings.profitShareInvestorPercent ?? 0);
+  }, [settings, hasEdited]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isOwner) return;
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
+        setHasEdited(true);
         setLogoDataUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
@@ -66,6 +98,18 @@ export const SettingsComponent = () => {
   };
 
   const handleSave = () => {
+    if (isOwner) {
+      toast.warning("Akun Owner berstatus Read-Only dan tidak dapat mengubah pengaturan sistem.");
+      return;
+    }
+    const canEditProfitShare = isSuperAdmin || isManager;
+    const ownerPct = Math.min(100, Math.max(0, Math.round(Number(profitShareOwnerPercent) || 0)));
+    const reservePct = Math.min(100, Math.max(0, Math.round(Number(profitShareReservePercent) || 0)));
+    const investorPct = Math.min(100, Math.max(0, Math.round(Number(profitShareInvestorPercent) || 0)));
+    if (canEditProfitShare && ownerPct + reservePct + investorPct !== 100) {
+      toast.error("Total pembagian keuntungan (Owner + Tabungan Kedai + Investor) harus tepat 100%.");
+      return;
+    }
     updateSettings({
       ...settings,
       brandName,
@@ -75,7 +119,7 @@ export const SettingsComponent = () => {
       salesPerson,
       footerMessage,
       language,
-      geminiApiKey,
+      geminiApiKey: isSuperAdmin ? geminiApiKey : settings.geminiApiKey,
       taxEnabled,
       taxRate: Number(taxRate) || 0,
       taxMode,
@@ -83,8 +127,17 @@ export const SettingsComponent = () => {
       posSupervisorPin: posSupervisorPin.trim() || "1234",
       autoDeductStockOnSale,
       allowNegativeStockSale,
+      profitShareOwnerPercent: canEditProfitShare ? ownerPct : (settings.profitShareOwnerPercent ?? 70),
+      profitShareReservePercent: canEditProfitShare ? reservePct : (settings.profitShareReservePercent ?? 30),
+      profitShareInvestorPercent: canEditProfitShare ? investorPct : (settings.profitShareInvestorPercent ?? 0),
     });
-    setSaveStatus("Settings saved successfully!");
+    setHasEdited(false);
+    const msg =
+      language === "id"
+        ? "Pengaturan berhasil disimpan!"
+        : "Settings saved successfully!";
+    setSaveStatus(msg);
+    toast.success(msg);
     setTimeout(() => setSaveStatus(null), 3000);
   };
 
@@ -101,9 +154,11 @@ export const SettingsComponent = () => {
     setTestResult(null);
 
     try {
-      const res = await fetch("/api/ai/test-key", {
+      const res = await authFetch("/api/ai/test-key", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ apiKey: geminiApiKey.trim() }),
       });
 
@@ -114,7 +169,7 @@ export const SettingsComponent = () => {
 
       setTestResult({
         success: true,
-        message: "Koneksi Berhasil! Model Gemini 3.8 Flash aktif dan siap digunakan.",
+        message: `Koneksi Berhasil! Model ${data.model || "Gemini 2.5 Flash"} aktif dan siap digunakan.`,
       });
     } catch (err: any) {
       setTestResult({
@@ -127,6 +182,8 @@ export const SettingsComponent = () => {
   };
 
   const removeLogo = () => {
+    if (isOwner) return;
+    setHasEdited(true);
     setLogoDataUrl(null);
   };
 
@@ -189,9 +246,13 @@ export const SettingsComponent = () => {
             </label>
             <input
               type="text"
+              disabled={isOwner}
               value={brandName}
-              onChange={(e) => setBrandName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
+              onChange={(e) => {
+                setHasEdited(true);
+                setBrandName(e.target.value);
+              }}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="e.g., Julia's Specialty Coffee"
             />
             <p className="mt-1 text-xs text-slate-500">
@@ -207,7 +268,7 @@ export const SettingsComponent = () => {
             </label>
 
             <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-              <div className="shrink-0">
+              <div className="shrink-0 flex flex-col items-center gap-2">
                 <div className="w-28 h-28 sm:w-32 sm:h-32 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center bg-slate-50 overflow-hidden relative group shadow-2xs">
                   {logoDataUrl ? (
                     <>
@@ -216,14 +277,17 @@ export const SettingsComponent = () => {
                         alt="Company Logo"
                         className="w-full h-full object-contain p-2"
                       />
-                      <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
-                        <button
-                          onClick={removeLogo}
-                          className="text-white text-xs font-bold px-3 py-1.5 bg-rose-600 hover:bg-rose-700 rounded-xl cursor-pointer"
-                        >
-                          {language === "id" ? "Hapus" : "Remove"}
-                        </button>
-                      </div>
+                      {!isOwner && (
+                        <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
+                          <button
+                            type="button"
+                            onClick={removeLogo}
+                            className="text-white text-xs font-bold px-3 py-1.5 bg-rose-600 hover:bg-rose-700 rounded-xl cursor-pointer"
+                          >
+                            {language === "id" ? "Hapus" : "Remove"}
+                          </button>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-center p-4">
@@ -234,12 +298,25 @@ export const SettingsComponent = () => {
                     </div>
                   )}
                 </div>
+                {logoDataUrl && !isOwner && (
+                  <button
+                    type="button"
+                    onClick={removeLogo}
+                    className="text-xs font-bold px-3 py-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl cursor-pointer transition-colors"
+                  >
+                    {language === "id" ? "Hapus Logo" : "Remove Logo"}
+                  </button>
+                )}
               </div>
 
               <div className="flex-1 w-full">
                 <label
-                  htmlFor="logo-upload"
-                  className="flex flex-col items-center justify-center w-full h-28 sm:h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors"
+                  htmlFor={isOwner ? undefined : "logo-upload"}
+                  className={`flex flex-col items-center justify-center w-full h-28 sm:h-32 border-2 border-slate-300 border-dashed rounded-2xl transition-colors ${
+                    isOwner
+                      ? "bg-slate-100 opacity-60 cursor-not-allowed"
+                      : "cursor-pointer bg-slate-50 hover:bg-slate-100"
+                  }`}
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <Upload className="w-6 h-6 mb-2 text-brand-600" />
@@ -256,6 +333,7 @@ export const SettingsComponent = () => {
                     id="logo-upload"
                     type="file"
                     accept="image/*"
+                    disabled={isOwner}
                     className="hidden"
                     onChange={handleImageUpload}
                   />
@@ -269,9 +347,13 @@ export const SettingsComponent = () => {
               {language === "id" ? "Alamat Perusahaan" : "Company Address"}
             </label>
             <textarea
+              disabled={isOwner}
               value={companyAddress}
-              onChange={(e) => setCompanyAddress(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[80px]"
+              onChange={(e) => {
+                setHasEdited(true);
+                setCompanyAddress(e.target.value);
+              }}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[80px] disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="e.g., Jl. Sudirman No. 123..."
             />
           </div>
@@ -285,9 +367,13 @@ export const SettingsComponent = () => {
               </label>
               <input
                 type="text"
+                disabled={isOwner}
                 value={salesPerson}
-                onChange={(e) => setSalesPerson(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
+                onChange={(e) => {
+                  setHasEdited(true);
+                  setSalesPerson(e.target.value);
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="e.g., Zakie"
               />
             </div>
@@ -299,9 +385,13 @@ export const SettingsComponent = () => {
                   : "Bank Details"}
               </label>
               <textarea
+                disabled={isOwner}
                 value={bankDetails}
-                onChange={(e) => setBankDetails(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[80px]"
+                onChange={(e) => {
+                  setHasEdited(true);
+                  setBankDetails(e.target.value);
+                }}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[80px] disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="e.g., BCA 123456789 a.n Julia..."
               />
             </div>
@@ -313,7 +403,11 @@ export const SettingsComponent = () => {
             </label>
             <CustomSelect
               value={language}
-              onChange={(val) => setLanguage(val as "en" | "id")}
+              disabled={isOwner}
+              onChange={(val) => {
+                setHasEdited(true);
+                setLanguage(val as "en" | "id");
+              }}
               options={[
                 { value: "id", label: "Bahasa Indonesia" },
                 { value: "en", label: "English" },
@@ -325,9 +419,9 @@ export const SettingsComponent = () => {
           {/* Gemini API Key Configuration Card */}
           <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <label className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-1.5">
+              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-600" />
-                <span>Google Gemini API Key (AI Copilot & OCR Struk)</span>
+                <span>Google Gemini API Key (AI Copilot &amp; OCR Struk)</span>
               </label>
               <a
                 href="https://aistudio.google.com/app/apikey"
@@ -348,11 +442,12 @@ export const SettingsComponent = () => {
                   disabled={!isSuperAdmin}
                   onChange={(e) => {
                     if (isSuperAdmin) {
+                      setHasEdited(true);
                       setGeminiApiKey(e.target.value);
                       setTestResult(null);
                     }
                   }}
-                  className={`w-full pl-3 pr-10 py-2.5 bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-base sm:text-xs font-mono text-stone-900 outline-none ${
+                  className={`w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-base sm:text-xs font-mono text-slate-900 outline-none ${
                     !isSuperAdmin ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""
                   }`}
                   placeholder={isSuperAdmin ? "AIzaSy..." : "Terkunci (Hanya Super Admin)"}
@@ -361,7 +456,7 @@ export const SettingsComponent = () => {
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
                     title={showApiKey ? "Sembunyikan Key" : "Tampilkan Key"}
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -415,8 +510,8 @@ export const SettingsComponent = () => {
               </div>
             )}
 
-            <p className="text-[11px] text-stone-500 leading-relaxed">
-              Kunci API ini digunakan untuk mengaktifkan AI Copilot (konsultasi bisnis, resep, strategi margin) dan pembacaan otomatis dokumen nota/faktur PDF & foto secara cerdas.
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Kunci API ini digunakan untuk mengaktifkan AI Copilot (konsultasi bisnis, resep, strategi margin) dan pembacaan otomatis dokumen nota/faktur PDF &amp; foto secara cerdas.
             </p>
           </div>
 
@@ -440,11 +535,15 @@ export const SettingsComponent = () => {
                     {FEATURES.POS ? "Otomatis tambahkan atau hitung pajak PB1 di kasir POS tablet." : "Otomatis tambahkan atau hitung pajak PB1 pada perhitungan omzet penjualan."}
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className={`relative inline-flex items-center ${isOwner ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                   <input
                     type="checkbox"
+                    disabled={isOwner}
                     checked={taxEnabled}
-                    onChange={(e) => setTaxEnabled(e.target.checked)}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setTaxEnabled(e.target.checked);
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
@@ -459,9 +558,13 @@ export const SettingsComponent = () => {
                     </label>
                     <input
                       type="number"
+                      disabled={isOwner}
                       value={taxRate}
-                      onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-mono focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none"
+                      onChange={(e) => {
+                        setHasEdited(true);
+                        setTaxRate(Number(e.target.value) || 0);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-mono focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="10"
                     />
                   </div>
@@ -472,7 +575,11 @@ export const SettingsComponent = () => {
                     </label>
                     <CustomSelect
                       value={taxMode}
-                      onChange={(val) => setTaxMode(val as "INCLUSIVE" | "EXCLUSIVE")}
+                      disabled={isOwner}
+                      onChange={(val) => {
+                        setHasEdited(true);
+                        setTaxMode(val as "INCLUSIVE" | "EXCLUSIVE");
+                      }}
                       options={[
                         {
                           value: "EXCLUSIVE",
@@ -503,11 +610,15 @@ export const SettingsComponent = () => {
               </p>
               <input
                 type="number"
+                disabled={isOwner}
                 min="0"
                 max="100"
                 value={maxCashierDiscount}
-                onChange={(e) => setMaxCashierDiscount(Number(e.target.value) || 0)}
-                className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-mono focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none"
+                onChange={(e) => {
+                  setHasEdited(true);
+                  setMaxCashierDiscount(Number(e.target.value) || 0);
+                }}
+                className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-xl text-base sm:text-xs font-mono focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder="10"
               />
             </div>
@@ -534,10 +645,14 @@ export const SettingsComponent = () => {
                 <div className="relative w-full max-w-xs">
                   <input
                     type={showSupervisorPin ? "text" : "password"}
+                    disabled={isOwner}
                     maxLength={6}
                     value={posSupervisorPin}
-                    onChange={(e) => setPosSupervisorPin(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-xl text-base sm:text-sm font-mono tracking-widest text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none"
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setPosSupervisorPin(e.target.value.replace(/\D/g, ""));
+                    }}
+                    className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-xl text-base sm:text-sm font-mono tracking-widest text-slate-900 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                     placeholder="1234"
                   />
                   <button
@@ -549,13 +664,94 @@ export const SettingsComponent = () => {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-tight">
-                  <strong className="text-slate-700">Wewenang:</strong> <strong>Manager Operasional</strong> dan <strong>Super Admin</strong> dapat memperbarui PIN ini sewaktu-waktu. Kasir cukup meminta otorisasi PIN ini di kasir untuk aksi Void & Refund tanpa meminjam akun login pribadi Manager. Default: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">1234</code>.
+                  <strong className="text-slate-700">Wewenang:</strong> <strong>Manager Operasional</strong> dan <strong>Super Admin</strong> dapat memperbarui PIN ini sewaktu-waktu. Kasir cukup meminta otorisasi PIN ini di kasir untuk aksi Void &amp; Refund tanpa meminjam akun login pribadi Manager. Default: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">1234</code>.
                 </p>
               </div>
             </div>
 
             </>
 )}
+            {/* Pembagian Keuntungan & Tabungan Kedai */}
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-500/15 border border-brand-200 dark:border-brand-500/30 flex items-center justify-center text-brand-700 dark:text-brand-300">
+                    <PieChart className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      Pembagian Keuntungan &amp; Tabungan Kedai
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Diatur oleh <strong>Manager / Super Admin</strong> (total porsi harus 100%). Terhubung ke Rekap Keuntungan Owner &amp; Laporan Laba Rugi.
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`self-start sm:self-auto px-2.5 py-1 rounded-full text-[11px] font-bold font-mono tabular-nums border ${
+                    profitShareOwnerPercent + profitShareReservePercent + profitShareInvestorPercent === 100
+                      ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
+                      : "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30"
+                  }`}
+                >
+                  Total: {profitShareOwnerPercent + profitShareReservePercent + profitShareInvestorPercent}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Porsi Owner (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={!(isSuperAdmin || isManager)}
+                    value={profitShareOwnerPercent}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setProfitShareOwnerPercent(Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-mono tabular-nums text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Tabungan / Cadangan Kedai (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={!(isSuperAdmin || isManager)}
+                    value={profitShareReservePercent}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setProfitShareReservePercent(Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-mono tabular-nums text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Porsi Investor / Lainnya (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={!(isSuperAdmin || isManager)}
+                    value={profitShareInvestorPercent}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setProfitShareInvestorPercent(Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-mono tabular-nums text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            </div>
 {/* Otomatisasi & Kontrol Stok POS */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
               <div className="flex items-center gap-2">
@@ -582,11 +778,15 @@ export const SettingsComponent = () => {
                     Saat transaksi penjualan masuk atau diimpor, bahan baku resep otomatis dipotong. Jika dimatikan, stok hanya berubah dari mutasi manual atau stok opname.
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <label className={`relative inline-flex items-center shrink-0 ${isOwner ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                   <input
                     type="checkbox"
+                    disabled={isOwner}
                     checked={autoDeductStockOnSale}
-                    onChange={(e) => setAutoDeductStockOnSale(e.target.checked)}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setAutoDeductStockOnSale(e.target.checked);
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -603,11 +803,15 @@ export const SettingsComponent = () => {
                     Penjualan tetap dapat diproses dan dicatat walaupun stok di sistem tercatat 0 (misal akibat staf terlambat input stok opname atau nota belanja). Stok akan tercatat minus untuk direkonsiliasi kemudian.
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <label className={`relative inline-flex items-center shrink-0 ${isOwner ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                   <input
                     type="checkbox"
+                    disabled={isOwner}
                     checked={allowNegativeStockSale}
-                    onChange={(e) => setAllowNegativeStockSale(e.target.checked)}
+                    onChange={(e) => {
+                      setHasEdited(true);
+                      setAllowNegativeStockSale(e.target.checked);
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -622,9 +826,13 @@ export const SettingsComponent = () => {
             </label>
             <input
               type="text"
+              disabled={isOwner}
               value={footerMessage}
-              onChange={(e) => setFooterMessage(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all"
+              onChange={(e) => {
+                setHasEdited(true);
+                setFooterMessage(e.target.value);
+              }}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="e.g., You are our strongest connection..."
             />
           </div>
@@ -650,7 +858,7 @@ export const SettingsComponent = () => {
                 target="_blank"
                 rel="noreferrer"
                 download="Buku_Panduan_Lengkap_Julia_Coffee.pdf"
-                className="group flex flex-col justify-between p-3.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all shadow-xs border border-slate-700"
+                className="group flex flex-col justify-between p-3.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-all shadow-xs border border-brand-500"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">

@@ -41,6 +41,7 @@ import {
   StockOpnameItem,
   Recipe,
   ClosedPeriod,
+  ClosedPeriodSnapshot,
   DEFAULT_LEADER_ALLOWANCE_RULES,
   DEFAULT_SHIFT_DEFINITIONS,
   Product,
@@ -51,16 +52,28 @@ import {
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
 import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { syncAttendanceRecordsWithDaily } from "../utils/attendanceRecap";
 import {
+  cascadeCashAccountDelete,
+  cascadeExpenseCategoryDelete,
+  cascadeExpenseCategoryUpdate,
+  cascadePurchaseOrderDelete,
   computePeriodFinancialSummary,
   DEFAULT_INGREDIENT_CATEGORIES,
   getSaleTransactionAmount,
   isSalesCashTransaction,
   recoverOrphanCashAccountsAndCategories,
 } from "../utils/financeMetrics";
+import {
+  aggregateBatchRequiredQuantities,
+  computeBatchWeightedUnitCost,
+  resolveDivisionStorageLocation,
+  sanitizePayrollRecordData,
+  validatePayrollMutation,
+} from "../utils/syncSanitizers";
 import { get, set, del } from "idb-keyval";
+import { toast } from "../context/ToastContext";
 
 const generateId = () => {
   try {
@@ -424,7 +437,11 @@ interface StoreContextType {
     opts?: { bankAccountId?: string; mdrFeeAmount?: number; settledDate?: string }
   ) => void;
   deleteDailySalesRecap: (id: string) => void;
-  syncMissingSalesToCashFlow: (targetAccountId?: string) => { syncedCount: number; syncedAmount: number };
+  syncMissingSalesToCashFlow: (targetAccountId?: string) => {
+    syncedCount: number;
+    syncedAmount: number;
+    skippedClosedCount?: number;
+  };
   salesImportLogs: SalesImportLog[];
   auditLogs: AuditLog[];
 
@@ -443,6 +460,12 @@ interface StoreContextType {
   employeeShifts: EmployeeShift[];
   setEmployeeShifts: (shifts: EmployeeShift[]) => void;
   kpiRecords: KPIRecord[];
+  kpiTasks: any[];
+  kpiBonusRules: any[];
+  updateKpiTask: (id: string, task: any) => void;
+  deleteKpiTask: (id: string) => void;
+  updateKpiBonusRule: (id: string, rule: any) => void;
+  deleteKpiBonusRule: (id: string) => void;
 
   // Fase 1: Expense Categories & Pos Kas Recovery
   expenseCategories: ExpenseCategory[];
@@ -463,11 +486,13 @@ interface StoreContextType {
   bankReconciliations: BankReconciliation[];
   addBankReconciliation: (r: BankReconciliation) => void;
   updateBankReconciliation: (r: BankReconciliation) => void;
-  
+  deleteBankReconciliation: (id: string) => void;
+
   bankStatementLines: BankStatementLine[];
   addBankStatementLine: (l: BankStatementLine) => void;
   updateBankStatementLine: (l: BankStatementLine) => void;
   bulkAddBankStatementLines: (lines: BankStatementLine[]) => void;
+  replaceBankReconLines: (reconciliationId: string, lines: BankStatementLine[]) => void;
 
   // Fase 3: Inventory
   stockOpnames: StockOpname[];
@@ -487,7 +512,12 @@ interface StoreContextType {
   bulkAddPayrollRecords: (records: PayrollRecord[]) => void;
 
   closedPeriods: ClosedPeriod[];
-  closePeriod: (period: string, notes?: string) => void;
+  closePeriod: (
+    period: string,
+    user: string,
+    notes?: string,
+    snapshot?: ClosedPeriodSnapshot | null
+  ) => void;
   reopenPeriod: (period: string, notes?: string) => void;
 
   // Generic state access (for new modules)
@@ -532,7 +562,7 @@ interface StoreContextType {
     totalAmount: number;
     cashAccountId?: string;
     notes?: string;
-  }) => PurchaseOrder;
+  }) => PurchaseOrder | null;
   updatePOStatus: (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => void;
   payPurchaseOrder: (
     id: string,
@@ -874,20 +904,67 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const dispatch = (action: any) => {
     if (currentUser?.role === "OWNER") return;
     switch (action.type) {
-      case "ADD_EXPENSE_CATEGORY":
+      case "ADD_EXPENSE_CATEGORY": {
         markChanged("expense_categories");
-        setExpenseCategories((prev) => [...prev, action.payload]);
+        setExpenseCategories((prev) => {
+          const next = [...prev, action.payload];
+          try {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         break;
-      case "UPDATE_EXPENSE_CATEGORY":
-        markChanged("expense_categories");
-        setExpenseCategories((prev) => prev.map((c) => c.id === action.payload.id ? action.payload : c));
+      }
+      case "UPDATE_EXPENSE_CATEGORY": {
+        const prevCat = expenseCategories.find((c) => c.id === action.payload.id);
+        const nextTransactions = cascadeExpenseCategoryUpdate({
+          updatedCategory: action.payload,
+          previousCategory: prevCat,
+          cashTransactions,
+        });
+        const txChanged = nextTransactions.some((t, idx) => t !== cashTransactions[idx]);
+        markChanged(...(txChanged ? ["expense_categories", "cash_transactions"] : ["expense_categories"]));
+        setExpenseCategories((prev) => {
+          const next = prev.map((c) => (c.id === action.payload.id ? action.payload : c));
+          try {
+            localStorage.setItem("app_expense_categories_cache", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        if (txChanged) {
+          setCashTransactions(nextTransactions);
+          try {
+            localStorage.setItem("app_cash_transactions_cache", JSON.stringify(nextTransactions));
+          } catch {}
+        }
         break;
+      }
       case "DELETE_EXPENSE_CATEGORY": {
-        markChanged("expense_categories");
-        const toDelete = expenseCategories.find((c) => c.id === action.payload);
-        if (toDelete) {
-          const childIds = expenseCategories.filter((c) => c.parentId === toDelete.id).map((c) => c.id);
-          setExpenseCategories((prev) => prev.filter((c) => c.id !== action.payload && !childIds.includes(c.id)));
+        const { updatedCategories, updatedTransactions, updatedBudgets } =
+          cascadeExpenseCategoryDelete({
+            categoryId: action.payload,
+            categories: expenseCategories,
+            cashTransactions,
+            budgets,
+          });
+        const txChanged = updatedTransactions.some((t, idx) => t !== cashTransactions[idx]);
+        const budgetChanged = updatedBudgets.length !== budgets.length;
+        const dirty: string[] = ["expense_categories"];
+        if (txChanged) dirty.push("cash_transactions");
+        if (budgetChanged) dirty.push("budgets");
+        markChanged(...dirty);
+        setExpenseCategories(updatedCategories);
+        try {
+          localStorage.setItem("app_expense_categories_cache", JSON.stringify(updatedCategories));
+        } catch {}
+        if (txChanged) {
+          setCashTransactions(updatedTransactions);
+          try {
+            localStorage.setItem("app_cash_transactions_cache", JSON.stringify(updatedTransactions));
+          } catch {}
+        }
+        if (budgetChanged) {
+          setBudgets(updatedBudgets);
         }
         break;
       }
@@ -908,22 +985,95 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         });
         break;
       }
-      case "ADD_PAYROLL_RECORD":
+      case "ADD_PAYROLL_RECORD": {
+        const rec = sanitizePayrollRecordData(action.payload, action.payload.id || generateId()) as PayrollRecord;
+        const check = validatePayrollMutation({
+          action: "CREATE",
+          recordPeriod: rec.period,
+          closedPeriods,
+        });
+        if ("error" in check) {
+          toast.error(check.error);
+          break;
+        }
+        setPayrollRecords((prev) => [...prev, rec]);
+        writeAuditLog("CREATE", "payroll_records", rec.id);
         markChanged("payroll_records");
-        setPayrollRecords((prev) => [...prev, action.payload]);
         break;
-      case "UPDATE_PAYROLL_RECORD":
+      }
+      case "UPDATE_PAYROLL_RECORD": {
+        const rec = sanitizePayrollRecordData(action.payload, action.payload.id || generateId()) as PayrollRecord;
+        const existing = payrollRecords.find((p) => p.id === rec.id);
+        const targetPeriod = existing?.period || rec.period;
+        const check = validatePayrollMutation({
+          action: "UPDATE",
+          recordPeriod: targetPeriod,
+          existingStatus: existing?.status,
+          closedPeriods,
+        });
+        if ("error" in check) {
+          toast.error(check.error);
+          break;
+        }
+        if (rec.period !== targetPeriod) {
+          const checkNewPeriod = validatePayrollMutation({
+            action: "UPDATE",
+            recordPeriod: rec.period,
+            existingStatus: existing?.status,
+            closedPeriods,
+          });
+          if ("error" in checkNewPeriod) {
+            toast.error(checkNewPeriod.error);
+            break;
+          }
+        }
+        setPayrollRecords((prev) => prev.map((p) => (p.id === rec.id ? rec : p)));
+        writeAuditLog("UPDATE", "payroll_records", rec.id);
         markChanged("payroll_records");
-        setPayrollRecords((prev) => prev.map((p) => p.id === action.payload.id ? action.payload : p));
         break;
-      case "DELETE_PAYROLL_RECORD":
-        markChanged("payroll_records");
+      }
+      case "DELETE_PAYROLL_RECORD": {
+        const existing = payrollRecords.find((p) => p.id === action.payload);
+        if (existing) {
+          const check = validatePayrollMutation({
+            action: "DELETE",
+            recordPeriod: existing.period,
+            existingStatus: existing.status,
+            closedPeriods,
+          });
+          if ("error" in check) {
+            toast.error(check.error);
+            break;
+          }
+        }
         setPayrollRecords((prev) => prev.filter((p) => p.id !== action.payload));
-        break;
-      case "BULK_ADD_PAYROLL_RECORDS":
+        writeAuditLog("DELETE", "payroll_records", String(action.payload));
         markChanged("payroll_records");
-        setPayrollRecords((prev) => [...prev, ...action.payload]);
         break;
+      }
+      case "BULK_ADD_PAYROLL_RECORDS": {
+        const closedSet = new Set(closedPeriods.map((p) => p.period));
+        const existingPairSet = new Set(
+          payrollRecords.map((r) => `${r.employeeId}::${r.period}`)
+        );
+        const validRecords: PayrollRecord[] = [];
+        for (const raw of action.payload || []) {
+          const rec = sanitizePayrollRecordData(raw, raw?.id || generateId()) as PayrollRecord;
+          if (!rec.period || closedSet.has(rec.period)) continue;
+          const pairKey = `${rec.employeeId}::${rec.period}`;
+          if (existingPairSet.has(pairKey)) continue;
+          existingPairSet.add(pairKey);
+          validRecords.push(rec);
+        }
+        if (validRecords.length === 0) {
+          toast.warning("Tidak ada slip gaji baru yang dapat dibuat (periode tutup buku atau sudah ada).");
+          break;
+        }
+        setPayrollRecords((prev) => [...prev, ...validRecords]);
+        writeAuditLog("CREATE", "payroll_records", `bulk-${validRecords.length}`);
+        markChanged("payroll_records");
+        break;
+      }
       case "ADD_BUDGET":
         markChanged("budgets");
         setBudgets((prev) => [...prev, action.payload]);
@@ -963,6 +1113,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       case "SET_BANK_STATEMENT_LINES":
         markChanged("bank_statement_lines");
         setBankStatementLines(action.payload);
+        break;
+      case "DELETE_BANK_RECONCILIATION":
+        setBankReconciliations((prev) => prev.filter((r) => r.id !== action.payload));
+        setBankStatementLines((prev) => prev.filter((l) => l.reconciliationId !== action.payload));
+        writeAuditLog("DELETE", "bank_reconciliations", String(action.payload));
+        markChanged("bank_reconciliations", "bank_statement_lines");
+        break;
+      case "REPLACE_BANK_RECON_LINES":
+        markChanged("bank_statement_lines");
+        setBankStatementLines((prev) => [
+          ...prev.filter((l) => l.reconciliationId !== action.payload.reconciliationId),
+          ...action.payload.lines,
+        ]);
         break;
       case "ADD_STOCK_OPNAME":
         markChanged("stock_opnames");
@@ -1008,6 +1171,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         break;
       case "ADD_CLOSED_PERIOD":
       case "CLOSE_PERIOD":
+        if (
+          currentUser?.role !== "SUPER_ADMIN" &&
+          currentUser?.role !== "MANAGER" &&
+          currentUser?.role !== "FINANCE"
+        ) {
+          toast.error("Hanya Finance, Manager, atau Super Admin yang dapat menutup periode buku.");
+          break;
+        }
         markChanged("closed_periods");
         setClosedPeriods((prev) => [
           ...prev.filter((p) => p.period !== action.payload.period),
@@ -1017,14 +1188,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             closedAt: action.payload.closedAt || new Date().toISOString(),
             closedBy: action.payload.user || action.payload.closedBy || "Manager",
             notes: action.payload.notes || "",
+            snapshot: action.payload.snapshot || null,
+            snapshotJson: action.payload.snapshot ? JSON.stringify(action.payload.snapshot) : null,
           },
         ]);
+        writeAuditLog("CREATE", "closed_periods", String(action.payload.period));
         break;
       case "REMOVE_CLOSED_PERIOD":
-      case "REOPEN_PERIOD":
+      case "REOPEN_PERIOD": {
+        if (currentUser?.role !== "SUPER_ADMIN" && currentUser?.role !== "MANAGER") {
+          toast.error("Hanya Manager atau Super Admin yang dapat membuka kembali periode tutup buku.");
+          break;
+        }
+        const targetPeriod =
+          typeof action.payload === "string" ? action.payload : action.payload?.period;
+        const reasonSuffix = action.payload?.notes ? ` (${String(action.payload.notes).slice(0, 80)})` : "";
         markChanged("closed_periods");
-        setClosedPeriods((prev) => prev.filter((p) => p.period !== (action.payload?.period || action.payload)));
+        setClosedPeriods((prev) => prev.filter((p) => p.period !== targetPeriod));
+        if (targetPeriod) {
+          writeAuditLog("DELETE", "closed_periods", `${targetPeriod}${reasonSuffix}`);
+        }
         break;
+      }
       case "SET_STOCK_OPNAMES":
         markChanged("stock_opnames");
         setStockOpnames(action.payload);
@@ -1180,18 +1365,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             ? data.expense_categories
             : expenseCategories;
 
-        try {
-          const restoredOnce = localStorage.getItem("julia_restored_default_cats_v2");
-          if (!restoredOnce) {
-            const existingIds = new Set(loadedCategories.map((c: any) => c.id));
-            const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id));
-            if (missingDefaults.length > 0) {
-              loadedCategories = [...loadedCategories, ...missingDefaults];
-            }
-            localStorage.setItem("julia_restored_default_cats_v2", "1");
-          }
-        } catch {}
-
         // Pulihkan otomatis Pos Kas dan Pos Kategori kustom jika ada transaksi yang kehilangan induknya
         const recovery = recoverOrphanCashAccountsAndCategories({
           cashAccounts: incomingAccounts,
@@ -1258,6 +1431,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               : (settings?.ingredientCategories && settings.ingredientCategories.length > 0
                   ? settings.ingredientCategories
                   : DEFAULT_INGREDIENT_CATEGORIES),
+            menuCategories:
+              s.menuCategories && typeof s.menuCategories === "object" && !Array.isArray(s.menuCategories)
+                ? s.menuCategories
+                : settings?.menuCategories,
             dailySalesRecaps: Array.isArray(data.daily_sales_recaps)
               ? data.daily_sales_recaps
               : Array.isArray(s.dailySalesRecaps)
@@ -1345,8 +1522,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(data.products) && data.products.length > 0) {
           setProducts(data.products);
         }
-        if (Array.isArray(data.batch_preparations) && data.batch_preparations.length > 0) {
+        if (Array.isArray(data.batch_preparations)) {
           setBatchPreparations(data.batch_preparations);
+        }
+        if (Array.isArray(data.kpiTasks)) {
+          setKpiTasks(data.kpiTasks);
+          try {
+            localStorage.setItem("kpi_tasks", JSON.stringify(data.kpiTasks));
+          } catch {}
+        }
+        if (Array.isArray(data.kpiBonusRules) && data.kpiBonusRules.length > 0) {
+          setKpiBonusRules(data.kpiBonusRules);
+          try {
+            localStorage.setItem("kpi_bonus_rules", JSON.stringify(data.kpiBonusRules));
+          } catch {}
         }
 
         setLastSyncTime(new Date());
@@ -1464,7 +1653,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (curSessionId) {
           fetch("/api/sessions/logout", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${curSessionId}`,
+            },
             body: JSON.stringify({ sessionId: curSessionId }),
           }).catch(() => {});
         }
@@ -1492,7 +1684,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       if (!activeSessionId) return;
       const res = await fetch("/api/sessions/heartbeat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${activeSessionId}`,
+        },
         body: JSON.stringify({
           sessionId: activeSessionId,
           userId: user.id,
@@ -1523,12 +1718,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchSessions = async () => {
     try {
-      const res = await fetch("/api/sessions");
+      const { sessionKey } = getAuthStorageKeys();
+      const token = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+      if (!token) return;
+      const res = await fetch("/api/sessions", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.sessions)) {
-          const { sessionKey } = getAuthStorageKeys();
-          const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+          const currentId = token;
           setSessions(
             data.sessions.map((s: any) => ({
               ...s,
@@ -1542,13 +1741,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const revokeSession = async (sessionId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/revoke`, {
+      const { userKey, sessionKey } = getAuthStorageKeys();
+      const token = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/revoke`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (res.ok) {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-        const { userKey, sessionKey } = getAuthStorageKeys();
-        const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+        const currentId = token;
         if (sessionId === currentId) {
           setCurrentUser(null);
           localStorage.removeItem(userKey);
@@ -1566,9 +1767,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { sessionKey } = getAuthStorageKeys();
       const currentId = localStorage.getItem(sessionKey) || deviceRef.current.sessionId;
+      if (!currentId) return false;
       const res = await fetch("/api/sessions/revoke-others", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentId}`,
+        },
         body: JSON.stringify({
           currentSessionId: currentId,
           userId: currentUser?.id,
@@ -1609,7 +1814,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     )
       return;
 
-    const token = localStorage.getItem("node_session_id") || deviceRef.current?.sessionId;
+    const { sessionKey } = getAuthStorageKeys();
+    const token = localStorage.getItem(sessionKey) || deviceRef.current?.sessionId;
     if (!token) return;
 
     const timer = setTimeout(async () => {
@@ -1642,6 +1848,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         dailyChecklists,
         employeeShifts,
         kpiRecords,
+        kpiTasks,
+        kpiBonusRules,
         expense_categories: expenseCategories,
         budgets,
         bank_reconciliations: bankReconciliations,
@@ -1689,7 +1897,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           const errData = await res.json().catch(() => ({}));
           console.error("Sync API failed:", errData);
           if (res.status !== 401) {
-            alert("Gagal sinkronisasi data ke server: " + (errData.error || "Unknown error"));
+            toast.error("Gagal sinkronisasi data ke server: " + (errData.error || "Unknown error"));
           }
         }
       } catch (err) {
@@ -1726,6 +1934,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     dailyChecklists,
     employeeShifts,
     kpiRecords,
+    kpiTasks,
+    kpiBonusRules,
     expenseCategories,
     budgets,
     bankReconciliations,
@@ -1739,7 +1949,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSettings = (newSettings: Settings) => {
     if (currentUser?.role === "OWNER") {
-      alert("Akun Owner berstatus Read-Only (Pengawasan). Anda tidak diizinkan mengubah konfigurasi toko.");
+      toast.warning("Akun Owner berstatus Read-Only (Pengawasan). Anda tidak diizinkan mengubah konfigurasi toko.");
       return;
     }
     setSettings(newSettings);
@@ -1748,25 +1958,34 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     } catch {}
     markChanged("settings");
 
-    // Kirim sinkronisasi langsung ke server agar tidak ter-rollback oleh background polling
-    const token = localStorage.getItem("node_session_id") || deviceRef.current?.sessionId;
-    if (token) {
-      fetch("/api/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          settings: newSettings,
-        }),
-      }).then((res) => {
-        if (res.ok) {
-          dirtyTablesRef.current.delete("settings");
-          hasLocalChanges.current = dirtyTablesRef.current.size > 0;
-        }
-      }).catch((err) => console.warn("Direct settings sync failed:", err));
-    }
+    // Tunda pengecekan ke microtask agar jika handler yang sama ikut mengubah ingredients/products,
+    // semua tabel terkirim bersamaan via debounced sync tanpa balapan data.
+    queueMicrotask(() => {
+      const otherDirtyTables = Array.from(dirtyTablesRef.current).filter(
+        (t) => t !== "settings" && t !== "audit_logs"
+      );
+      if (otherDirtyTables.length > 0) return;
+
+      const { sessionKey } = getAuthStorageKeys();
+      const token = localStorage.getItem(sessionKey) || deviceRef.current?.sessionId;
+      if (token) {
+        fetch("/api/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            settings: newSettings,
+          }),
+        }).then((res) => {
+          if (res.ok && dirtyTablesRef.current.size <= 1) {
+            dirtyTablesRef.current.delete("settings");
+            hasLocalChanges.current = dirtyTablesRef.current.size > 0;
+          }
+        }).catch((err) => console.warn("Direct settings sync failed:", err));
+      }
+    });
   };
 
   const login = async (username: string, pin: string) => {
@@ -1814,6 +2033,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const unsuspendUser = async (userId: string): Promise<boolean> => {
+    if (currentUser?.role !== "SUPER_ADMIN" && currentUser?.role !== "MANAGER") {
+      return false;
+    }
     setUsers((prev) =>
       prev.map((u) =>
         u.id === userId
@@ -1858,7 +2080,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (curSessionId) {
       fetch("/api/sessions/logout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${curSessionId}`,
+        },
         body: JSON.stringify({ sessionId: curSessionId }),
       }).catch(() => {});
     }
@@ -1898,14 +2123,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   
   const handleSetDailyChecklists = (c: DailyChecklist[]) => {
+    if (currentUser?.role === "OWNER") return;
     setDailyChecklists(c);
     markChanged("dailyChecklists");
   };
   const handleSetEmployeeShifts = (shifts: EmployeeShift[]) => {
+    if (currentUser?.role === "OWNER") return;
     setEmployeeShifts(shifts);
     markChanged("employeeShifts");
   };
   const handleSetDailyAttendances = (a: DailyAttendance[]) => {
+    if (currentUser?.role === "OWNER") return;
     setDailyAttendances(a);
     const { updatedAttendances, changed } = syncAttendanceRecordsWithDaily({
       dailyAttendances: a,
@@ -1928,6 +2156,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addUser = (user: Omit<User, "id">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
     setUsers((prev) => [...prev, { ...user, id }]);
     writeAuditLog("CREATE", "users", id);
@@ -1936,6 +2165,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   // ─── HR ACTIONS ─────────────────────────────────────────────────────────
   const addEmployee = (emp: Omit<Employee, "id" | "createdAt">) => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
     setEmployees((prev) => [
       ...prev,
@@ -1947,9 +2177,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateEmployee = (emp: Employee) => {
+    if (currentUser?.role === "OWNER") return;
     setEmployees((prev) => prev.map((e) => (e.id === emp.id ? emp : e)));
 
-    // Sinkronisasi otomatis ke akun pengguna (users)
+    // Sinkronisasi otomatis ke akun pengguna (users) — jangan ubah role SUPER_ADMIN / OWNER
     setUsers((prev) =>
       prev.map((u) => {
         const isMatched =
@@ -1959,27 +2190,29 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (!isMatched) return u;
 
         let role: Role = u.role;
-        const posUpper = (emp.position || "").toUpperCase();
-        const deptUpper = (emp.department || "").toUpperCase();
+        if (u.role !== "SUPER_ADMIN" && u.role !== "OWNER") {
+          const posUpper = (emp.position || "").toUpperCase();
+          const deptUpper = (emp.department || "").toUpperCase();
 
-        if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
-          role = "MANAGER";
-        } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
-          role = "FINANCE";
-        } else if (posUpper.includes("LEADER")) {
-          role = "LEADER";
-        } else if (posUpper.includes("KASIR")) {
-          role = "KASIR";
-        } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
-          role = "BAR";
-        } else if (
-          deptUpper.includes("KITCHEN") ||
-          deptUpper.includes("DAPUR") ||
-          posUpper.includes("KITCHEN")
-        ) {
-          role = "KITCHEN";
-        } else if (deptUpper.includes("BAKER") || posUpper.includes("BAKER")) {
-          role = "BAKER";
+          if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
+            role = "MANAGER";
+          } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
+            role = "FINANCE";
+          } else if (posUpper.includes("LEADER")) {
+            role = "LEADER";
+          } else if (posUpper.includes("KASIR")) {
+            role = "KASIR";
+          } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
+            role = "BAR";
+          } else if (
+            deptUpper.includes("KITCHEN") ||
+            deptUpper.includes("DAPUR") ||
+            posUpper.includes("KITCHEN")
+          ) {
+            role = "KITCHEN";
+          } else if (deptUpper.includes("BAKER") || posUpper.includes("BAKER")) {
+            role = "BAKER";
+          }
         }
 
         return {
@@ -1998,6 +2231,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteEmployee = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setEmployees((prev) => prev.filter((e) => e.id !== id));
     setUsers((prev) =>
       prev.map((u) => (u.employeeId === id ? { ...u, employeeId: null } : u))
@@ -2009,21 +2243,43 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addContract = (contract: Omit<EmployeeContract, "id">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
-    setContracts((prev) => [...prev, { ...contract, id }]);
+    const roundedContract: EmployeeContract = {
+      ...contract,
+      id,
+      basicSalary: Math.round(Math.max(0, Number(contract.basicSalary) || 0)),
+      mealAllowance: Math.round(Math.max(0, Number(contract.mealAllowance) || 0)),
+      positionAllowance: Math.round(Math.max(0, Number(contract.positionAllowance) || 0)),
+      transportAllowance: Math.round(Math.max(0, Number(contract.transportAllowance) || 0)),
+      alphaDeductionPerDay: Math.round(Math.max(0, Number(contract.alphaDeductionPerDay) || 0)),
+      kpiBonusTarget: Math.round(Math.max(0, Number(contract.kpiBonusTarget) || 0)),
+    };
+    setContracts((prev) => [...prev, roundedContract]);
     writeAuditLog("CREATE", "contracts", id);
     markChanged("contracts");
   };
 
   const updateContract = (contract: EmployeeContract) => {
+    if (currentUser?.role === "OWNER") return;
+    const roundedContract: EmployeeContract = {
+      ...contract,
+      basicSalary: Math.round(Math.max(0, Number(contract.basicSalary) || 0)),
+      mealAllowance: Math.round(Math.max(0, Number(contract.mealAllowance) || 0)),
+      positionAllowance: Math.round(Math.max(0, Number(contract.positionAllowance) || 0)),
+      transportAllowance: Math.round(Math.max(0, Number(contract.transportAllowance) || 0)),
+      alphaDeductionPerDay: Math.round(Math.max(0, Number(contract.alphaDeductionPerDay) || 0)),
+      kpiBonusTarget: Math.round(Math.max(0, Number(contract.kpiBonusTarget) || 0)),
+    };
     setContracts((prev) =>
-      prev.map((c) => (c.id === contract.id ? contract : c)),
+      prev.map((c) => (c.id === roundedContract.id ? roundedContract : c)),
     );
     writeAuditLog("UPDATE", "contracts", contract.id);
     markChanged("contracts");
   };
 
   const deleteContract = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setContracts((prev) => prev.filter((c) => c.id !== id));
     writeAuditLog("DELETE", "contracts", id);
     markChanged("contracts");
@@ -2032,6 +2288,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const addAttendance = (
     att: Omit<AttendanceRecord, "id" | "createdAt" | "createdBy">,
   ) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
     setAttendances((prev) => [
       ...prev,
@@ -2047,43 +2304,68 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateAttendance = (att: AttendanceRecord) => {
+    if (currentUser?.role === "OWNER") return;
     setAttendances((prev) => prev.map((a) => (a.id === att.id ? att : a)));
     writeAuditLog("UPDATE", "attendances", att.id);
     markChanged("attendances");
   };
 
   const addDailyAttendance = (att: Omit<DailyAttendance, "id">) => {
-    setDailyAttendances((prev) => {
-      const existing = prev.find(
-        (a) => a.employeeId === att.employeeId && a.date === att.date
+    if (currentUser?.role === "OWNER") return;
+    const existing = dailyAttendances.find(
+      (a) => a.employeeId === att.employeeId && a.date === att.date
+    );
+    let nextDailyAttendances: DailyAttendance[];
+    let targetId: string;
+    let actionType: "CREATE" | "UPDATE";
+
+    if (existing) {
+      targetId = existing.id;
+      actionType = "UPDATE";
+      nextDailyAttendances = dailyAttendances.map((a) =>
+        a.id === existing.id
+          ? {
+              ...existing,
+              ...att,
+              approvalStatus: att.approvalStatus || existing.approvalStatus || "PENDING",
+            }
+          : a
       );
-      if (existing) {
-        const updated = prev.map((a) =>
-          a.id === existing.id
-            ? {
-                ...existing,
-                ...att,
-                approvalStatus: att.approvalStatus || existing.approvalStatus || "PENDING",
-              }
-            : a
-        );
-        writeAuditLog("UPDATE", "daily_attendances", existing.id);
-        markChanged("dailyAttendances");
-        return updated;
-      }
-      const id = generateId();
+    } else {
+      targetId = generateId();
+      actionType = "CREATE";
       const newAtt: DailyAttendance = {
         approvalStatus: "PENDING",
         ...att,
-        id,
+        id: targetId,
       };
-      writeAuditLog("CREATE", "daily_attendances", id);
-      markChanged("dailyAttendances");
-      return [...prev, newAtt];
+      nextDailyAttendances = [...dailyAttendances, newAtt];
+    }
+
+    setDailyAttendances(nextDailyAttendances);
+    writeAuditLog(actionType, "daily_attendances", targetId);
+
+    const period = (att.date || "").slice(0, 7);
+    const { updatedAttendances, changed } = syncAttendanceRecordsWithDaily({
+      dailyAttendances: nextDailyAttendances,
+      existingAttendances: attendances,
+      affectedPairs:
+        att.employeeId && period.length === 7
+          ? [{ employeeId: att.employeeId, period }]
+          : [],
+      employees,
+      users,
     });
+    if (changed) {
+      setAttendances(updatedAttendances);
+      markChanged("dailyAttendances", "attendances");
+    } else {
+      markChanged("dailyAttendances");
+    }
   };
 
   const updateDailyAttendance = (att: DailyAttendance) => {
+    if (currentUser?.role === "OWNER") return;
     const nextDailyAttendances = dailyAttendances.map((a) =>
       a.id === att.id ? att : a
     );
@@ -2110,6 +2392,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addKPI = (kpi: Omit<KPIRecord, "id" | "createdAt" | "evaluatedBy">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
     setKpiRecords((prev) => [
       ...prev,
@@ -2125,12 +2408,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateKPI = (kpi: KPIRecord) => {
+    if (currentUser?.role === "OWNER") return;
     setKpiRecords((prev) => prev.map((k) => (k.id === kpi.id ? kpi : k)));
     writeAuditLog("UPDATE", "kpi_records", kpi.id);
     markChanged("kpiRecords");
   };
 
   const updateKpiTask = (id: string, task: any) => {
+    if (currentUser?.role === "OWNER") return;
     setKpiTasks((prev) => {
       const idx = prev.findIndex((t) => t.id === id);
       const updated = idx >= 0 
@@ -2139,17 +2424,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
       return updated;
     });
+    markChanged("kpiTasks");
   };
 
   const deleteKpiTask = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setKpiTasks((prev) => {
       const updated = prev.filter((t) => t.id !== id);
       try { localStorage.setItem("kpi_tasks", JSON.stringify(updated)); } catch {}
       return updated;
     });
+    markChanged("kpiTasks");
   };
 
   const updateKpiBonusRule = (id: string, rule: any) => {
+    if (currentUser?.role === "OWNER") return;
     setKpiBonusRules((prev) => {
       const idx = prev.findIndex((r) => r.id === id);
       const updated = idx >= 0 
@@ -2158,17 +2447,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
       return updated;
     });
+    markChanged("kpiBonusRules");
   };
 
   const deleteKpiBonusRule = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setKpiBonusRules((prev) => {
       const updated = prev.filter((r) => r.id !== id);
       try { localStorage.setItem("kpi_bonus_rules", JSON.stringify(updated)); } catch {}
       return updated;
     });
+    markChanged("kpiBonusRules");
   };
 
   const updateUser = (updatedUser: User) => {
+    if (currentUser?.role === "OWNER") return;
     setUsers((prev) =>
       prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
     );
@@ -2221,6 +2514,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteUser = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setUsers((prev) => prev.filter((u) => u.id !== id));
     setSessions((prev) => prev.filter((s) => s.userId !== id));
     writeAuditLog("DELETE", "users", id);
@@ -2228,26 +2522,61 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addCashAccount = (acc: Omit<CashAccount, "id">) => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
-    setCashAccounts((prev) => [...prev, { ...acc, id }]);
+    const next = [...cashAccounts, { ...acc, id }];
+    setCashAccounts(next);
+    try {
+      localStorage.setItem("app_cash_accounts_cache", JSON.stringify(next));
+    } catch {}
     writeAuditLog("CREATE", "cash_accounts", id);
     markChanged("cash_accounts");
     return id;
   };
 
   const updateCashAccount = (acc: CashAccount) => {
-    setCashAccounts((prev) => prev.map((a) => (a.id === acc.id ? acc : a)));
+    if (currentUser?.role === "OWNER") return;
+    const next = cashAccounts.map((a) => (a.id === acc.id ? acc : a));
+    setCashAccounts(next);
+    try {
+      localStorage.setItem("app_cash_accounts_cache", JSON.stringify(next));
+    } catch {}
     writeAuditLog("UPDATE", "cash_accounts", acc.id);
     markChanged("cash_accounts");
   };
 
   const deleteCashAccount = (id: string) => {
-    setCashAccounts((prev) => prev.filter((a) => a.id !== id));
+    if (currentUser?.role === "OWNER") return;
+    if (!cashAccounts.some((a) => a.id === id)) return;
+    const { updatedAccounts, updatedTransactions, transactionsChanged } =
+      cascadeCashAccountDelete({
+        accountId: id,
+        cashAccounts,
+        cashTransactions,
+      });
+    setCashAccounts(updatedAccounts);
+    try {
+      localStorage.setItem("app_cash_accounts_cache", JSON.stringify(updatedAccounts));
+    } catch {}
+    if (transactionsChanged) {
+      setCashTransactions(updatedTransactions);
+      try {
+        localStorage.setItem(
+          "app_cash_transactions_cache",
+          JSON.stringify(updatedTransactions)
+        );
+      } catch {}
+    }
     writeAuditLog("DELETE", "cash_accounts", id);
-    markChanged("cash_accounts");
+    markChanged(
+      ...(transactionsChanged
+        ? ["cash_accounts", "cash_transactions"]
+        : ["cash_accounts"])
+    );
   };
 
   const addCashTransaction = (trx: Omit<CashTransaction, "id">) => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
     const cleanItems = Array.isArray(trx.items)
       ? trx.items.filter((it) => Number(it.totalPrice) > 0 || Number(it.unitPrice) > 0)
@@ -2259,6 +2588,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const normalizedTrx: CashTransaction = {
       ...trx,
       type: normalizeCashTrxType(trx.type),
+      amount: Math.round(Number(trx.amount) || 0),
       items: cleanItems && cleanItems.length > 0 ? cleanItems : undefined,
       itemsJson,
       id,
@@ -2270,6 +2600,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateCashTransaction = (trx: CashTransaction) => {
+    if (currentUser?.role === "OWNER") return;
     const cleanItems = Array.isArray(trx.items)
       ? trx.items.filter((it) => Number(it.totalPrice) > 0 || Number(it.unitPrice) > 0)
       : undefined;
@@ -2280,6 +2611,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const normalizedTrx: CashTransaction = {
       ...trx,
       type: normalizeCashTrxType(trx.type),
+      amount: Math.round(Number(trx.amount) || 0),
       items: cleanItems && cleanItems.length > 0 ? cleanItems : undefined,
       itemsJson,
     };
@@ -2291,6 +2623,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteCashTransaction = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
+    if (!cashTransactions.some((t) => t.id === id)) return;
     const linkedMovements = stockMovements.filter((m) => m.referenceId === id);
     setCashTransactions((prev) => prev.filter((t) => t.id !== id));
     writeAuditLog("DELETE", "cash_transactions", id);
@@ -2327,6 +2661,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addIngredient = (ing: Omit<Ingredient, "id">): string => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
     setIngredients((prev) => [...prev, { ...ing, id }]);
     writeAuditLog("CREATE", "ingredients", id);
@@ -2335,18 +2670,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateIngredient = (ing: Ingredient) => {
+    if (currentUser?.role === "OWNER") return;
     setIngredients((prev) => prev.map((i) => (i.id === ing.id ? ing : i)));
     writeAuditLog("UPDATE", "ingredients", ing.id);
     markChanged("ingredients");
   };
 
   const deleteIngredient = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setIngredients((prev) => prev.filter((i) => i.id !== id));
     writeAuditLog("DELETE", "ingredients", id);
     markChanged("ingredients");
   };
 
   const addRecipe = (recipe: Omit<Recipe, "id">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
     setRecipes((prev) => [...prev, { ...recipe, id }]);
     writeAuditLog("CREATE", "recipes", id);
@@ -2354,22 +2692,29 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateRecipe = (recipe: Recipe) => {
+    if (currentUser?.role === "OWNER") return;
     setRecipes((prev) => prev.map((r) => (r.id === recipe.id ? recipe : r)));
     writeAuditLog("UPDATE", "recipes", recipe.id);
     markChanged("recipes");
   };
 
   const deleteRecipe = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setRecipes((prev) => prev.filter((r) => r.id !== id));
     writeAuditLog("DELETE", "recipes", id);
     markChanged("recipes");
   };
 
   const addProduct = (prod: Omit<Product, "id" | "createdAt">): string => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
     const newProduct: Product = {
       ...prod,
       id,
+      variants: (prod.variants || []).map((v) => ({
+        ...v,
+        productId: v.productId || id,
+      })),
       createdAt: new Date().toISOString(),
     };
     setProducts((prev) => [...prev, newProduct]);
@@ -2379,6 +2724,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateProduct = (prod: Product) => {
+    if (currentUser?.role === "OWNER") return;
     setProducts((prev) =>
       prev.map((p) => (p.id === prod.id ? { ...prod, updatedAt: new Date().toISOString() } : p))
     );
@@ -2387,12 +2733,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteProduct = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setProducts((prev) => prev.filter((p) => p.id !== id));
     writeAuditLog("DELETE", "products", id);
     markChanged("products");
   };
 
   const addBatchPreparation = (bp: Omit<BatchPreparation, "id">): string => {
+    if (currentUser?.role === "OWNER") return "";
     const id = generateId();
     const newBp: BatchPreparation = { ...bp, id };
     setBatchPreparations((prev) => [...prev, newBp]);
@@ -2402,12 +2750,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateBatchPreparation = (bp: BatchPreparation) => {
+    if (currentUser?.role === "OWNER") return;
     setBatchPreparations((prev) => prev.map((b) => (b.id === bp.id ? bp : b)));
     writeAuditLog("UPDATE", "batch_preparations", bp.id);
     markChanged("batch_preparations");
   };
 
   const deleteBatchPreparation = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setBatchPreparations((prev) => prev.filter((b) => b.id !== id));
     writeAuditLog("DELETE", "batch_preparations", id);
     markChanged("batch_preparations");
@@ -2418,6 +2768,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     multiplier: number = 1,
     notes?: string
   ): { success: boolean; message: string } => {
+    if (currentUser?.role === "OWNER") {
+      return {
+        success: false,
+        message:
+          "Akun Owner berstatus Read-Only dan tidak dapat mengeksekusi produksi batch.",
+      };
+    }
     const bp = batchPreparations.find((b) => b.id === batchPrepId);
     if (!bp) {
       return { success: false, message: "Kondimen olahan tidak ditemukan." };
@@ -2426,15 +2783,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       return { success: false, message: "Jumlah batch harus lebih dari 0." };
     }
 
-    // 1. Cek kecukupan stok seluruh bahan mentah
+    // 1. Cek kecukupan stok seluruh bahan mentah (diagregasi per ingredientId)
     const missingIngredients: string[] = [];
     let totalCostSpent = 0;
+    const requiredByIngredient = aggregateBatchRequiredQuantities(bp.ingredients || [], multiplier);
 
-    for (const ri of bp.ingredients) {
-      const ing = ingredients.find((i) => i.id === ri.ingredientId);
-      const neededQty = ri.quantity * multiplier;
+    for (const [ingredientId, neededQty] of requiredByIngredient.entries()) {
+      const ing = ingredients.find((i) => i.id === ingredientId);
       if (!ing) {
-        missingIngredients.push(`Bahan dengan ID ${ri.ingredientId} tidak ditemukan di inventori.`);
+        missingIngredients.push(`Bahan dengan ID ${ingredientId} tidak ditemukan di inventori.`);
         continue;
       }
       if (ing.currentStock < neededQty) {
@@ -2469,7 +2826,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         type: "USAGE",
         quantity: neededQty,
         unitCost: ingCost,
-        totalCost: ingCost * neededQty,
+        totalCost: Math.round(ingCost * neededQty),
         date: nowIso,
         note: `Bahan Olahan Batch: ${bp.name} (${multiplier}x batch)${notes ? ` - ${notes}` : ""}`,
         createdBy: currentUser?.name || "Kitchen / Bar Staff",
@@ -2478,17 +2835,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     // 4. Tambah stok hasil kondimen (IN) & update unit valuation HPP
     if (targetIng) {
-      const existingValuation = targetIng.currentStock * (targetIng.costPerUnit || 0);
-      const newTotalValuation = existingValuation + totalCostSpent;
-      const newTotalQty = targetIng.currentStock + yieldedQty;
-      const weightedAvgCost = newTotalQty > 0 ? Math.round(newTotalValuation / newTotalQty) : batchUnitCost;
+      const weightedAvgCost = computeBatchWeightedUnitCost(
+        targetIng.currentStock,
+        targetIng.costPerUnit || 0,
+        yieldedQty,
+        totalCostSpent
+      );
 
       addStockMovement({
         ingredientId: targetIng.id,
         type: "IN",
         quantity: yieldedQty,
         unitCost: batchUnitCost,
-        totalCost: totalCostSpent,
+        totalCost: Math.round(totalCostSpent),
         date: nowIso,
         note: `Hasil Olahan Batch: ${bp.name} (${yieldedQty} ${bp.yieldUnit})${notes ? ` - ${notes}` : ""}`,
         createdBy: currentUser?.name || "Kitchen / Bar Staff",
@@ -2509,6 +2868,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         minStock: Math.round(bp.yieldQuantity * 0.5),
         category: "Bahan Olahan",
         costPerUnit: batchUnitCost,
+        storageLocation: resolveDivisionStorageLocation(bp.division),
       };
       setIngredients((prev) => [...prev, newIng]);
       writeAuditLog("CREATE", "ingredients", newIngId);
@@ -2518,7 +2878,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         type: "IN",
         quantity: yieldedQty,
         unitCost: batchUnitCost,
-        totalCost: totalCostSpent,
+        totalCost: Math.round(totalCostSpent),
         date: nowIso,
         note: `Hasil Olahan Batch: ${bp.name} (${yieldedQty} ${bp.yieldUnit})${notes ? ` - ${notes}` : ""}`,
         createdBy: currentUser?.name || "Kitchen / Bar Staff",
@@ -2540,6 +2900,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addSupplier = (supplier: Omit<Supplier, "id">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
     setSuppliers((prev) => [...prev, { ...supplier, id }]);
     writeAuditLog("CREATE", "suppliers", id);
@@ -2547,6 +2908,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateSupplier = (supplier: Supplier) => {
+    if (currentUser?.role === "OWNER") return;
     setSuppliers((prev) =>
       prev.map((s) => (s.id === supplier.id ? supplier : s)),
     );
@@ -2555,6 +2917,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteSupplier = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
     writeAuditLog("DELETE", "suppliers", id);
     markChanged("suppliers");
@@ -2588,7 +2951,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     poItems: PurchaseOrderItem[],
     notePrefix: string,
     dateIso: string,
-    creatorName: string
+    creatorName: string,
+    poReferenceId?: string
   ): boolean => {
     if (!Array.isArray(poItems) || poItems.length === 0) return false;
 
@@ -2612,12 +2976,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           ? Number(item.subtotal)
           : Number(item.quantity || 0) * Number(item.unitPrice || 0)
       );
+      const rawLoc = String(ing?.storageLocation || "").toUpperCase();
+      const movementLocation: "MAIN" | "BAR" | "KITCHEN" | "BAKERY" | "BAKER" | "FINANCE" =
+        rawLoc === "BAR" || rawLoc === "CHILLER"
+          ? "BAR"
+          : rawLoc === "KITCHEN"
+            ? "KITCHEN"
+            : rawLoc === "BAKERY" || rawLoc === "BAKER"
+              ? "BAKERY"
+              : "MAIN";
       newMovements.push({
         id: mvId,
         ingredientId: item.productId,
         type: "IN",
         quantity: baseQty,
-        unitCost: baseQty > 0 ? Math.round((totalCost / baseQty) * 100) / 100 : 0,
+        unitCost: baseQty > 0 ? Math.round(totalCost / baseQty) : 0,
         totalCost,
         date: dateIso,
         note: `${notePrefix}${
@@ -2625,7 +2998,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             ? ` (${item.quantity} ${item.unit || "kemasan"} = ${baseQty} ${ing?.unit || "unit"})`
             : ""
         }`,
+        referenceId: poReferenceId || null,
         createdBy: creatorName,
+        location: movementLocation,
       });
       writeAuditLog("CREATE", "stock_movements", mvId);
     });
@@ -2666,7 +3041,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         const baseObj = updatedIng || ing;
         return {
           ...baseObj,
-          currentStock: ing.currentStock + addedStock,
+          currentStock: Number((ing.currentStock + addedStock).toFixed(4)),
         };
       })
     );
@@ -2683,12 +3058,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addPurchaseOrder = (po: Omit<PurchaseOrder, "id">) => {
+    if (currentUser?.role === "OWNER") return;
     const id = generateId();
-    const newPO: PurchaseOrder = { ...po, id };
+    const roundedItems = (po.items || []).map((it) => ({
+      ...it,
+      unitPrice: Math.round(Number(it.unitPrice || 0)),
+      subtotal: Math.round(Number(it.subtotal || 0)),
+    }));
+    const newPO: PurchaseOrder = {
+      ...po,
+      id,
+      items: roundedItems,
+      totalAmount: Math.round(Number(po.totalAmount || 0)),
+      amountPaid:
+        po.amountPaid !== undefined ? Math.round(Number(po.amountPaid)) : undefined,
+    };
     const poDate = newPO.date || new Date().toISOString();
     setPurchaseOrders((prev) => [...prev, newPO]);
     writeAuditLog("CREATE", "purchase_orders", id);
 
+    const dirty: string[] = ["purchase_orders"];
     let productsChanged = false;
     // Auto tambah stok (terkonversi ke satuan dasar) & sinkron HPP jika deliveryStatus === "RECEIVED"
     if (newPO.deliveryStatus === "RECEIVED") {
@@ -2696,8 +3085,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         newPO.items,
         `PO Masuk Stok: ${newPO.poNumber}`,
         poDate,
-        currentUser?.name || "System"
+        currentUser?.name || "System",
+        newPO.id
       );
+      dirty.push("ingredients", "stock_movements");
+      if (productsChanged) dirty.push("products");
     }
 
     // Auto potong kas jika status PAID dan ada cashAccountId
@@ -2724,13 +3116,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
+      dirty.push("cash_transactions");
     }
 
-    if (productsChanged) {
-      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions", "products");
-    } else {
-      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
-    }
+    markChanged(...dirty);
   };
 
   const addDirectMarketPurchase = (data: {
@@ -2739,10 +3128,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     totalAmount: number;
     cashAccountId?: string;
     notes?: string;
-  }): PurchaseOrder => {
+  }): PurchaseOrder | null => {
+    if (currentUser?.role === "OWNER") return null;
     const id = generateId();
-    const poNumber = `MKT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const periodCompact = getLocalPeriodString().replace("-", "");
+    const poNumber = `MKT-${periodCompact}-${Math.floor(1000 + Math.random() * 9000)}`;
     const nowISO = new Date().toISOString();
+    const roundedTotal = Math.round(Number(data.totalAmount || 0));
+    const roundedItems = (data.items || []).map((it) => ({
+      ...it,
+      unitPrice: Math.round(Number(it.unitPrice || 0)),
+      subtotal: Math.round(Number(it.subtotal || 0)),
+    }));
 
     const newPO: PurchaseOrder = {
       id,
@@ -2753,10 +3150,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       cashAccountId: data.cashAccountId,
       notes: data.notes,
       date: nowISO,
-      items: data.items,
-      totalAmount: data.totalAmount,
+      items: roundedItems,
+      totalAmount: roundedTotal,
       status: "PAID",
-      amountPaid: data.totalAmount,
+      amountPaid: roundedTotal,
       paymentMethod: "CASH",
       deliveryStatus: "RECEIVED",
     };
@@ -2766,14 +3163,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     // Auto tambahkan mutasi stok IN (konversi ke satuan dasar) & sinkron HPP
     const productsChanged = applyPoItemsToInventoryAndHpp(
-      data.items,
+      roundedItems,
       `Belanja Pasar: ${poNumber} (${data.marketName || "Eceran"})`,
       nowISO,
-      currentUser?.name || "Kasir/Barista"
+      currentUser?.name || "Kasir/Barista",
+      id
     );
 
+    const dirty: string[] = ["purchase_orders", "ingredients", "stock_movements"];
+    if (productsChanged) dirty.push("products");
+
     // Auto catat kas keluar pada akun kas yang dipilih
-    if (data.cashAccountId && data.totalAmount > 0) {
+    if (data.cashAccountId && roundedTotal > 0) {
       const cashTrxId = generateId();
       const bahanBakuCat = expenseCategories.find(
         (c) => c.type === "BAHAN_BAKU" || c.id === "cat-bahan-baku" || c.name.toLowerCase().includes("bahan")
@@ -2785,28 +3186,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           accountId: data.cashAccountId!,
           date: nowISO,
           type: "CASH_OUT",
-          amount: data.totalAmount,
+          amount: roundedTotal,
           category: bahanBakuCat?.name || "Pembelian Bahan",
           categoryId: bahanBakuCat?.id || "cat-bahan-baku",
-          description: `Belanja Pasar (${data.marketName || "Eceran"}): ${data.items.length} item bahan [${poNumber}]`,
+          description: `Belanja Pasar (${data.marketName || "Eceran"}): ${roundedItems.length} item bahan [${poNumber}]`,
           vendorName: newPO.supplierName || null,
           receiptNo: poNumber,
-          items: buildPoCashItems(data.items),
+          items: buildPoCashItems(roundedItems),
           referenceId: id,
         },
       ]);
       writeAuditLog("CREATE", "cash_transactions", cashTrxId);
+      dirty.push("cash_transactions");
     }
 
-    if (productsChanged) {
-      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions", "products");
-    } else {
-      markChanged("purchase_orders", "ingredients", "stock_movements", "cash_transactions");
-    }
+    markChanged(...dirty);
     return newPO;
   };
 
   const updatePOStatus = (id: string, status: "PAID" | "UNPAID" | "PARTIAL") => {
+    if (currentUser?.role === "OWNER") return;
     setPurchaseOrders((prev) =>
       prev.map((po) => (po.id === id ? { ...po, status } : po)),
     );
@@ -2821,11 +3220,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     notes?: string,
     date?: string,
   ) => {
+    if (currentUser?.role === "OWNER") return;
     const po = purchaseOrders.find((p) => p.id === id);
-    if (!po) return;
+    if (!po || po.status === "PAID" || !cashAccountId) return;
 
-    const newAmountPaid = (po.amountPaid || 0) + amount;
-    const isPaid = newAmountPaid >= po.totalAmount;
+    const roundedTotal = Math.max(0, Math.round(po.totalAmount || 0));
+    const prevPaid = Math.max(0, Math.round(po.amountPaid || 0));
+    const remaining = Math.max(0, roundedTotal - prevPaid);
+    const effectiveAmount = Math.min(remaining, Math.max(0, Math.round(amount || 0)));
+    if (effectiveAmount <= 0) return;
+
+    const newAmountPaid = prevPaid + effectiveAmount;
+    const isPaid = newAmountPaid >= roundedTotal;
 
     setPurchaseOrders((prev) =>
       prev.map((p) =>
@@ -2848,13 +3254,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       accountId: cashAccountId,
       date: date || new Date().toISOString(),
       type: "CASH_OUT",
-      amount: amount,
+      amount: effectiveAmount,
       category: bahanBakuCat?.name || "Pembelian Bahan",
       categoryId: bahanBakuCat?.id || "cat-bahan-baku",
       description: `Pelunasan Hutang PO ${po.poNumber} (${po.supplierName || "Supplier"})${notes ? ` - ${notes}` : ""}`,
       vendorName: po.supplierName || null,
       receiptNo: po.poNumber,
-      items: buildPoCashItems(po.items),
+      items: prevPaid === 0 && isPaid ? buildPoCashItems(po.items) : undefined,
       referenceId: po.id,
     });
 
@@ -2863,6 +3269,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const markPOAsReceived = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
     const po = purchaseOrders.find((p) => p.id === id);
     if (!po || po.deliveryStatus === "RECEIVED") return;
 
@@ -2876,7 +3283,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       po.items,
       `PO Diterima: ${po.poNumber}`,
       new Date().toISOString(),
-      currentUser?.name || "System"
+      currentUser?.name || "System",
+      po.id
     );
 
     if (productsChanged) {
@@ -2887,14 +3295,55 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deletePurchaseOrder = (id: string) => {
-    setPurchaseOrders((prev) => prev.filter((po) => po.id !== id));
+    if (currentUser?.role === "OWNER") return;
+    if (!purchaseOrders.some((p) => p.id === id)) return;
+    const {
+      updatedPurchaseOrders,
+      updatedStockMovements,
+      updatedIngredients,
+      updatedCashTransactions,
+      movementsChanged,
+      ingredientsChanged,
+      cashChanged,
+    } = cascadePurchaseOrderDelete({
+      poId: id,
+      purchaseOrders,
+      stockMovements,
+      ingredients,
+      cashTransactions,
+    });
+    setPurchaseOrders(updatedPurchaseOrders);
+    if (movementsChanged) setStockMovements(updatedStockMovements);
+    if (ingredientsChanged) {
+      setIngredients(updatedIngredients);
+      try {
+        localStorage.setItem("app_ingredients_cache", JSON.stringify(updatedIngredients));
+      } catch {}
+    }
+    if (cashChanged) {
+      setCashTransactions(updatedCashTransactions);
+      try {
+        localStorage.setItem("app_cash_transactions_cache", JSON.stringify(updatedCashTransactions));
+      } catch {}
+    }
     writeAuditLog("DELETE", "purchase_orders", id);
-    markChanged("purchase_orders");
+    const dirty: string[] = ["purchase_orders"];
+    if (movementsChanged) dirty.push("stock_movements");
+    if (ingredientsChanged) dirty.push("ingredients");
+    if (cashChanged) dirty.push("cash_transactions");
+    markChanged(...dirty);
   };
 
   const openShift = (shift: Omit<ShiftSession, "id">) => {
+    if (currentUser?.role === "OWNER") return;
+    if (shifts.some((s) => s.status === "OPEN")) return;
     const id = generateId();
-    setShifts((prev) => [...prev, { ...shift, id }]);
+    const roundedShift: ShiftSession = {
+      ...shift,
+      id,
+      startingCash: Math.round(Math.max(0, Number(shift.startingCash) || 0)),
+    };
+    setShifts((prev) => [...prev, roundedShift]);
     writeAuditLog("CREATE", "shifts", id);
     markChanged("shifts");
   };
@@ -2904,15 +3353,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     actualEndingCash: number,
     expectedEndingCash: number,
   ) => {
+    if (currentUser?.role === "OWNER") return;
+    const targetShift = shifts.find((s) => s.id === id);
+    if (!targetShift || targetShift.status === "CLOSED") return;
+    const roundedActual = Math.round(Math.max(0, Number(actualEndingCash) || 0));
+    const roundedExpected = Math.round(Number(expectedEndingCash) || 0);
     setShifts((prev) =>
       prev.map((shift) => {
         if (shift.id === id) {
           return {
             ...shift,
             endTime: new Date().toISOString(),
-            expectedEndingCash,
-            actualEndingCash,
-            difference: actualEndingCash - expectedEndingCash,
+            expectedEndingCash: roundedExpected,
+            actualEndingCash: roundedActual,
+            difference: roundedActual - roundedExpected,
             status: "CLOSED",
           };
         }
@@ -2923,10 +3377,22 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     markChanged("shifts");
   };
 
+  const canManagePromotions =
+    currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER";
+
   const addPromotion = (promo: Omit<Promotion, "id" | "createdAt">) => {
+    if (!canManagePromotions) return;
     const id = generateId();
     const newPromo: Promotion = {
       ...promo,
+      name: String(promo.name || "").trim(),
+      code: promo.code ? String(promo.code).trim().toUpperCase() : undefined,
+      value: Math.max(0, Math.round(Number(promo.value) || 0)),
+      minSpend: Math.max(0, Math.round(Number(promo.minSpend) || 0)),
+      maxDiscount:
+        promo.type === "PERCENT" && promo.maxDiscount !== undefined
+          ? Math.max(0, Math.round(Number(promo.maxDiscount) || 0)) || undefined
+          : undefined,
       id,
       createdAt: new Date().toISOString(),
     };
@@ -2942,8 +3408,26 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updatePromotion = (id: string, promoData: Partial<Promotion>) => {
+    if (!canManagePromotions) return;
     setPromotions((prev) => {
-      const updated = prev.map((p) => (p.id === id ? { ...p, ...promoData } : p));
+      const updated = prev.map((p) => {
+        if (p.id !== id) return p;
+        const mergedType = promoData.type || p.type;
+        return {
+          ...p,
+          ...promoData,
+          name: promoData.name !== undefined ? String(promoData.name).trim() : p.name,
+          code: promoData.code !== undefined ? (promoData.code ? String(promoData.code).trim().toUpperCase() : undefined) : p.code,
+          value: promoData.value !== undefined ? Math.max(0, Math.round(Number(promoData.value) || 0)) : p.value,
+          minSpend: promoData.minSpend !== undefined ? Math.max(0, Math.round(Number(promoData.minSpend) || 0)) : p.minSpend,
+          maxDiscount:
+            mergedType === "PERCENT"
+              ? promoData.maxDiscount !== undefined
+                ? Math.max(0, Math.round(Number(promoData.maxDiscount) || 0)) || undefined
+                : p.maxDiscount
+              : undefined,
+        };
+      });
       try {
         localStorage.setItem("coffee_promotions", JSON.stringify(updated));
       } catch {}
@@ -2954,6 +3438,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deletePromotion = (id: string) => {
+    if (!canManagePromotions) return;
     setPromotions((prev) => {
       const updated = prev.filter((p) => p.id !== id);
       try {
@@ -2966,6 +3451,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const togglePromotionStatus = (id: string) => {
+    if (!canManagePromotions) return;
     setPromotions((prev) => {
       const updated = prev.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p));
       try {
@@ -2978,7 +3464,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addStockMovement = (mov: Omit<StockMovement, "id">) => {
-    setStockMovements((prev) => [...prev, { ...mov, id: generateId() }]);
+    if (currentUser?.role === "OWNER") return;
+    const normalizedMov: StockMovement = {
+      ...mov,
+      id: generateId(),
+      unitCost: mov.unitCost !== undefined ? Math.round(Number(mov.unitCost) || 0) : undefined,
+      totalCost: mov.totalCost !== undefined ? Math.round(Number(mov.totalCost) || 0) : undefined,
+    };
+    setStockMovements((prev) => [...prev, normalizedMov]);
 
     // Update current stock automatically based on movement type
     setIngredients((prev) =>
@@ -2992,7 +3485,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           } else if (mov.type === "ADJUSTMENT") {
             newStock = mov.quantity;
           }
-          return { ...ing, currentStock: Math.max(0, newStock) };
+          return { ...ing, currentStock: Math.max(0, Number(newStock.toFixed(4))) };
         }
         return ing;
       }),
@@ -3005,6 +3498,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     fileName: string = "Import Penjualan Excel",
     targetCashAccountId?: string
   ) => {
+    if (currentUser?.role === "OWNER" || !transactions || transactions.length === 0) {
+      return { count: 0, cashSyncedAmount: 0, stockDeductedCount: 0 };
+    }
     const logId = generateId();
     const newTxs: SalesTransaction[] = transactions.map((t) => ({
       ...t,
@@ -3061,10 +3557,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       cashAccounts.find((a) => a.type === "CASH") ||
       cashAccounts[0];
 
+    const closedSet = new Set(closedPeriods.map((p) => p.period));
     let cashSyncedAmount = 0;
     const cashEntriesToAdd: CashTransaction[] = [];
     if (targetAccount && revenueByDate.size > 0) {
       revenueByDate.forEach((dayAmount, dayKey) => {
+        if (closedSet.has(dayKey.slice(0, 7))) return;
         if (!existingRecapDates.has(dayKey) && !existingCashSalesDates.has(dayKey)) {
           const roundedAmt = Math.round(dayAmount);
           cashSyncedAmount += roundedAmt;
@@ -3119,17 +3617,27 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           if (!ing) return;
           stockDeductedCount++;
           const sampleMenus = Array.from(info.menus).slice(0, 3).join(", ");
+          const rawLoc = String(ing.storageLocation || "").toUpperCase();
+          const movementLocation: "MAIN" | "BAR" | "KITCHEN" | "BAKERY" | "BAKER" | "FINANCE" =
+            rawLoc === "BAR" || rawLoc === "CHILLER"
+              ? "BAR"
+              : rawLoc === "KITCHEN"
+                ? "KITCHEN"
+                : rawLoc === "BAKERY" || rawLoc === "BAKER"
+                  ? "BAKERY"
+                  : "MAIN";
           movementsToAdd.push({
             id: generateId(),
             ingredientId: ingId,
             type: "OUT",
-            quantity: Number(info.qty.toFixed(2)),
+            quantity: Number(info.qty.toFixed(4)),
             unitCost: ing.costPerUnit || 0,
             totalCost: Math.round((ing.costPerUnit || 0) * info.qty),
             date: nowIso,
             note: `Penjualan (${fileName}): ${sampleMenus}${info.menus.size > 3 ? ", ..." : ""}`,
             createdBy: currentUser?.name || "System Import",
-          } as any);
+            location: movementLocation,
+          });
         });
 
         if (movementsToAdd.length > 0) {
@@ -3140,7 +3648,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               if (!info) return ing;
               return {
                 ...ing,
-                currentStock: Math.max(0, Number((ing.currentStock - info.qty).toFixed(2))),
+                currentStock: Math.max(0, Number((ing.currentStock - info.qty).toFixed(4))),
               };
             })
           );
@@ -3257,9 +3765,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addDailySalesRecap = (recap: Omit<DailySalesRecap, "id" | "createdAt">) => {
+    if (currentUser?.role === "OWNER") return;
     const newId = generateId();
     const newRecord: DailySalesRecap = {
       ...recap,
+      cashAmount: Math.round(Number(recap.cashAmount) || 0),
+      qrisAmount: Math.round(Number(recap.qrisAmount) || 0),
+      edcAmount: Math.round(Number(recap.edcAmount) || 0),
+      transferAmount: Math.round(Number(recap.transferAmount) || 0),
+      onlineDeliveryAmount: Math.round(Number(recap.onlineDeliveryAmount) || 0),
+      discountAmount: Math.round(Number(recap.discountAmount) || 0),
+      refundAmount: Math.round(Number(recap.refundAmount) || 0),
+      mdrFeeAmount: Math.round(Number(recap.mdrFeeAmount) || 0),
+      totalAmount: Math.round(Number(recap.totalAmount) || 0),
       id: newId,
       createdAt: new Date().toISOString(),
     };
@@ -3274,15 +3792,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateDailySalesRecap = (recap: DailySalesRecap) => {
+    if (currentUser?.role === "OWNER") return;
+    const normalized: DailySalesRecap = {
+      ...recap,
+      cashAmount: Math.round(Number(recap.cashAmount) || 0),
+      qrisAmount: Math.round(Number(recap.qrisAmount) || 0),
+      edcAmount: Math.round(Number(recap.edcAmount) || 0),
+      transferAmount: Math.round(Number(recap.transferAmount) || 0),
+      onlineDeliveryAmount: Math.round(Number(recap.onlineDeliveryAmount) || 0),
+      discountAmount: Math.round(Number(recap.discountAmount) || 0),
+      refundAmount: Math.round(Number(recap.refundAmount) || 0),
+      mdrFeeAmount: Math.round(Number(recap.mdrFeeAmount) || 0),
+      totalAmount: Math.round(Number(recap.totalAmount) || 0),
+    };
     persistDailySalesRecaps((prev) =>
-      prev.map((r) => (r.id === recap.id ? recap : r))
+      prev.map((r) => (r.id === normalized.id ? normalized : r))
     );
-    const regenerated = buildRecapCashTransactions(recap);
+    const regenerated = buildRecapCashTransactions(normalized);
     setCashTransactions((prev) => [
-      ...prev.filter((t) => !isRecapCashRef(t.referenceId, recap.id)),
+      ...prev.filter((t) => !isRecapCashRef(t.referenceId, normalized.id)),
       ...regenerated,
     ]);
-    writeAuditLog("UPDATE", "daily_sales_recap", recap.id);
+    writeAuditLog("UPDATE", "daily_sales_recap", normalized.id);
     markChanged("cash_transactions", "daily_sales_recaps");
   };
 
@@ -3290,6 +3821,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     id: string,
     opts?: { bankAccountId?: string; mdrFeeAmount?: number; settledDate?: string }
   ) => {
+    if (currentUser?.role === "OWNER") return;
     const target = dailySalesRecaps.find((r) => r.id === id);
     if (!target) return;
     const updated: DailySalesRecap = {
@@ -3306,6 +3838,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteDailySalesRecap = (id: string) => {
+    if (currentUser?.role === "OWNER") return;
+    if (!dailySalesRecaps.some((r) => r.id === id)) return;
     persistDailySalesRecaps((prev) => prev.filter((r) => r.id !== id));
     setCashTransactions((prev) => prev.filter((t) => !isRecapCashRef(t.referenceId, id)));
     writeAuditLog("DELETE", "daily_sales_recap", id);
@@ -3313,6 +3847,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const syncMissingSalesToCashFlow = (targetAccountId?: string) => {
+    if (currentUser?.role === "OWNER") {
+      return { syncedCount: 0, syncedAmount: 0, skippedClosedCount: 0 };
+    }
     const summary = computePeriodFinancialSummary({
       period: "ALL",
       salesTransactions,
@@ -3328,16 +3865,22 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       cashAccounts.find((a) => a.isDefault) ||
       cashAccounts.find((a) => a.type === "CASH") ||
       cashAccounts[0];
-    if (!targetAcc) return { syncedCount: 0, syncedAmount: 0 };
+    if (!targetAcc) return { syncedCount: 0, syncedAmount: 0, skippedClosedCount: 0 };
 
+    const closedSet = new Set(closedPeriods.map((p) => p.period));
     const toCreate: CashTransaction[] = [];
     let syncedAmount = 0;
+    let skippedClosedCount = 0;
 
     summary.dailyBreakdown.forEach((day) => {
       const gap = Math.round(
         day.recognizedRevenue - day.cashSalesInflow - day.pendingNonCash
       );
       if (gap > 0) {
+        if (closedSet.has(day.date.slice(0, 7))) {
+          skippedClosedCount++;
+          return;
+        }
         syncedAmount += gap;
         toCreate.push({
           id: generateId(),
@@ -3359,7 +3902,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       writeAuditLog("CREATE", "cash_transactions", `sync-sales-${toCreate.length}`);
       markChanged("cash_transactions");
     }
-    return { syncedCount: toCreate.length, syncedAmount };
+    return { syncedCount: toCreate.length, syncedAmount, skippedClosedCount };
   };
 
   if (!isAuthLoaded) {
@@ -3481,12 +4024,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         updateExpenseCategory: (cat: ExpenseCategory) => dispatch({ type: "UPDATE_EXPENSE_CATEGORY", payload: cat }),
         deleteExpenseCategory: (id: string) => dispatch({ type: "DELETE_EXPENSE_CATEGORY", payload: id }),
         restoreDefaultExpenseCategories: () => {
+          if (currentUser?.role === "OWNER") return 0;
           const existingIds = new Set(expenseCategories.map((c) => c.id));
           const missingCount = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingIds.has(d.id)).length;
           dispatch({ type: "RESTORE_DEFAULT_EXPENSE_CATEGORIES" });
           return missingCount;
         },
         restoreMissingCashPositions: () => {
+          if (currentUser?.role === "OWNER") {
+            return { addedAccountCount: 0, addedCategoryCount: 0 };
+          }
           const existingCatIds = new Set(expenseCategories.map((c) => c.id));
           const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter((d) => !existingCatIds.has(d.id));
           const baseCats = [...expenseCategories, ...missingDefaults];
@@ -3515,10 +4062,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         bankReconciliations,
         addBankReconciliation: (r: BankReconciliation) => dispatch({ type: "ADD_BANK_RECONCILIATION", payload: r }),
         updateBankReconciliation: (r: BankReconciliation) => dispatch({ type: "UPDATE_BANK_RECONCILIATION", payload: r }),
+        deleteBankReconciliation: (id: string) => dispatch({ type: "DELETE_BANK_RECONCILIATION", payload: id }),
         bankStatementLines,
         addBankStatementLine: (l: BankStatementLine) => dispatch({ type: "ADD_BANK_STATEMENT_LINE", payload: l }),
         updateBankStatementLine: (l: BankStatementLine) => dispatch({ type: "UPDATE_BANK_STATEMENT_LINE", payload: l }),
         bulkAddBankStatementLines: (lines: BankStatementLine[]) => dispatch({ type: "BULK_ADD_BANK_STATEMENT_LINES", payload: lines }),
+        replaceBankReconLines: (reconciliationId: string, lines: BankStatementLine[]) =>
+          dispatch({ type: "REPLACE_BANK_RECON_LINES", payload: { reconciliationId, lines } }),
         stockOpnames,
         addStockOpname: (o: StockOpname) => dispatch({ type: "ADD_STOCK_OPNAME", payload: o }),
         updateStockOpname: (o: StockOpname) => dispatch({ type: "UPDATE_STOCK_OPNAME", payload: o }),
@@ -3542,8 +4092,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           payrollRecords,
         },
         closedPeriods,
-        closePeriod: (period: string, user: string, notes?: string) => dispatch({ type: "CLOSE_PERIOD", payload: { period, user, notes } }),
-        reopenPeriod: (period: string) => dispatch({ type: "REOPEN_PERIOD", payload: period }),
+        closePeriod: (
+          period: string,
+          user: string,
+          notes?: string,
+          snapshot?: ClosedPeriodSnapshot | null
+        ) => dispatch({ type: "CLOSE_PERIOD", payload: { period, user, notes, snapshot } }),
+        reopenPeriod: (period: string, notes?: string) => dispatch({ type: "REOPEN_PERIOD", payload: { period, notes } }),
         promotions,
         addPromotion,
         updatePromotion,
@@ -3557,7 +4112,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useStore = () => {
+export const useStore = (): StoreContextType => {
   const context = useContext(StoreContext);
   if (context === undefined) {
     throw new Error("useStore must be used within a StoreProvider");

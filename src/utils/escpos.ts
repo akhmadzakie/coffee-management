@@ -6,6 +6,8 @@
  * serta penendang laci kasir (Cash Drawer Kick via ESC p).
  */
 
+import { DEFAULT_STORE_TIMEZONE } from "./dateUtils";
+
 export interface EscPosOptions {
   paperWidth?: "58mm" | "80mm";
   kickDrawer?: boolean;
@@ -138,6 +140,7 @@ export function buildEscPosReceipt(
   const dateStr = new Date(order?.createdAt || Date.now()).toLocaleString("id-ID", {
     dateStyle: "short",
     timeStyle: "short",
+    timeZone: DEFAULT_STORE_TIMEZONE,
   });
   pushLine(justifyColumns("No. Struk:", receiptNo, width));
   pushLine(justifyColumns("Waktu:", dateStr, width));

@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { toast } from "../../context/ToastContext";
+import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { formatCurrency } from "../../utils/format";
 import {
   buildEscPosReceipt,
@@ -33,6 +35,8 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isPrintingThermal, setIsPrintingThermal] = useState(false);
   const [printStatus, setPrintStatus] = useState<string>("");
+  const [showWaPhoneInput, setShowWaPhoneInput] = useState(false);
+  const [waPhoneInput, setWaPhoneInput] = useState(orderData.customerPhone || "");
 
   const payment = orderData.payments?.[0] || orderData.payment || {};
   const isCash = (payment.paymentMethod || orderData.paymentMethod || "CASH") === "CASH";
@@ -86,7 +90,7 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
       setPrintStatus("Meneruskan ke driver printer / RawBT...");
       setTimeout(() => setPrintStatus(""), 3000);
     } catch (err: any) {
-      alert(`Pencetakan ESC/POS: ${err.message}. Membuka dialog cetak browser sebagai cadangan.`);
+      toast.warning(`Pencetakan ESC/POS: ${err.message}. Membuka dialog cetak browser sebagai cadangan.`);
       handleBrowserPrint();
     } finally {
       setIsPrintingThermal(false);
@@ -102,26 +106,27 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
       } else {
         triggerRawBtPrint(kickBytes, "drawer-kick.bin");
       }
-      alert("Perintah buka laci uang terkirim ke printer!");
+      toast.success("Perintah buka laci uang terkirim ke printer!");
     } catch (e: any) {
-      alert(`Buka laci: ${e.message}`);
+      toast.error(`Buka laci: ${e.message}`);
     }
   };
 
-  // Kirim Struk Digital via WhatsApp
+  // Kirim Struk Digital via WhatsApp (tanpa window.prompt)
   const handleSendWhatsApp = () => {
-    let phone = orderData.customerPhone || "";
+    const phone = (orderData.customerPhone || waPhoneInput || "").trim();
     if (!phone) {
-      const input = prompt("Masukkan nomor WhatsApp pelanggan (misal 08123456789):", "");
-      if (!input) return;
-      phone = input;
+      setShowWaPhoneInput((prev) => !prev);
+      return;
     }
     const url = buildWhatsAppReceiptUrl(phone, orderData, settings, loyaltyPointsEarned);
     window.open(url, "_blank");
+    setShowWaPhoneInput(false);
   };
 
   const receiptNo = orderData.receiptNo || orderData.orderNumber || "ORD-0000";
   const dateFormatted = new Date(orderData.createdAt || Date.now()).toLocaleString("id-ID", {
+    timeZone: DEFAULT_STORE_TIMEZONE,
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -134,7 +139,10 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -347,6 +355,54 @@ export const PosReceiptModal: React.FC<PosReceiptModalProps> = ({ orderData, onC
 
         {/* Action Buttons */}
         <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 space-y-2.5 no-print">
+          <AnimatePresence>
+            {showWaPhoneInput && (
+              <motion.form
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!waPhoneInput.trim()) {
+                    toast.warning("Masukkan nomor WhatsApp pelanggan terlebih dahulu.");
+                    return;
+                  }
+                  const url = buildWhatsAppReceiptUrl(
+                    waPhoneInput.trim(),
+                    orderData,
+                    settings,
+                    loyaltyPointsEarned
+                  );
+                  window.open(url, "_blank");
+                  setShowWaPhoneInput(false);
+                }}
+                className="flex items-center gap-2 pb-1 overflow-hidden"
+              >
+                <input
+                  type="tel"
+                  value={waPhoneInput}
+                  onChange={(e) => setWaPhoneInput(e.target.value)}
+                  placeholder="No. WA (contoh: 08123456789)"
+                  autoFocus
+                  className="flex-1 px-3 py-2 text-xs bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                >
+                  Kirim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWaPhoneInput(false)}
+                  className="px-2.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold cursor-pointer shrink-0"
+                >
+                  Batal
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
           <div className="flex items-center gap-2">
             {/* 1. Tombol Utama: Cetak Thermal ESC/POS Instan */}
             <button

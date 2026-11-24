@@ -2,9 +2,11 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, X, Check, UtensilsCrossed } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "../context/ToastContext";
 import { Recipe, RecipeIngredient, Ingredient } from "../types";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
+import { validateRecipeSubmission } from "../utils/syncSanitizers";
 
 interface RecipeModalProps {
   isOpen: boolean;
@@ -12,6 +14,7 @@ interface RecipeModalProps {
   onSave: (recipe: Omit<Recipe, "id">) => void;
   editingRecipe: Recipe | null;
   ingredients: Ingredient[];
+  existingRecipes?: Recipe[];
 }
 
 export const RecipeModal: React.FC<RecipeModalProps> = ({
@@ -20,6 +23,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
   onSave,
   editingRecipe,
   ingredients,
+  existingRecipes = [],
 }) => {
   const [menuName, setMenuName] = useState("");
   const [recipeIngredients, setRecipeIngredients] = useState<Omit<RecipeIngredient, "id">[]>([]);
@@ -63,10 +67,15 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!menuName.trim()) return alert("Nama menu tidak boleh kosong");
-    if (recipeIngredients.length === 0) return alert("Minimal 1 bahan baku harus ditambahkan");
-    if (recipeIngredients.some((ri) => !ri.ingredientId || ri.quantity <= 0)) {
-      return alert("Harap lengkapi semua bahan baku dan takarannya (jumlah > 0)");
+    const validation = validateRecipeSubmission({
+      menuName,
+      ingredients: recipeIngredients,
+      existingRecipes,
+      editingRecipeId: editingRecipe?.id,
+    });
+    if ("error" in validation) {
+      toast.error(validation.error);
+      return;
     }
 
     onSave({
@@ -76,7 +85,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <AnimatePresence>
@@ -86,35 +95,36 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
           className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center p-3 sm:p-6 z-50 overflow-y-auto"
         >
           <motion.div
             key="recipe-modal-card"
-            initial={{ scale: 0.92, opacity: 0, y: 15 }}
+            initial={{ scale: 0.96, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.92, opacity: 0, y: 15 }}
-            transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/90"
+            exit={{ scale: 0.96, opacity: 0, y: 12 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[88vh] flex flex-col my-auto border border-slate-200/90 dark:border-slate-700"
           >
             {/* Header */}
-            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50/80 shrink-0">
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/20 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                     {editingRecipe ? "Edit Resep Menu" : "Tambah Resep Menu Baru"}
                   </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Tentukan takaran bahan yang otomatis dipotong setiap kali menu terjual di kasir.
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -124,22 +134,22 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-5 text-xs">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Nama Menu <span className="text-slate-400 font-normal">(Harus sama persis dengan nama menu di POS)</span>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Nama Menu <span className="text-slate-400 dark:text-slate-500 font-normal">(Harus sama persis dengan nama menu di POS)</span>
                   </label>
                   <input
                     type="text"
                     value={menuName}
                     onChange={(e) => setMenuName(e.target.value)}
                     required
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-base sm:text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                     placeholder="e.g. Kopi Susu Gula Aren, Matcha Latte"
                   />
                 </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-2.5">
-                    <label className="block text-xs font-bold text-slate-900">
+                    <label className="block text-xs font-bold text-slate-900 dark:text-slate-100">
                       Daftar Bahan & Takaran (Bill of Materials)
                     </label>
                     <motion.button
@@ -147,7 +157,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                       whileTap={{ scale: 0.96 }}
                       type="button"
                       onClick={handleAddIngredient}
-                      className="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer"
+                      className="px-3 py-1.5 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Tambah Bahan</span>
@@ -155,9 +165,9 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                   </div>
 
                   {recipeIngredients.length === 0 && (
-                    <div className="p-6 border border-dashed border-slate-200 rounded-2xl text-center bg-slate-50/50 space-y-1">
-                      <p className="font-semibold text-slate-600 text-xs">Belum ada bahan baku di resep ini.</p>
-                      <p className="text-[11px] text-slate-400">Klik tombol "+ Tambah Bahan" di atas untuk memasukkan komposisi takaran.</p>
+                    <div className="p-6 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-center bg-slate-50/50 dark:bg-slate-800/40 space-y-1">
+                      <p className="font-semibold text-slate-600 dark:text-slate-300 text-xs">Belum ada bahan baku di resep ini.</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">Klik tombol "+ Tambah Bahan" di atas untuk memasukkan komposisi takaran.</p>
                     </div>
                   )}
 
@@ -167,7 +177,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                       return (
                         <div
                           key={idx}
-                          className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2.5 hover:border-brand-200 transition-colors"
+                          className="p-3 bg-slate-50/80 dark:bg-slate-800/70 rounded-2xl border border-slate-200/80 dark:border-slate-700 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2.5 hover:border-brand-200 dark:hover:border-brand-500/40 transition-colors"
                         >
                           {/* Ingredient selector */}
                           <div className="flex-1">
@@ -182,7 +192,7 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                                   label: `${ing.name} (${ing.unit})`,
                                 })),
                               ]}
-                              buttonClassName="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-base sm:text-xs font-medium text-slate-900"
+                              buttonClassName="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl text-base sm:text-xs font-medium text-slate-900 dark:text-slate-100"
                             />
                           </div>
 
@@ -194,19 +204,19 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
                                 emptyWhenZero
                                 value={ri.quantity}
                                 onValueChange={(_, num) => handleIngredientChange(idx, "quantity", Math.max(0, num))}
-                                className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-base sm:text-xs font-mono font-bold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl text-base sm:text-xs font-mono font-bold text-slate-900 dark:text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 tabular-nums"
                                 placeholder="Takaran"
                               />
                             </div>
 
-                            <div className="px-2.5 py-2 bg-white rounded-xl border border-slate-200 text-slate-600 font-bold text-[11px] text-center min-w-[50px]">
+                            <div className="px-2.5 py-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] text-center min-w-[50px]">
                               {selectedIng ? selectedIng.unit : "-"}
                             </div>
 
                             <button
                               type="button"
                               onClick={() => handleRemoveIngredient(idx)}
-                              className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
+                              className="p-2 text-rose-500 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-500/15 rounded-xl transition-colors cursor-pointer shrink-0"
                               title="Hapus baris bahan"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -220,11 +230,11 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({
               </div>
 
               {/* Footer */}
-              <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80 shrink-0">
+              <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5 bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-200/60 rounded-2xl font-bold cursor-pointer transition-colors"
+                  className="px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-2xl font-bold cursor-pointer transition-colors"
                 >
                   Batal
                 </button>

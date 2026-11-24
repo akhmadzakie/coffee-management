@@ -20,7 +20,7 @@ import {
   ChevronUp,
   Keyboard,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useTheme, ThemeToggleButton } from "../context/ThemeContext";
 
 export const Login = () => {
@@ -36,6 +36,7 @@ export const Login = () => {
   const [useKeypad, setUseKeypad] = useState(true);
   const [isManualInput, setIsManualInput] = useState(false);
   const [showDemoDrawer, setShowDemoDrawer] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Sync server login error (including remaining PIN attempts / suspension alert)
@@ -72,6 +73,7 @@ export const Login = () => {
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSubmittingRef.current) return;
     const currentUsername = usernameRef.current;
     const currentPin = pinRef.current;
     if (!currentUsername.trim()) {
@@ -84,15 +86,16 @@ export const Login = () => {
     }
 
     isSubmittingRef.current = true;
+    setIsSubmitting(true);
     try {
       const success = await login(currentUsername, currentPin);
       if (!success) {
-        setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
         pinRef.current = "";
         setPin("");
       }
     } finally {
       isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -119,16 +122,18 @@ export const Login = () => {
       const targetExpectedLen = targetUser?.pin ? targetUser.pin.length : 6;
       if (nextPin.length === targetExpectedLen) {
         isSubmittingRef.current = true;
-        login(currentUsername, nextPin).then((success) => {
-          isSubmittingRef.current = false;
-          if (!success) {
-            setError(isIndo ? "PIN otorisasi tidak sesuai. Silakan coba lagi." : "Invalid credentials. Please try again.");
-            pinRef.current = "";
-            setPin("");
-          }
-        }).catch(() => {
-          isSubmittingRef.current = false;
-        });
+        setIsSubmitting(true);
+        login(currentUsername, nextPin)
+          .then((success) => {
+            if (!success) {
+              pinRef.current = "";
+              setPin("");
+            }
+          })
+          .finally(() => {
+            isSubmittingRef.current = false;
+            setIsSubmitting(false);
+          });
       }
     }
   };
@@ -205,10 +210,10 @@ export const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f8ff] text-slate-900 flex flex-col justify-between items-center relative overflow-hidden font-sans p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-brand-50/40 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between items-center relative overflow-hidden font-sans p-4 sm:p-6 lg:p-8 transition-colors">
       
       {/* Background Soft Brand Accent */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-brand-500/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-brand-500/10 dark:bg-brand-500/15 rounded-full blur-[100px] pointer-events-none" />
 
       {/* ─── TOP STATUS BAR ─── */}
       <header className="w-full max-w-5xl flex items-center justify-between z-10 py-2">
@@ -221,22 +226,22 @@ export const Login = () => {
               (e.currentTarget as HTMLImageElement).src = "/logo-icon-color.png";
             }}
           />
-          <div className="border-l border-slate-200 pl-3 hidden sm:block">
-            <span className="text-[11px] font-bold text-slate-800 tracking-wider block">
+          <div className="border-l border-slate-200 dark:border-slate-800 pl-3 hidden sm:block">
+            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100 tracking-wider block">
               Specialty Room • Coffee • Eatery
             </span>
-            <span className="text-[10px] text-brand-600 font-medium">POS & Management System</span>
+            <span className="text-[10px] text-brand-600 dark:text-brand-300 font-medium">POS &amp; Management System</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
           <ThemeToggleButton compact />
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-200 shadow-xs">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-200 shadow-xs tabular-nums">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold">
               {currentTime.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
             </span>
-            <span className="text-slate-400 text-[11px] hidden sm:inline">
+            <span className="text-slate-400 dark:text-slate-500 text-[11px] hidden sm:inline">
               • {currentTime.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}
             </span>
           </div>
@@ -246,44 +251,54 @@ export const Login = () => {
       {/* ─── MAIN LOGIN CONTAINER ─── */}
       <main className="w-full max-w-4xl z-10 my-auto py-6">
         {/* Force Logout Alert */}
-        {wasForceLoggedOut && (
-          <div className="mb-6 mx-auto max-w-md p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-3 text-xs shadow-sm animate-in fade-in">
-            <div className="flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-              <div>
-                <p className="font-bold text-rose-900">Sesi Telah Berakhir</p>
-                <p className="text-rose-700 mt-0.5 leading-relaxed">
-                  Akun Anda telah dinonaktifkan dari perangkat lain atau sesi kedaluwarsa. Silakan masuk kembali.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={dismissForceLogoutAlert}
-              className="text-rose-500 hover:text-rose-800 p-1 rounded-lg"
+        <AnimatePresence>
+          {wasForceLoggedOut && (
+            <motion.div
+              key="force-logout-banner"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="mb-6 mx-auto max-w-md p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200 flex items-start justify-between gap-3 text-xs shadow-sm"
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                <div>
+                  <p className="font-bold text-rose-900 dark:text-rose-100">Sesi Telah Berakhir</p>
+                  <p className="text-rose-700 dark:text-rose-200/90 mt-0.5 leading-relaxed">
+                    Akun Anda telah dinonaktifkan dari perangkat lain atau sesi kedaluwarsa. Silakan masuk kembali.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={dismissForceLogoutAlert}
+                className="text-rose-500 hover:text-rose-800 dark:hover:text-rose-200 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <motion.div
           initial={{ opacity: 0, y: 16, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ type: "spring", damping: 28, stiffness: 360 }}
-          className="bg-white border border-slate-200/90 rounded-3xl shadow-xl shadow-brand-950/5 overflow-hidden grid grid-cols-1 md:grid-cols-12"
+          className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl shadow-brand-950/5 dark:shadow-black/40 overflow-hidden grid grid-cols-1 md:grid-cols-12"
         >
           
           {/* ─── LEFT: OPERATOR SELECTOR ─── */}
-          <div className="md:col-span-5 p-6 sm:p-8 border-b md:border-b-0 md:border-r border-slate-100 bg-[#FAFBFF] flex flex-col justify-between">
+          <div className="md:col-span-5 p-6 sm:p-8 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/50 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Pilih Operator
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsManualInput(!isManualInput)}
-                  className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+                  className="text-xs font-semibold text-brand-600 dark:text-brand-300 hover:text-brand-700 dark:hover:text-brand-200 transition-colors cursor-pointer"
                 >
                   {isManualInput ? "Pilih dari Daftar" : "Ketik Manual"}
                 </button>
@@ -291,7 +306,7 @@ export const Login = () => {
 
               {isManualInput ? (
                 <div className="space-y-3 my-4">
-                  <label className="block text-xs text-slate-600 font-semibold">Username Operator</label>
+                  <label className="block text-xs text-slate-600 dark:text-slate-300 font-semibold">Username Operator</label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -302,12 +317,12 @@ export const Login = () => {
                         setError("");
                       }}
                       placeholder="Masukkan username..."
-                      className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/10"
                     />
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
                   {users && users.length > 0 ? (
                     users.map((u) => {
                       const isSelected = u.username === username;
@@ -319,14 +334,14 @@ export const Login = () => {
                           key={u.id}
                           type="button"
                           onClick={() => handleSelectQuickUser(u.username)}
-                          className={`w-full p-3 rounded-2xl flex items-center justify-between transition-all text-left border ${
+                          className={`w-full p-3 rounded-2xl flex items-center justify-between transition-all text-left border cursor-pointer ${
                             isSuspended
                               ? isSelected
-                                ? "bg-rose-50 border-rose-500 shadow-xs ring-1 ring-rose-500"
-                                : "bg-rose-50/40 border-rose-200 hover:border-rose-300"
+                                ? "bg-rose-50 dark:bg-rose-500/15 border-rose-500 shadow-xs ring-1 ring-rose-500"
+                                : "bg-rose-50/40 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 hover:border-rose-300"
                               : isSelected
-                              ? "bg-brand-50 border-brand-500 shadow-xs ring-1 ring-brand-500"
-                              : "bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50/70"
+                              ? "bg-brand-50 dark:bg-brand-500/15 border-brand-500 shadow-xs ring-1 ring-brand-500"
+                              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-800/60"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -336,13 +351,13 @@ export const Login = () => {
                                   ? "bg-rose-600 text-white font-black"
                                   : isSelected
                                   ? "bg-brand-600 text-white font-black"
-                                  : "bg-slate-100 text-slate-700 border border-slate-200"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
                               }`}
                             >
                               {isSuspended ? "🔒" : u.name ? u.name.slice(0, 2) : u.username.slice(0, 2)}
                             </div>
                             <div className="min-w-0">
-                              <p className={`text-xs font-bold truncate ${isSuspended ? "text-rose-900" : isSelected ? "text-brand-950" : "text-slate-800"}`}>
+                              <p className={`text-xs font-bold truncate ${isSuspended ? "text-rose-900 dark:text-rose-200" : isSelected ? "text-brand-950 dark:text-brand-100" : "text-slate-800 dark:text-slate-100"}`}>
                                 {u.name || u.username}
                               </p>
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -353,7 +368,7 @@ export const Login = () => {
                                   </span>
                                 )}
                                 {!isSuspended && failedCount > 0 && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
                                     Gagal PIN {failedCount}/3
                                   </span>
                                 )}
@@ -376,24 +391,24 @@ export const Login = () => {
 
             {/* Selected Operator Indicator */}
             {selectedUserObj && !isManualInput && (
-              <div className="mt-6 pt-4 border-t border-slate-200/80">
-                <div className="flex items-center justify-between text-xs text-slate-500">
+              <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                   <span>Operator Terpilih:</span>
-                  <span className="font-bold text-slate-800">{selectedUserObj.name}</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{selectedUserObj.name}</span>
                 </div>
               </div>
             )}
           </div>
 
           {/* ─── RIGHT: PIN TERMINAL & AUTH ─── */}
-          <div className="md:col-span-7 p-6 sm:p-8 flex flex-col justify-between items-center bg-white">
+          <div className="md:col-span-7 p-6 sm:p-8 flex flex-col justify-between items-center bg-white dark:bg-slate-900">
             <div className="w-full max-w-xs flex flex-col items-center">
               
               <div className="text-center mb-6">
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                   {selectedUserObj ? `Halo, ${selectedUserObj.name.split(" ")[0]}` : "Otorisasi Masuk"}
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {useKeypad
                     ? `Masukkan ${selectedUserObj?.pin?.length || 6} Digit PIN Keamanan`
                     : "Masukkan password / PIN akun Anda"}
@@ -412,13 +427,13 @@ export const Login = () => {
                           className={`w-4 h-4 rounded-full border transition-all duration-150 ${
                             isFilled
                               ? "bg-brand-600 border-brand-600 shadow-sm shadow-brand-600/40 scale-110"
-                              : "bg-slate-100 border-slate-300"
+                              : "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700"
                           }`}
                         />
                       );
                     })}
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1 font-mono">
+                  <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1 font-mono tabular-nums">
                     <Keyboard className="w-3 h-3 text-slate-400" />
                     <span>{pin.length} / {selectedUserObj?.pin?.length || 6} digit • Bisa ketik keyboard</span>
                   </div>
@@ -435,12 +450,12 @@ export const Login = () => {
                         setError("");
                       }}
                       placeholder="Masukkan PIN / Password"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-10 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-600 text-center tracking-wider"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-10 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-600 text-center tracking-wider"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPin(!showPin)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                     >
                       {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -449,32 +464,50 @@ export const Login = () => {
               )}
 
               {/* Suspended Account Banner */}
-              {selectedUserObj?.isSuspended && (
-                <div className="w-full mb-5 p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs shadow-xs animate-in fade-in">
-                  <div className="flex items-start gap-2.5">
-                    <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-extrabold text-rose-900 text-sm">
-                        🔒 Akun Ter-suspend Otomatis
-                      </p>
-                      <p className="text-rose-700 mt-1 leading-relaxed">
-                        {selectedUserObj.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}
-                      </p>
-                      <p className="text-rose-800 font-bold mt-2 bg-white/80 px-2.5 py-1.5 rounded-lg border border-rose-200">
-                        Hubungi Manager atau Super Admin untuk membuka suspend akun ini.
-                      </p>
+              <AnimatePresence>
+                {selectedUserObj?.isSuspended && (
+                  <motion.div
+                    key="suspended-banner"
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="w-full mb-5 p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/15 border-2 border-rose-300 dark:border-rose-500/40 text-rose-900 dark:text-rose-100 text-xs shadow-xs"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-extrabold text-rose-900 dark:text-rose-100 text-sm">
+                          🔒 Akun Ter-suspend Otomatis
+                        </p>
+                        <p className="text-rose-700 dark:text-rose-200/90 mt-1 leading-relaxed">
+                          {selectedUserObj.suspendedReason || "Salah memasukkan PIN sebanyak 3 kali berturut-turut."}
+                        </p>
+                        <p className="text-rose-800 dark:text-rose-200 font-bold mt-2 bg-white/80 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-500/30">
+                          Hubungi Manager atau Super Admin untuk membuka suspend akun ini.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Error Alert */}
-              {error && (
-                <div className="w-full mb-4 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center flex items-center justify-center gap-1.5 animate-in fade-in">
-                  <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    key="login-error-banner"
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="w-full mb-4 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-200 text-xs text-center flex items-center justify-center gap-1.5"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                    <span>{error}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Touch Numeric Keypad */}
               {useKeypad && (
@@ -483,8 +516,9 @@ export const Login = () => {
                     <button
                       key={num}
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => handleKeypadPress(num)}
-                      className="h-14 rounded-2xl bg-[#F8F9FA] hover:bg-slate-100 active:bg-brand-50 active:scale-95 border border-slate-200/90 text-lg font-bold text-slate-800 transition-all flex items-center justify-center select-none shadow-xs"
+                      className="h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-brand-50 active:scale-95 border border-slate-200/90 dark:border-slate-700 text-lg font-bold text-slate-800 dark:text-slate-100 transition-all flex items-center justify-center select-none shadow-xs cursor-pointer disabled:opacity-50"
                     >
                       {num}
                     </button>
@@ -492,8 +526,9 @@ export const Login = () => {
 
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={handleKeypadClear}
-                    className="h-14 rounded-2xl bg-slate-100/70 hover:bg-slate-200/70 active:scale-95 border border-slate-200 text-xs font-bold text-slate-600 transition-all flex items-center justify-center select-none"
+                    className="h-14 rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 hover:bg-slate-200/70 dark:hover:bg-slate-700 active:scale-95 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center select-none cursor-pointer disabled:opacity-50"
                     title="Hapus Semua"
                   >
                     C
@@ -501,16 +536,18 @@ export const Login = () => {
 
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => handleKeypadPress("0")}
-                    className="h-14 rounded-2xl bg-[#F8F9FA] hover:bg-slate-100 active:bg-brand-50 active:scale-95 border border-slate-200/90 text-lg font-bold text-slate-800 transition-all flex items-center justify-center select-none shadow-xs"
+                    className="h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-brand-50 active:scale-95 border border-slate-200/90 dark:border-slate-700 text-lg font-bold text-slate-800 dark:text-slate-100 transition-all flex items-center justify-center select-none shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     0
                   </button>
 
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={handleKeypadBackspace}
-                    className="h-14 rounded-2xl bg-slate-100/70 hover:bg-slate-200/70 active:scale-95 border border-slate-200 text-slate-600 hover:text-slate-900 transition-all flex items-center justify-center select-none"
+                    className="h-14 rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 hover:bg-slate-200/70 dark:hover:bg-slate-700 active:scale-95 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all flex items-center justify-center select-none cursor-pointer disabled:opacity-50"
                     title="Backspace"
                   >
                     <Delete className="w-5 h-5" />
@@ -522,10 +559,10 @@ export const Login = () => {
               <button
                 type="button"
                 onClick={() => handleLogin()}
-                disabled={!pin}
-                className="w-full py-3.5 px-5 rounded-2xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-brand-600 shadow-md shadow-brand-600/25"
+                disabled={!pin || isSubmitting}
+                className="w-full py-3.5 px-5 rounded-2xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-brand-600 shadow-md shadow-brand-600/25 cursor-pointer"
               >
-                <span>Masuk Sistem</span>
+                <span>{isSubmitting ? "Memproses..." : "Masuk Sistem"}</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
 
@@ -533,7 +570,7 @@ export const Login = () => {
               <button
                 type="button"
                 onClick={() => setUseKeypad(!useKeypad)}
-                className="mt-4 text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+                className="mt-4 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <KeyRound className="w-3.5 h-3.5" />
                 <span>{useKeypad ? "Gunakan Input Keyboard" : "Gunakan Touch Keypad"}</span>
@@ -550,67 +587,86 @@ export const Login = () => {
           <button
             type="button"
             onClick={() => setShowDemoDrawer(!showDemoDrawer)}
-            className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1 py-1 font-medium"
+            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex items-center gap-1 py-1 font-medium cursor-pointer"
           >
-            <span>Akun Pengujian Demo (Super Admin / Owner / Manager / Kasir)</span>
+            <span>Akun Pengujian Demo (Super Admin / Owner / Manager / Kasir / Leader)</span>
             {showDemoDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
 
-        {showDemoDrawer && (
-          <div className="mt-2 p-3 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600 animate-in fade-in">
-            <button
-              onClick={() => {
-                setUsername("admin");
-                pinRef.current = "123456";
-                setPin("123456");
-              }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-sky-50 hover:text-sky-800 border border-slate-200 text-xs transition-colors font-medium"
+        <AnimatePresence>
+          {showDemoDrawer && (
+            <motion.div
+              key="demo-drawer"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="mt-2 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-300"
             >
-              🛠️ Super Admin (IT): <span className="font-mono text-slate-800">admin / 123456</span>
-            </button>
-            <button
-              onClick={() => {
-                setUsername("owner");
-                pinRef.current = "123456";
-                setPin("123456");
-              }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-amber-50 hover:text-amber-800 border border-slate-200 text-xs transition-colors font-medium"
-            >
-              👑 Owner (Investor): <span className="font-mono text-slate-800">owner / 123456</span>
-            </button>
-            <button
-              onClick={() => {
-                setUsername("manager");
-                pinRef.current = "123456";
-                setPin("123456");
-              }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:text-indigo-800 border border-slate-200 text-xs transition-colors font-medium"
-            >
-              💼 Manager (Operasional): <span className="font-mono text-slate-800">manager / 123456</span>
-            </button>
-            <button
-              onClick={() => {
-                setUsername("kasir");
-                pinRef.current = "123456";
-                setPin("123456");
-              }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-emerald-50 hover:text-emerald-800 border border-slate-200 text-xs transition-colors font-medium"
-            >
-              💳 Kasir: <span className="font-mono text-slate-800">kasir / 123456</span>
-            </button>
-            <button
-              onClick={() => {
-                setUsername("barista");
-                pinRef.current = "123456";
-                setPin("123456");
-              }}
-              className="px-3 py-1 rounded-lg bg-slate-50 hover:bg-purple-50 hover:text-purple-800 border border-slate-200 text-xs transition-colors font-medium"
-            >
-              ☕ Leader QC: <span className="font-mono text-slate-800">barista / 123456</span>
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("admin");
+                  pinRef.current = "123456";
+                  setPin("123456");
+                  setError("");
+                }}
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-500/15 hover:text-sky-800 dark:hover:text-sky-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+              >
+                🛠️ Super Admin (IT): <span className="font-mono text-slate-800 dark:text-slate-200">admin / 123456</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("owner");
+                  pinRef.current = "123456";
+                  setPin("123456");
+                  setError("");
+                }}
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-500/15 hover:text-amber-800 dark:hover:text-amber-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+              >
+                👑 Owner (Investor): <span className="font-mono text-slate-800 dark:text-slate-200">owner / 123456</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("manager");
+                  pinRef.current = "123456";
+                  setPin("123456");
+                  setError("");
+                }}
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 hover:text-indigo-800 dark:hover:text-indigo-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+              >
+                💼 Manager (Operasional): <span className="font-mono text-slate-800 dark:text-slate-200">manager / 123456</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("kasir");
+                  pinRef.current = "123456";
+                  setPin("123456");
+                  setError("");
+                }}
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-500/15 hover:text-emerald-800 dark:hover:text-emerald-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+              >
+                💳 Kasir: <span className="font-mono text-slate-800 dark:text-slate-200">kasir / 123456</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("leader");
+                  pinRef.current = "123456";
+                  setPin("123456");
+                  setError("");
+                }}
+                className="px-3 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-500/15 hover:text-purple-800 dark:hover:text-purple-200 border border-slate-200 dark:border-slate-700 text-xs transition-colors font-medium cursor-pointer"
+              >
+                ☕ Leader Bar: <span className="font-mono text-slate-800 dark:text-slate-200">leader / 123456</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </footer>
 
     </div>

@@ -7,6 +7,8 @@
  * serta mencocokkan nama menu dengan katalog produk agar pemotongan stok/HPP akurat.
  */
 
+import { getLocalDateString } from "./dateUtils";
+
 export type CanonicalField =
   | "Tanggal"
   | "Nama Menu"
@@ -109,22 +111,49 @@ export const parseMoney = (value: unknown): number => {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Menghasilkan YYYY-MM-DD dari berbagai format tanggal; null bila tidak terbaca. */
+const SUMMARY_MENU_RE =
+  /^(total|grand total|sub ?total|jumlah|ringkasan|summary|total keseluruhan)$/i;
+
+/** Menghasilkan YYYY-MM-DD dari berbagai format tanggal termasuk Excel serial; null bila tidak terbaca. */
 export const parseDateToIso = (value: unknown): string | null => {
   if (value instanceof Date && !isNaN(value.getTime())) {
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+    return getLocalDateString(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value) && value >= 25000 && value <= 65000) {
+    const ms = Date.UTC(1899, 11, 30) + Math.floor(value) * 86400000;
+    return new Date(ms).toISOString().slice(0, 10);
   }
   const s = String(value ?? "").trim();
   if (!s) return null;
 
+  if (/^\d{5}(\.\d+)?$/.test(s)) {
+    const serial = Number(s);
+    if (serial >= 25000 && serial <= 65000) {
+      const ms = Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000;
+      return new Date(ms).toISOString().slice(0, 10);
+    }
+  }
+
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/); // 2026-10-18 / 2026/10/18
-  if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  if (m) {
+    const mo = +m[2];
+    const dy = +m[3];
+    if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+      return `${m[1]}-${pad(mo)}-${pad(dy)}`;
+    }
+  }
 
   m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/); // 18/10/2026 (format Indonesia: hari dulu)
-  if (m) return `${m[3]}-${pad(+m[2])}-${pad(+m[1])}`;
+  if (m) {
+    const dy = +m[1];
+    const mo = +m[2];
+    if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+      return `${m[3]}-${pad(mo)}-${pad(dy)}`;
+    }
+  }
 
   const d = new Date(s);
-  if (!isNaN(d.getTime())) return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  if (!isNaN(d.getTime())) return getLocalDateString(d);
   return null;
 };
 
@@ -138,7 +167,7 @@ export interface MappedSalesRow {
 export interface MapSalesResult {
   rows: MappedSalesRow[];
   mapping: HeaderMapping;
-  /** baris dilewati karena tanggal/nama menu tidak terbaca */
+  /** baris dilewati karena tanggal/nama menu tidak terbaca atau baris ringkasan */
   skippedRows: number;
   /** nama menu di file yang tidak ditemukan di katalog produk */
   unmatchedMenus: string[];
@@ -169,6 +198,11 @@ export const mapSalesRows = (
 
   rawRows.forEach((row) => {
     const rawMenuBase = String(col(row, "Nama Menu") ?? "").trim();
+    if (!rawMenuBase || SUMMARY_MENU_RE.test(norm(rawMenuBase))) {
+      skipped++;
+      return;
+    }
+
     const rawVariant = String(col(row, "Varian") ?? "").trim();
     const rawCombined =
       rawVariant &&
@@ -176,8 +210,49 @@ export const mapSalesRows = (
       !rawMenuBase.toLowerCase().includes(rawVariant.toLowerCase())
         ? `${rawMenuBase} - ${rawVariant}`
         : rawMenuBase;
-    const date = parseDateToIso(col(row, "Tanggal")) ?? parseDateToIso(new Date());
-    if (!rawMenuBase || !date) {
+
+    const rawDateVal = col(row, "Tanggal");
+    const hasDateCol = Boolean(mapping.mapped["Tanggal"]);
+    const hasRawDate =
+      rawDateVal !== undefined &&
+      rawDateVal !== null &&
+      String(rawDateVal).trim() !== "";
+    let date: string | null = null;
+    if (hasDateCol && hasRawDate) {
+      date = parseDateToIso(rawDateVal);
+      if (!date) {
+        skipped++;
+        return;
+      }
+    } else if (hasRawDate) {
+      date = parseDateToIso(rawDateVal) ?? getLocalDateString();
+    } else {
+      date = getLocalDateString();
+    }
+
+    const hasQtyCol = Boolean(mapping.mapped["Quantity"]);
+    const qtyRaw = col(row, "Quantity");
+    const hasQtyCell =
+      qtyRaw !== undefined && qtyRaw !== null && String(qtyRaw).trim() !== "";
+    let quantitySold = 1;
+    if (hasQtyCol && hasQtyCell) {
+      const parsedQty = Math.round(parseMoney(qtyRaw));
+      if (!(parsedQty > 0)) {
+        skipped++;
+        return;
+      }
+      quantitySold = parsedQty;
+    }
+
+    let totalPrice = Math.max(0, Math.round(parseMoney(col(row, "Total Penjualan"))));
+    if (totalPrice <= 0) {
+      const unitPrice = Math.max(0, parseMoney(col(row, "Harga Satuan")));
+      if (unitPrice > 0) {
+        totalPrice = Math.round(quantitySold * unitPrice);
+      }
+    }
+
+    if (!(hasQtyCol && hasQtyCell) && totalPrice <= 0) {
       skipped++;
       return;
     }
@@ -191,16 +266,6 @@ export const mapSalesRows = (
       menuName = hit;
     } else if (productNames.length > 0) {
       unmatched.add(rawCombined);
-    }
-
-    const qtyRaw = col(row, "Quantity");
-    const quantitySold = Math.max(1, Math.round(parseMoney(qtyRaw))) || 1;
-    let totalPrice = Math.max(0, Math.round(parseMoney(col(row, "Total Penjualan"))));
-    if (totalPrice <= 0) {
-      const unitPrice = Math.max(0, parseMoney(col(row, "Harga Satuan")));
-      if (unitPrice > 0) {
-        totalPrice = Math.round(quantitySold * unitPrice);
-      }
     }
 
     rows.push({ date, menuName, quantitySold, totalPrice });

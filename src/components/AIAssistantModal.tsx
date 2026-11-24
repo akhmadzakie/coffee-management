@@ -35,7 +35,11 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { formatCurrency } from "../utils/format";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
+import { authFetch } from "../utils/authHeaders";
+import { isNonOperationalCashTransaction } from "../utils/financeMetrics";
 import { calculateCashFlowHppSync, type CashFlowHppSyncResult } from "../utils/posDomainLogic";
 import {
   compressImageFile,
@@ -112,16 +116,26 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     users,
   } = useStore();
 
+  const canWriteTransactions = Boolean(onApplyTransactions || onOpenInCashFlowModal);
+
   const [activeTab, setActiveTab] = useState<
     "quick-input" | "receipt" | "consultant" | "insights"
-  >(initialTab);
+  >(
+    !canWriteTransactions && (initialTab === "quick-input" || initialTab === "receipt")
+      ? "insights"
+      : initialTab
+  );
 
   // Sync initialTab when modal opens
   useEffect(() => {
     if (isOpen) {
-      if (initialTab) setActiveTab(initialTab);
+      if (!canWriteTransactions && (initialTab === "quick-input" || initialTab === "receipt")) {
+        setActiveTab("insights");
+      } else if (initialTab) {
+        setActiveTab(initialTab);
+      }
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, canWriteTransactions]);
 
   // AI Connection Status
   const [aiStatus, setAiStatus] = useState<{
@@ -132,7 +146,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetch("/api/ai/status")
+      authFetch("/api/ai/status")
         .then((res) => res.json())
         .then((data) => setAiStatus(data))
         .catch(() =>
@@ -290,7 +304,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     setNaturalSummary(null);
 
     try {
-      const res = await fetch("/api/ai/parse-natural-entry", {
+      const res = await authFetch("/api/ai/parse-natural-entry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -308,7 +322,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         setDraftTransactions(mapRawAiTransactions(data.transactions));
       }
     } catch (err: any) {
-      alert("Kendala memproses input cerdas: " + (err.message || "Gagal"));
+      toast.error("Kendala memproses input cerdas: " + (err.message || "Gagal"));
     } finally {
       setIsParsingNatural(false);
     }
@@ -363,6 +377,12 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
   const [receiptText, setReceiptText] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
   const [isScanning, setIsScanning] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -456,7 +476,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         imageBase64 = await readPromise;
       }
 
-      const response = await fetch("/api/ai/parse-receipt", {
+      const response = await authFetch("/api/ai/parse-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -488,7 +508,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       id: "welcome",
       sender: "ai",
       text: `Halo ${currentUser?.name || "Rekan"}! Saya **Julia Coffee AI Copilot**.\n\nSaya siap membantu analisis HPP, optimasi alur barista saat rush hour, strategi promo jam sepi, maupun audit stok bahan baku toko. Apa yang ingin Anda diskusikan hari ini?`,
-      time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      time: new Date().toLocaleTimeString("id-ID", {
+        timeZone: DEFAULT_STORE_TIMEZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     },
   ]);
   const [inputQuestion, setInputQuestion] = useState(initialPrompt || "");
@@ -522,10 +546,6 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
   // Computed Live Store Metrics (shared across Konsultan & Executive Insights)
   const liveMetrics = useMemo(() => {
-    const isInternalTransfer = (c: any) =>
-      c.type === "TRANSFER" ||
-      String(c.referenceId || "").startsWith("TRANSFER:") ||
-      String(c.category || "").toLowerCase() === "transfer antar kas";
     const normCashType = (t: any): "CASH_IN" | "CASH_OUT" | "TRANSFER" => {
       if (t === "TRANSFER") return "TRANSFER";
       if (t === "OUT" || t === "EXPENSE" || t === "CASH_OUT") return "CASH_OUT";
@@ -542,13 +562,13 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
     cashTransactions.forEach((c) => {
       const amt = Number(c.amount || 0);
       const nt = normCashType(c.type);
-      const internal = isInternalTransfer(c);
+      const nonOperational = isNonOperationalCashTransaction(c);
       if (nt === "CASH_IN") {
         balanceMap.set(c.accountId, (balanceMap.get(c.accountId) || 0) + amt);
-        if (!internal) totalCashIn += amt;
+        if (!nonOperational) totalCashIn += amt;
       } else if (nt === "CASH_OUT") {
         balanceMap.set(c.accountId, (balanceMap.get(c.accountId) || 0) - amt);
-        if (!internal) {
+        if (!nonOperational) {
           totalExp += amt;
           const catName = (c.category || "Operasional").trim();
           categoryExpMap.set(catName, (categoryExpMap.get(catName) || 0) + amt);
@@ -753,7 +773,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
       id: `u-${Date.now()}`,
       sender: "user",
       text: textToSend.trim(),
-      time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      time: new Date().toLocaleTimeString("id-ID", {
+        timeZone: DEFAULT_STORE_TIMEZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -792,7 +816,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         text: m.text,
       }));
 
-      const res = await fetch("/api/ai/ask-advisor", {
+      const res = await authFetch("/api/ai/ask-advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -809,7 +833,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         id: `ai-${Date.now()}`,
         sender: "ai",
         text: data.reply || "Maaf, tidak dapat menghasilkan jawaban.",
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+        time: new Date().toLocaleTimeString("id-ID", {
+          timeZone: DEFAULT_STORE_TIMEZONE,
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         source: data.source,
       };
 
@@ -819,7 +847,11 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         id: `err-${Date.now()}`,
         sender: "ai",
         text: `Terjadi kendala: ${err.message || "Gagal memproses"}. Sistem tetap dapat berkonsultasi dalam mode offline.`,
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+        time: new Date().toLocaleTimeString("id-ID", {
+          timeZone: DEFAULT_STORE_TIMEZONE,
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -865,7 +897,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         hrSummary: liveMetrics.hrSummary,
       };
 
-      const res = await fetch("/api/ai/executive-insights", {
+      const res = await authFetch("/api/ai/executive-insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ metrics: payloadMetrics }),
@@ -876,7 +908,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
       setExecutiveBriefing(data.briefing || "Tidak ada ringkasan.");
     } catch (err: any) {
-      alert("Kendala briefing eksekutif: " + (err.message || "Gagal"));
+      toast.error("Kendala briefing eksekutif: " + (err.message || "Gagal"));
     } finally {
       setIsLoadingBriefing(false);
     }
@@ -1072,7 +1104,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       <span>
                         Potensi Duplikat!{" "}
                         {matchedRecentCash
-                          ? `Sudah ada di Kas (${new Date(matchedRecentCash.date).toLocaleDateString("id-ID")}: "${matchedRecentCash.description}")`
+                          ? `Sudah ada di Kas (${new Date(matchedRecentCash.date).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}: "${matchedRecentCash.description}")`
                           : `Sudah ada di PO ${matchedRecentPo!.poNumber}`}
                       </span>
                     </span>
@@ -1208,7 +1240,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                   type="number"
                   value={tx.amount}
                   onChange={(e) =>
-                    updateDraftInList(setter, idx, { amount: Number(e.target.value) })
+                    updateDraftInList(setter, idx, {
+                      amount: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                    })
                   }
                   className={`font-bold font-mono text-sm sm:text-base text-right w-28 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 focus:outline-none focus:border-brand-600 ${
                     tx.type === "CASH_OUT" ? "text-rose-600" : "text-emerald-600"
@@ -1461,31 +1495,35 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
         {/* ─── NAVIGATION TABS ─── */}
         <div className="flex border-b border-slate-200 bg-[#F8F9FA] px-2 sm:px-4 gap-1 overflow-x-auto no-scrollbar shrink-0">
-          <button
-            onClick={() => setActiveTab("quick-input")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
-              activeTab === "quick-input"
-                ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
-                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
-            }`}
-          >
-            <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
-            <span className="hidden sm:inline">Catat Cepat (Input Pintar)</span>
-            <span className="sm:hidden">Input Pintar</span>
-          </button>
+          {canWriteTransactions && (
+            <>
+              <button
+                onClick={() => setActiveTab("quick-input")}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+                  activeTab === "quick-input"
+                    ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
+                    : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
+                }`}
+              >
+                <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
+                <span className="hidden sm:inline">Catat Cepat (Input Pintar)</span>
+                <span className="sm:hidden">Input Pintar</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab("receipt")}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
-              activeTab === "receipt"
-                ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
-                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
-            }`}
-          >
-            <Receipt className="w-4 h-4 text-brand-600 shrink-0" />
-            <span className="hidden sm:inline">Pindai Nota / OCR</span>
-            <span className="sm:hidden">Scan Nota</span>
-          </button>
+              <button
+                onClick={() => setActiveTab("receipt")}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs font-bold border-b-2 transition-all shrink-0 cursor-pointer ${
+                  activeTab === "receipt"
+                    ? "border-brand-600 text-brand-900 bg-white shadow-2xs"
+                    : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
+                }`}
+              >
+                <Receipt className="w-4 h-4 text-brand-600 shrink-0" />
+                <span className="hidden sm:inline">Pindai Nota / OCR</span>
+                <span className="sm:hidden">Scan Nota</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => setActiveTab("consultant")}
@@ -1606,7 +1644,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
             )}
 
             {draftTransactions.length > 0 && (
-              <div className="space-y-3 animate-in fade-in duration-200">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -1686,7 +1724,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       <Upload className="w-5 h-5" />
                     </div>
                     <div>
-                      <span className="text-xs font-bold text-stone-800 block">
+                      <span className="text-xs font-bold text-slate-800 block">
                         Klik untuk Pilih Berkas atau Tarik ke Sini
                       </span>
                       <span className="text-[11px] text-slate-500 mt-0.5 block">
@@ -1872,7 +1910,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
 
               {/* Draft Results */}
               {scanResult && scanDrafts.length > 0 && (
-                <div className="p-4 rounded-2xl bg-[#F8F9FA] border border-slate-200 shadow-xs space-y-3 animate-in fade-in">
+                <div className="p-4 rounded-2xl bg-[#F8F9FA] border border-slate-200 shadow-xs space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -2065,22 +2103,24 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                       Peringatan Stok Menipis ({liveMetrics.lowStockItems.length} Bahan)
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const allDrafts = liveMetrics.lowStockItems.map((ing) =>
-                        buildRestockDraftFromIngredient(ing)
-                      );
-                      setDraftTransactions(allDrafts);
-                      setNaturalSummary(
-                        `Berhasil menyusun draf belanja restock otomatis untuk ${allDrafts.length} bahan baku kritis sesuai satuan beli.`
-                      );
-                      setActiveTab("quick-input");
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-2xs self-start sm:self-auto"
-                  >
-                    + Susun Draf Belanja Semua Bahan Kritis ({liveMetrics.lowStockItems.length})
-                  </button>
+                  {canWriteTransactions && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allDrafts = liveMetrics.lowStockItems.map((ing) =>
+                          buildRestockDraftFromIngredient(ing)
+                        );
+                        setDraftTransactions(allDrafts);
+                        setNaturalSummary(
+                          `Berhasil menyusun draf belanja restock otomatis untuk ${allDrafts.length} bahan baku kritis sesuai satuan beli.`
+                        );
+                        setActiveTab("quick-input");
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-2xs self-start sm:self-auto"
+                    >
+                      + Susun Draf Belanja Semua Bahan Kritis ({liveMetrics.lowStockItems.length})
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2095,22 +2135,24 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                           Sisa: {item.currentStock} {item.unit} (Min: {item.minStock} {item.unit})
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const draft = buildRestockDraftFromIngredient(item);
-                          const promptStr = `Beli ${item.name} ${draft.quantity} ${draft.unit} Rp ${draft.amount.toLocaleString("id-ID")} kas laci`;
-                          setDraftTransactions([draft]);
-                          setNaturalText(promptStr);
-                          setNaturalSummary(
-                            `Draf belanja ${item.name} (${draft.quantity} ${draft.unit}) siap ditinjau.`
-                          );
-                          setActiveTab("quick-input");
-                        }}
-                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer shrink-0"
-                      >
-                        + Catat Belanja
-                      </button>
+                      {canWriteTransactions && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const draft = buildRestockDraftFromIngredient(item);
+                            const promptStr = `Beli ${item.name} ${draft.quantity} ${draft.unit} Rp ${draft.amount.toLocaleString("id-ID")} kas laci`;
+                            setDraftTransactions([draft]);
+                            setNaturalText(promptStr);
+                            setNaturalSummary(
+                              `Draf belanja ${item.name} (${draft.quantity} ${draft.unit}) siap ditinjau.`
+                            );
+                            setActiveTab("quick-input");
+                          }}
+                          className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                        >
+                          + Catat Belanja
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2151,7 +2193,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
               </div>
 
               {executiveBriefing ? (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-[13px] leading-relaxed text-slate-800 whitespace-pre-wrap animate-in fade-in">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-[13px] leading-relaxed text-slate-800 whitespace-pre-wrap">
                   {executiveBriefing}
                 </div>
               ) : (

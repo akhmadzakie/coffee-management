@@ -1,13 +1,22 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
+import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { formatCurrency } from "../utils/format";
 import { computePeriodFinancialSummary } from "../utils/financeMetrics";
+import { DEFAULT_STORE_TIMEZONE, getLocalPeriodString } from "../utils/dateUtils";
 import {
   calculateWorkDurationHours,
   classifyDailyAttendanceStatus,
+  getWitaTimeMinutes,
   resolveCanonicalEmployeeId,
 } from "../utils/attendanceRecap";
+import {
+  computePayrollCategoryBreakdown,
+  validatePayrollMutation,
+} from "../utils/syncSanitizers";
 import { PayrollRecord, LeaderAllowanceRule, DEFAULT_LEADER_ALLOWANCE_RULES } from "../types";
 import {
   Calculator,
@@ -76,8 +85,9 @@ export function Payroll() {
     products,
   } = (useStore() as any);
 
+  const confirmModal = useConfirm();
   const [period, setPeriod] = useState(
-    new Date().toISOString().substring(0, 7) // YYYY-MM
+    () => getLocalPeriodString()
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"list" | "generate">("list");
@@ -86,6 +96,7 @@ export function Payroll() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [payrollToPay, setPayrollToPay] = useState<PayrollRecord | null>(null);
   const [bulkPayModalOpen, setBulkPayModalOpen] = useState(false);
+  const [paymentAccountId, setPaymentAccountId] = useState<string>("");
   const [paymentSplitMode, setPaymentSplitMode] = useState<"SPLIT_CATEGORY" | "SINGLE_COMBINED">("SPLIT_CATEGORY");
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -194,7 +205,11 @@ export function Payroll() {
         const alphaDays = dailyLogs.filter(
           (a: any) => classifyDailyAttendanceStatus(a) === "ALPHA"
         ).length;
-        const kpi = kpiRecords.find((k: any) => k.employeeId === emp.id && k.period === period);
+        const kpi = kpiRecords.find(
+          (k: any) =>
+            k.employeeId === emp.id &&
+            (k.period || `${k.year}-${String(k.month || 1).padStart(2, "0")}`) === period
+        );
 
         const rawBasicSalary = contract?.basicSalary || contract?.baseSalary || 0;
         const dailyWage = Math.round(rawBasicSalary / 26);
@@ -204,12 +219,24 @@ export function Payroll() {
         const dailyBonusRate = contract?.dailyBonusRate || 0;
         const sopBonusRate = contract?.sopBonusRate || 0;
         
-        const isManagerOrFinance = emp.position?.toUpperCase() === "MANAGER" || emp.position?.toUpperCase() === "FINANCE" || emp.role?.toUpperCase() === "MANAGER" || emp.role?.toUpperCase() === "FINANCE" || emp.department?.toUpperCase() === "FINANCE" || emp.department?.toUpperCase() === "MANAGEMENT";
+        const posUpper = String(emp.position || "").toUpperCase();
+        const roleUpper = String(emp.role || "").toUpperCase();
+        const deptUpper = String(emp.department || "").toUpperCase();
+        const isManagerOrFinance =
+          posUpper.includes("MANAGER") ||
+          posUpper.includes("MANAJER") ||
+          posUpper.includes("FINANCE") ||
+          posUpper.includes("KEUANGAN") ||
+          roleUpper === "MANAGER" ||
+          roleUpper === "FINANCE" ||
+          deptUpper.includes("FINANCE") ||
+          deptUpper.includes("KEUANGAN") ||
+          deptUpper.includes("MANAGEMENT");
         
-        const totalBasicSalary = isManagerOrFinance ? rawBasicSalary : (presentDays * dailyWage);
-        const totalMealAllowance = isManagerOrFinance ? (26 * mealAllowanceRate) : (presentDays * mealAllowanceRate);
-        const totalTransportAllowance = isManagerOrFinance ? (26 * transportAllowanceRate) : (presentDays * transportAllowanceRate);
-        const totalDailyBonus = isManagerOrFinance ? (26 * dailyBonusRate) : (presentDays * dailyBonusRate);
+        const totalBasicSalary = Math.round(isManagerOrFinance ? rawBasicSalary : (presentDays * dailyWage));
+        const totalMealAllowance = Math.round(isManagerOrFinance ? (26 * mealAllowanceRate) : (presentDays * mealAllowanceRate));
+        const totalTransportAllowance = Math.round(isManagerOrFinance ? (26 * transportAllowanceRate) : (presentDays * transportAllowanceRate));
+        const totalDailyBonus = Math.round(isManagerOrFinance ? (26 * dailyBonusRate) : (presentDays * dailyBonusRate));
         
         // Otomatisasi Perhitungan Bonus KPI Berdasarkan Jobdesk & Disiplin
         const userObj = (users || []).find((u: any) => u.id === emp.id || u.username === emp.username);
@@ -240,8 +267,7 @@ export function Payroll() {
             totalLateHours += parseFloat(match[1]) / 60;
           } else if (l.clockInTime) {
             try {
-              const clockIn = new Date(l.clockInTime);
-              const dec = clockIn.getHours() + clockIn.getMinutes() / 60;
+              const dec = getWitaTimeMinutes(new Date(l.clockInTime), DEFAULT_STORE_TIMEZONE) / 60;
               let targetStart = 7;
               if (dec > 13) targetStart = 15;
               else if (dec > 9) targetStart = 11;
@@ -331,8 +357,8 @@ export function Payroll() {
         const overtimePay = Math.round(overtimeHours * overtimeRate);
         const otherDeductions = 0;
         
-        const grossPay = totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay;
-        const netPay = grossPay - alphaDeduction - lateDeduction - otherDeductions;
+        const grossPay = Math.round(totalBasicSalary + positionAllowance + totalMealAllowance + totalTransportAllowance + totalDailyBonus + sopBonus + kpiBonus + targetBonus + overtimePay);
+        const netPay = Math.max(0, Math.round(grossPay - alphaDeduction - lateDeduction - otherDeductions));
 
         const completionPercentage = autoScore;
 
@@ -464,9 +490,22 @@ export function Payroll() {
     };
   };
 
+  const getDefaultPaymentAccountId = () => {
+    const defAcc =
+      cashAccounts.find((a: any) => a.type === "BANK" && a.isDefault) ||
+      cashAccounts.find((a: any) => a.type === "BANK") ||
+      cashAccounts.find((a: any) => a.isDefault) ||
+      cashAccounts[0];
+    return defAcc ? defAcc.id : "";
+  };
+
   const handleGenerateAll = () => {
+    if (!canGenerate) {
+      toast.warning("Anda tidak memiliki hak akses untuk membuat draf penggajian.");
+      return;
+    }
     if (closedPeriods.some((p: any) => p.period === period)) {
-      alert("Periode ini telah ditutup. Tidak dapat membuat slip gaji.");
+      toast.error("Periode ini telah ditutup. Tidak dapat membuat slip gaji.");
       return;
     }
 
@@ -490,182 +529,139 @@ export function Payroll() {
       });
 
     if (newRecords.length > 0) {
-      if (confirm(`Generate ${newRecords.length} slip gaji (Draft) untuk periode ${period}?`)) {
-        bulkAddPayrollRecords(newRecords);
-        setActiveTab("list");
-      }
+      confirmModal.open({
+        title: `Generate ${newRecords.length} Slip Gaji?`,
+        message: `Membuat ${newRecords.length} slip gaji baru berstatus DRAFT untuk periode ${period}.`,
+        confirmLabel: "Ya, Generate Draft",
+        variant: "info",
+        onConfirm: () => {
+          bulkAddPayrollRecords(newRecords);
+          setActiveTab("list");
+          toast.success(`${newRecords.length} draf slip gaji berhasil digenerate.`);
+        },
+      });
     } else {
-      alert("Semua slip gaji untuk periode ini sudah tergenerate.");
+      toast.info("Semua slip gaji untuk periode ini sudah tergenerate.");
       setActiveTab("list");
     }
   };
 
   const handleUpdateStatus = (record: PayrollRecord, newStatus: "DRAFT" | "APPROVED" | "PAID") => {
+    if (isOwner) return;
     if (closedPeriods.some((p: any) => p.period === record.period)) {
-      alert("Periode ini telah ditutup.");
+      toast.error("Periode ini telah ditutup.");
       return;
     }
 
     if (newStatus === "PAID") {
+      if (!canPay) {
+        toast.warning("Hanya Finance / Super Admin yang dapat mencairkan slip gaji.");
+        return;
+      }
       if (record.status !== "APPROVED") {
-        alert("Slip gaji harus berstatus FINAL (Disetujui oleh Manager) terlebih dahulu sebelum dapat dicairkan oleh Keuangan.");
+        toast.warning("Slip gaji harus berstatus FINAL (Disetujui oleh Manager) terlebih dahulu sebelum dapat dicairkan oleh Keuangan.");
         return;
       }
       setPayrollToPay(record);
+      setPaymentAccountId(getDefaultPaymentAccountId());
       setPaymentModalOpen(true);
     } else if (newStatus === "APPROVED") {
+      if (!canApprove) {
+        toast.warning("Hanya Manager / Super Admin yang dapat mengesahkan slip gaji.");
+        return;
+      }
       updatePayrollRecord({
         ...record,
         status: "APPROVED",
         approvedBy: currentUser?.name || "Manager",
         approvedAt: new Date().toISOString(),
       });
+      toast.success("Slip gaji disahkan (FINAL).");
     } else if (newStatus === "DRAFT") {
+      if (!canApprove) {
+        toast.warning("Hanya Manager / Super Admin yang dapat membatalkan pengesahan.");
+        return;
+      }
       if (record.status === "PAID") {
-        alert("Slip gaji yang sudah DIBAYAR tidak dapat dikembalikan ke status Draft!");
+        toast.error("Slip gaji yang sudah DIBAYAR tidak dapat dikembalikan ke status Draft!");
         return;
       }
       const empName = employees.find((e: any) => e.id === record.employeeId)?.name || "Karyawan";
-      if (confirm(`Kembalikan slip gaji ${empName} ke status Draft untuk membuka pengeditan ulang?`)) {
-        updatePayrollRecord({
-          ...record,
-          status: "DRAFT",
-          approvedBy: null,
-          approvedAt: null,
-        });
-      }
+      confirmModal.open({
+        title: "Kembalikan Slip ke Status Draft?",
+        message: `Kembalikan slip gaji ${empName} ke status DRAFT agar angka komponen dapat diedit kembali?`,
+        confirmLabel: "Ya, Kembalikan ke Draft",
+        variant: "warning",
+        onConfirm: () => {
+          updatePayrollRecord({
+            ...record,
+            status: "DRAFT",
+            approvedBy: null,
+            approvedAt: null,
+          });
+          toast.info(`Slip gaji ${empName} dikembalikan ke Draft.`);
+        },
+      });
     }
   };
 
   const handleApproveAllDrafts = () => {
-    const drafts = allPeriodRecords.filter((r: PayrollRecord) => r.status === "DRAFT");
-    if (drafts.length === 0) {
-      alert("Tidak ada slip gaji berstatus DRAFT pada periode ini.");
+    if (!canApprove) return;
+    if (closedPeriods.some((p: any) => p.period === period)) {
+      toast.error("Periode ini telah ditutup.");
       return;
     }
-    if (confirm(`Sahkan dan finalkan ${drafts.length} slip gaji periode ${period}? Data yang disahkan akan terkunci dari pengubahan angka dan siap dicairkan oleh Keuangan.`)) {
-      drafts.forEach((r: PayrollRecord) => {
-        updatePayrollRecord({
-          ...r,
-          status: "APPROVED",
-          approvedBy: currentUser?.name || "Manager",
-          approvedAt: new Date().toISOString(),
-        });
-      });
+    const drafts = allPeriodRecords.filter((r: PayrollRecord) => r.status === "DRAFT");
+    if (drafts.length === 0) {
+      toast.info("Tidak ada slip gaji berstatus DRAFT pada periode ini.");
+      return;
     }
+    confirmModal.open({
+      title: `Sahkan ${drafts.length} Slip Gaji Draft?`,
+      message: `Sahkan dan finalkan ${drafts.length} slip gaji periode ${period}? Data yang disahkan akan terkunci dari pengubahan angka dan siap dicairkan oleh Keuangan.`,
+      confirmLabel: "Ya, Sahkan Semua",
+      variant: "info",
+      onConfirm: () => {
+        const nowIso = new Date().toISOString();
+        drafts.forEach((r: PayrollRecord) => {
+          updatePayrollRecord({
+            ...r,
+            status: "APPROVED",
+            approvedBy: currentUser?.name || "Manager",
+            approvedAt: nowIso,
+          });
+        });
+        toast.success(`${drafts.length} slip gaji berhasil disahkan.`);
+      },
+    });
   };
 
   // Breakdown komponen slip gaji ke Sub-Kategori HRD & Personalia
   const getPayrollCategoryBreakdown = (record: PayrollRecord) => {
-    const basicGross = record.basicSalary || 0;
-    const totalDeductions =
-      (record.alphaDeduction || 0) +
-      (record.lateDeduction || 0) +
-      (record.otherDeductions || 0);
-
-    const rawBonusAndAllowance =
-      (record.mealAllowance || 0) +
-      (record.transportAllowance || 0) +
-      (record.positionAllowance || 0) +
-      (record.kpiBonus || 0) +
-      (record.targetBonus || 0) +
-      (record.overtimePay || 0);
-
-    // Potongan disiplin memotong Gaji Pokok terlebih dahulu, sisanya memotong tunjangan agar total pas = netPay
-    const deductionFromBasic = Math.min(basicGross, totalDeductions);
-    const remainingDeduction = Math.max(0, totalDeductions - deductionFromBasic);
-
-    const netBasicPortion = Math.max(0, basicGross - deductionFromBasic);
-    const netBonusAllowancePortion = Math.max(0, rawBonusAndAllowance - remainingDeduction);
-
-    // Rincian item untuk Sub-Kategori "Bonus, Kasbon & Tunjangan"
-    const bonusItems: { name: string; qty: number; unit: string; unitPrice: number; total: number }[] = [];
-    if ((record.mealAllowance || 0) > 0) {
-      bonusItems.push({
-        name: "Uang Makan Kehadiran",
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.mealAllowance,
-        total: record.mealAllowance,
-      });
-    }
-    if ((record.transportAllowance || 0) > 0) {
-      bonusItems.push({
-        name: "Tunjangan Transport",
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.transportAllowance || 0,
-        total: record.transportAllowance || 0,
-      });
-    }
-    if ((record.positionAllowance || 0) > 0) {
-      bonusItems.push({
-        name: "Tunjangan Jabatan Leader",
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.positionAllowance,
-        total: record.positionAllowance,
-      });
-    }
-    if ((record.kpiBonus || 0) > 0) {
-      bonusItems.push({
-        name: "Bonus KPI & Capaian Divisi",
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.kpiBonus,
-        total: record.kpiBonus,
-      });
-    }
-    if ((record.targetBonus || 0) > 0) {
-      bonusItems.push({
-        name: "Bonus Target Omzet Toko",
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.targetBonus || 0,
-        total: record.targetBonus || 0,
-      });
-    }
-    if ((record.overtimePay || 0) > 0) {
-      bonusItems.push({
-        name: `Upah Lembur Shift${record.overtimeHours ? ` (${record.overtimeHours} Jam)` : ""}`,
-        qty: 1,
-        unit: "periode",
-        unitPrice: record.overtimePay || 0,
-        total: record.overtimePay || 0,
-      });
-    }
-
-    const salaryItems: { name: string; qty: number; unit: string; unitPrice: number; total: number }[] = [];
-    if (netBasicPortion > 0) {
-      salaryItems.push({
-        name:
-          deductionFromBasic > 0
-            ? `Gaji Pokok Kehadiran (${formatCurrency(basicGross)} - Potongan ${formatCurrency(deductionFromBasic)})`
-            : "Gaji Pokok Kehadiran",
-        qty: 1,
-        unit: "periode",
-        unitPrice: netBasicPortion,
-        total: netBasicPortion,
-      });
-    }
-
-    const combinedItems = [...salaryItems, ...bonusItems];
-
-    return {
-      netBasicPortion,
-      netBonusAllowancePortion,
-      totalDeductions,
-      salaryItems,
-      bonusItems,
-      combinedItems,
-    };
+    return computePayrollCategoryBreakdown(record);
   };
 
   const disburseSinglePayrollRecord = (
     record: PayrollRecord,
     accountId: string,
-    splitMode: "SPLIT_CATEGORY" | "SINGLE_COMBINED"
-  ) => {
+    splitMode: "SPLIT_CATEGORY" | "SINGLE_COMBINED",
+    silent: boolean = false
+  ): boolean => {
+    if (!canPay || isOwner) return false;
+    const payCheck = validatePayrollMutation({
+      action: "PAY",
+      recordPeriod: record.period,
+      existingStatus: record.status,
+      closedPeriods: closedPeriods || [],
+      paymentDatePeriod: getLocalPeriodString(),
+      existingCashRefIds: (cashTransactions || []).map((t: any) => String(t.referenceId || "")),
+      recordId: record.id,
+    });
+    if ("error" in payCheck) {
+      if (!silent) toast.error(payCheck.error);
+      return false;
+    }
+
     const empName =
       employees.find((e: any) => e.id === record.employeeId)?.name ||
       users.find((u: any) => u.id === record.employeeId)?.name ||
@@ -717,7 +713,7 @@ export function Payroll() {
         quantity: breakdown.bonusItems.length || 1,
         unitPrice: breakdown.netBonusAllowancePortion,
       });
-    } else {
+    } else if (record.netPay > 0) {
       // Gabung 1 Transaksi Slip Gaji Utuh (atau jika hanya salah satu komponen yang > 0)
       const isOnlyBonus = breakdown.netBasicPortion === 0 && breakdown.netBonusAllowancePortion > 0;
       const targetCat = isOnlyBonus ? bonusCat : salaryCat;
@@ -742,11 +738,15 @@ export function Payroll() {
       paidDate: nowIso,
       paidVia: accountId,
     });
+    if (!silent) {
+      toast.success(`Gaji ${empName} (${formatCurrency(record.netPay)}) berhasil dicairkan ke Buku Kas.`);
+    }
+    return true;
   };
 
   const handleQuickExportXlsx = () => {
     if (currentPeriodRecords.length === 0) {
-      alert(`Tidak ada data penggajian untuk periode ${period} yang dapat diekspor.`);
+      toast.warning(`Tidak ada data penggajian untuk periode ${period} yang dapat diekspor.`);
       return;
     }
     exportPayrollToXlsx({
@@ -755,6 +755,7 @@ export function Payroll() {
       settings,
       periodLabel: `Bulan_${period}`,
     });
+    toast.success(`Laporan payroll periode ${period} berhasil diekspor ke Excel.`);
   };
 
   const handleSelectManualEmployee = (empId: string) => {
@@ -772,38 +773,41 @@ export function Payroll() {
     }));
   };
 
-  const handleSaveManualPayroll = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualForm.employeeId) {
-      alert("Silakan pilih karyawan terlebih dahulu.");
-      return;
-    }
+  const resetManualForm = () => {
+    setManualForm({
+      employeeId: "",
+      basicSalary: 0,
+      mealAllowance: 0,
+      positionAllowance: 0,
+      transportAllowance: 0,
+      kpiBonus: 0,
+      targetBonus: 0,
+      overtimePay: 0,
+      alphaDeduction: 0,
+      otherDeductions: 0,
+      notes: "",
+    });
+  };
 
-    const existing = (payrollRecords || []).find(
-      (r: any) => r.employeeId === manualForm.employeeId && r.period === period
-    );
-    if (existing) {
-      if (
-        !confirm(
-          `Karyawan ini sudah memiliki slip gaji pada periode ${period}. Apakah Anda ingin memperbarui (menimpa) slip gaji tersebut?`
-        )
-      ) {
-        return;
-      }
-    }
-
-    const bSal = Number(manualForm.basicSalary) || 0;
-    const mAll = Number(manualForm.mealAllowance) || 0;
-    const pAll = Number(manualForm.positionAllowance) || 0;
-    const tAll = Number(manualForm.transportAllowance) || 0;
-    const kBon = Number(manualForm.kpiBonus) || 0;
-    const tBon = Number(manualForm.targetBonus) || 0;
-    const oPay = Number(manualForm.overtimePay) || 0;
-    const aDed = Number(manualForm.alphaDeduction) || 0;
-    const oDed = Number(manualForm.otherDeductions) || 0;
+  const executeSaveManualPayroll = (existing?: PayrollRecord) => {
+    const bSal = Math.round(Math.max(0, Number(manualForm.basicSalary) || 0));
+    const mAll = Math.round(Math.max(0, Number(manualForm.mealAllowance) || 0));
+    const pAll = Math.round(Math.max(0, Number(manualForm.positionAllowance) || 0));
+    const tAll = Math.round(Math.max(0, Number(manualForm.transportAllowance) || 0));
+    const kBon = Math.round(Math.max(0, Number(manualForm.kpiBonus) || 0));
+    const tBon = Math.round(Math.max(0, Number(manualForm.targetBonus) || 0));
+    const oPay = Math.round(Math.max(0, Number(manualForm.overtimePay) || 0));
+    const aDed = Math.round(Math.max(0, Number(manualForm.alphaDeduction) || 0));
+    const oDed = Math.round(Math.max(0, Number(manualForm.otherDeductions) || 0));
 
     const gross = bSal + mAll + pAll + tAll + kBon + tBon + oPay;
     const net = Math.max(0, gross - aDed - oDed);
+    const cleanNote = manualForm.notes.trim();
+    const formattedNote = cleanNote
+      ? cleanNote.startsWith("[Manual]")
+        ? cleanNote
+        : `[Manual] ${cleanNote}`
+      : "[Manual Entry]";
 
     const recordToSave: PayrollRecord = {
       id: existing ? existing.id : `pay-manual-${Date.now()}-${manualForm.employeeId}`,
@@ -823,31 +827,54 @@ export function Payroll() {
       status: existing ? existing.status : ("DRAFT" as const),
       paidDate: existing ? existing.paidDate : null,
       paidVia: existing ? existing.paidVia : null,
-      notes: manualForm.notes ? `[Manual] ${manualForm.notes}` : "[Manual Entry]",
+      notes: formattedNote,
       createdBy: currentUser?.name || "Admin",
-      createdAt: new Date().toISOString(),
+      createdAt: existing ? existing.createdAt : new Date().toISOString(),
     };
 
     if (existing) {
       updatePayrollRecord(recordToSave);
+      toast.success("Slip gaji manual berhasil diperbarui.");
     } else {
       addPayrollRecord(recordToSave);
+      toast.success("Slip gaji manual berhasil ditambahkan.");
     }
 
     setManualModalOpen(false);
-    setManualForm({
-      employeeId: "",
-      basicSalary: 0,
-      mealAllowance: 0,
-      positionAllowance: 0,
-      transportAllowance: 0,
-      kpiBonus: 0,
-      targetBonus: 0,
-      overtimePay: 0,
-      alphaDeduction: 0,
-      otherDeductions: 0,
-      notes: "",
-    });
+    resetManualForm();
+  };
+
+  const handleSaveManualPayroll = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEdit || isOwner) return;
+    if (closedPeriods.some((p: any) => p.period === period)) {
+      toast.error(`Periode ${period} telah ditutup. Tidak dapat membuat atau mengubah slip gaji.`);
+      return;
+    }
+    if (!manualForm.employeeId) {
+      toast.warning("Silakan pilih karyawan terlebih dahulu.");
+      return;
+    }
+
+    const existing = (payrollRecords || []).find(
+      (r: any) => r.employeeId === manualForm.employeeId && r.period === period
+    );
+    if (existing) {
+      if (existing.status !== "DRAFT") {
+        toast.error(`Slip gaji karyawan ini pada periode ${period} sudah berstatus ${existing.status} dan tidak bisa ditimpa.`);
+        return;
+      }
+      confirmModal.open({
+        title: "Timpa Slip Gaji Draft?",
+        message: `Karyawan ini sudah memiliki slip gaji DRAFT pada periode ${period}. Timpa angka dengan entri manual ini?`,
+        confirmLabel: "Ya, Timpa Slip",
+        variant: "warning",
+        onConfirm: () => executeSaveManualPayroll(existing),
+      });
+      return;
+    }
+
+    executeSaveManualPayroll(undefined);
   };
 
   // KPI Summary Calculations (based on whole period)
@@ -999,7 +1026,7 @@ export function Payroll() {
       </div>
 
       {/* ─── FORMULA PENGGAJIAN COFFEE SHOP (TRANSPARAN & SEDERHANA) ─── */}
-      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-white/10 relative overflow-hidden">
+      <div className="bg-brand-gradient text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-white/10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-brand-600/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
         <div className="relative z-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
@@ -1184,8 +1211,9 @@ export function Payroll() {
             </span>
           </button>
 
-          {!isReadOnly && isHRD && (
+          {canGenerate && (
             <button
+              type="button"
               onClick={() => setActiveTab("generate")}
               className={`relative z-10 flex items-center justify-center gap-2 py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer ${
                 activeTab === "generate" ? "text-brand-900" : "text-slate-500 hover:text-slate-800"
@@ -1297,8 +1325,8 @@ export function Payroll() {
                 onClick={() => setStatusFilter("ALL")}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   statusFilter === "ALL"
-                    ? "bg-slate-900 text-white shadow-2xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-brand-600 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 }`}
               >
                 Semua ({allPeriodRecords.length})
@@ -1358,7 +1386,10 @@ export function Payroll() {
               {canPay && approvedCount > 0 && !closedPeriods.some((p: any) => p.period === period) && (
                 <button
                   type="button"
-                  onClick={() => setBulkPayModalOpen(true)}
+                  onClick={() => {
+                    setPaymentAccountId(getDefaultPaymentAccountId());
+                    setBulkPayModalOpen(true);
+                  }}
                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
                   title="Cairkan seluruh slip gaji berstatus FINAL (Disetujui) sekaligus ke Buku Kas"
                 >
@@ -1378,8 +1409,9 @@ export function Payroll() {
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                 Anda dapat membuat slip gaji otomatis dari presensi shift atau menambahkannya secara manual.
               </p>
-              {isHRD && !isReadOnly && (
+              {canGenerate && (
                 <button 
+                  type="button"
                   onClick={() => setActiveTab("generate")}
                   className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                 >
@@ -1525,10 +1557,18 @@ export function Payroll() {
                                     <Edit2 size={16} />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => {
-                                      if (confirm(`Hapus slip gaji untuk ${empName}?`)) {
-                                        deletePayrollRecord(record.id);
-                                      }
+                                      confirmModal.open({
+                                        title: "Hapus Slip Gaji Draft?",
+                                        message: `Hapus slip gaji DRAFT untuk ${empName} periode ${record.period}?`,
+                                        confirmLabel: "Ya, Hapus",
+                                        variant: "danger",
+                                        onConfirm: () => {
+                                          deletePayrollRecord(record.id);
+                                          toast.success(`Slip gaji ${empName} berhasil dihapus.`);
+                                        },
+                                      });
                                     }}
                                     className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200"
                                     title="Hapus Slip Gaji (Draft)"
@@ -1737,10 +1777,18 @@ export function Payroll() {
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
-                                  if (confirm(`Hapus slip gaji untuk ${empName}?`)) {
-                                    deletePayrollRecord(record.id);
-                                  }
+                                  confirmModal.open({
+                                    title: "Hapus Slip Gaji Draft?",
+                                    message: `Hapus slip gaji DRAFT untuk ${empName} periode ${record.period}?`,
+                                    confirmLabel: "Ya, Hapus",
+                                    variant: "danger",
+                                    onConfirm: () => {
+                                      deletePayrollRecord(record.id);
+                                      toast.success(`Slip gaji ${empName} berhasil dihapus.`);
+                                    },
+                                  });
                                 }}
                                 className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition-colors cursor-pointer border border-rose-200/80 active:scale-95"
                                 title="Hapus Slip"
@@ -1997,46 +2045,49 @@ export function Payroll() {
       )}
 
       {/* ─── MODAL EDIT / KOREKSI SLIP GAJI ─── */}
-      <AnimatePresence>
-        {editingPayroll && (() => {
-          const perfForEdit = getEmpPerformanceSummary(editingPayroll.employeeId);
-          const isLocked = editingPayroll.status !== "DRAFT" || !canEdit;
-          const empName = employees.find((e: any) => e.id === editingPayroll.employeeId)?.name || editingPayroll.employeeId;
+      {createPortal(
+        <AnimatePresence>
+          {editingPayroll && (() => {
+            const perfForEdit = getEmpPerformanceSummary(editingPayroll.employeeId);
+            const isLocked = editingPayroll.status !== "DRAFT" || !canEdit;
+            const empName = employees.find((e: any) => e.id === editingPayroll.employeeId)?.name || editingPayroll.employeeId;
 
-          return (
-            <motion.div
-              key="payroll-edit-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
-            >
+            return (
               <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden"
+                key="payroll-edit-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={() => setEditingPayroll(null)}
+                className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
               >
-              <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
-                <div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-                    <span>Edit & Koreksi Slip Gaji</span>
-                    {isLocked && <Lock className="w-4 h-4 text-slate-400" />}
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Karyawan: <strong>{empName}</strong> • Periode: {editingPayroll.period}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingPayroll(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 dark:border-slate-700/80 overflow-hidden"
                 >
-                  <X size={20} />
-                </button>
-              </div>
+                <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <span>Edit & Koreksi Slip Gaji</span>
+                      {isLocked && <Lock className="w-4 h-4 text-slate-400" />}
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Karyawan: <strong>{empName}</strong> • Periode: {editingPayroll.period}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPayroll(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               
               <div className="p-4 sm:p-5 space-y-4 overflow-y-auto custom-scrollbar text-xs flex-1">
                 {/* LOCKED BANNER IF NOT DRAFT (Aturan #5) */}
@@ -2084,10 +2135,11 @@ export function Payroll() {
                         <input
                           type="number"
                           placeholder="0"
+                          min="0"
                           disabled={isLocked}
                           value={editingPayroll.basicSalary || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = val + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
@@ -2095,22 +2147,23 @@ export function Payroll() {
                               return { ...prev, basicSalary: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Tunjangan Jabatan (Leader)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Tunjangan Jabatan (Leader)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.positionAllowance || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = (prev.basicSalary || 0) + val + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
@@ -2118,22 +2171,23 @@ export function Payroll() {
                               return { ...prev, positionAllowance: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Uang Makan</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Uang Makan</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.mealAllowance || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + val + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
@@ -2141,22 +2195,23 @@ export function Payroll() {
                               return { ...prev, mealAllowance: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Uang Transport</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Uang Transport</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.transportAllowance || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + val + (prev.kpiBonus || 0) + (prev.targetBonus || 0) + (prev.overtimePay || 0);
@@ -2164,22 +2219,23 @@ export function Payroll() {
                               return { ...prev, transportAllowance: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Bonus KPI / Capaian</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Bonus KPI / Capaian</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.kpiBonus || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + val + (prev.targetBonus || 0) + (prev.overtimePay || 0);
@@ -2187,22 +2243,23 @@ export function Payroll() {
                               return { ...prev, kpiBonus: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Bonus Omset Toko</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Bonus Omset Toko</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.targetBonus || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const gross = (prev.basicSalary || 0) + (prev.positionAllowance || 0) + (prev.mealAllowance || 0) + (prev.transportAllowance || 0) + (prev.kpiBonus || 0) + val + (prev.overtimePay || 0);
@@ -2210,7 +2267,7 @@ export function Payroll() {
                               return { ...prev, targetBonus: val, grossPay: gross, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
@@ -2355,62 +2412,65 @@ export function Payroll() {
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-rose-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.alphaDeduction || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const net = Math.max(0, prev.grossPay - val - (prev.lateDeduction || 0) - (prev.otherDeductions || 0));
                               return { ...prev, alphaDeduction: val, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Potongan Telat</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Potongan Telat</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-rose-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.lateDeduction || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const net = Math.max(0, prev.grossPay - (prev.alphaDeduction || 0) - val - (prev.otherDeductions || 0));
                               return { ...prev, lateDeduction: val, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Potongan Lainnya</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Potongan Lainnya</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-rose-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           disabled={isLocked}
                           value={editingPayroll.otherDeductions || ""}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
+                            const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
                             setEditingPayroll((prev: any) => {
                               if (!prev) return null;
                               const net = Math.max(0, prev.grossPay - (prev.alphaDeduction || 0) - (prev.lateDeduction || 0) - val);
                               return { ...prev, otherDeductions: val, netPay: net };
                             });
                           }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs font-mono tabular-nums disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                         />
                       </div>
                     </div>
@@ -2419,40 +2479,40 @@ export function Payroll() {
 
                 {/* Catatan Koreksi */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">Catatan Slip Gaji / Alasan Koreksi</label>
+                  <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Catatan Slip Gaji / Alasan Koreksi</label>
                   <input
                     type="text"
                     disabled={isLocked}
                     placeholder="Misal: Penyesuaian lembur event akhir pekan..."
                     value={editingPayroll.notes || ""}
                     onChange={(e) => setEditingPayroll((prev: any) => prev ? { ...prev, notes: e.target.value } : null)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs disabled:bg-slate-100 disabled:text-slate-400"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-base sm:text-xs disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
                   />
                 </div>
                 
                 {/* Ringkasan Akhir */}
-                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xs">
-                  <div className="flex justify-between text-xs text-slate-300 mb-1">
+                <div className="bg-brand-gradient text-white p-4 rounded-2xl shadow-xs">
+                  <div className="flex justify-between text-xs text-blue-100 mb-1">
                     <span>Total Penghasilan Kotor (Gross):</span>
-                    <span className="font-mono font-bold text-white">{formatCurrency(editingPayroll.grossPay)}</span>
+                    <span className="font-mono tabular-nums font-bold text-white">{formatCurrency(editingPayroll.grossPay)}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-rose-300 mb-2">
+                  <div className="flex justify-between text-xs text-rose-200 mb-2">
                     <span>Total Seluruh Potongan:</span>
-                    <span className="font-mono font-bold text-rose-300">
+                    <span className="font-mono tabular-nums font-bold text-rose-200">
                       -{formatCurrency((editingPayroll.alphaDeduction || 0) + (editingPayroll.lateDeduction || 0) + (editingPayroll.otherDeductions || 0))}
                     </span>
                   </div>
-                  <div className="flex justify-between text-base font-black border-t border-slate-700 pt-2 text-emerald-400">
+                  <div className="flex justify-between text-base font-black border-t border-white/20 pt-2 text-emerald-300">
                     <span>Take Home Pay (Diterima):</span>
-                    <span className="font-mono text-lg">{formatCurrency(editingPayroll.netPay)}</span>
+                    <span className="font-mono tabular-nums text-lg">{formatCurrency(editingPayroll.netPay)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/90 shrink-0">
+              <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/90 dark:bg-slate-800/60 shrink-0">
                 <div>
                   <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Take Home Pay</div>
-                  <div className="text-base sm:text-lg font-black text-emerald-600 font-mono">
+                  <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
                     {formatCurrency(editingPayroll.netPay)}
                   </div>
                 </div>
@@ -2460,7 +2520,7 @@ export function Payroll() {
                   <button
                     type="button"
                     onClick={() => setEditingPayroll(null)}
-                    className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                    className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
                   >
                     {isLocked ? "Tutup" : "Batal"}
                   </button>
@@ -2468,7 +2528,19 @@ export function Payroll() {
                     <button
                       type="button"
                       onClick={() => {
+                        const check = validatePayrollMutation({
+                          action: "UPDATE",
+                          recordPeriod: editingPayroll.period,
+                          existingStatus: editingPayroll.status,
+                          closedPeriods,
+                          recordId: editingPayroll.id,
+                        });
+                        if ("error" in check) {
+                          toast.error(check.error);
+                          return;
+                        }
                         updatePayrollRecord(editingPayroll);
+                        toast.success(`Koreksi slip gaji ${empName} berhasil disimpan.`);
                         setEditingPayroll(null);
                       }}
                       className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs cursor-pointer active:scale-95"
@@ -2482,41 +2554,46 @@ export function Payroll() {
             </motion.div>
           );
         })()}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ─── MODAL BUAT SLIP GAJI MANUAL ─── */}
-      <AnimatePresence>
-        {manualModalOpen && (
-          <motion.div
-            key="payroll-manual-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
-          >
+      {createPortal(
+        <AnimatePresence>
+          {manualModalOpen && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="my-auto bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 overflow-hidden"
+              key="payroll-manual-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              onClick={() => setManualModalOpen(false)}
+              className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs p-3 sm:p-6 flex justify-center items-start sm:items-center"
             >
-            <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
-              <div>
-                <h2 className="text-base sm:text-lg font-black text-slate-900">Buat Slip Gaji Manual</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Periode: {period} • Buat slip gaji kustom jika terdapat staf baru atau kondisi khusus
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setManualModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                onClick={(e) => e.stopPropagation()}
+                className="my-auto bg-white dark:bg-slate-900 rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80 dark:border-slate-700/80 overflow-hidden"
               >
-                <X size={20} />
-              </button>
-            </div>
+              <div className="flex justify-between items-center p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">Buat Slip Gaji Manual</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Periode: {period} • Buat slip gaji kustom jika terdapat staf baru atau kondisi khusus
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
 
             <form onSubmit={handleSaveManualPayroll} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-4 sm:p-5 space-y-4 overflow-y-auto custom-scrollbar text-xs flex-1">
@@ -2553,75 +2630,95 @@ export function Payroll() {
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.basicSalary || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, basicSalary: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, basicSalary: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Tunjangan Jabatan (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Tunjangan Jabatan (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.positionAllowance || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, positionAllowance: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, positionAllowance: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Uang Makan (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Uang Makan (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.mealAllowance || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, mealAllowance: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, mealAllowance: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Uang Transport (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Uang Transport (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.transportAllowance || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, transportAllowance: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, transportAllowance: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Bonus KPI / Capaian (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Bonus KPI / Capaian (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.kpiBonus || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, kpiBonus: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, kpiBonus: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Lembur / Insentif (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Bonus Omset Toko (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
+                          placeholder="0"
+                          value={manualForm.targetBonus || ""}
+                          onChange={(e) => setManualForm(prev => ({ ...prev, targetBonus: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Lembur / Insentif (IDR)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
+                        <input
+                          type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.overtimePay || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, overtimePay: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, overtimePay: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
@@ -2630,33 +2727,35 @@ export function Payroll() {
 
                 {/* Potongan */}
                 <div>
-                  <span className="font-bold text-rose-700 uppercase tracking-wider block mb-2 pb-1 border-b border-rose-100">
+                  <span className="font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-2 pb-1 border-b border-rose-100 dark:border-rose-500/20">
                     B. Potongan
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Potongan Alpha (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Potongan Alpha (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-rose-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.alphaDeduction || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, alphaDeduction: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, alphaDeduction: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-slate-600 font-semibold mb-1">Potongan Terlambat / Lainnya (IDR)</label>
+                      <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Potongan Terlambat / Lainnya (IDR)</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-rose-400 font-semibold text-xs pointer-events-none select-none">Rp</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={manualForm.otherDeductions || ""}
-                          onChange={(e) => setManualForm(prev => ({ ...prev, otherDeductions: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono text-base sm:text-xs"
+                          onChange={(e) => setManualForm(prev => ({ ...prev, otherDeductions: Math.max(0, Math.round(parseFloat(e.target.value) || 0)) }))}
+                          className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 font-mono tabular-nums text-base sm:text-xs"
                         />
                       </div>
                     </div>
@@ -2665,13 +2764,13 @@ export function Payroll() {
 
                 {/* Catatan */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">Catatan Khusus</label>
+                  <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">Catatan Khusus</label>
                   <input
                     type="text"
                     placeholder="Alasan pembuatan manual / catatan untuk karyawan..."
                     value={manualForm.notes}
                     onChange={(e) => setManualForm(prev => ({ ...prev, notes: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500/20 text-base sm:text-xs"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-brand-500/20 text-base sm:text-xs"
                   />
                 </div>
 
@@ -2681,18 +2780,18 @@ export function Payroll() {
                   const deductions = (manualForm.alphaDeduction || 0) + (manualForm.otherDeductions || 0);
                   const net = Math.max(0, gross - deductions);
                   return (
-                    <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xs">
-                      <div className="flex justify-between text-xs text-slate-300 mb-1">
+                    <div className="bg-brand-gradient text-white p-4 rounded-2xl shadow-xs">
+                      <div className="flex justify-between text-xs text-blue-100 mb-1">
                         <span>Penghasilan Kotor:</span>
-                        <span className="font-mono font-bold text-white">{formatCurrency(gross)}</span>
+                        <span className="font-mono tabular-nums font-bold text-white">{formatCurrency(gross)}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-rose-300 mb-2">
+                      <div className="flex justify-between text-xs text-rose-200 mb-2">
                         <span>Total Potongan:</span>
-                        <span className="font-mono font-bold text-rose-300">-{formatCurrency(deductions)}</span>
+                        <span className="font-mono tabular-nums font-bold text-rose-200">-{formatCurrency(deductions)}</span>
                       </div>
-                      <div className="flex justify-between text-base font-black border-t border-slate-700 pt-2 text-emerald-400">
+                      <div className="flex justify-between text-base font-black border-t border-white/20 pt-2 text-emerald-300">
                         <span>Take Home Pay Diterima:</span>
-                        <span className="font-mono text-lg">{formatCurrency(net)}</span>
+                        <span className="font-mono tabular-nums text-lg">{formatCurrency(net)}</span>
                       </div>
                     </div>
                   );
@@ -2704,10 +2803,10 @@ export function Payroll() {
                 const deductions = (manualForm.alphaDeduction || 0) + (manualForm.otherDeductions || 0);
                 const net = Math.max(0, gross - deductions);
                 return (
-                  <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/90 shrink-0">
+                  <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/90 dark:bg-slate-800/60 shrink-0">
                     <div>
                       <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Take Home Pay</div>
-                      <div className="text-base sm:text-lg font-black text-emerald-600 font-mono">
+                      <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
                         {formatCurrency(net)}
                       </div>
                     </div>
@@ -2715,7 +2814,7 @@ export function Payroll() {
                       <button
                         type="button"
                         onClick={() => setManualModalOpen(false)}
-                        className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
                       >
                         Batal
                       </button>
@@ -2732,14 +2831,17 @@ export function Payroll() {
             </form>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ─── MODAL EXPORT LAPORAN ─── */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         defaultModule="payroll"
+        defaultPeriod={period}
       />
 
       {/* ─── MODAL LIHAT SLIP GAJI ─── */}
@@ -2751,142 +2853,370 @@ export function Payroll() {
       )}
 
       {/* ─── MODAL BAYAR GAJI KARYAWAN (SINGLE SLIP) ─── */}
-      <AnimatePresence>
-        {paymentModalOpen && payrollToPay && (() => {
-          const breakdown = getPayrollCategoryBreakdown(payrollToPay);
-          const empName =
-            employees.find((e: any) => e.id === payrollToPay.employeeId)?.name ||
-            users.find((u: any) => u.id === payrollToPay.employeeId)?.name ||
-            "Karyawan";
+      {createPortal(
+        <AnimatePresence>
+          {paymentModalOpen && payrollToPay && (() => {
+            const breakdown = getPayrollCategoryBreakdown(payrollToPay);
+            const empName =
+              employees.find((e: any) => e.id === payrollToPay.employeeId)?.name ||
+              users.find((u: any) => u.id === payrollToPay.employeeId)?.name ||
+              "Karyawan";
 
-          return (
-            <motion.div
-              key="payroll-single-pay-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
-            >
+            return (
               <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]"
+                key="payroll-single-pay-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={() => {
+                  setPaymentModalOpen(false);
+                  setPayrollToPay(null);
+                }}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
               >
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
-                <div>
-                  <h2 className="text-lg font-black text-slate-800 flex items-center">
-                    <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
-                    Pencairan Slip Gaji & Tunjangan SDM
-                  </h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Terintegrasi langsung ke Buku Kas & Laporan Laba Rugi (HRD & Personalia)
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentModalOpen(false);
-                    setPayrollToPay(null);
-                  }}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 dark:border-slate-700/80 overflow-hidden max-h-[88vh]"
                 >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">Penerima</p>
-                      <p className="font-black text-slate-900 text-base">{empName}</p>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                      Periode {payrollToPay.period}
-                    </span>
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center">
+                      <Wallet className="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-400" />
+                      Pencairan Slip Gaji & Tunjangan SDM
+                    </h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Terintegrasi langsung ke Buku Kas & Laporan Laba Rugi (HRD & Personalia)
+                    </p>
                   </div>
-
-                  {/* Rincian Alokasi Sub-Kategori HRD */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
-                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
-                      <span className="text-[10px] font-bold text-purple-700 uppercase block">
-                        Sub: Gaji & Upah Karyawan
-                      </span>
-                      <span className="font-mono font-black text-slate-900 text-sm">
-                        {formatCurrency(breakdown.netBasicPortion)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        Gaji Pokok {breakdown.totalDeductions > 0 ? `(Net setelah potongan)` : `Kehadiran`}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
-                      <span className="text-[10px] font-bold text-amber-700 uppercase block">
-                        Sub: Bonus, Kasbon & Tunjangan
-                      </span>
-                      <span className="font-mono font-black text-amber-700 text-sm">
-                        {formatCurrency(breakdown.netBonusAllowancePortion)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        Makan, Transport, Leader, Bonus & Lembur
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center border-t border-slate-200/70 pt-3">
-                    <span className="text-xs font-bold text-slate-600">Total Take Home Pay (THP):</span>
-                    <span className="text-xl font-black font-mono text-emerald-700">
-                      {formatCurrency(payrollToPay.netPay)}
-                    </span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalOpen(false);
+                      setPayrollToPay(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
                 </div>
 
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const formData = new FormData(e.currentTarget);
-                    const accountId = formData.get("accountId") as string;
-                    if (!accountId) return;
+                <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                  <div className="p-4 bg-slate-50/90 dark:bg-slate-800/50 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">Penerima</p>
+                        <p className="font-black text-slate-900 dark:text-slate-100 text-base">{empName}</p>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30">
+                        Periode {payrollToPay.period}
+                      </span>
+                    </div>
 
-                    disburseSinglePayrollRecord(payrollToPay, accountId, paymentSplitMode);
-                    setPaymentModalOpen(false);
-                    setPayrollToPay(null);
-                  }}
-                  className="space-y-4"
-                >
-                  {/* Pilihan Mode Pencatatan Kategori di Buku Kas */}
-                  {breakdown.netBonusAllowancePortion > 0 && breakdown.netBasicPortion > 0 && (
+                    {/* Rincian Alokasi Sub-Kategori HRD */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-700/70 text-xs">
+                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase block">
+                          Sub: Gaji & Upah Karyawan
+                        </span>
+                        <span className="font-mono tabular-nums font-black text-slate-900 dark:text-slate-100 text-sm">
+                          {formatCurrency(breakdown.netBasicPortion)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Gaji Pokok {breakdown.totalDeductions > 0 ? `(Net setelah potongan)` : `Kehadiran`}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
+                          Sub: Bonus, Kasbon & Tunjangan
+                        </span>
+                        <span className="font-mono tabular-nums font-black text-amber-700 dark:text-amber-400 text-sm">
+                          {formatCurrency(breakdown.netBonusAllowancePortion)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Makan, Transport, Leader, Bonus & Lembur
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-slate-200/70 dark:border-slate-700/70 pt-3">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Total Take Home Pay (THP):</span>
+                      <span className="text-xl font-black font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                        {formatCurrency(payrollToPay.netPay)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!paymentAccountId) {
+                        toast.error("Pilih Pos Kas / Rekening Pembayaran terlebih dahulu.");
+                        return;
+                      }
+
+                      const ok = disburseSinglePayrollRecord(payrollToPay, paymentAccountId, paymentSplitMode);
+                      if (ok) {
+                        setPaymentModalOpen(false);
+                        setPayrollToPay(null);
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    {/* Pilihan Mode Pencatatan Kategori di Buku Kas */}
+                    {breakdown.netBonusAllowancePortion > 0 && breakdown.netBasicPortion > 0 && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                          Mode Pencatatan Kategori di Buku Kas:
+                        </label>
+                        <div className="grid grid-cols-1 gap-2 text-xs">
+                          <label
+                            className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                              paymentSplitMode === "SPLIT_CATEGORY"
+                                ? "bg-emerald-50/70 dark:bg-emerald-500/15 border-emerald-400 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-200 shadow-2xs"
+                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="splitMode"
+                              checked={paymentSplitMode === "SPLIT_CATEGORY"}
+                              onChange={() => setPaymentSplitMode("SPLIT_CATEGORY")}
+                              className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <div>
+                              <div className="font-bold flex items-center gap-1.5">
+                                <span>Pisah Otomatis ke Sub-Kategori HRD</span>
+                                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black">
+                                  Rekomendasi
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                                Otomatis membuat 2 pencatatan terperinci di Buku Kas: <strong>Gaji & Upah Karyawan</strong> ({formatCurrency(breakdown.netBasicPortion)}) serta <strong>Bonus, Kasbon & Tunjangan</strong> ({formatCurrency(breakdown.netBonusAllowancePortion)}).
+                              </p>
+                            </div>
+                          </label>
+
+                          <label
+                            className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                              paymentSplitMode === "SINGLE_COMBINED"
+                                ? "bg-emerald-50/70 dark:bg-emerald-500/15 border-emerald-400 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-200 shadow-2xs"
+                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="splitMode"
+                              checked={paymentSplitMode === "SINGLE_COMBINED"}
+                              onChange={() => setPaymentSplitMode("SINGLE_COMBINED")}
+                              className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <div>
+                              <div className="font-bold">Gabung 1 Transaksi Slip Gaji Utuh</div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                                Mencatat 1 transaksi sebesar {formatCurrency(payrollToPay.netPay)} ke sub-kategori <strong>Gaji & Upah Karyawan</strong> lengkap dengan rincian item komponen di dalamnya.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                        Gunakan Pos Kas / Rekening Pembayaran:
+                      </label>
+                      <CustomSelect
+                        name="accountId"
+                        value={paymentAccountId}
+                        onChange={(val) => setPaymentAccountId(val)}
+                        required
+                        placeholder="-- Pilih Pos Kas Pembayaran --"
+                        options={cashAccounts.map((a: any) => ({
+                          value: a.id,
+                          label: `${a.name} (${a.type})`,
+                        }))}
+                        buttonClassName="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold bg-white dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalOpen(false);
+                          setPayrollToPay(null);
+                        }}
+                        className="px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors font-bold text-xs cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Konfirmasi & Catat ke Buku Kas
+                      </button>
+                    </div>
+                  </form>
+                </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* ─── MODAL CAIRKAN SEMUA SLIP FINAL SEKALIGUS (BATCH PAY) ─── */}
+      {createPortal(
+        <AnimatePresence>
+          {bulkPayModalOpen && (() => {
+            const approvedSlips = allPeriodRecords.filter((r: PayrollRecord) => r.status === "APPROVED");
+            const totalBatchNet = approvedSlips.reduce((sum: number, r: PayrollRecord) => sum + (r.netPay || 0), 0);
+            const totalBatchBasic = approvedSlips.reduce(
+              (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBasicPortion,
+              0
+            );
+            const totalBatchBonus = approvedSlips.reduce(
+              (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBonusAllowancePortion,
+              0
+            );
+
+            return (
+              <motion.div
+                key="payroll-bulk-pay-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={() => setBulkPayModalOpen(false)}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 dark:border-slate-700/80 overflow-hidden max-h-[88vh]"
+                >
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center">
+                      <Wallet className="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-400" />
+                      Pencairan Serentak Slip Gaji Final ({approvedSlips.length} Staf)
+                    </h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Periode {period} • Otomatis masuk ke Buku Kas & Laporan Laba Rugi
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBulkPayModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                  <div className="p-4 bg-slate-50/90 dark:bg-slate-800/50 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                        <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase block">
+                          Total Sub: Gaji & Upah Karyawan
+                        </span>
+                        <span className="font-mono tabular-nums font-black text-slate-900 dark:text-slate-100 text-sm">
+                          {formatCurrency(totalBatchBasic)}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
+                          Total Sub: Bonus, Kasbon & Tunjangan
+                        </span>
+                        <span className="font-mono tabular-nums font-black text-amber-700 dark:text-amber-400 text-sm">
+                          {formatCurrency(totalBatchBonus)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-slate-200/70 dark:border-slate-700/70 pt-3">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        Total Kas Keluar ({approvedSlips.length} Slip Final):
+                      </span>
+                      <span className="text-xl font-black font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                        {formatCurrency(totalBatchNet)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!paymentAccountId) {
+                        toast.error("Pilih Pos Kas / Rekening Pembayaran terlebih dahulu.");
+                        return;
+                      }
+                      if (approvedSlips.length === 0) {
+                        toast.warning("Tidak ada slip berstatus APPROVED untuk dicairkan.");
+                        return;
+                      }
+
+                      let paidCount = 0;
+                      let firstError = "";
+                      approvedSlips.forEach((slip: PayrollRecord) => {
+                        const ok = disburseSinglePayrollRecord(slip, paymentAccountId, paymentSplitMode, true);
+                        if (ok) {
+                          paidCount += 1;
+                        } else if (!firstError) {
+                          firstError = "Sebagian slip tidak dapat dicairkan (cek status tutup buku/validasi).";
+                        }
+                      });
+
+                      if (paidCount > 0) {
+                        toast.success(`${paidCount} slip gaji periode ${period} berhasil dicairkan ke Buku Kas.`);
+                        setBulkPayModalOpen(false);
+                      } else if (firstError) {
+                        toast.error(firstError);
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
                         Mode Pencatatan Kategori di Buku Kas:
                       </label>
                       <div className="grid grid-cols-1 gap-2 text-xs">
                         <label
                           className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                             paymentSplitMode === "SPLIT_CATEGORY"
-                              ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
-                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                              ? "bg-emerald-50/70 dark:bg-emerald-500/15 border-emerald-400 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-200 shadow-2xs"
+                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60"
                           }`}
                         >
                           <input
                             type="radio"
-                            name="splitMode"
+                            name="batchSplitMode"
                             checked={paymentSplitMode === "SPLIT_CATEGORY"}
                             onChange={() => setPaymentSplitMode("SPLIT_CATEGORY")}
                             className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
                           />
                           <div>
                             <div className="font-bold flex items-center gap-1.5">
-                              <span>Pisah Otomatis ke Sub-Kategori HRD</span>
+                              <span>Pisah Otomatis Gaji Pokok vs Bonus/Tunjangan</span>
                               <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black">
                                 Rekomendasi
                               </span>
                             </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                              Otomatis membuat 2 pencatatan terperinci di Buku Kas: <strong>Gaji & Upah Karyawan</strong> ({formatCurrency(breakdown.netBasicPortion)}) serta <strong>Bonus, Kasbon & Tunjangan</strong> ({formatCurrency(breakdown.netBonusAllowancePortion)}).
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              Memisahkan porsi Gaji Pokok ke <strong>Gaji & Upah Karyawan</strong> dan porsi Tunjangan/Bonus/Lembur ke <strong>Bonus, Kasbon & Tunjangan</strong>.
                             </p>
                           </div>
                         </label>
@@ -2894,263 +3224,72 @@ export function Payroll() {
                         <label
                           className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                             paymentSplitMode === "SINGLE_COMBINED"
-                              ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
-                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                              ? "bg-emerald-50/70 dark:bg-emerald-500/15 border-emerald-400 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-200 shadow-2xs"
+                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60"
                           }`}
                         >
                           <input
                             type="radio"
-                            name="splitMode"
+                            name="batchSplitMode"
                             checked={paymentSplitMode === "SINGLE_COMBINED"}
                             onChange={() => setPaymentSplitMode("SINGLE_COMBINED")}
                             className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
                           />
                           <div>
-                            <div className="font-bold">Gabung 1 Transaksi Slip Gaji Utuh</div>
-                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                              Mencatat 1 transaksi sebesar {formatCurrency(payrollToPay.netPay)} ke sub-kategori <strong>Gaji & Upah Karyawan</strong> lengkap dengan rincian item komponen di dalamnya.
+                            <div className="font-bold">Gabung 1 Transaksi per Karyawan</div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              Mencatat 1 transaksi Take Home Pay utuh per staf ke <strong>Gaji & Upah Karyawan</strong> beserta rincian itemnya.
                             </p>
                           </div>
                         </label>
                       </div>
                     </div>
-                  )}
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Gunakan Pos Kas / Rekening Pembayaran:
-                    </label>
-                    <CustomSelect
-                      name="accountId"
-                      defaultValue=""
-                      required
-                      placeholder="-- Pilih Pos Kas Pembayaran --"
-                      options={cashAccounts.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.name} (${a.type})`,
-                      }))}
-                      buttonClassName="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentModalOpen(false);
-                        setPayrollToPay(null);
-                      }}
-                      className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Konfirmasi & Catat ke Buku Kas
-                    </button>
-                  </div>
-                </form>
-              </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
-
-      {/* ─── MODAL CAIRKAN SEMUA SLIP FINAL SEKALIGUS (BATCH PAY) ─── */}
-      <AnimatePresence>
-        {bulkPayModalOpen && (() => {
-          const approvedSlips = allPeriodRecords.filter((r: PayrollRecord) => r.status === "APPROVED");
-          const totalBatchNet = approvedSlips.reduce((sum: number, r: PayrollRecord) => sum + (r.netPay || 0), 0);
-          const totalBatchBasic = approvedSlips.reduce(
-            (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBasicPortion,
-            0
-          );
-          const totalBatchBonus = approvedSlips.reduce(
-            (sum: number, r: PayrollRecord) => sum + getPayrollCategoryBreakdown(r).netBonusAllowancePortion,
-            0
-          );
-
-          return (
-            <motion.div
-              key="payroll-bulk-pay-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ type: "spring", damping: 28, stiffness: 360 }}
-                className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col border border-slate-200/80 overflow-hidden max-h-[88vh]"
-              >
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
-                <div>
-                  <h2 className="text-lg font-black text-slate-800 flex items-center">
-                    <Wallet className="w-5 h-5 mr-2 text-emerald-600" />
-                    Pencairan Serentak Slip Gaji Final ({approvedSlips.length} Staf)
-                  </h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Periode {period} • Otomatis masuk ke Buku Kas & Laporan Laba Rugi
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBulkPayModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
-                      <span className="text-[10px] font-bold text-purple-700 uppercase block">
-                        Total Sub: Gaji & Upah Karyawan
-                      </span>
-                      <span className="font-mono font-black text-slate-900 text-sm">
-                        {formatCurrency(totalBatchBasic)}
-                      </span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-slate-200/80">
-                      <span className="text-[10px] font-bold text-amber-700 uppercase block">
-                        Total Sub: Bonus, Kasbon & Tunjangan
-                      </span>
-                      <span className="font-mono font-black text-amber-700 text-sm">
-                        {formatCurrency(totalBatchBonus)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center border-t border-slate-200/70 pt-3">
-                    <span className="text-xs font-bold text-slate-600">
-                      Total Kas Keluar ({approvedSlips.length} Slip Final):
-                    </span>
-                    <span className="text-xl font-black font-mono text-emerald-700">
-                      {formatCurrency(totalBatchNet)}
-                    </span>
-                  </div>
-                </div>
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const formData = new FormData(e.currentTarget);
-                    const accountId = formData.get("accountId") as string;
-                    if (!accountId || approvedSlips.length === 0) return;
-
-                    approvedSlips.forEach((slip: PayrollRecord) => {
-                      disburseSinglePayrollRecord(slip, accountId, paymentSplitMode);
-                    });
-
-                    setBulkPayModalOpen(false);
-                  }}
-                  className="space-y-4"
-                >
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Mode Pencatatan Kategori di Buku Kas:
-                    </label>
-                    <div className="grid grid-cols-1 gap-2 text-xs">
-                      <label
-                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                          paymentSplitMode === "SPLIT_CATEGORY"
-                            ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="batchSplitMode"
-                          checked={paymentSplitMode === "SPLIT_CATEGORY"}
-                          onChange={() => setPaymentSplitMode("SPLIT_CATEGORY")}
-                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <div>
-                          <div className="font-bold flex items-center gap-1.5">
-                            <span>Pisah Otomatis Gaji Pokok vs Bonus/Tunjangan</span>
-                            <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black">
-                              Rekomendasi
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            Memisahkan porsi Gaji Pokok ke <strong>Gaji & Upah Karyawan</strong> dan porsi Tunjangan/Bonus/Lembur ke <strong>Bonus, Kasbon & Tunjangan</strong>.
-                          </p>
-                        </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                        Gunakan Pos Kas / Rekening Pembayaran:
                       </label>
-
-                      <label
-                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                          paymentSplitMode === "SINGLE_COMBINED"
-                            ? "bg-emerald-50/70 border-emerald-400 text-emerald-950 shadow-2xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="batchSplitMode"
-                          checked={paymentSplitMode === "SINGLE_COMBINED"}
-                          onChange={() => setPaymentSplitMode("SINGLE_COMBINED")}
-                          className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <div>
-                          <div className="font-bold">Gabung 1 Transaksi per Karyawan</div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            Mencatat 1 transaksi Take Home Pay utuh per staf ke <strong>Gaji & Upah Karyawan</strong> beserta rincian itemnya.
-                          </p>
-                        </div>
-                      </label>
+                      <CustomSelect
+                        name="accountId"
+                        value={paymentAccountId}
+                        onChange={(val) => setPaymentAccountId(val)}
+                        required
+                        placeholder="-- Pilih Pos Kas Pembayaran --"
+                        options={cashAccounts.map((a: any) => ({
+                          value: a.id,
+                          label: `${a.name} (${a.type})`,
+                        }))}
+                        buttonClassName="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold bg-white dark:bg-slate-800 dark:text-slate-100"
+                      />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Gunakan Pos Kas / Rekening Pembayaran:
-                    </label>
-                    <CustomSelect
-                      name="accountId"
-                      defaultValue=""
-                      required
-                      placeholder="-- Pilih Pos Kas Pembayaran --"
-                      options={cashAccounts.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.name} (${a.type})`,
-                      }))}
-                      buttonClassName="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base sm:text-xs font-semibold bg-white"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setBulkPayModalOpen(false)}
-                      className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Cairkan {approvedSlips.length} Slip Sekarang
-                    </button>
-                  </div>
-                </form>
-              </div>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setBulkPayModalOpen(false)}
+                        className="px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors font-bold text-xs cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-bold text-xs flex items-center shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Cairkan {approvedSlips.length} Slip Sekarang
+                      </button>
+                    </div>
+                  </form>
+                </div>
+                </motion.div>
               </motion.div>
-            </motion.div>
-          );
-        })()}
-      </AnimatePresence>
+            );
+          })()}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      <ConfirmModal {...confirmModal.modalProps} />
     </div>
   );
 }

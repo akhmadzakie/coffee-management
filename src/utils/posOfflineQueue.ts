@@ -26,11 +26,16 @@ export interface QueuedOfflineOrder {
  */
 export async function enqueueOfflineOrder(payload: any): Promise<QueuedOfflineOrder> {
   const existing: QueuedOfflineOrder[] = (await get(OUTBOX_STORAGE_KEY)) || [];
+  const idempotencyKey = payload?.idempotencyKey || crypto.randomUUID();
+  const normalizedPayload = {
+    ...(payload || {}),
+    idempotencyKey,
+  };
   const queuedItem: QueuedOfflineOrder = {
-    id: payload.id || crypto.randomUUID(),
-    idempotencyKey: payload.idempotencyKey || crypto.randomUUID(),
-    orderNumber: payload.orderNumber || `OFFLINE-${Date.now().toString().slice(-4)}`,
-    payload,
+    id: payload?.id || crypto.randomUUID(),
+    idempotencyKey,
+    orderNumber: payload?.orderNumber || `OFFLINE-${Date.now().toString().slice(-4)}`,
+    payload: normalizedPayload,
     queuedAt: new Date().toISOString(),
     retryCount: 0,
   };
@@ -67,37 +72,64 @@ export async function clearOfflineOrders(): Promise<void> {
   notifyQueueChange(0);
 }
 
+let activeFlushPromise: Promise<{ syncedCount: number; failedCount: number }> | null = null;
+
 /**
  * Sinkronkan (flush) seluruh antrean outbox ke backend API secara berurutan (FIFO)
  */
 export async function flushOfflineOutbox(
   senderFn: (orderPayload: any) => Promise<{ success: boolean; error?: string }>
 ): Promise<{ syncedCount: number; failedCount: number }> {
-  const queue = await getPendingOfflineOrders();
-  if (queue.length === 0) return { syncedCount: 0, failedCount: 0 };
-
-  let syncedCount = 0;
-  let failedCount = 0;
-
-  for (const item of queue) {
-    try {
-      const res = await senderFn(item.payload);
-      if (res.success) {
-        await removeOfflineOrder(item.id);
-        syncedCount++;
-      } else {
-        item.retryCount = (item.retryCount || 0) + 1;
-        item.lastError = res.error || "Gagal sinkron";
-        failedCount++;
-      }
-    } catch (err: any) {
-      item.retryCount = (item.retryCount || 0) + 1;
-      item.lastError = err.message || "Network error";
-      failedCount++;
-    }
+  if (activeFlushPromise) {
+    return activeFlushPromise;
   }
 
-  return { syncedCount, failedCount };
+  activeFlushPromise = (async () => {
+    const queue = await getPendingOfflineOrders();
+    if (queue.length === 0) return { syncedCount: 0, failedCount: 0 };
+
+    let syncedCount = 0;
+    let failedCount = 0;
+    const failedUpdates = new Map<string, { retryCount: number; lastError: string }>();
+
+    for (const item of queue) {
+      try {
+        const res = await senderFn(item.payload);
+        if (res.success) {
+          await removeOfflineOrder(item.id);
+          syncedCount++;
+        } else {
+          const nextRetry = (item.retryCount || 0) + 1;
+          const nextErr = res.error || "Gagal sinkron";
+          failedUpdates.set(item.id, { retryCount: nextRetry, lastError: nextErr });
+          failedCount++;
+        }
+      } catch (err: any) {
+        const nextRetry = (item.retryCount || 0) + 1;
+        const nextErr = err?.message || "Network error";
+        failedUpdates.set(item.id, { retryCount: nextRetry, lastError: nextErr });
+        failedCount++;
+      }
+    }
+
+    if (failedUpdates.size > 0) {
+      const latestQueue = await getPendingOfflineOrders();
+      const persisted = latestQueue.map((q) => {
+        const patch = failedUpdates.get(q.id);
+        return patch ? { ...q, ...patch } : q;
+      });
+      await set(OUTBOX_STORAGE_KEY, persisted);
+      notifyQueueChange(persisted.length);
+    }
+
+    return { syncedCount, failedCount };
+  })();
+
+  try {
+    return await activeFlushPromise;
+  } finally {
+    activeFlushPromise = null;
+  }
 }
 
 // Global subscribers untuk update status antrean secara real-time di UI

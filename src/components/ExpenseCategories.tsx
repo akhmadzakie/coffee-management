@@ -1,13 +1,18 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { ExpenseCategory, ExpenseCategoryType } from "../types";
 import { CustomSelect } from "./common/CustomSelect";
+import {
+  filterExpenseCategoryTree,
+  parseImportedExpenseCategories,
+} from "../utils/syncSanitizers";
 import {
   Plus,
   Edit2,
   Trash2,
   ChevronRight,
-  ChevronDown,
   Tag,
   TrendingUp,
   TrendingDown,
@@ -37,9 +42,8 @@ import {
   Search,
   Filter,
   ChevronsUpDown,
-  AlertTriangle,
-  FolderPlus,
   RotateCcw,
+  Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CsvImportExport } from "./common/CsvImportExport";
@@ -87,9 +91,9 @@ const CATEGORY_TYPES: { value: ExpenseCategoryType; label: string; description: 
 ];
 
 const PRESET_COLORS = [
-  "#10B981", "#059669", "#3B82F6", "#1D4ED8", "#8B5CF6",
-  "#6D28D9", "#F59E0B", "#D97706", "#EF4444", "#DC2626",
-  "#EC4899", "#14B8A6", "#F97316", "#06B6D4", "#64748B",
+  "#1b2cc0", "#059669", "#0284c7", "#1624a0", "#8b5cf6",
+  "#6d28d9", "#d97706", "#f59e0b", "#e11d48", "#dc2626",
+  "#db2777", "#0d9488", "#ea580c", "#0891b2", "#64748b",
 ];
 
 const TYPE_CONFIG: Record<
@@ -98,62 +102,47 @@ const TYPE_CONFIG: Record<
 > = {
   PENDAPATAN: {
     label: "Pendapatan",
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
     borderClass: "border-l-emerald-500",
     icon: TrendingUp,
   },
   PENGELUARAN: {
     label: "Pengeluaran",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30",
     borderClass: "border-l-rose-500",
     icon: TrendingDown,
   },
   BAHAN_BAKU: {
     label: "Bahan Baku",
-    badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30",
     borderClass: "border-l-amber-500",
     icon: Package,
   },
   UTILITAS: {
     label: "Utilitas",
-    badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
-    borderClass: "border-l-blue-500",
+    badgeClass: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/30",
+    borderClass: "border-l-sky-500",
     icon: Zap,
   },
   HRD: {
     label: "HRD",
-    badgeClass: "bg-violet-50 text-violet-700 border-violet-200",
+    badgeClass: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30",
     borderClass: "border-l-violet-500",
     icon: Users,
   },
   ASET: {
     label: "Aset",
-    badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    borderClass: "border-l-indigo-500",
+    badgeClass: "bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30",
+    borderClass: "border-l-brand-500",
     icon: Box,
   },
   LAINNYA: {
     label: "Lainnya",
-    badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+    badgeClass: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
     borderClass: "border-l-slate-400",
     icon: Tag,
   },
 };
-
-// ─── Build Tree Structure ────────────────────────────────────────────────────
-function buildTree(categories: ExpenseCategory[]): ExpenseCategory[] {
-  const map = new Map<string, ExpenseCategory>();
-  categories.forEach((c) => map.set(c.id, { ...c, children: [] }));
-  const roots: ExpenseCategory[] = [];
-  map.forEach((cat) => {
-    if (cat.parentId && map.has(cat.parentId)) {
-      map.get(cat.parentId)!.children!.push(cat);
-    } else {
-      roots.push(cat);
-    }
-  });
-  return roots.sort((a, b) => a.sortOrder - b.sortOrder);
-}
 
 // ─── Modal Form Component ────────────────────────────────────────────────────
 interface CategoryModalFormProps {
@@ -181,7 +170,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
     initial?.parentId ?? defaultParent?.id ?? null,
   );
   const [color, setColor] = useState(
-    initial?.color ?? defaultParent?.color ?? "#3B82F6",
+    initial?.color ?? defaultParent?.color ?? "#1b2cc0",
   );
   const [icon, setIcon] = useState(initial?.icon ?? "tag");
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
@@ -192,13 +181,17 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
       setName(initial?.name ?? "");
       setType(initial?.type ?? defaultParent?.type ?? "PENGELUARAN");
       setParentId(initial?.parentId ?? defaultParent?.id ?? null);
-      setColor(initial?.color ?? defaultParent?.color ?? "#3B82F6");
+      setColor(initial?.color ?? defaultParent?.color ?? "#1b2cc0");
       setIcon(initial?.icon ?? "tag");
       setIsActive(initial?.isActive ?? true);
     }
   }, [isOpen, initial, defaultParent]);
 
-  if (!isOpen) return null;
+  if (typeof document === "undefined") return null;
+
+  const hasExistingChildren = Boolean(
+    initial?.id && categories.some((c) => c.parentId === initial.id),
+  );
 
   const rootCategories = categories.filter(
     (c) => !c.parentId && c.id !== initial?.id,
@@ -210,7 +203,7 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
     onSave({
       name: name.trim(),
       type,
-      parentId,
+      parentId: hasExistingChildren ? null : parentId,
       color,
       icon,
       isActive,
@@ -221,237 +214,265 @@ const CategoryModalForm: React.FC<CategoryModalFormProps> = ({
   const IconComp = ICON_MAP[icon] ?? Tag;
   const currentConfig = TYPE_CONFIG[type] || TYPE_CONFIG.LAINNYA;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 15 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        transition={{ type: "spring", stiffness: 450, damping: 32 }}
-        className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-xs"
-              style={{
-                backgroundColor: `${color}18`,
-                border: `1.5px solid ${color}40`,
-              }}
-            >
-              <IconComp className="w-5 h-5" style={{ color }} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                {initial?.id ? "Edit Kategori" : "Tambah Kategori"}
-              </h3>
-              <p className="text-xs text-slate-500">
-                {parentId
-                  ? `Sub-kategori di bawah "${categories.find((c) => c.id === parentId)?.name || "Induk"}"`
-                  : "Kategori utama dalam bagan akun kafe"}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="category-form-modal-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-              Nama Pos Kategori *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Contoh: Kopi & Espresso / Sewa Tempat"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all shadow-2xs"
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Type */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                Tipe Akun
-              </label>
-              <CustomSelect
-                value={type}
-                onChange={(val) => setType(val as ExpenseCategoryType)}
-                options={CATEGORY_TYPES.map((t) => ({
-                  value: t.value,
-                  label: t.label,
-                }))}
-                buttonClassName="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 hover:bg-white shadow-2xs"
-              />
-            </div>
-
-            {/* Parent Category */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                Kategori Induk (Grup)
-              </label>
-              <CustomSelect
-                value={parentId ?? ""}
-                onChange={(val) => setParentId(val || null)}
-                options={[
-                  { value: "", label: "— Pos Utama (Header / Root) —" },
-                  ...rootCategories.map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                  })),
-                ]}
-                buttonClassName="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 hover:bg-white shadow-2xs"
-              />
-            </div>
-          </div>
-
-          {/* Color Palette */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
-              Warna Penanda
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-xl transition-all cursor-pointer ${
-                    color === c
-                      ? "scale-115 ring-2 ring-slate-900 ring-offset-2 ring-offset-white shadow-xs"
-                      : "hover:scale-105 opacity-80 hover:opacity-100"
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-              <div className="relative flex items-center">
-                <input
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="w-8 h-8 rounded-xl cursor-pointer border-0 bg-transparent"
-                  title="Pilih Warna Kustom"
-                />
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/60">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-2xs"
+                  style={{
+                    backgroundColor: `${color}18`,
+                    border: `1.5px solid ${color}40`,
+                  }}
+                >
+                  <IconComp className="w-5 h-5" style={{ color }} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    {initial?.id ? "Edit Kategori" : "Tambah Kategori"}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {parentId && !hasExistingChildren
+                      ? `Sub-kategori di bawah "${categories.find((c) => c.id === parentId)?.name || "Induk"}"`
+                      : "Kategori utama dalam bagan akun kafe"}
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Icon Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
-              Pilih Ikon Simbol
-            </label>
-            <div className="grid grid-cols-8 gap-2 p-2 bg-slate-50 rounded-2xl border border-slate-200 max-h-32 overflow-y-auto no-scrollbar">
-              {AVAILABLE_ICONS.map((ic) => {
-                const Ic = ICON_MAP[ic] || Tag;
-                const isSelected = icon === ic;
-                return (
-                  <button
-                    key={ic}
-                    type="button"
-                    onClick={() => setIcon(ic)}
-                    className={`p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-brand-600 text-white shadow-xs scale-105"
-                        : "bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200/80"
-                    }`}
-                    title={ic}
-                  >
-                    <Ic className="w-4 h-4" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Real-time Preview Box */}
-          <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs"
-                style={{
-                  backgroundColor: `${color}20`,
-                  border: `1.5px solid ${color}45`,
-                }}
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Tutup modal kategori"
               >
-                <IconComp className="w-4.5 h-4.5" style={{ color }} />
-              </div>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Name */}
               <div>
-                <p className="text-xs font-bold text-slate-900">
-                  {name || "Nama Kategori Anda"}
-                </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${currentConfig.badgeClass}`}
-                  >
-                    {currentConfig.label}
-                  </span>
-                  {parentId && (
-                    <span className="text-[10px] text-slate-400">
-                      • Sub-kategori
-                    </span>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                  Nama Pos Kategori *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Contoh: Kopi & Espresso / Sewa Tempat"
+                  className="w-full bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-brand-500/20 transition-all shadow-2xs"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Type */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                    Tipe Akun
+                  </label>
+                  <CustomSelect
+                    value={type}
+                    onChange={(val) => setType(val as ExpenseCategoryType)}
+                    options={CATEGORY_TYPES.map((t) => ({
+                      value: t.value,
+                      label: t.label,
+                    }))}
+                    buttonClassName="w-full bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 dark:text-slate-100 hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
+                  />
+                </div>
+
+                {/* Parent Category */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                    Kategori Induk (Grup)
+                  </label>
+                  <CustomSelect
+                    value={hasExistingChildren ? "" : (parentId ?? "")}
+                    onChange={(val) => setParentId(val || null)}
+                    disabled={hasExistingChildren}
+                    options={[
+                      { value: "", label: "— Pos Utama (Header / Root) —" },
+                      ...rootCategories.map((c) => ({
+                        value: c.id,
+                        label: c.name,
+                      })),
+                    ]}
+                    buttonClassName="w-full bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 dark:text-slate-100 hover:bg-white dark:hover:bg-slate-800 shadow-2xs"
+                  />
+                  {hasExistingChildren && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 font-medium">
+                      Pos induk dengan sub-kategori aktif tetap menjadi Header agar struktur tidak terputus.
+                    </p>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Active Toggle Switch */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-xs font-semibold text-slate-600">
-                {isActive ? "Aktif" : "Nonaktif"}
-              </span>
-              <div
-                onClick={() => setIsActive(!isActive)}
-                className={`w-9 h-5 rounded-full relative transition-colors ${
-                  isActive ? "bg-emerald-500" : "bg-slate-300"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform ${
-                    isActive ? "translate-x-4.5" : "translate-x-0.5"
-                  }`}
-                />
+              {/* Color Palette */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wider">
+                  Warna Penanda
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setColor(c)}
+                      className={`w-7 h-7 rounded-xl transition-all cursor-pointer ${
+                        color === c
+                          ? "scale-110 ring-2 ring-brand-600 dark:ring-brand-300 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 shadow-xs"
+                          : "hover:scale-105 opacity-80 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={`Warna ${c}`}
+                    />
+                  ))}
+                  <div className="relative flex items-center">
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="w-8 h-8 rounded-xl cursor-pointer border-0 bg-transparent"
+                      title="Pilih Warna Kustom"
+                    />
+                  </div>
+                </div>
               </div>
-            </label>
-          </div>
 
-          {/* Footer Actions */}
-          <div className="flex gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="flex-1 flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-all cursor-pointer active:scale-95"
-            >
-              <Save className="w-4 h-4" />
-              <span>Simpan Kategori</span>
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
+              {/* Icon Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wider">
+                  Pilih Ikon Simbol
+                </label>
+                <div className="grid grid-cols-8 gap-2 p-2 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-32 overflow-y-auto no-scrollbar">
+                  {AVAILABLE_ICONS.map((ic) => {
+                    const Ic = ICON_MAP[ic] || Tag;
+                    const isSelected = icon === ic;
+                    return (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => setIcon(ic)}
+                        className={`p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-brand-600 text-white shadow-xs scale-105"
+                            : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
+                        }`}
+                        title={ic}
+                      >
+                        <Ic className="w-4 h-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Real-time Preview Box */}
+              <div className="p-3.5 bg-slate-50/90 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs shrink-0"
+                    style={{
+                      backgroundColor: `${color}20`,
+                      border: `1.5px solid ${color}45`,
+                    }}
+                  >
+                    <IconComp className="w-4 h-4" style={{ color }} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                      {name || "Nama Kategori Anda"}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${currentConfig.badgeClass}`}
+                      >
+                        {currentConfig.label}
+                      </span>
+                      {parentId && !hasExistingChildren && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          • Sub-kategori
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Toggle Switch */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    {isActive ? "Aktif" : "Nonaktif"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isActive}
+                    onClick={() => setIsActive(!isActive)}
+                    className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
+                      isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`block absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-2xs transition-transform ${
+                        isActive ? "translate-x-4.5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm shadow-brand-600/20 transition-all cursor-pointer active:scale-95"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Kategori</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 };
 
 // ─── Tree Node Component (Modern Accordion Row) ─────────────────────────────
 interface TreeNodeProps {
   category: ExpenseCategory;
+  isReadOnly?: boolean;
   onEdit: (c: ExpenseCategory) => void;
   onDelete: (c: ExpenseCategory) => void;
   onAddChild: (parent: ExpenseCategory) => void;
@@ -461,6 +482,7 @@ interface TreeNodeProps {
 
 const TreeNode: React.FC<TreeNodeProps> = ({
   category,
+  isReadOnly = false,
   onEdit,
   onDelete,
   onAddChild,
@@ -477,7 +499,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden"
+      className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm hover:shadow-coffee transition-all overflow-hidden"
     >
       {/* Root Category Bar */}
       <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
@@ -487,16 +509,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             type="button"
             onClick={() => onToggleExpand(category.id)}
             disabled={!hasChildren}
-            className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+            className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
               hasChildren
-                ? "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-                : "text-slate-200 cursor-default"
+                ? "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                : "text-slate-200 dark:text-slate-700 cursor-default"
             }`}
             title={hasChildren ? (isExpanded ? "Ciutkan sub-pos" : "Buka sub-pos") : "Tidak ada sub-pos"}
           >
             <ChevronRight
               className={`w-4 h-4 transition-transform duration-200 ${
-                isExpanded && hasChildren ? "rotate-90 text-brand-600" : ""
+                isExpanded && hasChildren ? "rotate-90 text-brand-600 dark:text-brand-300" : ""
               }`}
             />
           </button>
@@ -517,58 +539,62 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <h4
                 className={`text-sm font-bold truncate ${
-                  category.isActive ? "text-slate-900" : "text-slate-400 line-through"
+                  category.isActive
+                    ? "text-slate-900 dark:text-slate-100"
+                    : "text-slate-400 dark:text-slate-500 line-through"
                 }`}
               >
                 {category.name}
               </h4>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${config.badgeClass}`}
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${config.badgeClass}`}
               >
                 {config.label}
               </span>
               {!category.isActive && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                   Nonaktif
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5 tabular-nums">
               <span>{hasChildren ? `${category.children!.length} Sub-kategori` : "Pos Utama Tunggal"}</span>
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => onAddChild(category)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-            title="Tambah Sub-kategori di bawah pos ini"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Tambah Sub</span>
-          </button>
+        {!isReadOnly && (
+          <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => onAddChild(category)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 border border-emerald-200/80 dark:border-emerald-500/30 text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              title="Tambah Sub-kategori di bawah pos ini"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Tambah Sub</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onEdit(category)}
-            className="p-2 rounded-xl text-slate-600 hover:text-brand-700 hover:bg-brand-50 border border-slate-200/80 transition-colors cursor-pointer shadow-2xs"
-            title="Edit Kategori"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
+            <button
+              type="button"
+              onClick={() => onEdit(category)}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/15 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
+              title="Edit Kategori"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onDelete(category)}
-            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 transition-colors cursor-pointer shadow-2xs"
-            title="Hapus Kategori"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => onDelete(category)}
+              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 border border-slate-200/80 dark:border-slate-700 transition-colors cursor-pointer shadow-2xs"
+              title="Hapus Kategori"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Children Sub-Categories List */}
@@ -579,50 +605,49 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="border-t border-slate-100 bg-slate-50/60 p-3 sm:p-4 space-y-2 overflow-hidden"
+            className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 p-3 sm:p-4 space-y-2 overflow-hidden"
           >
-            <div className="border-l-2 border-brand-200/80 ml-3.5 pl-3 sm:pl-4 space-y-2">
-              {category.children!
-                .sort((a, b) => a.sortOrder - b.sortOrder)
-                .map((child) => {
-                  const ChildIcon = ICON_MAP[child.icon] ?? Tag;
-                  return (
-                    <div
-                      key={child.id}
-                      className="p-2.5 sm:p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between gap-3 group/child hover:border-brand-200 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{
-                            backgroundColor: `${child.color}15`,
-                            border: `1px solid ${child.color}35`,
-                          }}
-                        >
-                          <ChildIcon
-                            className="w-3.5 h-3.5"
-                            style={{ color: child.color }}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <span
-                            className={`text-xs font-semibold truncate block ${
-                              child.isActive
-                                ? "text-slate-800"
-                                : "text-slate-400 line-through"
-                            }`}
-                          >
-                            {child.name}
-                          </span>
-                        </div>
+            <div className="border-l-2 border-brand-200/80 dark:border-brand-500/40 ml-3.5 pl-3 sm:pl-4 space-y-2">
+              {category.children!.map((child) => {
+                const ChildIcon = ICON_MAP[child.icon] ?? Tag;
+                return (
+                  <div
+                    key={child.id}
+                    className="p-2.5 sm:p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs flex items-center justify-between gap-3 group/child hover:border-brand-200 dark:hover:border-brand-500/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: `${child.color}15`,
+                          border: `1px solid ${child.color}35`,
+                        }}
+                      >
+                        <ChildIcon
+                          className="w-3.5 h-3.5"
+                          style={{ color: child.color }}
+                        />
                       </div>
+                      <div className="min-w-0">
+                        <span
+                          className={`text-xs font-semibold truncate block ${
+                            child.isActive
+                              ? "text-slate-800 dark:text-slate-100"
+                              : "text-slate-400 dark:text-slate-500 line-through"
+                          }`}
+                        >
+                          {child.name}
+                        </span>
+                      </div>
+                    </div>
 
-                      {/* Sub-item Actions */}
+                    {/* Sub-item Actions */}
+                    {!isReadOnly && (
                       <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover/child:opacity-100 transition-opacity">
                         <button
                           type="button"
                           onClick={() => onEdit(child)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/15 transition-colors cursor-pointer"
                           title="Edit Sub-kategori"
                         >
                           <Edit2 className="w-3 h-3" />
@@ -630,15 +655,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                         <button
                           type="button"
                           onClick={() => onDelete(child)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors cursor-pointer"
                           title="Hapus Sub-kategori"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -649,17 +675,15 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function ExpenseCategories() {
-  const { expenseCategories, dispatch, restoreDefaultExpenseCategories } = useStore() as any;
+  const {
+    expenseCategories,
+    addExpenseCategory,
+    updateExpenseCategory,
+    deleteExpenseCategory,
+    restoreDefaultExpenseCategories,
+    isReadOnly,
+  } = useStore();
   const categories: ExpenseCategory[] = expenseCategories ?? [];
-
-  const handleRestoreDefaults = () => {
-    const restoredCount = restoreDefaultExpenseCategories ? restoreDefaultExpenseCategories() : 0;
-    if (restoredCount > 0) {
-      alert(`Berhasil memulihkan ${restoredCount} kategori & sub-kategori standar yang sebelumnya terhapus.`);
-    } else {
-      alert("Seluruh kategori & sub-kategori standar sudah lengkap dan aktif.");
-    }
-  };
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null);
@@ -673,25 +697,37 @@ export function ExpenseCategories() {
   // Confirm delete modal state
   const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null);
 
-  // Filter categories
-  const filtered = useMemo(() => {
-    return categories.filter((c) => {
-      const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
-      const matchType = filterType === "ALL" || c.type === filterType;
-      return matchSearch && matchType;
-    });
-  }, [categories, search, filterType]);
+  const handleRestoreDefaults = () => {
+    if (isReadOnly) return;
+    const restoredCount = restoreDefaultExpenseCategories ? restoreDefaultExpenseCategories() : 0;
+    if (restoredCount > 0) {
+      toast.success(`Berhasil memulihkan ${restoredCount} kategori & sub-kategori standar yang sebelumnya terhapus.`);
+    } else {
+      toast.info("Seluruh kategori & sub-kategori standar sudah lengkap dan aktif.");
+    }
+  };
 
-  const tree = useMemo(() => buildTree(filtered), [filtered]);
+  // Build & filter 2-level category hierarchy safely
+  const { tree, autoExpandIds } = useMemo(
+    () => filterExpenseCategoryTree(categories, search, filterType),
+    [categories, search, filterType],
+  );
 
-  // Set default expanded for all root items on load
+  // Set default expanded on load and auto-expand parents matching child search/filter
   React.useEffect(() => {
-    const initialExpanded: Record<string, boolean> = {};
-    tree.forEach((t) => {
-      initialExpanded[t.id] = true;
+    setExpandedIds((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      if (Object.keys(prev).length === 0) {
+        tree.forEach((t) => {
+          next[t.id] = true;
+        });
+      }
+      Object.entries(autoExpandIds).forEach(([id, val]) => {
+        if (val) next[id] = true;
+      });
+      return next;
     });
-    setExpandedIds(initialExpanded);
-  }, [categories.length]);
+  }, [categories.length, autoExpandIds]);
 
   const stats = useMemo(() => {
     const total = categories.length;
@@ -701,11 +737,17 @@ export function ExpenseCategories() {
     return { total, active, roots, subCategories };
   }, [categories]);
 
+  const expandableRoots = useMemo(
+    () => tree.filter((t) => (t.children?.length ?? 0) > 0),
+    [tree],
+  );
+
   // Expand / Collapse all
   const handleToggleExpandAll = () => {
-    const areAllExpanded = tree.every((t) => expandedIds[t.id]);
-    const nextState: Record<string, boolean> = {};
-    tree.forEach((t) => {
+    if (expandableRoots.length === 0) return;
+    const areAllExpanded = expandableRoots.every((t) => expandedIds[t.id]);
+    const nextState: Record<string, boolean> = { ...expandedIds };
+    expandableRoots.forEach((t) => {
       nextState[t.id] = !areAllExpanded;
     });
     setExpandedIds(nextState);
@@ -716,21 +758,32 @@ export function ExpenseCategories() {
   };
 
   const handleSave = (data: Omit<ExpenseCategory, "id" | "children">) => {
+    if (isReadOnly) return;
+    const dupExists = categories.some(
+      (c) =>
+        c.id !== editingCategory?.id &&
+        (c.parentId || null) === (data.parentId || null) &&
+        c.name.trim().toLowerCase() === data.name.trim().toLowerCase(),
+    );
+    if (dupExists) {
+      toast.warning(`Kategori "${data.name}" sudah ada pada grup induk yang sama.`);
+      return;
+    }
+
     if (editingCategory) {
-      dispatch({
-        type: "UPDATE_EXPENSE_CATEGORY",
-        payload: { ...editingCategory, ...data },
-      });
+      updateExpenseCategory({ ...editingCategory, ...data });
+      toast.success(`Kategori "${data.name}" berhasil diperbarui.`);
     } else {
       const newCat: ExpenseCategory = {
         id: `cat-${Date.now()}`,
         ...data,
-        parentId: defaultParent?.id ?? data.parentId,
+        parentId: data.parentId,
       };
-      dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: newCat });
+      addExpenseCategory(newCat);
       if (newCat.parentId) {
         setExpandedIds((prev) => ({ ...prev, [newCat.parentId!]: true }));
       }
+      toast.success(`Kategori "${data.name}" berhasil ditambahkan.`);
     }
     setShowFormModal(false);
     setEditingCategory(null);
@@ -738,151 +791,138 @@ export function ExpenseCategories() {
   };
 
   const handleEdit = (cat: ExpenseCategory) => {
+    if (isReadOnly) return;
     setEditingCategory(cat);
     setDefaultParent(null);
     setShowFormModal(true);
   };
 
   const handleDeletePrompt = (cat: ExpenseCategory) => {
+    if (isReadOnly) return;
     setCategoryToDelete(cat);
   };
 
   const handleConfirmDelete = () => {
+    if (isReadOnly) return;
     if (categoryToDelete) {
-      dispatch({
-        type: "DELETE_EXPENSE_CATEGORY",
-        payload: categoryToDelete.id,
-      });
+      deleteExpenseCategory(categoryToDelete.id);
+      toast.success(`Kategori "${categoryToDelete.name}" berhasil dihapus.`);
       setCategoryToDelete(null);
     }
   };
 
   const handleAddChild = (parent: ExpenseCategory) => {
+    if (isReadOnly) return;
     setEditingCategory(null);
     setDefaultParent(parent);
     setShowFormModal(true);
   };
 
   const handleAddRoot = () => {
+    if (isReadOnly) return;
     setEditingCategory(null);
     setDefaultParent(null);
     setShowFormModal(true);
   };
 
   const handleImportCategories = (data: any[]) => {
-    let imported = 0;
-    let updated = 0;
-    data.forEach((row) => {
-      const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const name = row["Nama Kategori"] || row.name;
-      const type = (
-        row["Tipe"] ||
-        row.type ||
-        "LAINNYA"
-      ).toUpperCase() as ExpenseCategoryType;
-      const color = row["Warna"] || row.color || "#3B82F6";
-      const icon = row["Icon"] || row.icon || "tag";
+    if (isReadOnly) return;
+    const { toCreate, toUpdate, skipped } = parseImportedExpenseCategories(
+      data,
+      categories,
+      AVAILABLE_ICONS,
+    );
 
-      if (name) {
-        if (idSistem) {
-          const existing = categories.find((c) => c.id === idSistem);
-          if (existing) {
-            dispatch({
-              type: "UPDATE_EXPENSE_CATEGORY",
-              payload: { ...existing, name, type, color, icon },
-            });
-            updated++;
-          }
-        } else {
-          const newCat: ExpenseCategory = {
-            id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name,
-            type,
-            color,
-            icon,
-            parentId: null,
-            isActive: true,
-            sortOrder: 0,
-          };
-          dispatch({ type: "ADD_EXPENSE_CATEGORY", payload: newCat });
-          imported++;
-        }
-      }
+    toUpdate.forEach((cat) => updateExpenseCategory(cat));
+    toCreate.forEach((cat, idx) => {
+      addExpenseCategory({
+        id: `cat-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+        ...cat,
+      });
     });
-    if (imported > 0 || updated > 0)
-      alert(
-        `Berhasil menambahkan ${imported} pos baru dan memperbarui ${updated} kategori.`,
+
+    if (toCreate.length > 0 || toUpdate.length > 0) {
+      toast.success(
+        `Berhasil menambahkan ${toCreate.length} pos baru & memperbarui ${toUpdate.length} kategori${skipped > 0 ? ` (${skipped} baris dilewati)` : ""}.`,
       );
-    else alert("Tidak ada data valid yang diimpor.");
+    } else {
+      toast.warning("Tidak ada data kategori valid atau baru yang diimpor.");
+    }
   };
 
   return (
     <div className="space-y-6">
       {/* ─── Header Card ─────────────────────────────────────────────────── */}
-      <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-7 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 text-brand-700 uppercase border border-brand-200/70">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 uppercase border border-brand-200/70 dark:border-brand-500/30">
               Chart of Accounts • Klasifikasi Keuangan
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-              Julia's • Specialty Room • Coffee • Eatery
-            </span>
+            {isReadOnly && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
+                <Eye className="w-3 h-3" />
+                Mode Pemantauan Owner (Read-Only)
+              </span>
+            )}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shadow-2xs shrink-0">
               <Tag className="w-5 h-5" />
             </div>
             Kategori Kas & Biaya
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
             Kelola bagan pos pendapatan, biaya operasional, utilitas, dan modal kafe untuk otomatisasi Buku Kas & Laba Rugi.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={handleRestoreDefaults}
-            className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
-            title="Kembalikan kategori dan sub-kategori bawaan yang tidak sengaja terhapus"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-            <span>Pulihkan Kategori Standar</span>
-          </button>
+        {!isReadOnly && (
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={handleRestoreDefaults}
+              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-500/30 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+              title="Kembalikan kategori dan sub-kategori bawaan yang tidak sengaja terhapus"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 shrink-0" />
+              <span>Pulihkan Kategori Standar</span>
+            </button>
 
-          <CsvImportExport
-            onImport={handleImportCategories}
-            templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
-            templateExampleRow={["Gaji Karyawan", "HRD", "#8B5CF6", "users"]}
-            currentData={categories.map((c) => ({
-              id: c.id,
-              "Nama Kategori": c.name,
-              Tipe: c.type,
-              Warna: c.color,
-              Icon: c.icon,
-            }))}
-            templateFilename="template_kategori_keuangan"
-            buttonLabel="Impor/Ekspor Excel"
-            templateDropdowns={{
-              Tipe: CATEGORY_TYPES.map((t) => t.value),
-            }}
-            templateHints={{
-              "Nama Kategori": "Wajib diisi",
-              Tipe: "Pilih tipe kategori dari dropdown",
-              Warna: "Kode HEX warna, contoh: #8B5CF6",
-              Icon: "Nama icon (misal: users, coffee, tag, wallet, package)",
-            }}
-          />
+            <CsvImportExport
+              onImport={handleImportCategories}
+              templateHeaders={["Nama Kategori", "Tipe", "Warna", "Icon"]}
+              templateExampleRow={["Gaji Karyawan", "HRD", "#8b5cf6", "users"]}
+              currentData={categories.map((c) => ({
+                id: c.id,
+                "Nama Kategori": c.name,
+                Tipe: c.type,
+                Warna: c.color,
+                Icon: c.icon,
+              }))}
+              templateFilename="template_kategori_keuangan"
+              buttonLabel="Impor/Ekspor Excel"
+              templateDropdowns={{
+                Tipe: CATEGORY_TYPES.map((t) => t.value),
+              }}
+              templateHints={{
+                "Nama Kategori": "Wajib diisi",
+                Tipe: "Pilih tipe kategori dari dropdown",
+                Warna: "Kode HEX warna, contoh: #8b5cf6",
+                Icon: "Nama icon (misal: users, coffee, tag, wallet, package)",
+              }}
+            />
 
-          <button
-            onClick={handleAddRoot}
-            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span>Tambah Kategori</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={handleAddRoot}
+              className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-sm shadow-brand-600/20 cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Tambah Kategori</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─── 4 Bento KPI Cards ────────────────────────────────────────────── */}
@@ -892,18 +932,18 @@ export function ExpenseCategories() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-2xs flex items-center justify-between"
+          className="bg-gradient-to-br from-slate-50/80 via-white to-white dark:from-slate-800/70 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm flex items-center justify-between"
         >
           <div>
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Total Pos Kategori
             </p>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900 mt-1 font-mono">
+            <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 mt-1 font-mono tabular-nums">
               {stats.total}
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Bagan akun terdaftar</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Bagan akun terdaftar</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shadow-2xs shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200 shadow-2xs shrink-0">
             <FolderTree className="w-5 h-5" />
           </div>
         </motion.div>
@@ -913,18 +953,18 @@ export function ExpenseCategories() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, delay: 0.05 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-2xs flex items-center justify-between"
+          className="bg-gradient-to-br from-emerald-50/60 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 rounded-3xl border border-emerald-200/70 dark:border-emerald-500/30 shadow-coffee-sm flex items-center justify-between"
         >
           <div>
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-600">
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
               Kategori Aktif
             </p>
-            <p className="text-2xl sm:text-3xl font-black text-emerald-600 mt-1 font-mono">
+            <p className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-300 mt-1 font-mono tabular-nums">
               {stats.active}
             </p>
-            <p className="text-[11px] text-emerald-600/70 mt-0.5">Siap di entri kas</p>
+            <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">Siap di entri kas</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-2xs shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-100 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-300 shadow-2xs shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </motion.div>
@@ -934,18 +974,18 @@ export function ExpenseCategories() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, delay: 0.1 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-2xs flex items-center justify-between"
+          className="bg-gradient-to-br from-brand-50/60 via-white to-white dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 rounded-3xl border border-brand-200/70 dark:border-brand-500/30 shadow-coffee-sm flex items-center justify-between"
         >
           <div>
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-brand-600">
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-300">
               Kategori Utama (Header)
             </p>
-            <p className="text-2xl sm:text-3xl font-black text-brand-700 mt-1 font-mono">
+            <p className="text-2xl sm:text-3xl font-black text-brand-700 dark:text-brand-300 mt-1 font-mono tabular-nums">
               {stats.roots}
             </p>
-            <p className="text-[11px] text-brand-600/70 mt-0.5">Grup induk akun</p>
+            <p className="text-[11px] text-brand-700/80 dark:text-brand-300/80 mt-0.5">Grup induk akun</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shadow-2xs shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-500/20 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shadow-2xs shrink-0">
             <Layers className="w-5 h-5" />
           </div>
         </motion.div>
@@ -955,25 +995,25 @@ export function ExpenseCategories() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, delay: 0.15 }}
-          className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-2xs flex items-center justify-between"
+          className="bg-gradient-to-br from-sky-50/60 via-white to-white dark:from-sky-500/15 dark:via-slate-900 dark:to-slate-900 p-4 sm:p-5 rounded-3xl border border-sky-200/70 dark:border-sky-500/30 shadow-coffee-sm flex items-center justify-between"
         >
           <div>
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-violet-600">
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">
               Rincian Sub-Kategori
             </p>
-            <p className="text-2xl sm:text-3xl font-black text-violet-700 mt-1 font-mono">
+            <p className="text-2xl sm:text-3xl font-black text-sky-700 dark:text-sky-300 mt-1 font-mono tabular-nums">
               {stats.subCategories}
             </p>
-            <p className="text-[11px] text-violet-600/70 mt-0.5">Pos detail turunan</p>
+            <p className="text-[11px] text-sky-700/80 dark:text-sky-300/80 mt-0.5">Pos detail turunan</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-600 shadow-2xs shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-sky-50 dark:bg-sky-500/20 border border-sky-100 dark:border-sky-500/30 flex items-center justify-center text-sky-600 dark:text-sky-300 shadow-2xs shrink-0">
             <GitBranch className="w-5 h-5" />
           </div>
         </motion.div>
       </div>
 
       {/* ─── Filter & Search Bar ─────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative flex-1">
@@ -983,12 +1023,14 @@ export function ExpenseCategories() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari pos pengeluaran, pendapatan, atau sub-kategori..."
-              className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl pl-10 pr-10 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20 transition-all shadow-2xs"
+              className="w-full bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/90 dark:border-slate-700 rounded-2xl pl-10 pr-10 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-brand-500/20 transition-all shadow-2xs"
             />
             {search && (
               <button
+                type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                aria-label="Hapus pencarian"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -999,18 +1041,21 @@ export function ExpenseCategories() {
           <button
             type="button"
             onClick={handleToggleExpandAll}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-bold transition-colors cursor-pointer shrink-0"
+            disabled={expandableRoots.length === 0}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer shrink-0"
           >
-            <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500" />
+            <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             <span>
-              {tree.every((t) => expandedIds[t.id]) ? "Ciutkan Semua" : "Buka Semua"}
+              {expandableRoots.length > 0 && expandableRoots.every((t) => expandedIds[t.id])
+                ? "Ciutkan Semua"
+                : "Buka Semua"}
             </span>
           </button>
         </div>
 
         {/* Quick Type Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-          <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1 shrink-0 uppercase tracking-wider text-[10px]">
+          <span className="font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1 shrink-0 uppercase tracking-wider text-[10px]">
             <Filter className="w-3 h-3" />
             Filter Tipe:
           </span>
@@ -1029,8 +1074,8 @@ export function ExpenseCategories() {
                 onClick={() => setFilterType(tab.id as any)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   isSelected
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200/70 border border-slate-200/60"
+                    ? "bg-brand-600 text-white shadow-sm shadow-brand-600/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700"
                 }`}
               >
                 {tab.label}
@@ -1043,27 +1088,45 @@ export function ExpenseCategories() {
       {/* ─── Category Tree Container ─────────────────────────────────────── */}
       <div className="space-y-3">
         {tree.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center text-slate-400 shadow-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 p-12 text-center text-slate-400 shadow-coffee-sm">
             <Tag className="w-12 h-12 mx-auto mb-3 opacity-30 text-slate-400" />
-            <h4 className="text-base font-bold text-slate-700">Tidak ada kategori ditemukan</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            <h4 className="text-base font-bold text-slate-700 dark:text-slate-200">Tidak ada kategori ditemukan</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
               {search || filterType !== "ALL"
                 ? "Tidak ada pos yang cocok dengan pencarian atau filter tipe Anda."
                 : "Belum ada bagan akun yang dibuat. Mulai tambahkan pos kategori pertama Anda."}
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-              <button
-                onClick={handleRestoreDefaults}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold shadow-xs hover:bg-amber-600 transition cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" /> Pulihkan Kategori Standar
-              </button>
-              <button
-                onClick={handleAddRoot}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-xs hover:bg-brand-700 transition cursor-pointer"
-              >
-                <Plus className="w-4 h-4" /> Tambah Kategori Baru
-              </button>
+              {(search || filterType !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilterType("ALL");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset Filter
+                </button>
+              )}
+              {!isReadOnly && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaults}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold shadow-xs hover:bg-amber-600 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" /> Pulihkan Kategori Standar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddRoot}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-sm shadow-brand-600/20 hover:bg-brand-700 transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" /> Tambah Kategori Baru
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -1072,6 +1135,7 @@ export function ExpenseCategories() {
               <TreeNode
                 key={cat.id}
                 category={cat}
+                isReadOnly={isReadOnly}
                 onEdit={handleEdit}
                 onDelete={handleDeletePrompt}
                 onAddChild={handleAddChild}
@@ -1084,22 +1148,18 @@ export function ExpenseCategories() {
       </div>
 
       {/* ─── Category Add/Edit Modal Form ─────────────────────────────────── */}
-      <AnimatePresence>
-        {showFormModal && (
-          <CategoryModalForm
-            isOpen={showFormModal}
-            initial={editingCategory}
-            defaultParent={defaultParent}
-            categories={categories}
-            onSave={handleSave}
-            onClose={() => {
-              setShowFormModal(false);
-              setEditingCategory(null);
-              setDefaultParent(null);
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <CategoryModalForm
+        isOpen={showFormModal}
+        initial={editingCategory}
+        defaultParent={defaultParent}
+        categories={categories}
+        onSave={handleSave}
+        onClose={() => {
+          setShowFormModal(false);
+          setEditingCategory(null);
+          setDefaultParent(null);
+        }}
+      />
 
       {/* ─── Delete Confirmation Modal ────────────────────────────────────── */}
       <ConfirmModal

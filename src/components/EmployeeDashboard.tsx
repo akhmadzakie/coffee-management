@@ -1,14 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { useStore } from "../store/StoreContext";
 import { ViewState } from "../types";
-import { getLocalDateString } from "../utils/dateUtils";
-const formatRupiah = (amount: number) => {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+import {
+  DEFAULT_STORE_TIMEZONE,
+  getLocalDateString,
+  getLocalPeriodString,
+} from "../utils/dateUtils";
+import {
+  classifyDailyAttendanceStatus,
+  calculateWorkDurationHours,
+  formatWitaTimeHm,
+  getWitaTimeMinutes,
+  resolveCanonicalEmployeeId,
+} from "../utils/attendanceRecap";
+import { getWitaWeekStartDate } from "../utils/syncSanitizers";
 import {
   Calendar,
   Clock,
@@ -81,23 +86,30 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     );
   }, [employees, currentUser]);
 
-  const activeEmployeeId = currentUser?.employeeId || activeEmployee?.id || currentUser?.id;
+  const activeEmployeeId = useMemo(
+    () =>
+      resolveCanonicalEmployeeId(
+        currentUser?.employeeId || activeEmployee?.id || currentUser?.id || "",
+        employees,
+        users
+      ),
+    [currentUser, activeEmployee, employees, users]
+  );
 
-  // 2. Dates & Period
+  // 2. Dates & Period (zona waktu WITA)
   const todayStr = getLocalDateString();
   const now = new Date();
-  const currentMonthNum = now.getMonth() + 1; // 1 - 12
-  const currentYear = now.getFullYear();
-  const currentMonthStr = `${currentYear}-${String(currentMonthNum).padStart(2, "0")}`;
+  const currentMonthStr = getLocalPeriodString();
+  const [currentYear, currentMonthNum] = currentMonthStr.split("-").map(Number);
 
-  // Time-based Indonesian greeting
+  // Time-based Indonesian greeting (WITA)
+  const witaHour = Math.floor(getWitaTimeMinutes(now) / 60);
   const greeting = useMemo(() => {
-    const hour = now.getHours();
-    if (hour < 11) return "Selamat Pagi";
-    if (hour < 15) return "Selamat Siang";
-    if (hour < 18) return "Selamat Sore";
+    if (witaHour < 11) return "Selamat Pagi";
+    if (witaHour < 15) return "Selamat Siang";
+    if (witaHour < 18) return "Selamat Sore";
     return "Selamat Malam";
-  }, [now]);
+  }, [witaHour]);
 
   // 3. Today's Attendance
   const todayAttendance = useMemo(() => {
@@ -123,14 +135,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
     let alpha = 0;
 
     monthlyLogs.forEach((l) => {
-      if (l.approvalStatus === "REJECTED" || l.status === "ALPHA" || l.status === "DITOLAK") {
+      const cls = classifyDailyAttendanceStatus(l);
+      if (cls === "ALPHA") {
         alpha++;
-      } else if (l.status === "HADIR") {
+      } else if (cls === "HADIR") {
         present++;
-      } else if (l.status === "TERLAMBAT") {
+      } else if (cls === "TERLAMBAT") {
         present++;
         late++;
-      } else if (l.status === "IZIN" || l.status === "SAKIT") {
+      } else if (cls === "IZIN" || cls === "SAKIT") {
         sickLeave++;
       }
     });
@@ -213,10 +226,9 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   const todayShiftRecord = (employeeShifts || []).find(
     (s: any) => s.employeeId === activeEmployeeId && s.date === todayStr
   );
-  const currentHour = new Date().getHours();
-  const defaultShiftByTime: "PAGI" | "MIDDLE" | "SORE" = 
-    currentHour >= 15 ? "SORE" : currentHour >= 11 ? "MIDDLE" : "PAGI";
-  const scheduledShift: "PAGI" | "MIDDLE" | "SORE" | "OFF" = todayShiftRecord?.shiftType || defaultShiftByTime;
+  const defaultShiftByTime: "PAGI" | "MIDDLE" | "SORE" =
+    witaHour >= 15 ? "SORE" : witaHour >= 11 ? "MIDDLE" : "PAGI";
+  const scheduledShift: string = todayShiftRecord?.shiftType || defaultShiftByTime;
 
   // Checklist progress today for this employee
   const checklistProgress = useMemo(() => {
@@ -383,13 +395,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   }, [payrollRecords, activeEmployeeId]);
 
   // ─── 11. OFFICIAL WEEKLY SCHEDULE & MANAGER'S BRIEF ───
-  const currentMonday = useMemo(() => {
-    const d = new Date(now);
-    d.setHours(12, 0, 0, 0);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
-  }, [now]);
+  const currentMonday = useMemo(() => getWitaWeekStartDate(now), [todayStr]);
 
   const currentWeekDays = useMemo(() => {
     const days = [];
@@ -416,10 +422,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
       return {
         date: d,
         dateStr,
-        dayName: d.toLocaleDateString("id-ID", { weekday: "short" }),
-        fullDayName: d.toLocaleDateString("id-ID", { weekday: "long" }),
-        dayNum: d.getDate(),
-        monthStr: d.toLocaleDateString("id-ID", { month: "short" }),
+        dayName: d.toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, weekday: "short" }),
+        fullDayName: d.toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, weekday: "long" }),
+        dayNum: Number(dateStr.slice(8, 10)),
+        monthStr: d.toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE, month: "short" }),
         isToday: dateStr === todayStr,
         shiftType,
         notes: shiftRecord?.notes,
@@ -459,7 +465,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
       {/* ─── 1. GREETING & IDENTITY BANNER ─── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-white/10">
+      <div className="relative overflow-hidden bg-brand-gradient text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-brand-700/60">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-20 -mb-16 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
 
@@ -754,13 +760,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <span>Jam Masuk (Clock In)</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
             </div>
-            <div className="text-lg font-black text-slate-800 font-mono">
-              {todayAttendance?.clockInTime
-                ? new Date(todayAttendance.clockInTime).toLocaleTimeString("id-ID", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "-- : --"}
+            <div className="text-lg font-black text-slate-800 font-mono tabular-nums">
+              {todayAttendance?.clockInTime ? formatWitaTimeHm(todayAttendance.clockInTime) : "-- : --"}
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
               {todayAttendance?.status || "Belum Absen"}
@@ -773,13 +774,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <span>Jam Pulang (Clock Out)</span>
               <span className="w-2 h-2 rounded-full bg-rose-500" />
             </div>
-            <div className="text-lg font-black text-slate-800 font-mono">
-              {todayAttendance?.clockOutTime
-                ? new Date(todayAttendance.clockOutTime).toLocaleTimeString("id-ID", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "-- : --"}
+            <div className="text-lg font-black text-slate-800 font-mono tabular-nums">
+              {todayAttendance?.clockOutTime ? formatWitaTimeHm(todayAttendance.clockOutTime) : "-- : --"}
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
               {isClockedOut ? "Pulang Tepat Waktu" : "Belum Clock Out"}
@@ -792,13 +788,9 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
               <span>Total Jam Kerja</span>
               <Clock className="w-3.5 h-3.5 text-blue-500" />
             </div>
-            <div className="text-lg font-black text-blue-700 font-mono">
+            <div className="text-lg font-black text-blue-700 font-mono tabular-nums">
               {todayAttendance?.clockInTime && todayAttendance?.clockOutTime
-                ? `${(
-                    (new Date(todayAttendance.clockOutTime).getTime() -
-                      new Date(todayAttendance.clockInTime).getTime()) /
-                    3600000
-                  ).toFixed(1)} Jam`
+                ? `${calculateWorkDurationHours(todayAttendance.clockInTime, todayAttendance.clockOutTime).toFixed(1)} Jam`
                 : isClockedIn
                 ? "Berjalan..."
                 : "0 Jam"}
@@ -863,8 +855,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
               <button
-                onClick={() => onNavigate("hr")}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
+                onClick={() => {
+                  sessionStorage.setItem("hr_target_tab", "schedule");
+                  onNavigate("hr");
+                }}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Clock className="w-4 h-4 text-indigo-600" />
                 <span>Atur Jadwal Shift Tim →</span>
@@ -958,12 +953,9 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       </div>
 
                       <div className="flex items-center gap-2.5">
-                        <span className="font-mono text-slate-600 text-[11px]">
+                        <span className="font-mono text-slate-600 text-[11px] tabular-nums">
                           {member.attendance?.clockInTime
-                            ? new Date(member.attendance.clockInTime).toLocaleTimeString("id-ID", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
+                            ? formatWitaTimeHm(member.attendance.clockInTime)
                             : "-"}
                         </span>
                         <span
@@ -1010,7 +1002,12 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 Ringkasan Kehadiran Bulan Ini
               </h3>
               <p className="text-xs text-slate-500">
-                Periode: {now.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+                Periode:{" "}
+                {now.toLocaleDateString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                  month: "long",
+                  year: "numeric",
+                })}
               </p>
             </div>
             <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold text-xs rounded-lg">
@@ -1092,28 +1089,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                             {att.status}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">
-                          {att.clockInTime
-                            ? new Date(att.clockInTime).toLocaleTimeString("id-ID", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "-"}
+                        <td className="py-2.5 px-3 font-mono text-slate-600 tabular-nums">
+                          {att.clockInTime ? formatWitaTimeHm(att.clockInTime) : "-"}
                           {" - "}
-                          {att.clockOutTime
-                            ? new Date(att.clockOutTime).toLocaleTimeString("id-ID", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "-"}
+                          {att.clockOutTime ? formatWitaTimeHm(att.clockOutTime) : "-"}
                         </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-700">
+                        <td className="py-2.5 px-3 font-bold text-slate-700 tabular-nums">
                           {att.clockInTime && att.clockOutTime
-                            ? `${(
-                                (new Date(att.clockOutTime).getTime() -
-                                  new Date(att.clockInTime).getTime()) /
-                                3600000
-                              ).toFixed(1)} Jam`
+                            ? `${calculateWorkDurationHours(att.clockInTime, att.clockOutTime).toFixed(1)} Jam`
                             : "-"}
                         </td>
                         <td className="py-2.5 px-3 text-right">
@@ -1156,7 +1139,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                 </div>
               </div>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
-                {now.toLocaleDateString("id-ID", { month: "short", year: "numeric" })}
+                {now.toLocaleDateString("id-ID", {
+                  timeZone: DEFAULT_STORE_TIMEZONE,
+                  month: "short",
+                  year: "numeric",
+                })}
               </span>
             </div>
 
@@ -1173,14 +1160,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                   </span>
                 </div>
 
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono">
-                  {formatRupiah(periodSales)}
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tabular-nums">
+                  {formatCurrency(periodSales)}
                 </div>
 
                 <div className="flex justify-between items-center text-xs text-slate-500 mt-1 mb-2">
                   <span>Target Outlet:</span>
-                  <span className="font-mono font-bold text-slate-700">
-                    {monthlyRevenueTarget > 0 ? formatRupiah(monthlyRevenueTarget) : "Belum Diset"}
+                  <span className="font-mono font-bold text-slate-700 tabular-nums">
+                    {monthlyRevenueTarget > 0 ? formatCurrency(monthlyRevenueTarget) : "Belum Diset"}
                   </span>
                 </div>
 
@@ -1211,8 +1198,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       <Sparkles className={`w-4 h-4 ${isRevenueTargetAchieved ? "text-emerald-600" : "text-amber-500"}`} />
                       {isRevenueTargetAchieved ? "Bonus Omset Toko Siap Cair!" : "Bonus Tembus Omset Toko"}
                     </span>
-                    <span className="font-mono font-black text-emerald-700 text-sm">
-                      +{formatRupiah(storeBonusAmount)}
+                    <span className="font-mono font-black text-emerald-700 text-sm tabular-nums">
+                      +{formatCurrency(storeBonusAmount)}
                     </span>
                   </div>
                   <p className="text-[11px] leading-relaxed">
@@ -1221,7 +1208,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                     ) : isRevenueTargetAchieved ? (
                       <span className="text-emerald-800 font-medium">🎉 Selamat! Omset toko telah tembus target. Bonus siap masuk ke slip gaji bulan ini bersama seluruh rekan tim!</span>
                     ) : (
-                      <span className="text-slate-600">Kurang <strong className="font-mono text-indigo-700">{formatRupiah(Math.max(0, monthlyRevenueTarget - periodSales))}</strong> lagi agar bonus omset cair ke seluruh staf. Terus upselling & jaga kepuasan tamu!</span>
+                      <span className="text-slate-600">Kurang <strong className="font-mono text-indigo-700 tabular-nums">{formatCurrency(Math.max(0, monthlyRevenueTarget - periodSales))}</strong> lagi agar bonus omset cair ke seluruh staf. Terus upselling & jaga kepuasan tamu!</span>
                     )}
                   </p>
                 </div>
@@ -1302,7 +1289,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
             {myPayslips.map((pay) => {
               const [y, m] = pay.period.split("-");
               const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
-              const formattedPeriod = dateObj.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+              const formattedPeriod = dateObj.toLocaleDateString("id-ID", {
+                timeZone: DEFAULT_STORE_TIMEZONE,
+                month: "long",
+                year: "numeric",
+              });
 
               return (
                 <div
@@ -1341,7 +1332,10 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
                       </span>
                       {pay.paidDate && (
                         <span className="text-[10px] text-slate-400 block mt-1">
-                          Dibayar tgl {new Date(pay.paidDate).toLocaleDateString("id-ID")}
+                          Dibayar tgl{" "}
+                          {new Date(pay.paidDate).toLocaleDateString("id-ID", {
+                            timeZone: DEFAULT_STORE_TIMEZONE,
+                          })}
                         </span>
                       )}
                     </div>
@@ -1349,7 +1343,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onNavigate
 
                   <button
                     onClick={() => setSelectedPayslipForEmployee(pay)}
-                    className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-3 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5 text-amber-400" />
                     <span>Lihat & Unduh Slip Gaji</span>

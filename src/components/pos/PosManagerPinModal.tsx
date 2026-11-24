@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { useStore } from "../../store/StoreContext";
+import { authFetch } from "../../utils/authHeaders";
 import {
   Lock,
   X,
@@ -92,7 +93,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
     setErrorMessage("");
 
     try {
-      const res = await fetch("/api/pos/approvals/request", {
+      const res = await authFetch("/api/pos/approvals/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +130,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
     let isMounted = true;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/pos/approvals/${remoteRequestId}/status`);
+        const res = await authFetch(`/api/pos/approvals/${remoteRequestId}/status`);
         if (res.ok && isMounted) {
           const data = await res.json();
           if (data.status === "APPROVED") {
@@ -174,7 +175,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
     }
 
     try {
-      const res = await fetch("/api/pos/verify-pin", {
+      const res = await authFetch("/api/pos/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin: currentPin, purpose }),
@@ -257,7 +258,7 @@ export const PosManagerPinModal: React.FC<PosManagerPinModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 select-none"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}

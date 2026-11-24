@@ -15,7 +15,9 @@ import {
 import {
   getSaleTransactionAmount,
   isNonOperationalCashTransaction,
+  parseBankStatementAmount,
 } from "./financeMetrics";
+import { DEFAULT_STORE_TIMEZONE, getLocalDateString } from "./dateUtils";
 import {
   calculateWorkDurationHours,
   classifyDailyAttendanceStatus,
@@ -35,6 +37,7 @@ const toDateIndo = (dateStr: string | Date): string => {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: DEFAULT_STORE_TIMEZONE,
   });
 };
 
@@ -106,12 +109,17 @@ export const exportFinanceToXlsx = ({
   const brandName = settings.brandName || "Julia's Management System";
 
   // ─── Sheet 1: Ringkasan ───────────────────────────────────────────────────
-  const totalIn = finance
-    .filter((f) => f.type === "CASH_IN")
-    .reduce((a, b) => a + b.amount, 0);
-  const totalOut = finance
-    .filter((f) => f.type === "CASH_OUT")
-    .reduce((a, b) => a + b.amount, 0);
+  const operationalFinance = finance.filter((f) => !isNonOperationalCashTransaction(f));
+  const isCashIn = (t: unknown) => {
+    const up = String(t || "").toUpperCase();
+    return up === "CASH_IN" || up === "IN" || up === "INCOME";
+  };
+  const totalIn = operationalFinance
+    .filter((f) => isCashIn(f.type))
+    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
+  const totalOut = operationalFinance
+    .filter((f) => !isCashIn(f.type))
+    .reduce((a, b) => a + (Number(b.amount) || 0), 0);
   const net = totalIn - totalOut;
 
   const summaryData = [
@@ -345,14 +353,14 @@ export const downloadFinanceImportTemplate = (
   const headers = ["Tanggal*", "Jenis*", "Kategori*", "Keterangan*", "Jumlah (Rp)*"];
   const exampleData = [
     [
-      new Date().toLocaleDateString("id-ID"),
+      new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
       "Pemasukan",
       expenseCategories[0]?.name || "Pendapatan Penjualan",
       "Pendapatan shift pagi",
       500000,
     ],
     [
-      new Date().toLocaleDateString("id-ID"),
+      new Date().toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE }),
       "Pengeluaran",
       expenseCategories[1]?.name || "Operasional",
       "Pembelian bahan baku",
@@ -449,8 +457,11 @@ export const parseFinanceImportFile = (
           const rowNum = idx + headerRowIdx + 2;
           // Normalize keys: strip * and lowercase
           const r: Record<string, string> = {};
+          let rawDateCell: unknown = "";
           for (const k in row) {
-            r[k.replace(/\*/g, "").trim().toLowerCase()] = String(row[k]).trim();
+            const normKey = k.replace(/\*/g, "").trim().toLowerCase();
+            r[normKey] = String(row[k]).trim();
+            if (normKey === "tanggal") rawDateCell = row[k];
           }
 
           // Skip empty rows
@@ -473,33 +484,74 @@ export const parseFinanceImportFile = (
             return;
           }
 
-          // Resolve date
+          // Resolve date (aman zona waktu WITA, validasi kalender, serial Excel & DD/MM/YYYY)
           const dateRaw = r["tanggal"];
           let dateISO = "";
-          // Try direct parsing
-          const d1 = new Date(dateRaw);
-          if (!isNaN(d1.getTime())) {
-            dateISO = d1.toISOString();
-          } else {
-            // Try DD/MM/YYYY
-            const parts = dateRaw.split(/[/\-\.]/);
-            if (parts.length === 3) {
-              const [dd, mm, yy] = parts;
-              const d2 = new Date(
-                `${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`,
+          const buildWitaIso = (yyyy: number, mm: number, dd: number): string => {
+            if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1990 || yyyy > 2100) return "";
+            const check = new Date(Date.UTC(yyyy, mm - 1, dd));
+            if (
+              check.getUTCFullYear() !== yyyy ||
+              check.getUTCMonth() + 1 !== mm ||
+              check.getUTCDate() !== dd
+            ) {
+              return "";
+            }
+            const yStr = String(yyyy);
+            const mStr = String(mm).padStart(2, "0");
+            const dStr = String(dd).padStart(2, "0");
+            return new Date(`${yStr}-${mStr}-${dStr}T12:00:00+08:00`).toISOString();
+          };
+
+          if (rawDateCell instanceof Date && !Number.isNaN(rawDateCell.getTime())) {
+            const ymd = getLocalDateString(rawDateCell);
+            dateISO = new Date(`${ymd}T12:00:00+08:00`).toISOString();
+          } else if (
+            typeof rawDateCell === "number" &&
+            Number.isFinite(rawDateCell) &&
+            rawDateCell >= 25000 &&
+            rawDateCell <= 65000
+          ) {
+            const utcMs = Math.round((rawDateCell - 25569) * 86400 * 1000);
+            const dt = new Date(utcMs);
+            dateISO = buildWitaIso(
+              dt.getUTCFullYear(),
+              dt.getUTCMonth() + 1,
+              dt.getUTCDate()
+            );
+          } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateRaw)) {
+            const [yy, mm, dd] = dateRaw.split("-").map(Number);
+            dateISO = buildWitaIso(yy, mm, dd);
+          } else if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}$/.test(dateRaw)) {
+            const [dd, mm, yy] = dateRaw.split(/[\/\-\.]/).map(Number);
+            dateISO = buildWitaIso(yy, mm, dd);
+          } else if (/^\d{5}(\.\d+)?$/.test(dateRaw)) {
+            const serial = Number(dateRaw);
+            if (serial >= 25000 && serial <= 65000) {
+              const utcMs = Math.round((serial - 25569) * 86400 * 1000);
+              const dt = new Date(utcMs);
+              dateISO = buildWitaIso(
+                dt.getUTCFullYear(),
+                dt.getUTCMonth() + 1,
+                dt.getUTCDate()
               );
-              if (!isNaN(d2.getTime())) dateISO = d2.toISOString();
+            }
+          } else {
+            const d1 = new Date(dateRaw);
+            if (!Number.isNaN(d1.getTime())) {
+              dateISO = d1.toISOString();
             }
           }
+
           if (!dateISO) {
             errors.push(`Baris ${rowNum}: Format tanggal "${dateRaw}" tidak dikenali.`);
             return;
           }
 
-          // Resolve amount
+          // Resolve amount (aman pemisah ribuan Indonesia "Rp 150.000")
           const amountRaw = r["jumlah (rp)"] || r["jumlah"] || "0";
-          const amount = parseFloat(String(amountRaw).replace(/[^\d.-]/g, ""));
-          if (isNaN(amount) || amount <= 0) {
+          const amount = Math.abs(parseBankStatementAmount(amountRaw));
+          if (!Number.isFinite(amount) || amount <= 0) {
             errors.push(`Baris ${rowNum}: Jumlah "${amountRaw}" tidak valid.`);
             return;
           }
@@ -901,8 +953,8 @@ export const exportMasterExecutiveReportXlsx = ({
       Tanggal: a.date,
       "Nama Karyawan": emp?.name || a.employeeId,
       Jabatan: emp?.position || "-",
-      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-",
-      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-",
+      "Jam Masuk": a.clockInTime ? new Date(a.clockInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
+      "Jam Pulang": a.clockOutTime ? new Date(a.clockOutTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: DEFAULT_STORE_TIMEZONE }) : "-",
       Durasi: dur,
       Status: a.status,
       "Verifikasi Manager": a.approvalStatus === "APPROVED" ? "Disahkan" : a.approvalStatus === "REJECTED" ? "Ditolak" : "Menunggu",
@@ -970,7 +1022,7 @@ export const exportDailySalesRecapToXlsx = ({
     ["LAPORAN REKAP PENJUALAN HARIAN", ""],
     ["Unit Usaha", settings.brandName || "Julia Coffee"],
     ["Periode / Filter", periodLabel],
-    ["Tanggal Unduh", new Date().toLocaleString("id-ID")],
+    ["Tanggal Unduh", new Date().toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })],
     ["Total Catatan", recaps.length],
     ["Total Tunai (Cash)", totalCash],
     ["Total QRIS", totalQris],

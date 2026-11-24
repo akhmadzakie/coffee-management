@@ -1,17 +1,28 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
 import { toast } from "../context/ToastContext";
+import { ConfirmModal } from "./common/ConfirmModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { CurrencyInput } from "./common/CurrencyInput";
 import { formatCurrency } from "../utils/format";
 import {
+  applyDeleteMenuCategory,
+  applyRenameMenuCategory,
+  buildMenuCategoriesSettingsMap,
+  getDivisionMenuCategories,
   PRODUCT_GROUP_OPTIONS,
   PRODUCT_GROUP_LABELS,
-  MENU_CATEGORY_PRESETS,
   inferProductGroup,
   isPackagingIngredient,
 } from "../utils/productSalesAnalytics";
+import {
+  parseRecipeIngredientsSafe,
+  mergeDuplicateRecipeIngredients,
+  computeSignedMarginMetrics,
+  recalculateVariantFromLiveIngredients,
+  validateBatchPrepSubmission,
+} from "../utils/syncSanitizers";
 import {
   ViewState,
   Product,
@@ -50,6 +61,7 @@ import {
   ChevronDown,
   Info,
   RefreshCw,
+  Sliders,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -71,12 +83,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
     ingredients,
     recipes,
     addRecipe,
+    updateRecipe,
+    settings,
+    updateSettings,
     currentUser,
     isReadOnly,
   } = useStore();
 
+  const userRole = (currentUser?.role || "").toUpperCase();
+  const canManageMenuCategories = !isReadOnly && userRole !== "LEADER";
+  const canNavigateToHpp =
+    Boolean(onNavigate) &&
+    (userRole === "SUPER_ADMIN" || userRole === "OWNER" || userRole === "MANAGER");
+
   const [activeTab, setActiveTab] = useState<ProductDivision | "BATCH_PREP">("BAR");
   const [searchTerm, setSearchTerm] = useState("");
+  const [batchSearch, setBatchSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [onlyHighFoodCost, setOnlyHighFoodCost] = useState<boolean>(false);
 
@@ -92,11 +114,26 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   const [cookingBatchPrep, setCookingBatchPrep] = useState<BatchPreparation | null>(null);
   const [cookMultiplier, setCookMultiplier] = useState<number>(1);
   const [cookNotes, setCookNotes] = useState<string>("");
-  const [feedbackMessage, setFeedbackMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Kategori Menu Manager state
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [categoryManagerDivision, setCategoryManagerDivision] = useState<ProductDivision>("BAR");
+  const [newMenuCatName, setNewMenuCatName] = useState("");
+  const [editingMenuCatOld, setEditingMenuCatOld] = useState<string | null>(null);
+  const [editingMenuCatNew, setEditingMenuCatNew] = useState("");
+  const [menuCatToDelete, setMenuCatToDelete] = useState<{
+    division: ProductDivision;
+    name: string;
+  } | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [batchPrepToDelete, setBatchPrepToDelete] = useState<BatchPreparation | null>(null);
 
   const showToast = (type: "success" | "error", text: string) => {
-    setFeedbackMessage({ type, text });
-    setTimeout(() => setFeedbackMessage(null), 4000);
+    if (type === "success") {
+      toast.success(text);
+    } else {
+      toast.error(text);
+    }
   };
 
   // ─── Filtered Products ─────────────────────────────────────────────────────
@@ -106,12 +143,126 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   }, [products, activeTab]);
 
   const categories = useMemo(() => {
-    const cats = new Set<string>();
-    currentDivisionProducts.forEach((p) => {
-      if (p.category) cats.add(p.category);
+    if (activeTab === "BATCH_PREP") return [];
+    return getDivisionMenuCategories(activeTab, settings?.menuCategories, products);
+  }, [activeTab, settings?.menuCategories, products]);
+
+  const modalDivisionCategories = useMemo(
+    () =>
+      getDivisionMenuCategories(
+        categoryManagerDivision,
+        settings?.menuCategories,
+        products
+      ),
+    [categoryManagerDivision, settings?.menuCategories, products]
+  );
+
+  const persistMenuCategories = (division: ProductDivision, nextList: string[]) => {
+    const baseMap = buildMenuCategoriesSettingsMap(settings?.menuCategories);
+    updateSettings({
+      ...settings,
+      menuCategories: {
+        ...baseMap,
+        [division]: nextList,
+      },
     });
-    return Array.from(cats);
-  }, [currentDivisionProducts]);
+  };
+
+  const handleOpenCategoryManager = (div?: ProductDivision) => {
+    if (!canManageMenuCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori menu.");
+      return;
+    }
+    const targetDiv =
+      div || (activeTab === "BATCH_PREP" ? "BAR" : activeTab);
+    setCategoryManagerDivision(targetDiv);
+    setEditingMenuCatOld(null);
+    setEditingMenuCatNew("");
+    setNewMenuCatName("");
+    setIsCategoryManagerOpen(true);
+  };
+
+  const handleAddMenuCategory = (rawName: string) => {
+    if (!canManageMenuCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori menu.");
+      return;
+    }
+    const clean = rawName.trim().toUpperCase();
+    if (!clean) {
+      toast.error("Nama kategori menu tidak boleh kosong.");
+      return;
+    }
+    if (modalDivisionCategories.some((c) => c === clean)) {
+      toast.error(`Kategori "${clean}" sudah ada di divisi ${categoryManagerDivision}.`);
+      return;
+    }
+    const next = [...modalDivisionCategories, clean];
+    persistMenuCategories(categoryManagerDivision, next);
+    setNewMenuCatName("");
+    toast.success(`Kategori menu "${clean}" ditambahkan.`);
+  };
+
+  const handleSaveRenameMenuCategory = (oldName: string) => {
+    if (!canManageMenuCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori menu.");
+      return;
+    }
+    const cleanNew = editingMenuCatNew.trim().toUpperCase();
+    if (!cleanNew) {
+      toast.error("Nama kategori baru tidak boleh kosong.");
+      return;
+    }
+    if (
+      cleanNew !== oldName.trim().toUpperCase() &&
+      modalDivisionCategories.some((c) => c === cleanNew)
+    ) {
+      toast.error(`Kategori "${cleanNew}" sudah digunakan.`);
+      return;
+    }
+    const { updatedCategories, updatedProducts } = applyRenameMenuCategory({
+      division: categoryManagerDivision,
+      currentCategories: modalDivisionCategories,
+      oldName,
+      newName: cleanNew,
+      products,
+    });
+    persistMenuCategories(categoryManagerDivision, updatedCategories);
+    updatedProducts.forEach((prod) => updateProduct(prod));
+    if (activeTab === categoryManagerDivision && selectedCategory === oldName) {
+      setSelectedCategory(cleanNew);
+    }
+    setEditingMenuCatOld(null);
+    setEditingMenuCatNew("");
+    toast.success(`Kategori menu "${oldName}" diubah menjadi "${cleanNew}".`);
+  };
+
+  const handleConfirmDeleteMenuCategory = () => {
+    if (!canManageMenuCategories) {
+      toast.error("Hanya Manager atau Super Admin yang dapat mengelola kategori menu.");
+      setMenuCatToDelete(null);
+      return;
+    }
+    if (!menuCatToDelete) return;
+    const { division: targetDiv, name: targetName } = menuCatToDelete;
+    const divCats = getDivisionMenuCategories(targetDiv, settings?.menuCategories, products);
+    const { updatedCategories, updatedProducts, fallbackCategory } = applyDeleteMenuCategory({
+      division: targetDiv,
+      currentCategories: divCats,
+      targetName,
+      products,
+    });
+    persistMenuCategories(targetDiv, updatedCategories);
+    updatedProducts.forEach((prod) => updateProduct(prod));
+    if (activeTab === targetDiv && selectedCategory === targetName) {
+      setSelectedCategory("ALL");
+    }
+    toast.success(
+      updatedProducts.length > 0
+        ? `Kategori "${targetName}" dihapus. ${updatedProducts.length} produk dipindahkan ke "${fallbackCategory}".`
+        : `Kategori menu "${targetName}" berhasil dihapus.`
+    );
+    setMenuCatToDelete(null);
+  };
 
   const filteredProducts = useMemo(() => {
     return currentDivisionProducts.filter((p) => {
@@ -133,16 +284,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
   }, [currentDivisionProducts, searchTerm, selectedCategory, onlyHighFoodCost]);
 
   const filteredBatchPreparations = useMemo(() => {
+    const q = batchSearch.trim().toLowerCase();
     return batchPreparations.filter((bp) => {
       if (batchPrepDivisionFilter !== "ALL" && bp.division !== batchPrepDivisionFilter) return false;
-      if (searchTerm) {
-        const matchName = bp.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchTarget = (bp.targetIngredientName || "").toLowerCase().includes(searchTerm.toLowerCase());
+      if (q) {
+        const matchName = bp.name.toLowerCase().includes(q);
+        const matchTarget = (bp.targetIngredientName || "").toLowerCase().includes(q);
         if (!matchName && !matchTarget) return false;
       }
       return true;
     });
-  }, [batchPreparations, batchPrepDivisionFilter, searchTerm]);
+  }, [batchPreparations, batchPrepDivisionFilter, batchSearch]);
 
   // ─── Metrics Strip ─────────────────────────────────────────────────────────
   const metrics = useMemo(() => {
@@ -176,19 +328,17 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
   // ─── Live Stock Availability Helper ────────────────────────────────────────
   const calculateVariantStockAvailability = (variant: ProductVariant, productName?: string) => {
-    let effectiveRecipe = variant.recipe;
-    if (!effectiveRecipe || effectiveRecipe.length === 0) {
-      if (productName) {
-        const fallbackRec = recipes.find(
-          (r) => r.menuName.trim().toLowerCase() === productName.trim().toLowerCase()
-        );
-        if (fallbackRec) {
-          effectiveRecipe = fallbackRec.ingredients;
-        }
+    let effectiveRecipe = parseRecipeIngredientsSafe(variant.recipe);
+    if (effectiveRecipe.length === 0 && productName) {
+      const fallbackRec = recipes.find(
+        (r) => r.menuName.trim().toLowerCase() === productName.trim().toLowerCase()
+      );
+      if (fallbackRec) {
+        effectiveRecipe = parseRecipeIngredientsSafe(fallbackRec.ingredients);
       }
     }
 
-    if (!effectiveRecipe || effectiveRecipe.length === 0) {
+    if (effectiveRecipe.length === 0) {
       return { status: "ready" as const, portions: null, bottleneck: null };
     }
 
@@ -222,10 +372,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
   // ─── Batch Prep Readiness Helper ───────────────────────────────────────────
   const calculateBatchPrepReadiness = (bp: BatchPreparation) => {
+    const ingList = Array.isArray(bp.ingredients) ? bp.ingredients : [];
+    if (ingList.length === 0) {
+      return { canCook: false, maxBatches: 0, bottleneck: "Resep belum memiliki bahan" };
+    }
     let maxBatches = Infinity;
     let bottleneckIng: string | null = null;
 
-    for (const ri of bp.ingredients) {
+    for (const ri of ingList) {
       const ing = ingredients.find((i) => i.id === ri.ingredientId);
       if (!ing || ing.currentStock <= 0 || ri.quantity <= 0) {
         return { canCook: false, maxBatches: 0, bottleneck: ing ? ing.name : "Bahan kosong" };
@@ -246,6 +400,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
   // ─── Batch Cook Execution ──────────────────────────────────────────────────
   const handleConfirmBatchCook = () => {
+    if (isReadOnly) {
+      showToast("error", "Akun Owner berstatus Read-Only.");
+      return;
+    }
     if (!cookingBatchPrep) return;
     const res = executeBatchCook(cookingBatchPrep.id, cookMultiplier, cookNotes);
     if (res.success) {
@@ -261,52 +419,29 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
   // ─── Bulk Recalculate HPP from latest ingredients & packaging ───────────────
   const handleBulkRecalculateHpp = () => {
+    if (isReadOnly) {
+      showToast("error", "Akun Owner berstatus Read-Only dan tidak dapat mengubah harga HPP produk.");
+      return;
+    }
     let updatedProductsCount = 0;
     let updatedVariantsCount = 0;
 
     products.forEach((p) => {
       let isProductChanged = false;
+      const fallbackRec = recipes.find(
+        (r) => r.menuName.trim().toLowerCase() === p.name.trim().toLowerCase()
+      );
       const updatedVariants = (p.variants || []).map((v) => {
-        let effectiveRecipe = v.recipe;
-        if (!effectiveRecipe || effectiveRecipe.length === 0) {
-          const rec = recipes.find(
-            (r) => r.menuName.trim().toLowerCase() === p.name.trim().toLowerCase()
-          );
-          if (rec) effectiveRecipe = rec.ingredients;
-        }
-
-        if (!effectiveRecipe || effectiveRecipe.length === 0) return v;
-
-        let rawCost = 0;
-        let stockPackCost = 0;
-        for (const ri of effectiveRecipe) {
-          const ing = ingredients.find((i) => i.id === ri.ingredientId);
-          if (ing && ing.costPerUnit) {
-            const lineCost = ri.quantity * Number(ing.costPerUnit);
-            if (isPackagingIngredient(ing)) {
-              stockPackCost += lineCost;
-            } else {
-              rawCost += lineCost;
-            }
-          }
-        }
-
-        const effectivePackCost =
-          stockPackCost > 0
-            ? Math.max(stockPackCost, Number(v.packagingCost || 0))
-            : Number(v.packagingCost || 0);
-        const baseCost = rawCost + effectivePackCost;
-        const wastageCost = Math.round(baseCost * (Number(v.wastagePercent || 0) / 100));
-        const overheadCost = Math.round(baseCost * (Number(v.overheadPercent || 0) / 100));
-        const newEstimatedHpp = Math.round(baseCost + wastageCost + overheadCost);
-        if (newEstimatedHpp !== v.estimatedHpp || (!v.recipe?.length && effectiveRecipe.length > 0)) {
+        const res = recalculateVariantFromLiveIngredients({
+          variant: v,
+          fallbackRecipe: fallbackRec?.ingredients,
+          ingredients,
+          isPackagingCheck: isPackagingIngredient,
+        });
+        if (res.changed) {
           isProductChanged = true;
           updatedVariantsCount++;
-          return {
-            ...v,
-            recipe: v.recipe?.length ? v.recipe : effectiveRecipe,
-            estimatedHpp: newEstimatedHpp,
-          };
+          return res.updatedVariant;
         }
         return v;
       });
@@ -332,28 +467,6 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {feedbackMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className={`fixed top-5 right-5 z-50 px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 text-sm font-semibold border ${
-              feedbackMessage.type === "success"
-                ? "bg-slate-900 text-emerald-400 border-emerald-500/30"
-                : "bg-slate-900 text-rose-400 border-rose-500/30"
-            }`}
-          >
-            {feedbackMessage.type === "success" ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-            )}
-            <span className="whitespace-pre-line">{feedbackMessage.text}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* HEADER SECTION */}
       <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -372,19 +485,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={handleBulkRecalculateHpp}
-            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-slate-200/90 shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
-            title="Hitung ulang estimasi HPP seluruh produk berdasarkan harga bahan baku dan kemasan terbaru di inventori"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-            <span>Sinkronkan HPP</span>
-          </button>
-
-          {onNavigate && (
+          {!isReadOnly && (
             <button
-              onClick={() => onNavigate("hpp_calculator")}
+              type="button"
+              onClick={handleBulkRecalculateHpp}
+              className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-slate-200/90 shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+              title="Hitung ulang estimasi HPP seluruh produk berdasarkan harga bahan baku dan kemasan terbaru di inventori"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+              <span>Sinkronkan HPP</span>
+            </button>
+          )}
+
+          {canNavigateToHpp && (
+            <button
+              type="button"
+              onClick={() => onNavigate?.("hpp_calculator")}
               className="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold rounded-2xl text-xs transition-all flex items-center gap-2 border border-brand-200/70 shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
             >
               <Calculator className="w-3.5 h-3.5 text-brand-600 shrink-0" />
@@ -392,8 +508,14 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </button>
           )}
 
-          {activeTab === "BATCH_PREP" ? (
+          {isReadOnly ? (
+            <div className="px-3.5 py-2 bg-amber-50 border border-amber-200/80 text-amber-800 rounded-2xl text-[11px] font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0">
+              <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Mode Pantau (Owner Read-Only)</span>
+            </div>
+          ) : activeTab === "BATCH_PREP" ? (
             <button
+              type="button"
               onClick={() => {
                 setEditingBatchPrep(null);
                 setIsBatchPrepModalOpen(true);
@@ -405,6 +527,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </button>
           ) : (
             <button
+              type="button"
               onClick={() => {
                 setEditingProduct(null);
                 setIsProductModalOpen(true);
@@ -602,13 +725,24 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Cari menu, rasa, kategori..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                className="w-full pl-9 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Bersihkan pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
               {(metrics.highFoodCostCount > 0 || onlyHighFoodCost) && (
                 <button
+                  type="button"
                   onClick={() => setOnlyHighFoodCost((prev) => !prev)}
                   className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 active:scale-95 ${
                     onlyHighFoodCost
@@ -621,6 +755,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setSelectedCategory("ALL")}
                 className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                   selectedCategory === "ALL"
@@ -632,6 +767,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               </button>
               {categories.map((cat) => (
                 <button
+                  type="button"
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
                   className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
@@ -643,6 +779,21 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                   {cat}
                 </button>
               ))}
+              {canManageMenuCategories && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOpenCategoryManager(
+                      activeTab === "BATCH_PREP" ? "BAR" : activeTab
+                    )
+                  }
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-brand-50/80 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                  title="Tambah, ubah nama, atau hapus kategori menu"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Kelola Kategori</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -679,30 +830,29 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => {
-                          setEditingProduct(product);
-                          setIsProductModalOpen(true);
-                        }}
-                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
-                        title="Edit Produk & Varian"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Hapus produk "${product.name}" beserta variannya?`)) {
-                            deleteProduct(product.id);
-                            showToast("success", `Produk "${product.name}" berhasil dihapus.`);
-                          }
-                        }}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                        title="Hapus Produk"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setIsProductModalOpen(true);
+                          }}
+                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Produk & Varian"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProductToDelete(product)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                          title="Hapus Produk"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* VARIAN LIST */}
@@ -714,10 +864,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                     {product.variants?.map((variant) => {
                       const avail = calculateVariantStockAvailability(variant, product.name);
                       const hpp = variant.estimatedHpp || 0;
-                      const profit = Math.max(0, variant.price - hpp);
-                      const marginPct = variant.price > 0 ? (profit / variant.price) * 100 : 0;
-                      const foodCostPct = variant.price > 0 && hpp > 0 ? (hpp / variant.price) * 100 : 0;
-                      const isHighFoodCost = foodCostPct > 35;
+                      const {
+                        grossProfit: profit,
+                        grossMarginPercent: marginPct,
+                        foodCostPercent: foodCostPct,
+                        isLoss,
+                      } = computeSignedMarginMetrics(variant.price, hpp);
+                      const isHighFoodCost = isLoss || foodCostPct > 35;
                       const idealPrice = hpp > 0 ? Math.ceil(hpp / 0.32 / 500) * 500 : variant.price;
 
                       return (
@@ -768,11 +921,13 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                                 {formatCurrency(variant.price)}
                               </span>
                               <div
-                                className={`text-[10px] font-bold ${
+                                className={`text-[10px] font-bold tabular-nums ${
                                   isHighFoodCost ? "text-rose-700" : "text-emerald-700"
                                 }`}
                               >
-                                Margin: {marginPct.toFixed(0)}% (+{formatCurrency(profit)})
+                                {isLoss
+                                  ? `Rugi: ${formatCurrency(profit)} (${marginPct.toFixed(0)}%)`
+                                  : `Margin: ${marginPct.toFixed(0)}% (+${formatCurrency(profit)})`}
                               </div>
                             </div>
                           </div>
@@ -838,7 +993,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                 <Coffee className="w-10 h-10 text-slate-300 mx-auto" />
                 <h4 className="text-sm font-bold text-slate-700">Belum ada produk di divisi {activeTab}</h4>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Tambahkan produk baru dengan mengklik tombol "+ Produk {activeTab} Baru" di atas.
+                  {isReadOnly
+                    ? "Belum ada daftar produk yang cocok dengan filter saat ini."
+                    : `Tambahkan produk baru dengan mengklik tombol "+ Produk ${activeTab} Baru" di atas.`}
                 </p>
               </div>
             )}
@@ -863,9 +1020,32 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             </p>
           </div>
 
-          {/* DIVISION SUB-TABS FILTER */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          {/* SEARCH & DIVISION SUB-TABS FILTER */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={batchSearch}
+                onChange={(e) => setBatchSearch(e.target.value)}
+                placeholder="Cari resep batch atau target bahan..."
+                className="w-full pl-9 pr-7 py-2 bg-white border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+              />
+              {batchSearch && (
+                <button
+                  type="button"
+                  onClick={() => setBatchSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Bersihkan pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             <button
+              type="button"
               onClick={() => setBatchPrepDivisionFilter("ALL")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "ALL"
@@ -876,6 +1056,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               Semua Olahan ({batchPreparations.length})
             </button>
             <button
+              type="button"
               onClick={() => setBatchPrepDivisionFilter("BAR")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "BAR"
@@ -887,6 +1068,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               Olahan Bar ({batchPreparations.filter((b) => b.division === "BAR").length})
             </button>
             <button
+              type="button"
               onClick={() => setBatchPrepDivisionFilter("KITCHEN")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "KITCHEN"
@@ -898,6 +1080,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               Olahan Kitchen ({batchPreparations.filter((b) => b.division === "KITCHEN").length})
             </button>
             <button
+              type="button"
               onClick={() => setBatchPrepDivisionFilter("BAKER")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap ${
                 batchPrepDivisionFilter === "BAKER"
@@ -908,6 +1091,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
               <Cake className="w-3.5 h-3.5" />
               Olahan Bakery ({batchPreparations.filter((b) => b.division === "BAKER").length})
             </button>
+            </div>
           </div>
 
           {/* BATCH PREP CARDS GRID */}
@@ -915,9 +1099,10 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
             {filteredBatchPreparations.map((bp) => {
               const target = ingredients.find((i) => i.id === bp.targetIngredientId);
               const readiness = calculateBatchPrepReadiness(bp);
+              const bpIngredients = Array.isArray(bp.ingredients) ? bp.ingredients : [];
 
               // Hitung total cost bahan baku per 1 batch
-              const totalCostPerBatch = bp.ingredients.reduce((sum, ri) => {
+              const totalCostPerBatch = bpIngredients.reduce((sum, ri) => {
                 const ing = ingredients.find((i) => i.id === ri.ingredientId);
                 return sum + ri.quantity * (ing?.costPerUnit || 0);
               }, 0);
@@ -954,30 +1139,29 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => {
-                            setEditingBatchPrep(bp);
-                            setIsBatchPrepModalOpen(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
-                          title="Edit Resep Batch"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Hapus resep batch "${bp.name}"?`)) {
-                              deleteBatchPreparation(bp.id);
-                              showToast("success", `Resep batch "${bp.name}" dihapus.`);
-                            }
-                          }}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                          title="Hapus Resep Batch"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingBatchPrep(bp);
+                              setIsBatchPrepModalOpen(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors cursor-pointer"
+                            title="Edit Resep Batch"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBatchPrepToDelete(bp)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                            title="Hapus Resep Batch"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* STATUS STOK KONDIMEN SIAP PAKAI */}
@@ -1006,7 +1190,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                         Komposisi Bahan Mentah per 1 Batch:
                       </span>
                       <div className="space-y-1">
-                        {bp.ingredients.map((ri, idx) => {
+                        {bpIngredients.map((ri, idx) => {
                           const ing = ingredients.find((i) => i.id === ri.ingredientId);
                           const isShortage = ing && ing.currentStock < ri.quantity;
 
@@ -1061,19 +1245,22 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                       )}
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setCookingBatchPrep(bp);
-                        setCookMultiplier(1);
-                        setCookNotes("");
-                        setIsBatchCookModalOpen(true);
-                      }}
-                      disabled={!readiness.canCook}
-                      className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95 cursor-pointer"
-                    >
-                      <Flame className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Masak Batch Sekarang</span>
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCookingBatchPrep(bp);
+                          setCookMultiplier(1);
+                          setCookNotes("");
+                          setIsBatchCookModalOpen(true);
+                        }}
+                        disabled={!readiness.canCook}
+                        className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95 cursor-pointer"
+                      >
+                        <Flame className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Masak Batch Sekarang</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1088,7 +1275,9 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
                     : `Belum ada resep batch kondimen di divisi ${batchPrepDivisionFilter}`}
                 </h4>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Tambahkan formula resep olahan batch baru dengan mengklik tombol "+ Resep Batch Baru" di atas.
+                  {isReadOnly
+                    ? "Belum ada resep batch yang sesuai filter saat ini."
+                    : 'Tambahkan formula resep olahan batch baru dengan mengklik tombol "+ Resep Batch Baru" di atas.'}
                 </p>
               </div>
             )}
@@ -1099,180 +1288,471 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({ onNavigate }) =>
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* MODAL 1: COOK BATCH MODAL (MASAK KONDIMEN) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isBatchCookModalOpen && cookingBatchPrep && createPortal(
-          <div className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="my-auto bg-white rounded-3xl p-5 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200/90 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
-            >
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
-                <div>
-                  <span className="text-[10px] font-bold text-brand-700 uppercase tracking-wider bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200/60">
-                    Eksekusi Produksi Kondimen
-                  </span>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-                    Masak: {cookingBatchPrep.name}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setIsBatchCookModalOpen(false)}
-                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer"
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isBatchCookModalOpen && cookingBatchPrep && (() => {
+              const cookIngredients = Array.isArray(cookingBatchPrep.ingredients)
+                ? cookingBatchPrep.ingredients
+                : [];
+              const hasCookShortage = cookIngredients.some((ri) => {
+                const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                return !ing || ing.currentStock < ri.quantity * cookMultiplier;
+              });
+              return (
+                <motion.div
+                  key="batch-cook-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) setIsBatchCookModalOpen(false);
+                  }}
+                  className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
                 >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* MULTIPLIER SLIDER & INPUT */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-slate-800">Jumlah Batch yang Dimasak:</label>
-                  <span className="font-mono font-black text-base text-brand-700">
-                    {cookMultiplier}x Batch
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="10"
-                  step="0.5"
-                  value={cookMultiplier}
-                  onChange={(e) => setCookMultiplier(Number(e.target.value))}
-                  className="w-full accent-brand-600"
-                />
-                <div className="flex justify-between text-[11px] text-slate-500 font-medium">
-                  <span>Hasil Olahan:</span>
-                  <span className="font-bold text-slate-900 font-mono">
-                    +{(cookingBatchPrep.yieldQuantity * cookMultiplier).toLocaleString("id-ID")}{" "}
-                    {cookingBatchPrep.yieldUnit}
-                  </span>
-                </div>
-              </div>
-
-              {/* PREVIEW BAHAN YANG AKAN DIPOTONG */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Bahan Mentah yang Akan Dipotong Otomatis (USAGE):
-                </span>
-                <div className="max-h-44 overflow-y-auto space-y-1.5 no-scrollbar pr-1">
-                  {cookingBatchPrep.ingredients.map((ri, idx) => {
-                    const ing = ingredients.find((i) => i.id === ri.ingredientId);
-                    const needed = ri.quantity * cookMultiplier;
-                    const isShortage = ing && ing.currentStock < needed;
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-xl border flex justify-between items-center text-xs ${
-                          isShortage ? "bg-rose-50 border-rose-300" : "bg-slate-50/70 border-slate-200"
-                        }`}
+                  <motion.div
+                    key="batch-cook-card"
+                    initial={{ scale: 0.96, opacity: 0, y: 12 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.96, opacity: 0, y: 8 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                    className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200/90 dark:border-slate-700 max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar"
+                  >
+                    <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                      <div>
+                        <span className="text-[10px] font-bold text-brand-700 dark:text-brand-300 uppercase tracking-wider bg-brand-50 dark:bg-brand-500/15 px-2 py-0.5 rounded-md border border-brand-200/60 dark:border-brand-500/30">
+                          Eksekusi Produksi Kondimen
+                        </span>
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 mt-1">
+                          Masak: {cookingBatchPrep.name}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsBatchCookModalOpen(false)}
+                        className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:hover:text-slate-200 cursor-pointer"
                       >
-                        <div>
-                          <span className="font-semibold text-slate-900 block">
-                            {ing ? ing.name : "Bahan Terhapus"}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            Stok Saat Ini: {ing ? `${ing.currentStock} ${ing.unit}` : 0}
-                          </span>
-                        </div>
-                        <span className={`font-mono font-bold ${isShortage ? "text-rose-700" : "text-brand-700"}`}>
-                          -{needed} {ing?.unit}
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* MULTIPLIER SLIDER & INPUT */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200/80 dark:border-slate-700 space-y-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <label className="font-bold text-slate-800 dark:text-slate-200">Jumlah Batch yang Dimasak:</label>
+                        <span className="font-mono font-black text-base text-brand-700 dark:text-brand-300 tabular-nums">
+                          {cookMultiplier}x Batch
                         </span>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="10"
+                        step="0.5"
+                        value={cookMultiplier}
+                        onChange={(e) => setCookMultiplier(Number(e.target.value))}
+                        className="w-full accent-brand-600 cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        <span>Hasil Olahan:</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
+                          +{(cookingBatchPrep.yieldQuantity * cookMultiplier).toLocaleString("id-ID")}{" "}
+                          {cookingBatchPrep.yieldUnit}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* CATATAN BATCH */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Catatan Masak / Shift (Opsional)
-                </label>
-                <input
-                  type="text"
-                  value={cookNotes}
-                  onChange={(e) => setCookNotes(e.target.value)}
-                  placeholder="e.g. Masak shift pagi, panci 5L, aroma wangi sempurna"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-                />
-              </div>
+                    {/* PREVIEW BAHAN YANG AKAN DIPOTONG */}
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                        Bahan Mentah yang Akan Dipotong Otomatis (USAGE):
+                      </span>
+                      <div className="max-h-44 overflow-y-auto space-y-1.5 no-scrollbar pr-1">
+                        {cookIngredients.map((ri, idx) => {
+                          const ing = ingredients.find((i) => i.id === ri.ingredientId);
+                          const needed = ri.quantity * cookMultiplier;
+                          const isShortage = !ing || ing.currentStock < needed;
 
-              {/* BUTTONS */}
-              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsBatchCookModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmBatchCook}
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
-                >
-                  <Flame className="w-4 h-4 text-amber-300" />
-                  <span>Konfirmasi & Potong Stok Sekarang</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>,
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-2.5 rounded-xl border flex justify-between items-center text-xs ${
+                                isShortage
+                                  ? "bg-rose-50 dark:bg-rose-500/15 border-rose-300 dark:border-rose-500/40"
+                                  : "bg-slate-50/70 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700"
+                              }`}
+                            >
+                              <div>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100 block">
+                                  {ing ? ing.name : "Bahan Terhapus"}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                  Stok Saat Ini: {ing ? `${ing.currentStock} ${ing.unit}` : 0}
+                                </span>
+                              </div>
+                              <span className={`font-mono font-bold tabular-nums ${isShortage ? "text-rose-700 dark:text-rose-300" : "text-brand-700 dark:text-brand-300"}`}>
+                                -{needed} {ing?.unit}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {hasCookShortage && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 text-[11px] font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          <span>Stok bahan mentah belum cukup untuk {cookMultiplier}x batch. Turunkan pengali atau beli stok terlebih dahulu.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CATATAN BATCH */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Catatan Masak / Shift (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={cookNotes}
+                        onChange={(e) => setCookNotes(e.target.value)}
+                        placeholder="e.g. Masak shift pagi, panci 5L, aroma wangi sempurna"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                      />
+                    </div>
+
+                    {/* BUTTONS */}
+                    <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setIsBatchCookModalOpen(false)}
+                        className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        disabled={hasCookShortage || isReadOnly}
+                        onClick={handleConfirmBatchCook}
+                        className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all disabled:opacity-45 disabled:cursor-not-allowed"
+                      >
+                        <Flame className="w-4 h-4 text-amber-300" />
+                        <span>Konfirmasi & Potong Stok Sekarang</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              );
+            })()}
+          </AnimatePresence>,
           document.body
         )}
-      </AnimatePresence>
 
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* MODAL 2: PRODUK MODAL (TAMBAH / EDIT PRODUK & VARIAN) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isProductModalOpen && (
-          <ProductFormModal
-            product={editingProduct}
-            defaultDivision={activeTab === "BATCH_PREP" ? "BAR" : activeTab}
-            ingredients={ingredients}
-            recipes={recipes}
-            onSaveRecipe={addRecipe}
-            onNavigateHpp={onNavigate ? () => onNavigate("hpp_calculator") : undefined}
-            onClose={() => setIsProductModalOpen(false)}
-            onSave={(prodData) => {
-              if (editingProduct) {
-                updateProduct({ ...editingProduct, ...prodData });
-                showToast("success", `Produk "${prodData.name}" berhasil diperbarui.`);
-              } else {
-                addProduct(prodData);
-                showToast("success", `Produk "${prodData.name}" berhasil dibuat.`);
-              }
-              setIsProductModalOpen(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <ProductFormModal
+        isOpen={isProductModalOpen}
+        product={editingProduct}
+        defaultDivision={activeTab === "BATCH_PREP" ? "BAR" : activeTab}
+        ingredients={ingredients}
+        recipes={recipes}
+        menuCategoriesMap={settings?.menuCategories}
+        onOpenCategoryManager={
+          canManageMenuCategories ? (div) => handleOpenCategoryManager(div) : undefined
+        }
+        onSaveRecipe={addRecipe}
+        onUpdateRecipe={updateRecipe}
+        onNavigateHpp={canNavigateToHpp ? () => onNavigate?.("hpp_calculator") : undefined}
+        onClose={() => setIsProductModalOpen(false)}
+        onSave={(prodData) => {
+          if (isReadOnly) return;
+          if (editingProduct) {
+            updateProduct({ ...editingProduct, ...prodData });
+            showToast("success", `Produk "${prodData.name}" berhasil diperbarui.`);
+          } else {
+            addProduct(prodData);
+            showToast("success", `Produk "${prodData.name}" berhasil dibuat.`);
+          }
+          setIsProductModalOpen(false);
+        }}
+      />
 
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* MODAL 3: BATCH PREPARATION FORM MODAL (RESEP KONDIMEN) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isBatchPrepModalOpen && (
-          <BatchPrepFormModal
-            batchPrep={editingBatchPrep}
-            ingredients={ingredients}
-            onClose={() => setIsBatchPrepModalOpen(false)}
-            onSave={(bpData) => {
-              if (editingBatchPrep) {
-                updateBatchPreparation({ ...editingBatchPrep, ...bpData });
-                showToast("success", `Resep batch "${bpData.name}" diperbarui.`);
-              } else {
-                addBatchPreparation(bpData);
-                showToast("success", `Resep batch "${bpData.name}" berhasil dibuat.`);
-              }
-              setIsBatchPrepModalOpen(false);
-            }}
-          />
+      <BatchPrepFormModal
+        isOpen={isBatchPrepModalOpen}
+        batchPrep={editingBatchPrep}
+        ingredients={ingredients}
+        onClose={() => setIsBatchPrepModalOpen(false)}
+        onSave={(bpData) => {
+          if (isReadOnly) return;
+          if (editingBatchPrep) {
+            updateBatchPreparation({ ...editingBatchPrep, ...bpData });
+            showToast("success", `Resep batch "${bpData.name}" diperbarui.`);
+          } else {
+            addBatchPreparation(bpData);
+            showToast("success", `Resep batch "${bpData.name}" berhasil dibuat.`);
+          }
+          setIsBatchPrepModalOpen(false);
+        }}
+      />
+
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 4: KELOLA KATEGORI MENU (TAMBAH, EDIT, HAPUS PER DIVISI) */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isCategoryManagerOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setIsCategoryManagerOpen(false);
+                    setEditingMenuCatOld(null);
+                    setEditingMenuCatNew("");
+                  }
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="my-auto bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200/90 dark:border-slate-800"
+                >
+                  <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-3 bg-slate-50/70 dark:bg-slate-800/50">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
+                        <Tag className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                          Kelola Kategori Menu
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Tambah, ubah nama, atau hapus kategori menu per divisi. Perubahan otomatis menyinkronkan produk terkait.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCategoryManagerOpen(false);
+                        setEditingMenuCatOld(null);
+                        setEditingMenuCatNew("");
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-700 text-slate-400 cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar text-xs">
+                    {/* Selector Divisi */}
+                    <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 gap-1">
+                      {(
+                        [
+                          { id: "BAR", label: "Bar & Kopi" },
+                          { id: "KITCHEN", label: "Kitchen" },
+                          { id: "BAKER", label: "Bakery & Pastry" },
+                        ] as const
+                      ).map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setCategoryManagerDivision(d.id);
+                            setEditingMenuCatOld(null);
+                            setEditingMenuCatNew("");
+                          }}
+                          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            categoryManagerDivision === d.id
+                              ? "bg-brand-600 text-white shadow-xs"
+                              : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                          }`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Form Tambah Kategori */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAddMenuCategory(newMenuCatName);
+                      }}
+                      className="flex items-center gap-2 p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/30"
+                    >
+                      <input
+                        type="text"
+                        value={newMenuCatName}
+                        onChange={(e) => setNewMenuCatName(e.target.value)}
+                        placeholder={`Kategori baru divisi ${categoryManagerDivision} (mis. MATCHA, BENTO)...`}
+                        className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 uppercase"
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah</span>
+                      </button>
+                    </form>
+
+                    {/* Daftar Kategori Menu */}
+                    <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {modalDivisionCategories.length === 0 ? (
+                        <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                          Belum ada kategori menu di divisi ini. Tambahkan kategori baru di atas.
+                        </div>
+                      ) : (
+                        modalDivisionCategories.map((catName) => {
+                          const prodCount = products.filter(
+                            (p) =>
+                              p.division === categoryManagerDivision &&
+                              String(p.category || "").trim().toUpperCase() === catName
+                          ).length;
+                          const isEditing = editingMenuCatOld === catName;
+                          const isProtectedFallback = catName === "LAINNYA" && prodCount > 0;
+
+                          return (
+                            <div
+                              key={catName}
+                              className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50/90 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700"
+                            >
+                              {isEditing ? (
+                                <div className="flex items-center gap-2 flex-1">
+                                  <input
+                                    type="text"
+                                    value={editingMenuCatNew}
+                                    onChange={(e) => setEditingMenuCatNew(e.target.value)}
+                                    className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 rounded-xl border border-brand-300 text-xs font-bold text-slate-900 dark:text-slate-100 uppercase focus:outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveRenameMenuCategory(catName)}
+                                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs cursor-pointer"
+                                  >
+                                    Simpan
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingMenuCatOld(null);
+                                      setEditingMenuCatNew("");
+                                    }}
+                                    className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs cursor-pointer"
+                                  >
+                                    Batal
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="min-w-0">
+                                    <p className="font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                                      {catName}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                      {prodCount} produk terdaftar
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingMenuCatOld(catName);
+                                        setEditingMenuCatNew(catName);
+                                      }}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                      title="Ubah nama kategori"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    {!isProtectedFallback && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setMenuCatToDelete({
+                                            division: categoryManagerDivision,
+                                            name: catName,
+                                          })
+                                        }
+                                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                        title="Hapus kategori"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={Boolean(menuCatToDelete)}
+        title="Hapus Kategori Menu?"
+        message={`Kategori menu "${menuCatToDelete?.name || ""}" akan dihapus dari divisi ${menuCatToDelete?.division || ""}. Produk yang memakai kategori ini akan otomatis dipindahkan ke kategori "LAINNYA".`}
+        confirmLabel="Hapus Kategori"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={handleConfirmDeleteMenuCategory}
+        onCancel={() => setMenuCatToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(productToDelete)}
+        title="Hapus Produk & Varian?"
+        message={`Hapus produk "${productToDelete?.name || ""}" beserta seluruh varian dan resepnya dari Katalog Menu?`}
+        confirmLabel="Ya, Hapus Produk"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={() => {
+          if (isReadOnly) return;
+          if (productToDelete) {
+            deleteProduct(productToDelete.id);
+            showToast("success", `Produk "${productToDelete.name}" berhasil dihapus.`);
+            setProductToDelete(null);
+          }
+        }}
+        onCancel={() => setProductToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(batchPrepToDelete)}
+        title="Hapus Resep Batch?"
+        message={`Hapus resep kondimen olahan "${batchPrepToDelete?.name || ""}"? Stok bahan jadi di inventori tidak akan ikut terhapus.`}
+        confirmLabel="Ya, Hapus Resep"
+        cancelLabel="Batal"
+        variant="danger"
+        onConfirm={() => {
+          if (isReadOnly) return;
+          if (batchPrepToDelete) {
+            deleteBatchPreparation(batchPrepToDelete.id);
+            showToast("success", `Resep batch "${batchPrepToDelete.name}" dihapus.`);
+            setBatchPrepToDelete(null);
+          }
+        }}
+        onCancel={() => setBatchPrepToDelete(null)}
+      />
     </div>
   );
 };
@@ -1288,28 +1768,54 @@ export interface ProductFormInitialDraft {
 }
 
 interface ProductFormModalProps {
+  isOpen?: boolean;
   product: Product | null;
   defaultDivision: ProductDivision;
   ingredients: Ingredient[];
   recipes: Recipe[];
+  menuCategoriesMap?: Partial<Record<ProductDivision, string[]>>;
   initialDraft?: ProductFormInitialDraft | null;
+  onOpenCategoryManager?: (division: ProductDivision) => void;
   onSaveRecipe?: (recipe: Omit<Recipe, "id">) => void;
+  onUpdateRecipe?: (recipe: Recipe) => void;
   onNavigateHpp?: () => void;
   onClose: () => void;
   onSave: (data: Omit<Product, "id" | "createdAt">) => void;
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
+  isOpen = true,
   product,
   defaultDivision,
   ingredients,
   recipes,
+  menuCategoriesMap,
   initialDraft,
+  onOpenCategoryManager,
   onSaveRecipe,
+  onUpdateRecipe,
   onNavigateHpp,
   onClose,
   onSave,
 }) => {
+  const buildDefaultVariant = (div: ProductDivision): ProductVariant => ({
+    id: `var-${Date.now()}-1`,
+    productId: product?.id || "",
+    name:
+      initialDraft?.variantName ||
+      (div === "BAR" ? "Iced 16oz" : "Reguler"),
+    sku: "",
+    price:
+      initialDraft?.price && initialDraft.price > 0
+        ? Math.round(initialDraft.price)
+        : 22000,
+    packagingCost: DEFAULT_DIVISION_PACKAGING[div][0]?.cost || 0,
+    packagingNotes: DEFAULT_DIVISION_PACKAGING[div][0]?.name || "",
+    estimatedHpp: initialDraft ? 0 : 7000,
+    isAvailable: true,
+    recipe: [],
+  });
+
   const initialDivision: ProductDivision =
     product?.division || initialDraft?.division || defaultDivision;
   const initialCategory =
@@ -1343,26 +1849,43 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         recipe: Array.isArray(v.recipe) ? v.recipe : [],
       }));
     }
-    return [
-      {
-        id: `var-${Date.now()}-1`,
-        productId: product?.id || "",
-        name:
-          initialDraft?.variantName ||
-          (initialDivision === "BAR" ? "Iced 16oz" : "Reguler"),
-        sku: "",
-        price:
-          initialDraft?.price && initialDraft.price > 0
-            ? Math.round(initialDraft.price)
-            : 22000,
-        packagingCost: DEFAULT_DIVISION_PACKAGING[initialDivision][0]?.cost || 0,
-        packagingNotes: DEFAULT_DIVISION_PACKAGING[initialDivision][0]?.name || "",
-        estimatedHpp: initialDraft ? 0 : 7000,
-        isAvailable: true,
-        recipe: [],
-      },
-    ];
+    return [buildDefaultVariant(initialDivision)];
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const nextDiv: ProductDivision =
+      product?.division || initialDraft?.division || defaultDivision;
+    const nextCat =
+      product?.category ||
+      initialDraft?.category ||
+      getDivisionMenuCategories(nextDiv, menuCategoriesMap, [])[0] ||
+      (nextDiv === "BAR" ? "COFFEE" : nextDiv === "KITCHEN" ? "FOOD" : "BAKERY");
+
+    setName(product?.name || initialDraft?.name || "");
+    setDivision(nextDiv);
+    setCategory(nextCat);
+    setProductGroup(
+      inferProductGroup(
+        nextDiv,
+        nextCat,
+        product?.productGroup || initialDraft?.productGroup,
+        initialDraft?.variantName
+      )
+    );
+    setDescription(product?.description || "");
+    setIsActive(product?.isActive ?? true);
+    if (product?.variants && product.variants.length > 0) {
+      setVariants(
+        product.variants.map((v) => ({
+          ...v,
+          recipe: Array.isArray(v.recipe) ? v.recipe : [],
+        }))
+      );
+    } else {
+      setVariants([buildDefaultVariant(nextDiv)]);
+    }
+  }, [isOpen, product, defaultDivision, initialDraft]);
 
   const stockPackagingIngredients = useMemo(
     () => ingredients.filter((ing) => isPackagingIngredient(ing)),
@@ -1510,24 +2033,36 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     const cleanedVariants = variants.map((v) => ({
       ...v,
       name: v.name.trim() || "Reguler",
-      recipe: (v.recipe || []).filter((ri) => ri.ingredientId && Number(ri.quantity) > 0),
+      recipe: mergeDuplicateRecipeIngredients(v.recipe || []),
     }));
 
-    if (onSaveRecipe) {
+    const variantNames = cleanedVariants.map((v) => v.name.toLowerCase());
+    if (new Set(variantNames).size !== variantNames.length) {
+      toast.error("Nama varian dalam satu produk tidak boleh sama.");
+      return;
+    }
+
+    if (onSaveRecipe || onUpdateRecipe) {
       cleanedVariants.forEach((v) => {
         if (!v.recipe || v.recipe.length === 0) return;
         const targetRecName =
           cleanedVariants.length === 1 && v.name.toLowerCase() === "reguler"
             ? cleanName
             : `${cleanName} - ${v.name}`;
-        const alreadyExists = recipes.some(
+        const existingRecipe = recipes.find(
           (r) =>
             r.menuName.trim().toLowerCase() === targetRecName.toLowerCase() ||
             (cleanedVariants.length === 1 &&
               r.menuName.trim().toLowerCase() === cleanName.toLowerCase())
         );
-        if (!alreadyExists) {
-          onSaveRecipe({
+        if (existingRecipe) {
+          onUpdateRecipe?.({
+            ...existingRecipe,
+            menuName: targetRecName,
+            ingredients: v.recipe,
+          });
+        } else {
+          onSaveRecipe?.({
             menuName: targetRecName,
             ingredients: v.recipe,
           });
@@ -1547,21 +2082,30 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     });
   };
 
+  if (typeof document === "undefined") return null;
+
   return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
-      className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 8 }}
-        transition={{ type: "spring", damping: 28, stiffness: 360 }}
-        className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 max-w-3xl w-full max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90 dark:border-slate-800"
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="product-form-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
+        >
+          <motion.div
+            key="product-form-card"
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 max-w-3xl w-full max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90 dark:border-slate-800"
+          >
         <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3.5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
@@ -1610,8 +2154,18 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 onChange={(val) => {
                   const nextDiv = val as ProductDivision;
                   setDivision(nextDiv);
+                  const nextCats = getDivisionMenuCategories(nextDiv, menuCategoriesMap, []);
+                  let nextCat = category;
+                  if (
+                    !product &&
+                    nextCats.length > 0 &&
+                    !nextCats.includes(category.trim().toUpperCase())
+                  ) {
+                    nextCat = nextCats[0];
+                    setCategory(nextCat);
+                  }
                   if (!product?.productGroup) {
-                    setProductGroup(inferProductGroup(nextDiv, category));
+                    setProductGroup(inferProductGroup(nextDiv, nextCat));
                   }
                 }}
                 options={[
@@ -1675,7 +2229,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mr-1">
               Saran Kategori Menu:
             </span>
-            {(MENU_CATEGORY_PRESETS[division] || []).map((preset) => (
+            {getDivisionMenuCategories(division, menuCategoriesMap, []).map((preset) => (
               <button
                 key={preset}
                 type="button"
@@ -1694,6 +2248,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 {preset}
               </button>
             ))}
+            {onOpenCategoryManager && (
+              <button
+                type="button"
+                onClick={() => onOpenCategoryManager(division)}
+                className="px-2 py-0.5 rounded-lg text-[10px] font-bold border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Edit2 className="w-2.5 h-2.5" />
+                <span>Kelola Kategori</span>
+              </button>
+            )}
           </div>
 
           <div>
@@ -2057,33 +2621,45 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                           onChange={(val) => {
                             const picked = recipes.find((r) => r.id === val);
                             if (picked) {
-                              let safeList = picked.ingredients;
-                              if (typeof safeList === "string") {
-                                try {
-                                  safeList = JSON.parse(safeList);
-                                } catch {
-                                  safeList = [];
-                                }
+                              const validList = mergeDuplicateRecipeIngredients(
+                                parseRecipeIngredientsSafe(picked.ingredients)
+                              );
+                              const linkedPacks = validList
+                                .map((ri) => ({
+                                  ri,
+                                  ing: ingredients.find((i) => i.id === ri.ingredientId),
+                                }))
+                                .filter((x): x is { ri: RecipeIngredient; ing: Ingredient } =>
+                                  Boolean(x.ing && isPackagingIngredient(x.ing))
+                                );
+                              if (linkedPacks.length > 0) {
+                                const packCost = Math.round(
+                                  linkedPacks.reduce(
+                                    (sum, x) =>
+                                      sum +
+                                      Number(x.ri.quantity || 1) * Number(x.ing.costPerUnit || 0),
+                                    0
+                                  )
+                                );
+                                handleUpdateVariant(
+                                  idx,
+                                  {
+                                    recipe: validList,
+                                    packagingCost: packCost,
+                                    packagingNotes: linkedPacks.map((x) => x.ing.name).join(" + "),
+                                  },
+                                  true
+                                );
+                              } else {
+                                handleUpdateVariant(idx, { recipe: validList }, true);
                               }
-                              const validList = Array.isArray(safeList) ? safeList : [];
-                              handleUpdateVariant(idx, { recipe: validList }, true);
                             }
                           }}
                           placeholder="-- Pilih Resep Toko (Opsional) --"
                           options={[
                             { value: "", label: "-- Pilih Resep Toko (Opsional) --" },
                             ...recipes.map((r) => {
-                              const rIngCount = Array.isArray(r.ingredients)
-                                ? r.ingredients.length
-                                : typeof r.ingredients === "string"
-                                  ? (() => {
-                                      try {
-                                        return JSON.parse(r.ingredients).length;
-                                      } catch {
-                                        return 0;
-                                      }
-                                    })()
-                                  : 0;
+                              const rIngCount = parseRecipeIngredientsSafe(r.ingredients).length;
                               return {
                                 value: r.id,
                                 label: `${r.menuName} (${rIngCount} bahan baku)`,
@@ -2130,13 +2706,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
         </form>
       </motion.div>
-    </motion.div>,
+    </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };
 
 // ─── SUBCOMPONENT: BATCH PREP FORM MODAL ──────────────────────────────────────
 interface BatchPrepFormModalProps {
+  isOpen: boolean;
   batchPrep: BatchPreparation | null;
   ingredients: any[];
   onClose: () => void;
@@ -2144,6 +2723,7 @@ interface BatchPrepFormModalProps {
 }
 
 const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
+  isOpen,
   batchPrep,
   ingredients,
   onClose,
@@ -2160,6 +2740,22 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
     batchPrep?.ingredients || [{ ingredientId: ingredients[0]?.id || "", quantity: 1000 }]
   );
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(batchPrep?.name || "");
+    setDivision(batchPrep?.division || "BAR");
+    setTargetIngredientId(batchPrep?.targetIngredientId || "");
+    setTargetIngredientName(batchPrep?.targetIngredientName || "");
+    setYieldQuantity(batchPrep?.yieldQuantity || 1200);
+    setYieldUnit(batchPrep?.yieldUnit || "ml");
+    setNotes(batchPrep?.notes || "");
+    setRecipeItems(
+      Array.isArray(batchPrep?.ingredients) && batchPrep.ingredients.length > 0
+        ? batchPrep.ingredients
+        : [{ ingredientId: ingredients[0]?.id || "", quantity: 1000 }]
+    );
+  }, [isOpen, batchPrep]);
+
   const handleAddIngredient = () => {
     setRecipeItems([...recipeItems, { ingredientId: ingredients[0]?.id || "", quantity: 100 }]);
   };
@@ -2170,7 +2766,7 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
 
   const handleRemoveIngredient = (idx: number) => {
     if (recipeItems.length <= 1) {
-      alert("Minimal harus ada 1 bahan baku.");
+      toast.error("Minimal harus ada 1 bahan baku.");
       return;
     }
     setRecipeItems((prev) => prev.filter((_, i) => i !== idx));
@@ -2178,12 +2774,15 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      alert("Nama resep batch tidak boleh kosong.");
-      return;
-    }
-    if (!targetIngredientId && !targetIngredientName.trim()) {
-      alert("Pilih atau masukkan nama target bahan hasil olahan.");
+    const validation = validateBatchPrepSubmission({
+      name,
+      targetIngredientId,
+      targetIngredientName,
+      yieldQuantity,
+      ingredients: recipeItems,
+    });
+    if ("error" in validation) {
+      toast.error(validation.error);
       return;
     }
 
@@ -2193,274 +2792,296 @@ const BatchPrepFormModal: React.FC<BatchPrepFormModalProps> = ({
       targetIngredientId: targetIngredientId || `ing-custom-${Date.now()}`,
       targetIngredientName: targetIngredientName.trim() || name.trim(),
       yieldQuantity: Number(yieldQuantity),
-      yieldUnit: yieldUnit.trim(),
-      ingredients: recipeItems.filter((ri) => ri.ingredientId && ri.quantity > 0),
+      yieldUnit: yieldUnit.trim() || "ml",
+      ingredients: validation.mergedIngredients,
       notes: notes.trim(),
     });
   };
 
+  if (typeof document === "undefined") return null;
+
   return createPortal(
-    <div className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center">
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="my-auto bg-white rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90"
-      >
-        <div className="flex justify-between items-start border-b border-slate-100 pb-3.5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
-              <Flame className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-slate-900">
-                {batchPrep ? `Edit Resep Batch: ${batchPrep.name}` : "Resep Batch Kondimen Baru"}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-500">
-                Formula pengolahan bahan mentah menjadi kondimen olahan (Saus Aren, Sirup, dll).
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Divisi Penanggung Jawab Olahan
-            </label>
-            <div className="grid grid-cols-3 gap-2">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="batch-prep-form-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+          className="fixed inset-0 z-[100] overflow-y-auto p-3 sm:p-6 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center"
+        >
+          <motion.div
+            key="batch-prep-form-card"
+            initial={{ scale: 0.96, opacity: 0, y: 12 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.96, opacity: 0, y: 8 }}
+            transition={{ type: "spring", damping: 28, stiffness: 360 }}
+            className="my-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[85vh] sm:max-h-[88vh] overflow-y-auto custom-scrollbar space-y-5 shadow-2xl border border-slate-200/90 dark:border-slate-700"
+          >
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-500/15 border border-brand-100 dark:border-brand-500/30 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
+                  <Flame className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                    {batchPrep ? `Edit Resep Batch: ${batchPrep.name}` : "Resep Batch Kondimen Baru"}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                    Formula pengolahan bahan mentah menjadi kondimen olahan (Saus Aren, Sirup, dll).
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setDivision("BAR")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                  division === "BAR"
-                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
+                onClick={onClose}
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:hover:text-slate-200 cursor-pointer"
               >
-                <Coffee className="w-3.5 h-3.5 text-brand-600" />
-                <span>Bar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDivision("KITCHEN")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                  division === "KITCHEN"
-                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <UtensilsCrossed className="w-3.5 h-3.5 text-brand-600" />
-                <span>Kitchen</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDivision("BAKER")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                  division === "BAKER"
-                    ? "bg-brand-50 border-brand-300 text-brand-800 font-black shadow-2xs"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <Cake className="w-3.5 h-3.5 text-brand-600" />
-                <span>Bakery</span>
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Nama Resep Olahan
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (!targetIngredientName) setTargetIngredientName(e.target.value);
-              }}
-              placeholder="e.g. Saus Gula Aren Racikan, Simple Syrup Bar"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Target Bahan di Inventori
-              </label>
-              <CustomSelect
-                value={targetIngredientId}
-                onChange={(val) => {
-                  setTargetIngredientId(val);
-                  const sel = ingredients.find((i) => i.id === val);
-                  if (sel) {
-                    setTargetIngredientName(sel.name);
-                    setYieldUnit(sel.unit);
-                  }
-                }}
-                placeholder="-- Buat Bahan Jadi Baru --"
-                options={[
-                  { value: "", label: "-- Buat Bahan Jadi Baru --" },
-                  ...ingredients.map((ing) => ({
-                    value: ing.id,
-                    label: `${ing.name} (${ing.unit}) - Stok: ${ing.currentStock}`,
-                  })),
-                ]}
-                buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 hover:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Nama Bahan Jadi Jika Baru
-              </label>
-              <input
-                type="text"
-                value={targetIngredientName}
-                onChange={(e) => setTargetIngredientName(e.target.value)}
-                placeholder="e.g. Gula Aren Cair Racikan"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Yield Hasil Olahan per 1 Batch
-              </label>
-              <input
-                type="number"
-                required
-                min="1"
-                value={yieldQuantity}
-                onChange={(e) => setYieldQuantity(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-bold font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Satuan Hasil
-              </label>
-              <input
-                type="text"
-                required
-                value={yieldUnit}
-                onChange={(e) => setYieldUnit(e.target.value)}
-                placeholder="ml / gr / porsi"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-              />
-            </div>
-          </div>
-
-          {/* BAHAN MENTAH ROWS */}
-          <div className="space-y-3 pt-2 border-t border-slate-100">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Bahan Mentah yang Dimasak
-              </span>
-              <button
-                type="button"
-                onClick={handleAddIngredient}
-                className="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
-              >
-                <Plus className="w-3.5 h-3.5 text-brand-600" />
-                <span>Tambah Bahan</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2">
-              {recipeItems.map((item, idx) => {
-                const selectedIng = ingredients.find((i) => i.id === item.ingredientId);
-
-                return (
-                  <div
-                    key={idx}
-                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center gap-2 text-xs"
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Divisi Penanggung Jawab Olahan
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDivision("BAR")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      division === "BAR"
+                        ? "bg-brand-50 dark:bg-brand-500/20 border-brand-300 dark:border-brand-500/40 text-brand-800 dark:text-brand-200 font-black shadow-2xs"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
                   >
-                    <div className="flex-1 w-full">
-                      <CustomSelect
-                        value={item.ingredientId}
-                        onChange={(val) => handleUpdateIngredient(idx, { ingredientId: val })}
-                        options={ingredients.map((ing) => ({
-                          value: ing.id,
-                          label: `${ing.name} (${ing.unit}) - Rp ${ing.costPerUnit || 0}/${ing.unit}`,
-                        }))}
-                        buttonClassName="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-semibold text-slate-900"
-                      />
-                    </div>
+                    <Coffee className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                    <span>Bar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDivision("KITCHEN")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      division === "KITCHEN"
+                        ? "bg-brand-50 dark:bg-brand-500/20 border-brand-300 dark:border-brand-500/40 text-brand-800 dark:text-brand-200 font-black shadow-2xs"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <UtensilsCrossed className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                    <span>Kitchen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDivision("BAKER")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      division === "BAKER"
+                        ? "bg-brand-50 dark:bg-brand-500/20 border-brand-300 dark:border-brand-500/40 text-brand-800 dark:text-brand-200 font-black shadow-2xs"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    <Cake className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                    <span>Bakery</span>
+                  </button>
+                </div>
+              </div>
 
-                    <div className="flex items-center gap-2 justify-between sm:justify-end">
-                      <div className="w-28 flex items-center gap-1">
-                        <input
-                          type="number"
-                          min="0.1"
-                          step="any"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleUpdateIngredient(idx, { quantity: Number(e.target.value) })
-                          }
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-base sm:text-xs font-bold font-mono text-right text-slate-900"
-                        />
-                        <span className="text-[10px] text-slate-500 font-bold shrink-0">
-                          {selectedIng?.unit || "satuan"}
-                        </span>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Resep Olahan
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (!targetIngredientName) setTargetIngredientName(e.target.value);
+                  }}
+                  placeholder="e.g. Saus Gula Aren Racikan, Simple Syrup Bar"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Target Bahan di Inventori
+                  </label>
+                  <CustomSelect
+                    value={targetIngredientId}
+                    onChange={(val) => {
+                      setTargetIngredientId(val);
+                      const sel = ingredients.find((i) => i.id === val);
+                      if (sel) {
+                        setTargetIngredientName(sel.name);
+                        setYieldUnit(sel.unit);
+                      }
+                    }}
+                    placeholder="-- Buat Bahan Jadi Baru --"
+                    options={[
+                      { value: "", label: "-- Buat Bahan Jadi Baru --" },
+                      ...ingredients.map((ing) => ({
+                        value: ing.id,
+                        label: `${ing.name} (${ing.unit}) - Stok: ${ing.currentStock}`,
+                      })),
+                    ]}
+                    buttonClassName="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 hover:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama Bahan Jadi Jika Baru
+                  </label>
+                  <input
+                    type="text"
+                    value={targetIngredientName}
+                    onChange={(e) => setTargetIngredientName(e.target.value)}
+                    placeholder="e.g. Gula Aren Cair Racikan"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Yield Hasil Olahan per 1 Batch
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={yieldQuantity}
+                    onChange={(e) => setYieldQuantity(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-bold font-mono text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all tabular-nums"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Satuan Hasil
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={yieldUnit}
+                    onChange={(e) => setYieldUnit(e.target.value)}
+                    placeholder="ml / gr / porsi"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* BAHAN MENTAH ROWS */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Bahan Mentah yang Dimasak
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddIngredient}
+                    className="px-3 py-1 bg-brand-50 hover:bg-brand-100 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                    <span>Tambah Bahan</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {recipeItems.map((item, idx) => {
+                    const selectedIng = ingredients.find((i) => i.id === item.ingredientId);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200/80 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center gap-2 text-xs"
+                      >
+                        <div className="flex-1 w-full">
+                          <CustomSelect
+                            value={item.ingredientId}
+                            onChange={(val) => handleUpdateIngredient(idx, { ingredientId: val })}
+                            options={ingredients.map((ing) => ({
+                              value: ing.id,
+                              label: `${ing.name} (${ing.unit}) - Rp ${ing.costPerUnit || 0}/${ing.unit}`,
+                            }))}
+                            buttonClassName="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 justify-between sm:justify-end">
+                          <div className="w-28 flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="any"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                handleUpdateIngredient(idx, { quantity: Number(e.target.value) })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-base sm:text-xs font-bold font-mono text-right text-slate-900 dark:text-slate-100 tabular-nums"
+                            />
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold shrink-0">
+                              {selectedIng?.unit || "satuan"}
+                            </span>
+                          </div>
+
+                          {recipeItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveIngredient(idx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                      {recipeItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveIngredient(idx)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Panduan Memasak / Suhu / Waktu Simpan
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Masak api kecil 25 menit, saring halus, simpan di chiller 4°C maksimal 14 hari."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Panduan Memasak / Suhu / Waktu Simpan
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Masak api kecil 25 menit, saring halus, simpan di chiller 4°C maksimal 14 hari."
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
-            >
-              <Check className="w-4 h-4 text-white" />
-              <span>Simpan Resep Batch</span>
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>,
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 transition-all"
+                >
+                  <Check className="w-4 h-4 text-white" />
+                  <span>Simpan Resep Batch</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

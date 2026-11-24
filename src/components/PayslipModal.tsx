@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import {
@@ -7,16 +7,12 @@ import {
   Download,
   CheckCircle2,
   Clock,
-  Calendar,
-  User,
-  Wallet,
   X,
   Sparkles,
-  AlertCircle,
-  Building,
   Target,
-  Award,
 } from "lucide-react";
+import { toast } from "../context/ToastContext";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/format";
 import {
   classifyDailyAttendanceStatus,
@@ -104,19 +100,20 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
   // 3. Identify KPI / Checklist details
   const kpiDetails = useMemo(() => {
+    const canonicalEmpId = resolveCanonicalEmployeeId(payroll.employeeId, employees, users);
     const isLeader =
       (employee.position || "").toUpperCase().includes("LEADER") ||
       (employee.position || "").toUpperCase().includes("HEAD");
 
-    const kpi = (kpiRecords || []).find(
-      (k) => k.employeeId === payroll.employeeId && k.period === payroll.period
-    );
+    const kpi = (kpiRecords || []).find((k) => {
+      const kPeriod = k.period || `${k.year}-${String(k.month).padStart(2, "0")}`;
+      return resolveCanonicalEmployeeId(k.employeeId, employees, users) === canonicalEmpId && kPeriod === payroll.period;
+    });
 
     const empChecklists = (dailyChecklists || []).filter(
       (c) =>
-        (c.employeeId === payroll.employeeId ||
-          c.notes?.includes(`[${employee.department}]`)) &&
-        c.date.startsWith(payroll.period)
+        resolveCanonicalEmployeeId(c.employeeId, employees, users) === canonicalEmpId &&
+        (c.date || "").startsWith(payroll.period)
     );
     const checklistDays = empChecklists.length;
     const expectedDays = Math.max(1, attendanceBreakdown.presentDays || 22);
@@ -135,18 +132,30 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         : `Kedisiplinan Presensi Kerja (${ratio}% - ${attendanceBreakdown.presentDays}/${expectedDays} Hari)`,
       isLeader,
     };
-  }, [employee, kpiRecords, dailyChecklists, payroll.employeeId, payroll.period, payroll.kpiBonus, attendanceBreakdown]);
+  }, [employee, employees, users, kpiRecords, dailyChecklists, payroll.employeeId, payroll.period, payroll.kpiBonus, attendanceBreakdown]);
 
-  // 4. Formatted Period String (e.g. Oktober 2026)
+  // 4. Formatted Period String (e.g. Oktober 2026) in WITA
   const periodFormatted = useMemo(() => {
     try {
       const [y, m] = payroll.period.split("-");
-      const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-      return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+      const d = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, 15, 4, 0, 0));
+      return d.toLocaleDateString("id-ID", {
+        timeZone: DEFAULT_STORE_TIMEZONE,
+        month: "long",
+        year: "numeric",
+      });
     } catch {
       return payroll.period;
     }
   }, [payroll.period]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [onClose]);
 
   // 5. Account Name if Paid
   const paidViaAccountName = useMemo(() => {
@@ -167,6 +176,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         kpiDetails,
         paidViaAccountName,
       });
+      toast.success("Slip gaji PDF berhasil diunduh.");
     } catch (err) {
       console.warn("Vector PDF export warning, mencoba raster fallback:", err);
       // Secondary fallback: html2canvas with sanitized rendering
@@ -187,12 +197,13 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
           pdf.save(
             `Slip_Gaji_${employee.name.replace(/\s+/g, "_")}_${payroll.period}.pdf`
           );
+          toast.success("Slip gaji PDF berhasil diunduh.");
           return;
         } catch (innerErr) {
           console.error("Gagal membuat PDF slip gaji via canvas:", innerErr);
         }
       }
-      alert("Terjadi kesalahan saat memproses PDF. Silakan gunakan tombol 'Cetak' untuk mencetak langsung atau simpan sebagai PDF via browser.");
+      toast.error("Gagal memproses PDF. Gunakan tombol 'Cetak' untuk mencetak atau simpan sebagai PDF via browser.");
     } finally {
       setIsExporting(false);
     }
@@ -209,6 +220,9 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center"
     >
       <motion.div
@@ -216,15 +230,15 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: "spring", damping: 28, stiffness: 360 }}
-        className="my-auto bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200"
+        className="my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200 dark:border-slate-800"
       >
         {/* Top Action Bar */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 no-print">
+        <div className="p-4 bg-brand-gradient text-white flex items-center justify-between shrink-0 no-print">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-400" />
+            <FileText className="w-5 h-5 text-amber-300" />
             <div>
               <h3 className="font-bold text-sm sm:text-base">Slip Gaji Karyawan</h3>
-              <p className="text-[11px] text-slate-300">
+              <p className="text-[11px] text-brand-100">
                 {employee.name} • {periodFormatted}
               </p>
             </div>
@@ -232,8 +246,9 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setPrintMode(printMode === "standard" ? "thermal" : "standard")}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-colors hidden sm:inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/20 transition-colors hidden sm:inline-flex items-center gap-1.5 cursor-pointer"
               title="Ganti tampilan A4 / Struk Kasir Thermal"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -241,25 +256,28 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
             </button>
 
             <button
+              type="button"
               onClick={handleDownloadPDF}
               disabled={isExporting}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-400 hover:bg-amber-500 text-slate-950 transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{isExporting ? "Menyimpan..." : "Unduh PDF"}</span>
             </button>
 
             <button
+              type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/20 hover:bg-white/30 text-white border border-white/20 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak</span>
             </button>
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors ml-1 cursor-pointer"
+              className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/15 transition-colors ml-1 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -267,7 +285,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         </div>
 
         {/* Scrollable Document Area */}
-        <div className="overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-slate-100/70 flex justify-center flex-1">
+        <div className="overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-slate-100/70 dark:bg-slate-950/60 flex justify-center flex-1 tabular-nums">
           {/* Printable Document Box */}
           <div
             ref={printRef}
@@ -285,15 +303,15 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {settings.storeAddress || "Outlet Utama & Operasional Kafe"}
+                  {settings.companyAddress || "Outlet Utama & Operasional Kafe"}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  {settings.storePhone ? `Telp: ${settings.storePhone}` : "Sistem Manajemen Terpadu"}
+                  {settings.footerMessage || "Sistem Manajemen Terpadu"}
                 </p>
               </div>
 
               <div className="sm:text-right">
-                <span className="inline-block px-3 py-1 rounded-md bg-slate-900 text-white font-black text-xs uppercase tracking-wider mb-1">
+                <span className="inline-block px-3 py-1 rounded-md bg-brand-600 text-white font-black text-xs uppercase tracking-wider mb-1">
                   SLIP GAJI RESMI
                 </span>
                 <p className="text-xs font-bold text-slate-800">
@@ -633,23 +651,23 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
             </div>
 
             {/* Take Home Pay (Gaji Bersih Diterima) */}
-            <div className="bg-slate-900 text-white rounded-xl p-4 sm:p-5 mb-6 shadow-md flex items-center justify-between">
+            <div className="bg-brand-gradient text-white rounded-xl p-4 sm:p-5 mb-6 shadow-md flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-brand-100 uppercase tracking-wider block">
                   TAKE HOME PAY (TOTAL DITERIMA)
                 </span>
-                <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white block mt-0.5">
+                <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white block mt-0.5 tabular-nums">
                   {formatCurrency(payroll.netPay)}
                 </span>
                 {paidViaAccountName && (
-                  <span className="text-[10px] text-slate-400 mt-1 block">
+                  <span className="text-[10px] text-brand-100 mt-1 block">
                     Dibayarkan via: {paidViaAccountName}{" "}
-                    {payroll.paidDate && `pada ${new Date(payroll.paidDate).toLocaleDateString("id-ID")}`}
+                    {payroll.paidDate && `pada ${new Date(payroll.paidDate).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}`}
                   </span>
                 )}
               </div>
               <div className="text-right">
-                <CheckCircle2 className="w-9 h-9 text-emerald-400 inline-block opacity-90" />
+                <CheckCircle2 className="w-9 h-9 text-emerald-300 inline-block opacity-95" />
               </div>
             </div>
 
@@ -679,7 +697,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5">
                   {payroll.approvedAt
-                    ? `Disetujui pada ${new Date(payroll.approvedAt).toLocaleDateString("id-ID")}`
+                    ? `Disetujui pada ${new Date(payroll.approvedAt).toLocaleDateString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}`
                     : "Otorisasi Resmi Outlet"}
                 </p>
               </div>
@@ -693,11 +711,12 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ payroll, onClose }) 
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 no-print">
+        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 no-print">
           <span>Format: {printMode === "standard" ? "A4 Standar" : "Thermal 80mm"}</span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-colors cursor-pointer"
           >
             Tutup
           </button>

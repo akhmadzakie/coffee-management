@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useStore } from "../../store/StoreContext";
 import { formatCurrency } from "../../utils/format";
+import { DEFAULT_STORE_TIMEZONE } from "../../utils/dateUtils";
 import { ShiftSession } from "../../types";
 import { calculateShiftStats } from "../../utils/posDomainLogic";
 import {
@@ -175,7 +176,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: "easeInOut" }}
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
@@ -188,7 +189,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+                className="fixed inset-0 z-60 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 14 }}
@@ -219,19 +220,19 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                 id="thermal-z-report"
                 className="w-full max-w-[320px] bg-white text-black p-4 rounded-xl font-mono text-[11px] leading-tight shadow-md border border-slate-200"
               >
-                <div className="text-center pb-2 border-b border-dashed border-gray-400 mb-2">
+                <div className="text-center pb-2 border-b border-dashed border-slate-400 mb-2">
                   <h3 className="font-bold text-sm uppercase">
-                    {settings?.name || "COFFEE SHOP"}
+                    {settings?.brandName || "COFFEE SHOP"}
                   </h3>
-                  <p className="text-[10px] text-gray-600">
+                  <p className="text-[10px] text-slate-600">
                     LAPORAN PENUTUPAN SHIFT (Z-REPORT)
                   </p>
-                  <p className="text-[9px] text-gray-500">
-                    {new Date().toLocaleString("id-ID")}
+                  <p className="text-[9px] text-slate-500">
+                    {new Date().toLocaleString("id-ID", { timeZone: DEFAULT_STORE_TIMEZONE })}
                   </p>
                 </div>
 
-                <div className="space-y-1 pb-2 border-b border-dashed border-gray-400 text-[10px]">
+                <div className="space-y-1 pb-2 border-b border-dashed border-slate-400 text-[10px]">
                   <div className="flex justify-between">
                     <span>PIC Shift:</span>
                     <span className="font-bold">{closedShiftData.picEmployeeName || closedShiftData.cashierName}</span>
@@ -252,6 +253,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     <span>Mulai Shift:</span>
                     <span>
                       {new Date(closedShiftData.startTime).toLocaleTimeString("id-ID", {
+                        timeZone: DEFAULT_STORE_TIMEZONE,
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -261,6 +263,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     <span>Selesai:</span>
                     <span>
                       {new Date(closedShiftData.endTime).toLocaleTimeString("id-ID", {
+                        timeZone: DEFAULT_STORE_TIMEZONE,
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -272,8 +275,8 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   </div>
                 </div>
 
-                <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
-                  <p className="font-bold text-[10px] uppercase text-gray-700">
+                <div className="py-2 border-b border-dashed border-slate-400 space-y-1">
+                  <p className="font-bold text-[10px] uppercase text-slate-700">
                     Ringkasan Pendapatan POS
                   </p>
                   <div className="flex justify-between">
@@ -288,14 +291,14 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                     <span>EDC / Kartu:</span>
                     <span>{formatCurrency(closedShiftData.edcSales)}</span>
                   </div>
-                  <div className="flex justify-between font-bold pt-1 border-t border-gray-200">
+                  <div className="flex justify-between font-bold pt-1 border-t border-slate-200">
                     <span>TOTAL OMZET:</span>
                     <span>{formatCurrency(closedShiftData.salesTotal)}</span>
                   </div>
                 </div>
 
-                <div className="py-2 border-b border-dashed border-gray-400 space-y-1">
-                  <p className="font-bold text-[10px] uppercase text-gray-700">
+                <div className="py-2 border-b border-dashed border-slate-400 space-y-1">
+                  <p className="font-bold text-[10px] uppercase text-slate-700">
                     Rekonsiliasi Laci Kasir (Cash)
                   </p>
                   <div className="flex justify-between">
@@ -330,7 +333,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                       <span>({formatCurrency(closedShiftData.cashOut)})</span>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-gray-800 pt-1 border-t border-gray-200">
+                  <div className="flex justify-between font-bold text-slate-800 pt-1 border-t border-slate-200">
                     <span>Estimasi Kas Laci:</span>
                     <span>{formatCurrency(closedShiftData.expectedEndingCash)}</span>
                   </div>
@@ -357,7 +360,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-4 text-center text-[9px] text-gray-500">
+                <div className="pt-4 text-center text-[9px] text-slate-500">
                   <div className="flex justify-between pt-6 px-2 text-center">
                     <div>
                       <p>PIC Kasir,</p>
@@ -639,6 +642,7 @@ export const PosShiftModal: React.FC<PosShiftModalProps> = ({
                   </p>
                   <p className="font-bold text-slate-800">
                     {new Date(activeShift.startTime).toLocaleTimeString("id-ID", {
+                      timeZone: DEFAULT_STORE_TIMEZONE,
                       hour: "2-digit",
                       minute: "2-digit",
                     })}

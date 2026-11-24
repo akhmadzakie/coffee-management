@@ -8,6 +8,7 @@ import { CsvImportExport } from "./common/CsvImportExport";
 import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 import { CustomSelect } from "./common/CustomSelect";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "../context/ToastContext";
 
 const ALL_ROLES: { value: string; label: string; description: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin",       description: "Akses penuh semua sistem" },
@@ -28,6 +29,7 @@ const DEPARTMENTS = [
   { value: "MAIN", label: "Gudang Utama" },
   { value: "BAR", label: "Bar" },
   { value: "KITCHEN", label: "Kitchen / Dapur" },
+  { value: "BAKER", label: "Bakery / Pastry" },
 ];
 
 export const UsersComponent = () => {
@@ -63,6 +65,7 @@ export const UsersComponent = () => {
 
   // Role yang tersedia berdasarkan siapa yang login
   const isManager = currentUser?.role === "MANAGER";
+  const isOwner = currentUser?.role === "OWNER";
   const ROLES = ALL_ROLES.filter((r) =>
     isManager ? MANAGER_ALLOWED_ROLES.includes(r.value) : true
   );
@@ -109,47 +112,74 @@ export const UsersComponent = () => {
     if (emp) {
       setFormName(emp.name);
       setFormUsername(emp.username || emp.name.toLowerCase().replace(/\s+/g, ""));
-      if (!formPin) setFormPin("123456");
+      if (!editingUser && !formPin) setFormPin("123456");
 
       const posUpper = (emp.position || "").toUpperCase();
       const deptUpper = (emp.department || "").toUpperCase();
+      let resolvedRole: Role = "KASIR";
       if (posUpper.includes("MANAGER") || posUpper.includes("MANAJER")) {
-        setFormRole("MANAGER");
+        resolvedRole = "MANAGER";
       } else if (posUpper.includes("FINANCE") || posUpper.includes("KEUANGAN") || posUpper.includes("AKUNTAN") || deptUpper.includes("FINANCE") || deptUpper.includes("KEUANGAN")) {
-        setFormRole("FINANCE");
+        resolvedRole = "FINANCE";
       } else if (posUpper.includes("LEADER")) {
-        setFormRole("LEADER");
+        resolvedRole = "LEADER";
       } else if (posUpper.includes("KASIR")) {
-        setFormRole("KASIR");
+        resolvedRole = "KASIR";
       } else if (deptUpper.includes("BAR") || posUpper.includes("BAR")) {
-        setFormRole("BAR");
+        resolvedRole = "BAR";
       } else if (
         deptUpper.includes("KITCHEN") ||
         deptUpper.includes("DAPUR") ||
         posUpper.includes("KITCHEN")
       ) {
-        setFormRole("KITCHEN");
+        resolvedRole = "KITCHEN";
       } else if (deptUpper.includes("BAKER") || posUpper.includes("ROTI")) {
-        setFormRole("BAKER");
-      } else {
-        setFormRole("KASIR");
+        resolvedRole = "BAKER";
       }
+      if (isManager && !MANAGER_ALLOWED_ROLES.includes(resolvedRole)) {
+        resolvedRole = "KASIR";
+      }
+      setFormRole(resolvedRole);
       if (emp.department) setFormDept(emp.department);
     }
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isOwner) {
+      toast.warning("Akun Owner hanya memiliki akses pantau (Read-Only).");
+      return;
+    }
+    if (isManager && !MANAGER_ALLOWED_ROLES.includes(formRole)) {
+      toast.error(`Manager tidak dapat menetapkan role ${formRole}.`);
+      return;
+    }
+
     const cleanUsername = formUsername.trim().toLowerCase();
     const cleanName = formName.trim();
     const cleanPin = formPin.trim();
 
     if (!cleanUsername || !cleanName) {
-      alert("Nama lengkap dan username tidak boleh kosong.");
+      toast.error("Nama lengkap dan username tidak boleh kosong.");
       return;
     }
-    if (!cleanPin || cleanPin.length < 4) {
-      alert("PIN otorisasi minimal 4 digit angka.");
+
+    const duplicateUser = users.find(
+      (u) =>
+        u.id !== editingUser?.id &&
+        u.username.trim().toLowerCase() === cleanUsername
+    );
+    if (duplicateUser) {
+      toast.error(`Username "@${cleanUsername}" sudah digunakan oleh ${duplicateUser.name}.`);
+      return;
+    }
+
+    if (!editingUser && (!cleanPin || cleanPin.length < 4)) {
+      toast.error("PIN otorisasi minimal 4 digit angka.");
+      return;
+    }
+    if (editingUser && cleanPin.length > 0 && cleanPin.length < 4) {
+      toast.error("Jika mengubah PIN, masukkan minimal 4 digit angka.");
       return;
     }
 
@@ -159,13 +189,13 @@ export const UsersComponent = () => {
       employees.find(
         (emp) =>
           (editingUser?.employeeId && emp.id === editingUser.employeeId) ||
-          emp.username.toLowerCase() === editingUser?.username.toLowerCase() ||
+          (editingUser?.username && emp.username.toLowerCase() === editingUser.username.toLowerCase()) ||
           emp.username.toLowerCase() === cleanUsername
       )?.id || null;
 
     const userData: any = {
       username: cleanUsername,
-      pin: cleanPin,
+      pin: cleanPin || editingUser?.pin || "",
       name: cleanName,
       role: formRole,
       employeeId: targetEmpId,
@@ -185,8 +215,10 @@ export const UsersComponent = () => {
       if (editingUser.isSuspended && canUnsuspend) {
         unsuspendUser(editingUser.id);
       }
+      toast.success(`Akun "${cleanName}" berhasil diperbarui.`);
     } else {
       addUser(userData);
+      toast.success(`Akun baru "${cleanName}" (@${cleanUsername}) berhasil ditambahkan.`);
     }
 
     // Sinkronkan juga langsung ke data karyawan jika ada karyawan terkait
@@ -248,6 +280,7 @@ export const UsersComponent = () => {
   };
 
   const handleAddNew = () => {
+    if (isOwner) return;
     setEditingUser(null);
     setFormName("");
     setFormUsername("");
@@ -259,9 +292,19 @@ export const UsersComponent = () => {
   };
 
   const handleCreateForEmployee = (emp: any) => {
+    if (isOwner) return;
     setEditingUser(null);
     handleSelectEmployee(emp.id);
     setIsEditing(true);
+  };
+
+  const handleUnsuspend = async (user: User) => {
+    const ok = await unsuspendUser(user.id);
+    if (ok) {
+      toast.success(`Suspend akun "${user.name}" (@${user.username}) berhasil dibuka.`);
+    } else {
+      toast.error(`Gagal membuka suspend akun "${user.name}".`);
+    }
   };
 
   const handleDelete = (user: User) => {
@@ -270,51 +313,80 @@ export const UsersComponent = () => {
       message: `Akun login "${user.name}" (@${user.username}) dengan role ${user.role} akan dihapus secara permanen dari sistem login. Data absensi dan riwayat transaksi yang sudah ada akan tetap aman tersimpan.`,
       confirmLabel: "Ya, Hapus Pengguna",
       variant: "danger",
-      onConfirm: () => deleteUser(user.id),
+      onConfirm: () => {
+        deleteUser(user.id);
+        toast.success(`Akun "${user.name}" telah dihapus.`);
+      },
     });
   };
 
   const handleImportUsers = (data: any[]) => {
+    if (isOwner) {
+      toast.warning("Akun Owner tidak diizinkan mengimpor pengguna.");
+      return;
+    }
     let imported = 0;
     let updated = 0;
-    data.forEach(row => {
+    let skipped = 0;
+    const seenUsernames = new Set(users.map((u) => u.username.toLowerCase()));
+
+    data.forEach((row) => {
       const idSistem = row["ID_SISTEM (JANGAN DIUBAH)"];
-      const name = row["Nama Lengkap"] || row.name;
-      const username = row["Username"] || row.username;
-      const pin = row["PIN"] || row.pin;
-      const role = row["Role"] || row.role;
+      const name = String(row["Nama Lengkap"] || row.name || "").trim();
+      const username = String(row["Username"] || row.username || "").trim().toLowerCase();
+      const rawPin = row["PIN"] !== undefined && row["PIN"] !== null ? String(row["PIN"]).trim() : "";
+      const role = String(row["Role"] || row.role || "").trim().toUpperCase() as Role;
       const department = row["Departemen"] || row.department;
 
-      if (name && username && pin && role) {
-        if (idSistem) {
-          const existing = users.find(u => u.id === idSistem);
-          if (existing) {
-            updateUser({
-              ...existing,
-              name,
-              username,
-              pin: String(pin),
-              role,
-              department: role === "LEADER" ? department : null
-            });
-            updated++;
+      if (!name || !username || !role) return;
+      if (isManager && !MANAGER_ALLOWED_ROLES.includes(role)) {
+        skipped++;
+        return;
+      }
+
+      if (idSistem) {
+        const existing = users.find((u) => u.id === idSistem);
+        if (existing) {
+          if (isManager && !MANAGER_ALLOWED_ROLES.includes(existing.role)) {
+            skipped++;
+            return;
           }
-        } else {
-          addUser({ 
-            name, 
-            username, 
-            pin: String(pin), 
-            role, 
-            department: role === "LEADER" ? department : null 
+          if (rawPin && rawPin.length < 4) {
+            skipped++;
+            return;
+          }
+          updateUser({
+            ...existing,
+            name,
+            username,
+            pin: rawPin || existing.pin || "",
+            role,
+            department: (role === "LEADER" ? department || existing.department || "BAR" : null) as any,
           });
-          imported++;
+          updated++;
         }
+      } else {
+        if (!rawPin || rawPin.length < 4 || seenUsernames.has(username)) {
+          skipped++;
+          return;
+        }
+        seenUsernames.add(username);
+        addUser({
+          name,
+          username,
+          pin: rawPin,
+          role,
+          department: (role === "LEADER" ? department || "BAR" : null) as any,
+        });
+        imported++;
       }
     });
     if (imported > 0 || updated > 0) {
-      alert(`Berhasil menambahkan ${imported} data baru dan memperbarui ${updated} pengguna.`);
+      toast.success(
+        `Berhasil menambahkan ${imported} pengguna baru dan memperbarui ${updated} pengguna.${skipped > 0 ? ` (${skipped} baris dilewati)` : ""}`
+      );
     } else {
-      alert("Tidak ada data valid yang diimport. Pastikan format kolom sesuai template.");
+      toast.warning("Tidak ada data valid yang diimpor. Pastikan kolom Nama, Username, PIN, & Role sesuai template.");
     }
   };
 
@@ -330,16 +402,17 @@ export const UsersComponent = () => {
             Kelola akses role pengguna dalam sistem Julia's Management.
           </p>
         </div>
+        {!isOwner && (
         <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
           <CsvImportExport
             onImport={handleImportUsers}
             templateHeaders={["Nama Lengkap", "Username", "PIN", "Role", "Departemen"]}
             templateExampleRow={["Budi Santoso", "budi", "123456", "KASIR", ""]}
-            currentData={users.map(u => ({
+            currentData={editableUsers.map(u => ({
               id: u.id,
               "Nama Lengkap": u.name,
               "Username": u.username,
-              "PIN": u.pin,
+              "PIN": "",
               "Role": u.role,
               "Departemen": u.department || ""
             }))}
@@ -349,10 +422,10 @@ export const UsersComponent = () => {
               Role: isManager
                 ? ["KASIR", "LEADER", "BAR", "KITCHEN", "BAKER"]
                 : ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE", "KASIR", "LEADER", "BAR", "KITCHEN", "BAKER"],
-              Departemen: ["MAIN", "BAR", "KITCHEN"],
+              Departemen: ["MAIN", "BAR", "KITCHEN", "BAKER"],
             }}
             templateHints={{
-              PIN: "PIN 4–6 digit angka",
+              PIN: "PIN 4–6 digit angka (kosongkan saat edit jika tetap)",
               Departemen: "Hanya diisi untuk role LEADER",
             }}
           />
@@ -364,6 +437,7 @@ export const UsersComponent = () => {
             <span>Tambah Pengguna</span>
           </button>
         </div>
+        )}
       </div>
 
       {/* Banner Akun Ter-suspend (Salah PIN 3x) */}
@@ -388,7 +462,7 @@ export const UsersComponent = () => {
                 <button
                   key={u.id}
                   type="button"
-                  onClick={() => unsuspendUser(u.id)}
+                  onClick={() => handleUnsuspend(u)}
                   className="text-xs font-bold px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <span>🔓 Buka Suspend: {u.name} (@{u.username})</span>
@@ -415,18 +489,20 @@ export const UsersComponent = () => {
               </p>
             </div>
           </div>
+          {!isOwner && (
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
             {unlinkedEmployees.slice(0, 3).map((emp) => (
               <button
                 key={emp.id}
                 onClick={() => handleCreateForEmployee(emp)}
-                className="text-xs font-semibold px-3 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                className="text-xs font-semibold px-3 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Buat Akun: {emp.name.split(" ")[0]} ({emp.position})
               </button>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -546,7 +622,7 @@ export const UsersComponent = () => {
                         {user.isSuspended && canUnsuspend && (
                           <button
                             type="button"
-                            onClick={() => unsuspendUser(user.id)}
+                            onClick={() => handleUnsuspend(user)}
                             className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors mr-1 cursor-pointer shadow-2xs"
                             title="Buka Suspend Akun (Unsuspend)"
                           >
@@ -662,7 +738,7 @@ export const UsersComponent = () => {
                   {user.isSuspended && canUnsuspend && (
                     <button
                       type="button"
-                      onClick={() => unsuspendUser(user.id)}
+                      onClick={() => handleUnsuspend(user)}
                       className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
                     >
                       <span>🔓 Buka Suspend</span>
@@ -703,7 +779,7 @@ export const UsersComponent = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-50 p-3 sm:p-6 overflow-y-auto"
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-50 p-3 sm:p-6 overflow-y-auto"
               >
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -782,19 +858,21 @@ export const UsersComponent = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    PIN Akses (4-6 Digit Angka) *
+                    {editingUser ? "PIN Akses Baru (Opsional)" : "PIN Akses (4-6 Digit Angka) *"}
                   </label>
                   <input
                     type="text"
-                    required
+                    required={!editingUser}
                     maxLength={6}
                     value={formPin}
                     onChange={(e) => setFormPin(e.target.value.replace(/\D/g, ""))}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs font-mono tracking-widest focus:ring-2 focus:ring-brand-500/20 outline-none"
-                    placeholder="123456"
+                    placeholder={editingUser ? "Kosongkan jika PIN tetap" : "123456"}
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Panjang: {formPin.length} digit (didukung 4 atau 6 digit)
+                    {editingUser && formPin.length === 0
+                      ? "PIN lama tetap dipertahankan jika dikosongkan"
+                      : `Panjang: ${formPin.length} digit (didukung 4 atau 6 digit)`}
                   </span>
                 </div>
                 <div>
@@ -820,7 +898,7 @@ export const UsersComponent = () => {
                   </label>
                   <CustomSelect
                     value={formDept}
-                    onChange={(val) => setFormDept(val as "BAR" | "KITCHEN" | "MAIN")}
+                    onChange={(val) => setFormDept(val as "BAR" | "KITCHEN" | "MAIN" | "BAKER")}
                     options={DEPARTMENTS.map((d) => ({
                       value: d.value,
                       label: d.label,

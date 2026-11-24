@@ -19,9 +19,20 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { createPortal } from "react-dom";
 import { useStore } from "../store/StoreContext";
+import { toast } from "../context/ToastContext";
 import { Promotion, PromotionType } from "../types";
+import { getLocalDateString } from "../utils/dateUtils";
+import { formatCurrency } from "../utils/format";
+import {
+  getPromotionRuntimeStatus,
+  validatePromotionInput,
+  computePromotionDiscountPreview,
+} from "../utils/syncSanitizers";
 import { CustomSelect } from "./common/CustomSelect";
+import { CustomDatePicker } from "./common/CustomDatePicker";
+import { ConfirmModal, useConfirm } from "./common/ConfirmModal";
 
 export const PromotionsManagement: React.FC = () => {
   const {
@@ -39,16 +50,12 @@ export const PromotionsManagement: React.FC = () => {
     !isOwner &&
     (currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "MANAGER");
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => getLocalDateString(), []);
 
   const getPromoStatus = (
     promo: Promotion
   ): "ACTIVE" | "UPCOMING" | "EXPIRED" | "INACTIVE" => {
-    if (!promo.isActive) return "INACTIVE";
-    if (promo.endDate && promo.endDate.slice(0, 10) < todayStr) return "EXPIRED";
-    if (promo.startDate && promo.startDate.slice(0, 10) > todayStr)
-      return "UPCOMING";
-    return "ACTIVE";
+    return getPromotionRuntimeStatus(promo, todayStr);
   };
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,7 +69,7 @@ export const PromotionsManagement: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const confirmModal = useConfirm();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -114,6 +121,7 @@ export const PromotionsManagement: React.FC = () => {
   ).length;
 
   const handleOpenAddModal = () => {
+    if (!canManage) return;
     setEditingPromo(null);
     setFormData({
       name: "",
@@ -132,6 +140,7 @@ export const PromotionsManagement: React.FC = () => {
   };
 
   const handleOpenEditModal = (promo: Promotion) => {
+    if (!canManage) return;
     setEditingPromo(promo);
     setFormData({
       name: promo.name,
@@ -151,77 +160,79 @@ export const PromotionsManagement: React.FC = () => {
 
   const handleSavePromo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      setFormError("Nama promo wajib diisi.");
-      return;
-    }
-    if (formData.value <= 0) {
-      setFormError("Besaran diskon harus lebih besar dari 0.");
-      return;
-    }
-    if (formData.type === "PERCENT" && formData.value > 100) {
-      setFormError("Diskon persen tidak boleh melebihi 100%.");
+    if (!canManage) return;
+
+    const validation = validatePromotionInput(
+      {
+        name: formData.name,
+        code: formData.code,
+        type: formData.type,
+        value: Number(formData.value),
+        minSpend: Number(formData.minSpend) || 0,
+        maxDiscount: Number(formData.maxDiscount) || 0,
+        startDate: formData.startDate || undefined,
+        endDate: formData.endDate || undefined,
+      },
+      promotions || [],
+      editingPromo?.id || null
+    );
+    if ("error" in validation) {
+      setFormError(validation.error);
       return;
     }
 
+    const { normalized } = validation;
     const payload: Promotion = {
       id: editingPromo ? editingPromo.id : `promo_${Date.now()}`,
-      name: formData.name.trim(),
-      code: formData.code.trim().toUpperCase() || undefined,
+      name: normalized.name,
+      code: normalized.code,
       type: formData.type,
-      value: Number(formData.value),
-      minSpend: Number(formData.minSpend) || 0,
-      maxDiscount: formData.type === "PERCENT" ? Number(formData.maxDiscount) || undefined : undefined,
+      value: normalized.value,
+      minSpend: normalized.minSpend,
+      maxDiscount: normalized.maxDiscount,
       isActive: formData.isActive,
       description: formData.description.trim() || undefined,
-      startDate: formData.startDate || undefined,
-      endDate: formData.endDate || undefined,
+      startDate: normalized.startDate,
+      endDate: normalized.endDate,
       createdAt: editingPromo ? editingPromo.createdAt : new Date().toISOString(),
       createdBy: editingPromo ? editingPromo.createdBy : currentUser?.name || currentUser?.username,
     };
 
     if (editingPromo) {
-      updatePromotion(payload);
+      updatePromotion(editingPromo.id, payload);
+      toast.success(`Promo "${payload.name}" berhasil diperbarui.`);
     } else {
       addPromotion(payload);
+      toast.success(`Promo "${payload.name}" berhasil ditambahkan.`);
     }
 
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    deletePromotion(id);
-    setDeleteConfirmId(null);
+  const confirmDeletePromo = (promo: Promotion) => {
+    if (!canManage) return;
+    confirmModal.open({
+      title: `Hapus Promo "${promo.name}"?`,
+      message:
+        "Promo ini tidak akan berlaku lagi untuk transaksi mendatang. Riwayat pesanan sebelumnya tidak akan terhapus.",
+      confirmLabel: "Ya, Hapus",
+      variant: "danger",
+      onConfirm: () => {
+        deletePromotion(promo.id);
+        toast.success(`Promo "${promo.name}" berhasil dihapus.`);
+      },
+    });
   };
 
   // Preview helper for simulation box
   const previewSimulation = useMemo(() => {
-    const sampleSpend = 100000;
-    if (formData.minSpend > 0 && sampleSpend < formData.minSpend) {
-      return {
-        applied: false,
-        reason: `Subtotal Rp ${sampleSpend.toLocaleString("id-ID")} kurang dari min. belanja Rp ${formData.minSpend.toLocaleString("id-ID")}`,
-        discount: 0,
-        finalTotal: sampleSpend,
-      };
-    }
-
-    let calculatedDiscount = 0;
-    if (formData.type === "PERCENT") {
-      calculatedDiscount = (sampleSpend * (formData.value || 0)) / 100;
-      if (formData.maxDiscount > 0 && calculatedDiscount > formData.maxDiscount) {
-        calculatedDiscount = formData.maxDiscount;
-      }
-    } else {
-      calculatedDiscount = formData.value || 0;
-    }
-
-    return {
-      applied: true,
-      reason: null,
-      discount: calculatedDiscount,
-      finalTotal: Math.max(0, sampleSpend - calculatedDiscount),
-    };
+    return computePromotionDiscountPreview({
+      type: formData.type,
+      value: Number(formData.value) || 0,
+      minSpend: Number(formData.minSpend) || 0,
+      maxDiscount: Number(formData.maxDiscount) || 0,
+      subtotal: 100000,
+    });
   }, [formData]);
 
   return (
@@ -545,6 +556,7 @@ export const PromotionsManagement: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
+                              if (!canManage) return;
                               if (status === "EXPIRED") {
                                 handleOpenEditModal(promo);
                               } else {
@@ -639,7 +651,7 @@ export const PromotionsManagement: React.FC = () => {
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => setDeleteConfirmId(promo.id)}
+                              onClick={() => confirmDeletePromo(promo)}
                               className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                               title="Hapus Promo"
                             >
@@ -660,39 +672,44 @@ export const PromotionsManagement: React.FC = () => {
       </div>
 
       {/* ── Modal Tambah/Edit Promo ── */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden border border-slate-100"
-            >
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-brand-100 text-brand-700 rounded-lg">
-                  <Tag className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg">
-                  {editingPromo ? "Edit Promo Whitelist" : "Tambah Promo Whitelist Baru"}
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition-colors"
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isModalOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsModalOpen(false);
+                }}
+                className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                  transition={{ type: "spring", damping: 28, stiffness: 360 }}
+                  className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-100 dark:border-slate-700"
+                >
+                {/* Modal Header */}
+                <div className="px-6 py-4 bg-slate-50/80 dark:bg-slate-800/80 border-b border-slate-200/80 dark:border-slate-700 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 rounded-lg">
+                      <Tag className="w-4 h-4" />
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg">
+                      {editingPromo ? "Edit Promo Whitelist" : "Tambah Promo Whitelist Baru"}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
             {/* Modal Form */}
             <form onSubmit={handleSavePromo} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -822,6 +839,34 @@ export const PromotionsManagement: React.FC = () => {
                 )}
               </div>
 
+              {/* Masa Berlaku Promo (Opsional) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal Mulai (Opsional)
+                  </label>
+                  <CustomDatePicker
+                    value={formData.startDate}
+                    onChange={(val) => setFormData({ ...formData, startDate: val })}
+                    placeholder="Berlaku langsung"
+                    allowClear
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Kosongkan bila aktif seketika</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal Berakhir (Opsional)
+                  </label>
+                  <CustomDatePicker
+                    value={formData.endDate}
+                    onChange={(val) => setFormData({ ...formData, endDate: val })}
+                    placeholder="Tanpa batas waktu"
+                    allowClear
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Otomatis kedaluwarsa setelah tanggal ini</p>
+                </div>
+              </div>
+
               {/* Description */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -862,38 +907,40 @@ export const PromotionsManagement: React.FC = () => {
                 </div>
                 {previewSimulation.applied ? (
                   <div className="space-y-1 text-xs">
-                    <div className="flex justify-between text-slate-600">
+                    <div className="flex justify-between text-slate-600 dark:text-slate-300">
                       <span>Subtotal Belanja:</span>
-                      <span>Rp 100.000</span>
+                      <span className="tabular-nums">{formatCurrency(100000)}</span>
                     </div>
-                    <div className="flex justify-between font-semibold text-rose-600">
+                    <div className="flex justify-between font-semibold text-rose-600 dark:text-rose-400">
                       <span>Diskon ({formData.name || "Promo"}):</span>
-                      <span>-Rp {previewSimulation.discount.toLocaleString("id-ID")}</span>
+                      <span className="tabular-nums">-{formatCurrency(previewSimulation.discount)}</span>
                     </div>
-                    <div className="pt-1 border-t border-brand-200 flex justify-between font-bold text-slate-900">
+                    <div className="pt-1 border-t border-brand-200 dark:border-brand-500/30 flex justify-between font-bold text-slate-900 dark:text-slate-100">
                       <span>Total Akhir Bayar:</span>
-                      <span className="text-emerald-700">Rp {previewSimulation.finalTotal.toLocaleString("id-ID")}</span>
+                      <span className="text-emerald-700 dark:text-emerald-400 tabular-nums">
+                        {formatCurrency(previewSimulation.finalTotal)}
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-800 italic">
+                  <p className="text-xs text-amber-800 dark:text-amber-300 italic">
                     ⚠️ {previewSimulation.reason}
                   </p>
                 )}
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-sm transition-all"
+                  className="px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-sm transition-all cursor-pointer"
                 >
                   {editingPromo ? "Simpan Perubahan" : "Tambahkan ke Whitelist"}
                 </button>
@@ -901,53 +948,13 @@ export const PromotionsManagement: React.FC = () => {
             </form>
             </motion.div>
           </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
 
       {/* ── Confirm Delete Modal ── */}
-      <AnimatePresence>
-        {deleteConfirmId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 360 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-slate-100 text-center"
-            >
-            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <h4 className="text-lg font-bold text-slate-900">Hapus Promo Ini?</h4>
-            <p className="text-xs text-slate-500 mt-1 mb-5">
-              Promo ini tidak akan berlaku lagi untuk transaksi mendatang. Riwayat pesanan sebelumnya tidak akan terhapus.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmId(null)}
-                className="flex-1 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(deleteConfirmId)}
-                className="flex-1 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm"
-              >
-                Ya, Hapus
-              </button>
-            </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ConfirmModal {...confirmModal.modalProps} />
     </div>
   );
 };

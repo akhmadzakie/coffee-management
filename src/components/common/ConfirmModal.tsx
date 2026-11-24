@@ -80,7 +80,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: "easeInOut" }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-[100] p-3 sm:p-5 overflow-y-auto"
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex justify-center items-start sm:items-center z-[100] p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}

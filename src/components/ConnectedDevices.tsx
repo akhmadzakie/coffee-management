@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStore } from "../store/StoreContext";
+import { DEFAULT_STORE_TIMEZONE } from "../utils/dateUtils";
 import {
   Laptop,
   Smartphone,
@@ -124,6 +125,7 @@ export const ConnectedDevices: React.FC = () => {
     try {
       const d = new Date(isoString);
       return d.toLocaleDateString(isIndo ? "id-ID" : "en-US", {
+        timeZone: DEFAULT_STORE_TIMEZONE,
         day: "numeric",
         month: "short",
         year: "numeric",
