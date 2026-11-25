@@ -114,8 +114,9 @@
   - `POST /api/kds/items/:id/status` (`L6580`)
   - `POST /api/kds/orders/:id/status` (`L6640`)
 - **Dashboard & Admin**:
-  - `GET /api/dashboard/summary` (`L6765`)
-  - `POST /api/admin/reset-transactions` (`L6865`)
+  - `GET /api/dashboard/summary` (`L7757`)
+  - `POST /api/admin/reset-transactions` (`L7859`)
+  - `GET /api/admin/data-inventory` (`L8110`), `GET /api/admin/data-backup` (`L8201`), `POST /api/admin/clean-data` (`L8260`) — Super Admin inventory preview, sanitized JSON snapshot backup, & atomic client data cleaning + initial setup
 
 ---
 
@@ -227,7 +228,7 @@
 - [`src/components/Users.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Users.tsx) (797 baris)
 - [`src/components/ClockIn.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ClockIn.tsx) (761 baris)
 - [`src/components/KPI.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/KPI.tsx) (723 baris)
-- [`src/components/Settings.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Settings.tsx) (706 baris)
+- [`src/components/Settings.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Settings.tsx) — Profil toko, pajak, target & integrasi [`src/components/DataCleaningPanel.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/DataCleaningPanel.tsx) (khusus Super Admin)
 - [`src/components/ShiftManagement.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/ShiftManagement.tsx) (664 baris)
 - [`src/components/PayslipModal.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/PayslipModal.tsx) (655 baris)
 - [`src/components/Login.tsx`](file:///c:/Users/User/Documents/coffee%20management/src/components/Login.tsx) (571 baris)
@@ -255,4 +256,4 @@
 - [`src/utils/genericImport.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/genericImport.ts) (105 baris) — Parser CSV/Excel generik
 - [`src/utils/whatsappReceipt.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/whatsappReceipt.ts) (90 baris) — Format nota WhatsApp
 - [`src/utils/syncSanitizers.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/syncSanitizers.ts) — Pure sanitizer database (`ingredients`, `employees`, `employeeContracts`, `payrollRecords`, `purchaseOrders`, `kpiRecords`, `kpiTasks`, `kpiBonusRules`) & RBAC sync filter (`applyRoleSyncRestrictions`) yang dipakai bersama `server.ts` dan test suite
-- [`src/utils/deviceDetector.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/deviceDetector.ts) (84 baris), [`src/utils/i18n.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/i18n.ts) (81 baris), [`src/utils/dateUtils.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/dateUtils.ts) (62 baris), [`src/utils/format.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/format.ts) (8 baris).
+- [`src/utils/deviceDetector.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/deviceDetector.ts) (84 baris), [`src/utils/i18n.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/i18n.ts) (81 baris), [`src/utils/dateUtils.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/dateUtils.ts) (62 baris), [`src/utils/format.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/format.ts) (8 baris), [`src/utils/dataCleaning.ts`](file:///c:/Users/User/Documents/coffee%20management/src/utils/dataCleaning.ts) (grup sortir cleaning database, proteksi 32 kategori inti & flag `shouldAutoSeedDummyData`, validator setup profil/pos kas/akun klien).

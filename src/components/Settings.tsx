@@ -26,6 +26,7 @@ import {
   PieChart,
 } from "lucide-react";
 import { ConnectedDevices } from "./ConnectedDevices";
+import { DataCleaningPanel } from "./DataCleaningPanel";
 import { CustomSelect } from "./common/CustomSelect";
 
 export const SettingsComponent = () => {
@@ -964,6 +965,9 @@ export const SettingsComponent = () => {
             : "Save Settings"}
         </button>
       </div>
+
+      {/* Super Admin Data Cleaning & Client Setup */}
+      {isSuperAdmin && <DataCleaningPanel />}
     </motion.div>
   );
 };

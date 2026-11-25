@@ -402,6 +402,8 @@ export interface Settings {
   profitShareOwnerPercent?: number;
   profitShareReservePercent?: number;
   profitShareInvestorPercent?: number;
+  autoSeedDisabled?: boolean;
+  lastCleanedAt?: string | null;
 }
 
 export interface CashAccount {

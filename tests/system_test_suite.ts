@@ -119,6 +119,13 @@ import {
   enforceClosedPeriodDataLock,
 } from "../src/utils/syncSanitizers";
 import {
+  CORE_EXPENSE_CATEGORY_IDS,
+  parseCleaningGroups,
+  shouldAutoSeedDummyData,
+  validateClientSetupPayload,
+  buildCleaningSummary,
+} from "../src/utils/dataCleaning";
+import {
   buildEscPosReceipt,
   buildCashDrawerKickCommand,
 } from "../src/utils/escpos";
@@ -5785,6 +5792,118 @@ test("43d. parseSmartCoffeeTextEntry mengenali satuan rapat (2krt, 3slp, 4btl) t
   assert.strictEqual(cupTx.unit, "Slop");
   assert.strictEqual(cupTx.conversionFactor, 50);
   assert.strictEqual(cupTx.amount, 75000);
+});
+
+// =============================================================
+// TEST SUITE 44: DATA CLEANING & ANTI AUTO-SEED DUMMY
+// =============================================================
+console.log("\n--- SUITE 44: DATA CLEANING & ANTI AUTO-SEED DUMMY ---");
+
+test("44a. parseCleaningGroups default membersihkan transaksi & master namun mempertahankan KPI & kategori inti", () => {
+  const defaults = parseCleaningGroups();
+  assert.strictEqual(defaults.salesPos, true);
+  assert.strictEqual(defaults.financeCash, true);
+  assert.strictEqual(defaults.inventoryOps, true);
+  assert.strictEqual(defaults.hrAudit, true);
+  assert.strictEqual(defaults.catalogMenu, true);
+  assert.strictEqual(defaults.catalogIngredients, true);
+  assert.strictEqual(defaults.hrSuppliers, true);
+  assert.strictEqual(defaults.promotions, true);
+  assert.strictEqual(defaults.dummyUsers, true);
+  assert.strictEqual(defaults.devicesPrinters, true);
+  assert.strictEqual(defaults.kpiTemplates, false);
+  assert.strictEqual(defaults.customExpenseCategories, false);
+
+  const custom = parseCleaningGroups({ catalogIngredients: false, kpiTemplates: true });
+  assert.strictEqual(custom.catalogIngredients, false);
+  assert.strictEqual(custom.kpiTemplates, true);
+  assert.strictEqual(custom.salesPos, true);
+});
+
+test("44b. shouldAutoSeedDummyData membaca flag __autoSeedDisabled secara akurat", () => {
+  assert.strictEqual(shouldAutoSeedDummyData(undefined), true);
+  assert.strictEqual(shouldAutoSeedDummyData({ divisionKpiBonusTarget: "{}" }), true);
+  assert.strictEqual(
+    shouldAutoSeedDummyData({ divisionKpiBonusTarget: JSON.stringify({ __autoSeedDisabled: true }) }),
+    false
+  );
+  assert.strictEqual(shouldAutoSeedDummyData({ autoSeedDisabled: true }), false);
+});
+
+test("44c. CORE_EXPENSE_CATEGORY_IDS menjaga 32 ID kategori P&L/HPP/CapEx sistem", () => {
+  assert.strictEqual(CORE_EXPENSE_CATEGORY_IDS.size, 32);
+  for (const requiredId of [
+    "cat-pendapatan",
+    "cat-penjualan",
+    "cat-bahan-baku",
+    "cat-gaji",
+    "cat-aset-mesin",
+    "cat-admin-bank",
+    "cat-lainnya",
+  ]) {
+    assert.strictEqual(CORE_EXPENSE_CATEGORY_IDS.has(requiredId), true);
+  }
+});
+
+test("44d. validateClientSetupPayload memvalidasi Pos Kas, PIN 6 digit, dan username unik", () => {
+  const invalidCash = validateClientSetupPayload({
+    applyCashAccounts: true,
+    cashAccounts: [{ name: "Tabungan Saja", type: "SAVINGS", isDefault: true }],
+  });
+  assert.strictEqual(invalidCash.valid, false);
+  assert.ok(invalidCash.errors.some((e) => e.includes("CASH atau BANK")));
+
+  const invalidUser = validateClientSetupPayload(
+    {
+      newUsers: [
+        { name: "Kasir 1", username: "admin", role: "KASIR", pin: "123" },
+      ],
+    },
+    ["admin"]
+  );
+  assert.strictEqual(invalidUser.valid, false);
+  assert.ok(invalidUser.errors.some((e) => e.includes("duplikat")));
+  assert.ok(invalidUser.errors.some((e) => e.includes("6 digit")));
+
+  const valid = validateClientSetupPayload(
+    {
+      applyProfile: true,
+      profile: {
+        brandName: "Kopi Klien Baru",
+        taxEnabled: true,
+        taxRate: 10,
+        taxMode: "EXCLUSIVE",
+        monthlyRevenueTarget: 90000000,
+        autoDeductStockOnSale: false,
+      },
+      applyCashAccounts: true,
+      cashAccounts: [
+        { name: "Tabungan Cadangan", type: "SAVINGS", isDefault: true },
+        { name: "Laci Kasir Klien", type: "CASH", isDefault: false },
+      ],
+      newUsers: [
+        { name: "Kasir Klien", username: "kasir.klien", role: "KASIR", department: "Bar", pin: "654321" },
+      ],
+    },
+    ["admin"]
+  );
+  assert.strictEqual(valid.valid, true);
+  assert.strictEqual(valid.sanitized.profile?.brandName, "Kopi Klien Baru");
+  assert.strictEqual(valid.sanitized.cashAccounts[0].isDefault, false);
+  assert.strictEqual(valid.sanitized.cashAccounts[1].isDefault, true);
+  assert.strictEqual(valid.sanitized.newUsers.length, 1);
+});
+
+test("44e. buildCleaningSummary menghitung selisih baris yang dihapus dengan tepat", () => {
+  const summary = buildCleaningSummary(
+    { orders: 24, ingredients: 13, expense_categories: 34 },
+    { orders: 0, ingredients: 0, expense_categories: 32 },
+    parseCleaningGroups({ customExpenseCategories: true })
+  );
+  assert.strictEqual(summary.deletedTotal, 39);
+  assert.strictEqual(summary.deletedByTable.orders, 24);
+  assert.strictEqual(summary.deletedByTable.ingredients, 13);
+  assert.strictEqual(summary.deletedByTable.expense_categories, 2);
 });
 
 // -------------------------------------------------------------

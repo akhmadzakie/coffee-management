@@ -51,6 +51,7 @@ import {
   Promotion,
 } from "../types";
 import { detectDeviceAsync, DetectedDeviceInfo } from "../utils/deviceDetector";
+import { LOCAL_STORAGE_DATA_CACHE_KEYS } from "../utils/dataCleaning";
 import { calculateCashFlowHppSync, resolveOrderItemIngredients } from "../utils/posDomainLogic";
 import { getLocalDateString, getLocalPeriodString } from "../utils/dateUtils";
 import { syncAttendanceRecordsWithDaily } from "../utils/attendanceRecap";
@@ -627,6 +628,7 @@ interface StoreContextType {
   isSyncing: boolean;
   lastSyncTime: Date | null;
   syncData: () => Promise<void>;
+  clearLocalCachesAndReload: () => Promise<void>;
 
   // Session handling
   currentSessionId: string;
@@ -760,9 +762,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           return item;
         });
       }
-      return DEFAULT_INITIAL_INGREDIENTS;
+      return [];
     } catch {
-      return DEFAULT_INITIAL_INGREDIENTS;
+      return [];
     }
   });
 
@@ -795,17 +797,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem("app_products_cache");
-      return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return DEFAULT_PRODUCTS;
+      return [];
     }
   });
   const [batchPreparations, setBatchPreparations] = useState<BatchPreparation[]>(() => {
     try {
       const saved = localStorage.getItem("app_batch_preparations_cache");
-      return saved ? JSON.parse(saved) : DEFAULT_BATCH_PREPARATIONS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return DEFAULT_BATCH_PREPARATIONS;
+      return [];
     }
   });
   const [promotions, setPromotions] = useState<Promotion[]>(() => {
@@ -1455,6 +1457,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             posSupervisorPin: String(s.posSupervisorPin ?? ""),
             autoDeductStockOnSale: s.autoDeductStockOnSale === true,
             allowNegativeStockSale: s.allowNegativeStockSale !== false,
+            autoSeedDisabled: Boolean(s.autoSeedDisabled),
+            lastCleanedAt: s.lastCleanedAt ?? null,
           };
           setSettings(newSettings);
           if (!Array.isArray(data.daily_sales_recaps) && Array.isArray(s.dailySalesRecaps)) {
@@ -1474,10 +1478,19 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           setUsers(data.users);
         if (Array.isArray(data.device_sessions))
           setSessions(data.device_sessions);
-        if (Array.isArray(data.ingredients) && data.ingredients.length > 0)
+        if (Array.isArray(data.ingredients)) {
           setIngredients(data.ingredients);
-        if (Array.isArray(data.recipes))
-          setRecipes(normalizeRecipeList(data.recipes));
+          try {
+            localStorage.setItem("app_ingredients_cache", JSON.stringify(data.ingredients));
+          } catch {}
+        }
+        if (Array.isArray(data.recipes)) {
+          const normalizedRecipes = normalizeRecipeList(data.recipes);
+          setRecipes(normalizedRecipes);
+          try {
+            localStorage.setItem("app_recipes_cache", JSON.stringify(normalizedRecipes));
+          } catch {}
+        }
         if (Array.isArray(data.stock_movements))
           setStockMovements(data.stock_movements);
         if (Array.isArray(data.sales_transactions))
@@ -1525,11 +1538,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           } catch {}
         }
         if (Array.isArray(data.closed_periods)) setClosedPeriods(data.closed_periods);
-        if (Array.isArray(data.products) && data.products.length > 0) {
+        if (Array.isArray(data.products)) {
           setProducts(data.products);
+          try {
+            localStorage.setItem("app_products_cache", JSON.stringify(data.products));
+          } catch {}
         }
         if (Array.isArray(data.batch_preparations)) {
           setBatchPreparations(data.batch_preparations);
+          try {
+            localStorage.setItem(
+              "app_batch_preparations_cache",
+              JSON.stringify(data.batch_preparations)
+            );
+          } catch {}
         }
         if (Array.isArray(data.kpiTasks)) {
           setKpiTasks(data.kpiTasks);
@@ -1537,7 +1559,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             localStorage.setItem("kpi_tasks", JSON.stringify(data.kpiTasks));
           } catch {}
         }
-        if (Array.isArray(data.kpiBonusRules) && data.kpiBonusRules.length > 0) {
+        if (Array.isArray(data.kpiBonusRules)) {
           setKpiBonusRules(data.kpiBonusRules);
           try {
             localStorage.setItem("kpi_bonus_rules", JSON.stringify(data.kpiBonusRules));
@@ -2108,6 +2130,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const dismissForceLogoutAlert = () => setWasForceLoggedOut(false);
   const syncData = async () => await fetchFromServer(true);
+  const clearLocalCachesAndReload = async () => {
+    try {
+      for (const cacheKey of LOCAL_STORAGE_DATA_CACHE_KEYS) {
+        localStorage.removeItem(cacheKey);
+      }
+    } catch {}
+    hasLocalChanges.current = false;
+    dirtyTablesRef.current.clear();
+    serverVersionRef.current = null;
+    await fetchFromServer(true);
+  };
 
   // ─── Audit Log Helper ─────────────────────────────────────────────────────
   const writeAuditLog = (
@@ -4016,6 +4049,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         isSyncing,
         lastSyncTime,
         syncData,
+        clearLocalCachesAndReload,
         currentSessionId: deviceRef.current.sessionId || "",
         fetchSessions,
         revokeSession,

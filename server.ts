@@ -8,7 +8,7 @@ import { createServer as createViteServer } from "vite";
 import crypto from "crypto";
 import { db, pool } from "./src/db/db.ts";
 import * as schema from "./src/db/schema.ts";
-import { eq, ne, not, desc, like, and, or, gte, lte, sql } from "drizzle-orm";
+import { eq, ne, not, desc, like, and, or, gte, lte, sql, inArray, notInArray } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
 import {
   getLocalDateString,
@@ -63,6 +63,16 @@ import {
   protectClosedPeriodsOnSync,
   enforceClosedPeriodDataLock,
 } from "./src/utils/syncSanitizers.ts";
+import {
+  CLEANING_CONFIRM_PHRASE,
+  CORE_EXPENSE_CATEGORY_IDS,
+  CLEANING_GROUP_DEFINITIONS,
+  parseCleaningGroups,
+  shouldAutoSeedDummyData,
+  extractCleaningMetaFromSettings,
+  validateClientSetupPayload,
+  buildCleaningSummary,
+} from "./src/utils/dataCleaning.ts";
 
 const initialSettings = {
   id: "1",
@@ -843,9 +853,14 @@ async function ensureTables() {
       [pin123456Hash, pin1234Hash]
     );
 
-    // Pastikan user default POS Kasir ada
-    const checkKasir = await pool.query(`SELECT id FROM users WHERE username = 'kasir' LIMIT 1`);
-    if (checkKasir.rowCount === 0) {
+    // Pastikan user default POS Kasir hanya dibuat pada DB yang benar-benar baru & auto-seed aktif
+    const userCountRes = await pool.query(`SELECT COUNT(*)::int AS cnt FROM users`);
+    const userCount = Number(userCountRes.rows?.[0]?.cnt || 0);
+    const settingsRes = await pool.query(
+      `SELECT division_kpi_bonus_target AS "divisionKpiBonusTarget" FROM settings LIMIT 1`
+    );
+    const allowInitialSeed = shouldAutoSeedDummyData(settingsRes.rows?.[0]);
+    if (userCount === 0 && allowInitialSeed) {
       await pool.query(
         `INSERT INTO users (id, username, pin, name, role, department)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -1279,6 +1294,22 @@ async function startServer() {
           : normalizeProfitSharePercentages(divTarget.__profitShareConfig);
     }
 
+    const existingCleaningMeta = extractCleaningMetaFromSettings(existingRow);
+    const resolvedAutoSeedDisabled =
+      st?.autoSeedDisabled !== undefined
+        ? Boolean(st.autoSeedDisabled)
+        : existingCleaningMeta.autoSeedDisabled;
+    if (resolvedAutoSeedDisabled) {
+      divTarget.__autoSeedDisabled = true;
+    } else if (st?.autoSeedDisabled === false) {
+      delete divTarget.__autoSeedDisabled;
+    }
+    const resolvedLastCleanedAt =
+      st?.lastCleanedAt !== undefined ? st.lastCleanedAt : existingCleaningMeta.lastCleanedAt;
+    if (resolvedLastCleanedAt) {
+      divTarget.__lastCleanedAt = String(resolvedLastCleanedAt);
+    }
+
     const incomingKey = st?.gemini_api_key ?? st?.geminiApiKey;
     const resolvedGeminiKey = resolveGeminiApiKeyForSave({
       role: isSuperAdmin ? "SUPER_ADMIN" : isPrivilegedRole ? "MANAGER" : "STAFF",
@@ -1382,7 +1413,8 @@ async function startServer() {
     };
   };
 
-  const ensureDefaultUsers = async (targetDb: any, existingUsers: any[]) => {
+  const ensureDefaultUsers = async (targetDb: any, existingUsers: any[], allowAutoSeed = true) => {
+    if (!allowAutoSeed) return existingUsers || [];
     if (!existingUsers) return initialUsers;
     const existingIds = new Set(existingUsers.map((u: any) => String(u.id || "")));
     const existingUsernames = new Set(
@@ -1869,7 +1901,8 @@ async function startServer() {
               db.select().from(schema.users),
               db.select().from(schema.settings).limit(1),
             ]);
-            if (uRows.length === 0) {
+            const allowPublicAutoSeed = shouldAutoSeedDummyData(sRows[0]);
+            if (uRows.length === 0 && allowPublicAutoSeed) {
               await db.transaction(async (tx) => {
                 await tx
                   .insert(schema.users)
@@ -1881,18 +1914,24 @@ async function startServer() {
               publicUsers = initialUsers;
               rawSt = initialSettings;
             } else {
-              publicUsers = await ensureDefaultUsers(db, uRows);
+              publicUsers = allowPublicAutoSeed ? await ensureDefaultUsers(db, uRows, true) : uRows;
               rawSt = sRows[0] || initialSettings;
             }
           } catch {
             const rawOffline = offlineState?.users || initialUsers;
-            publicUsers = initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin));
             rawSt = (Array.isArray(offlineState?.settings) ? offlineState.settings[0] : offlineState?.settings) || initialSettings;
+            const allowOfflineSeed = shouldAutoSeedDummyData(rawSt);
+            publicUsers = allowOfflineSeed
+              ? initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin))
+              : rawOffline;
           }
         } else if (offlineState) {
           const rawOffline = offlineState.users || initialUsers;
-          publicUsers = initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin));
           rawSt = (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) || initialSettings;
+          const allowOfflineSeed = shouldAutoSeedDummyData(rawSt);
+          publicUsers = allowOfflineSeed
+            ? initialUsers.map((iu: any) => rawOffline.find((ou: any) => ou.username === iu.username) || sanitizeUserForInsert(iu, iu.pin))
+            : rawOffline;
         }
 
         return res.json({
@@ -1966,6 +2005,13 @@ async function startServer() {
             ? rawDivObj.__ingredientCategoryDivisions
             : rawSettings?.ingredientCategoryDivisions;
         delete rawDivObj.__ingredientCategoryDivisions;
+        const offlineCleaningMeta = extractCleaningMetaFromSettings({
+          divisionKpiBonusTarget: rawDivObj,
+          autoSeedDisabled: rawSettings?.autoSeedDisabled,
+          lastCleanedAt: rawSettings?.lastCleanedAt,
+        });
+        delete rawDivObj.__autoSeedDisabled;
+        delete rawDivObj.__lastCleanedAt;
         return {
           ...offlineState,
           users: (offlineState.users || initialUsers).map(sanitizeUser),
@@ -1988,6 +2034,8 @@ async function startServer() {
             profitShareOwnerPercent: profitShareCfg.ownerPercent,
             profitShareReservePercent: profitShareCfg.reservePercent,
             profitShareInvestorPercent: profitShareCfg.investorPercent,
+            autoSeedDisabled: offlineCleaningMeta.autoSeedDisabled,
+            lastCleanedAt: offlineCleaningMeta.lastCleanedAt,
           },
           serverTime: new Date().toISOString(),
         };
@@ -2108,8 +2156,10 @@ async function startServer() {
           db.select().from(schema.kpiBonusRules),
         ]);
 
-        // Seed default promotions if empty
-        if (promotions.length === 0) {
+        const allowAutoSeed = shouldAutoSeedDummyData(settings[0]);
+
+        // Seed default promotions if empty (only when auto-seed is enabled)
+        if (promotions.length === 0 && allowAutoSeed) {
           try {
             await db.insert(schema.promotions).values(initialPromotions).onConflictDoNothing();
             promotions = initialPromotions;
@@ -2128,8 +2178,8 @@ async function startServer() {
           }
         }
 
-        // Auto seed if completely new database
-        if (users.length === 0) {
+        // Auto seed if completely new database (only when auto-seed is enabled)
+        if (users.length === 0 && allowAutoSeed) {
           try {
             await db.transaction(async (tx) => {
               await tx
@@ -2146,8 +2196,8 @@ async function startServer() {
           } catch (seedErr) {
             console.warn("Auto seed skipped or failed:", seedErr);
           }
-        } else {
-          users = (await ensureDefaultUsers(db, users)) as any;
+        } else if (allowAutoSeed) {
+          users = (await ensureDefaultUsers(db, users, true)) as any;
         }
 
         // Auto seed default cash accounts & pulihkan Pos Kas / Pos Kategori yang masih direferensikan cash_transactions
@@ -2183,8 +2233,8 @@ async function startServer() {
           }
         }
 
-        // Auto seed ingredients, recipes, and products if ingredients is empty
-        if (ingredients.length === 0) {
+        // Auto seed ingredients, recipes, and products if ingredients is empty and auto-seed is enabled
+        if (ingredients.length === 0 && allowAutoSeed) {
           try {
             await db.transaction(async (tx) => {
               for (const ing of initialIngredients) {
@@ -2341,6 +2391,14 @@ async function startServer() {
       );
       delete rawDivTarget.__profitShareConfig;
 
+      const cleaningMeta = extractCleaningMetaFromSettings({
+        divisionKpiBonusTarget: rawDivTarget,
+        autoSeedDisabled: rawSettings.autoSeedDisabled,
+        lastCleanedAt: rawSettings.lastCleanedAt,
+      });
+      delete rawDivTarget.__autoSeedDisabled;
+      delete rawDivTarget.__lastCleanedAt;
+
       const formattedSettings = {
         ...rawSettings,
         hasGeminiApiKey: Boolean(effectiveApiKey),
@@ -2363,6 +2421,8 @@ async function startServer() {
         profitShareOwnerPercent: profitShareCfg.ownerPercent,
         profitShareReservePercent: profitShareCfg.reservePercent,
         profitShareInvestorPercent: profitShareCfg.investorPercent,
+        autoSeedDisabled: cleaningMeta.autoSeedDisabled,
+        lastCleanedAt: cleaningMeta.lastCleanedAt,
         monthlyRevenueTarget: Number(rawSettings.monthlyRevenueTarget ?? 150000000),
         targetBonusAmount: Number(rawSettings.targetBonusAmount ?? 0),
         divisionKpiBonusTarget: rawDivTarget,
@@ -7953,6 +8013,672 @@ ${
     } catch (err: any) {
       console.error("Gagal membersihkan data transaksi:", err);
       res.status(500).json({ error: err?.message || "Gagal membersihkan data transaksi" });
+    }
+  });
+
+  // ─── ADMIN DATA INVENTORY, BACKUP & CLIENT CLEANING ENDPOINTS (SUPER_ADMIN) ─────
+  const requireSuperAdminAuth = async (req: express.Request, res: express.Response) => {
+    const requestUser: any = await resolveAuthUser(req);
+    if (!requestUser) {
+      res.status(401).json({ error: "Sesi tidak valid. Silakan login ulang." });
+      return null;
+    }
+    if (requestUser.isSuspended) {
+      res.status(403).json({ error: "Akun sedang ditangguhkan (suspended)." });
+      return null;
+    }
+    if (requestUser.role !== "SUPER_ADMIN") {
+      res.status(403).json({ error: "Hanya Super Admin yang berhak mengakses fitur cleaning data." });
+      return null;
+    }
+    return requestUser;
+  };
+
+  const INVENTORY_TABLE_MAP = [
+    { name: "orders", table: schema.orders, offlineKey: "orders" },
+    { name: "order_items", table: schema.orderItems, offlineKey: "order_items" },
+    { name: "payments", table: schema.payments, offlineKey: "payments" },
+    { name: "shifts", table: schema.shifts, offlineKey: "shifts" },
+    { name: "sales_transactions", table: schema.salesTransactions, offlineKey: "sales_transactions" },
+    { name: "daily_sales_recaps", table: schema.dailySalesRecaps, offlineKey: "daily_sales_recaps" },
+    { name: "sales_import_logs", table: schema.salesImportLogs, offlineKey: "sales_import_logs" },
+    { name: "manager_approval_requests", table: schema.managerApprovalRequests, offlineKey: "manager_approval_requests" },
+    { name: "cash_transactions", table: schema.cashTransactions, offlineKey: "cash_transactions" },
+    { name: "budgets", table: schema.budgets, offlineKey: "budgets" },
+    { name: "bank_reconciliations", table: schema.bankReconciliations, offlineKey: "bank_reconciliations" },
+    { name: "bank_statement_lines", table: schema.bankStatementLines, offlineKey: "bank_statement_lines" },
+    { name: "closed_periods", table: schema.closedPeriods, offlineKey: "closed_periods" },
+    { name: "stock_movements", table: schema.stockMovements, offlineKey: "stock_movements" },
+    { name: "stock_opnames", table: schema.stockOpnames, offlineKey: "stock_opnames" },
+    { name: "stock_opname_items", table: schema.stockOpnameItems, offlineKey: "stock_opname_items" },
+    { name: "purchase_orders", table: schema.purchaseOrders, offlineKey: "purchase_orders" },
+    { name: "daily_attendances", table: schema.dailyAttendances, offlineKey: "dailyAttendances" },
+    { name: "daily_checklists", table: schema.dailyChecklists, offlineKey: "dailyChecklists" },
+    { name: "attendance_records", table: schema.attendanceRecords, offlineKey: "attendances" },
+    { name: "payroll_records", table: schema.payrollRecords, offlineKey: "payroll_records" },
+    { name: "kpi_records", table: schema.kpiRecords, offlineKey: "kpiRecords" },
+    { name: "audit_logs", table: schema.auditLogs, offlineKey: "audit_logs" },
+    { name: "products", table: schema.products, offlineKey: "products" },
+    { name: "recipes", table: schema.recipes, offlineKey: "recipes" },
+    { name: "batch_preparations", table: schema.batchPreparations, offlineKey: "batch_preparations" },
+    { name: "ingredients", table: schema.ingredients, offlineKey: "ingredients" },
+    { name: "suppliers", table: schema.suppliers, offlineKey: "suppliers" },
+    { name: "employees", table: schema.employees, offlineKey: "employees" },
+    { name: "employee_contracts", table: schema.employeeContracts, offlineKey: "contracts" },
+    { name: "employee_shifts", table: schema.employeeShifts, offlineKey: "employeeShifts" },
+    { name: "promotions", table: schema.promotions, offlineKey: "promotions" },
+    { name: "users", table: schema.users, offlineKey: "users" },
+    { name: "device_sessions", table: schema.deviceSessions, offlineKey: "device_sessions" },
+    { name: "pos_printers", table: schema.posPrinters, offlineKey: "pos_printers" },
+    { name: "kpi_tasks", table: schema.kpiTasks, offlineKey: "kpiTasks" },
+    { name: "kpi_bonus_rules", table: schema.kpiBonusRules, offlineKey: "kpiBonusRules" },
+    { name: "expense_categories", table: schema.expenseCategories, offlineKey: "expense_categories" },
+    { name: "cash_accounts", table: schema.cashAccounts, offlineKey: "cash_accounts" },
+    { name: "settings", table: schema.settings, offlineKey: "settings" },
+  ] as const;
+
+  const getDatabaseTableCounts = async (executor: any = db): Promise<Record<string, number>> => {
+    const counts: Record<string, number> = {};
+    if (!isDbConnected && offlineState) {
+      for (const item of INVENTORY_TABLE_MAP) {
+        const val = offlineState[item.offlineKey];
+        counts[item.name] = Array.isArray(val) ? val.length : val ? 1 : 0;
+      }
+      return counts;
+    }
+    const results = await Promise.all(
+      INVENTORY_TABLE_MAP.map(async (item) => {
+        try {
+          const rows = await executor
+            .select({ cnt: sql<number>`count(*)::int` })
+            .from(item.table);
+          return [item.name, Number(rows?.[0]?.cnt || 0)] as const;
+        } catch {
+          return [item.name, 0] as const;
+        }
+      })
+    );
+    for (const [name, cnt] of results) {
+      counts[name] = cnt;
+    }
+    return counts;
+  };
+
+  app.get("/api/admin/data-inventory", async (req, res) => {
+    try {
+      const requestUser = await requireSuperAdminAuth(req, res);
+      if (!requestUser) return;
+
+      const currentSessionId = String(req.headers["x-session-id"] || "").trim();
+      const tableCounts = await getDatabaseTableCounts();
+
+      let userRows: any[] = [];
+      let cashAccountRows: any[] = [];
+      let settingsRow: any = initialSettings;
+      let categoryRows: any[] = [];
+      let sessionRows: any[] = [];
+
+      if (!isDbConnected && offlineState) {
+        userRows = offlineState.users || [];
+        cashAccountRows = offlineState.cash_accounts || [];
+        settingsRow =
+          (Array.isArray(offlineState.settings) ? offlineState.settings[0] : offlineState.settings) ||
+          initialSettings;
+        categoryRows = offlineState.expense_categories || [];
+        sessionRows = offlineState.device_sessions || [];
+      } else {
+        const [u, ca, st, ec, ds] = await Promise.all([
+          db.select().from(schema.users),
+          db.select().from(schema.cashAccounts),
+          db.select().from(schema.settings).limit(1),
+          db.select().from(schema.expenseCategories),
+          db.select().from(schema.deviceSessions),
+        ]);
+        userRows = u;
+        cashAccountRows = ca;
+        settingsRow = st[0] || initialSettings;
+        categoryRows = ec;
+        sessionRows = ds;
+      }
+
+      const cleaningMeta = extractCleaningMetaFromSettings(settingsRow);
+      const coreCategoryCount = categoryRows.filter((c: any) =>
+        CORE_EXPENSE_CATEGORY_IDS.has(String(c.id))
+      ).length;
+      const customCategoryCount = Math.max(0, categoryRows.length - coreCategoryCount);
+      const otherUsersCount = userRows.filter(
+        (u: any) => String(u.id) !== String(requestUser.id)
+      ).length;
+      const cleanableSessionsCount = sessionRows.filter(
+        (s: any) => !currentSessionId || String(s.id) !== currentSessionId
+      ).length;
+
+      const groupCounts: Record<string, number> = {};
+      for (const def of CLEANING_GROUP_DEFINITIONS) {
+        if (def.key === "dummyUsers") {
+          groupCounts[def.key] = otherUsersCount;
+        } else if (def.key === "devicesPrinters") {
+          groupCounts[def.key] = Number(tableCounts.pos_printers || 0) + cleanableSessionsCount;
+        } else if (def.key === "customExpenseCategories") {
+          groupCounts[def.key] = customCategoryCount;
+        } else {
+          groupCounts[def.key] = def.tables.reduce(
+            (sum, tbl) => sum + Number(tableCounts[tbl] || 0),
+            0
+          );
+        }
+      }
+
+      res.json({
+        isDbConnected,
+        tableCounts,
+        groupCounts,
+        protectedSummary: {
+          users: userRows.map(sanitizeUser),
+          cashAccounts: cashAccountRows.map(sanitizeCashAccount),
+          settings: {
+            brandName: String(settingsRow?.brandName || "Julia's"),
+            companyAddress: String(settingsRow?.companyAddress || ""),
+            bankDetails: String(settingsRow?.bankDetails || ""),
+            footerMessage: String(settingsRow?.footerMessage || ""),
+            taxEnabled: Boolean(settingsRow?.taxEnabled ?? false),
+            taxRate: Number(settingsRow?.taxRate ?? 10),
+            taxMode: String(settingsRow?.taxMode || "EXCLUSIVE"),
+            monthlyRevenueTarget: Number(settingsRow?.monthlyRevenueTarget ?? 150000000),
+            autoDeductStockOnSale: settingsRow?.autoDeductStockOnSale === true,
+            autoSeedDisabled: cleaningMeta.autoSeedDisabled,
+            lastCleanedAt: cleaningMeta.lastCleanedAt,
+          },
+          expenseCategories: {
+            total: categoryRows.length,
+            coreCount: coreCategoryCount,
+            customCount: customCategoryCount,
+          },
+        },
+      });
+    } catch (err: any) {
+      console.error("Gagal memuat inventaris database:", err);
+      res.status(500).json({ error: err?.message || "Gagal memuat inventaris database" });
+    }
+  });
+
+  app.get("/api/admin/data-backup", async (req, res) => {
+    try {
+      const requestUser = await requireSuperAdminAuth(req, res);
+      if (!requestUser) return;
+
+      const tableCounts = await getDatabaseTableCounts();
+      const data: Record<string, any[]> = {};
+
+      if (!isDbConnected && offlineState) {
+        for (const item of INVENTORY_TABLE_MAP) {
+          const raw = offlineState[item.offlineKey];
+          data[item.name] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+        }
+      } else {
+        const rowsList = await Promise.all(
+          INVENTORY_TABLE_MAP.map(async (item) => {
+            try {
+              const rows = await db.select().from(item.table);
+              return [item.name, rows as any[]] as const;
+            } catch {
+              return [item.name, [] as any[]] as const;
+            }
+          })
+        );
+        for (const [name, rows] of rowsList) {
+          data[name] = [...rows];
+        }
+      }
+
+      // Hapus field sensitif (PIN, hash PIN, API key) dari snapshot backup
+      if (Array.isArray(data.users)) {
+        data.users = data.users.map(sanitizeUser);
+      }
+      if (Array.isArray(data.settings)) {
+        data.settings = data.settings.map((st: any) => {
+          const copy = { ...st };
+          delete copy.gemini_api_key;
+          delete copy.geminiApiKey;
+          delete copy.posSupervisorPin;
+          return copy;
+        });
+      }
+
+      const settingsRow = data.settings?.[0];
+      const brandName = String(settingsRow?.brandName || "Cafe");
+      const nowIso = new Date().toISOString();
+      const localDateStamp = getLocalDateString(new Date());
+      const filename = `backup-erp-${localDateStamp}.json`;
+
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.json({
+        exportedAt: nowIso,
+        exportedBy: requestUser.username,
+        brandName,
+        tableCounts,
+        data,
+      });
+    } catch (err: any) {
+      console.error("Gagal membuat backup JSON:", err);
+      res.status(500).json({ error: err?.message || "Gagal membuat backup JSON" });
+    }
+  });
+
+  app.post("/api/admin/clean-data", pinVerifyLimiter, async (req, res) => {
+    try {
+      const requestUser = await requireSuperAdminAuth(req, res);
+      if (!requestUser) return;
+
+      const { pin, confirmText } = req.body || {};
+      if (confirmText !== CLEANING_CONFIRM_PHRASE) {
+        return res.status(400).json({ error: `Ketik persis: ${CLEANING_CONFIRM_PHRASE}` });
+      }
+
+      const rawPin = String(pin || "");
+      const hashedPin =
+        rawPin.length === 64 ? rawPin : crypto.createHash("sha256").update(rawPin).digest("hex");
+      if (!rawPin || (requestUser.pin !== hashedPin && requestUser.pin !== rawPin)) {
+        return res.status(403).json({ error: "PIN Super Admin salah." });
+      }
+
+      const groups = parseCleaningGroups(req.body?.groups);
+      const disableAutoSeed = req.body?.disableAutoSeed !== false;
+      const keepUserIds = new Set<string>([
+        String(requestUser.id),
+        ...(Array.isArray(req.body?.keepUserIds) ? req.body.keepUserIds.map(String) : []),
+      ]);
+      const currentSessionId = String(req.headers["x-session-id"] || "").trim();
+
+      let currentUsersSnapshot: any[] = [];
+      if (!isDbConnected && offlineState) {
+        currentUsersSnapshot = offlineState.users || [];
+      } else {
+        currentUsersSnapshot = await db.select().from(schema.users);
+      }
+
+      const keptUsernames = currentUsersSnapshot
+        .filter((u: any) => !groups.dummyUsers || keepUserIds.has(String(u.id)))
+        .map((u: any) => String(u.username || "").toLowerCase())
+        .filter(Boolean);
+
+      const clientValidation = validateClientSetupPayload(req.body?.clientSetup, keptUsernames);
+      if (!clientValidation.valid) {
+        return res.status(400).json({
+          error: clientValidation.errors[0] || "Konfigurasi setup klien tidak valid.",
+          errors: clientValidation.errors,
+        });
+      }
+
+      const clientSetup = clientValidation.sanitized;
+      const beforeCounts = await getDatabaseTableCounts();
+      const cleanedAt = new Date().toISOString();
+      const selectedGroupKeys = Object.entries(groups)
+        .filter(([, checked]) => Boolean(checked))
+        .map(([k]) => k);
+
+      const cleanAudit = {
+        id: crypto.randomUUID(),
+        userId: String(requestUser.id),
+        action: "DELETE",
+        tableName: "CLEAN_CLIENT_DATA",
+        recordId: selectedGroupKeys.join(",") || "SETUP_ONLY",
+        timestamp: cleanedAt,
+      };
+
+      let createdUsersCount = 0;
+      let updatedCashAccountsCount = 0;
+
+      if (!isDbConnected && offlineState) {
+        if (groups.salesPos) {
+          offlineState.payments = [];
+          offlineState.order_items = [];
+          offlineState.orders = [];
+          offlineState.sales_transactions = [];
+          offlineState.daily_sales_recaps = [];
+          offlineState.sales_import_logs = [];
+          offlineState.shifts = [];
+          offlineState.manager_approval_requests = [];
+        }
+        if (groups.financeCash) {
+          offlineState.bank_statement_lines = [];
+          offlineState.bank_reconciliations = [];
+          offlineState.cash_transactions = [];
+          offlineState.budgets = [];
+          offlineState.closed_periods = [];
+        }
+        if (groups.inventoryOps) {
+          offlineState.stock_opname_items = [];
+          offlineState.stock_opnames = [];
+          offlineState.stock_movements = [];
+          offlineState.purchase_orders = [];
+          if (!groups.catalogIngredients && Array.isArray(offlineState.ingredients)) {
+            offlineState.ingredients = offlineState.ingredients.map((ing: any) => ({
+              ...ing,
+              currentStock: 0,
+            }));
+          }
+        }
+        if (groups.hrAudit) {
+          offlineState.dailyAttendances = [];
+          offlineState.dailyChecklists = [];
+          offlineState.attendances = [];
+          offlineState.payroll_records = [];
+          offlineState.kpiRecords = [];
+          offlineState.audit_logs = [];
+        }
+        if (groups.catalogMenu) {
+          offlineState.batch_preparations = [];
+          offlineState.recipes = [];
+          offlineState.products = [];
+        }
+        if (groups.catalogIngredients) {
+          offlineState.ingredients = [];
+        }
+        if (groups.hrSuppliers) {
+          offlineState.employeeShifts = [];
+          offlineState.contracts = [];
+          offlineState.employees = [];
+          offlineState.suppliers = [];
+        }
+        if (groups.promotions) {
+          offlineState.promotions = [];
+        }
+        if (groups.dummyUsers && Array.isArray(offlineState.users)) {
+          offlineState.users = offlineState.users.filter((u: any) =>
+            keepUserIds.has(String(u.id))
+          );
+        }
+        if (groups.devicesPrinters) {
+          offlineState.pos_printers = [];
+          offlineState.device_sessions = (offlineState.device_sessions || []).filter(
+            (s: any) => currentSessionId && String(s.id) === currentSessionId
+          );
+        }
+        if (groups.kpiTemplates) {
+          offlineState.kpiTasks = [];
+          offlineState.kpiBonusRules = [];
+        }
+        if (groups.customExpenseCategories) {
+          offlineState.expense_categories = (offlineState.expense_categories || []).filter(
+            (c: any) => CORE_EXPENSE_CATEGORY_IDS.has(String(c.id))
+          );
+          const existingCatIds = new Set(
+            offlineState.expense_categories.map((c: any) => String(c.id))
+          );
+          for (const coreCat of defaultCategories) {
+            if (!existingCatIds.has(coreCat.id)) {
+              offlineState.expense_categories.push(coreCat);
+            }
+          }
+        }
+
+        const rawExistingSt =
+          (Array.isArray(offlineState.settings)
+            ? offlineState.settings[0]
+            : offlineState.settings) || initialSettings;
+        const mergedOfflineSt: any = {
+          ...rawExistingSt,
+          ...(clientSetup.applyProfile && clientSetup.profile ? clientSetup.profile : {}),
+          autoSeedDisabled: disableAutoSeed,
+          lastCleanedAt: cleanedAt,
+        };
+        if (groups.salesPos) {
+          mergedOfflineSt.dailySalesRecaps = [];
+        }
+        offlineState.settings = [sanitizeSettings(mergedOfflineSt, rawExistingSt, true, true)];
+
+        if (clientSetup.applyCashAccounts && clientSetup.cashAccounts.length > 0) {
+          const referencedIds = new Set(
+            (offlineState.cash_transactions || []).map((t: any) => String(t.accountId || ""))
+          );
+          const nextIds = new Set(clientSetup.cashAccounts.map((a) => a.id));
+          const preservedOld = groups.financeCash
+            ? []
+            : (offlineState.cash_accounts || []).filter(
+                (a: any) => referencedIds.has(String(a.id)) && !nextIds.has(String(a.id))
+              );
+          offlineState.cash_accounts = [
+            ...clientSetup.cashAccounts.map(sanitizeCashAccount),
+            ...preservedOld,
+          ];
+          updatedCashAccountsCount = clientSetup.cashAccounts.length;
+        }
+
+        if (clientSetup.newUsers.length > 0) {
+          offlineState.users = offlineState.users || [];
+          for (const nu of clientSetup.newUsers) {
+            offlineState.users.push(
+              sanitizeUserForInsert(
+                {
+                  id: `usr-${crypto.randomUUID().slice(0, 8)}`,
+                  username: nu.username,
+                  name: nu.name,
+                  role: nu.role,
+                  department: nu.department || nu.role,
+                  pin: nu.pin,
+                },
+                nu.pin
+              )
+            );
+            createdUsersCount += 1;
+          }
+        }
+
+        offlineState.audit_logs = [cleanAudit, ...(offlineState.audit_logs || [])];
+        const afterCounts = await getDatabaseTableCounts();
+        bumpDataVersion();
+        return res.json({
+          success: true,
+          summary: buildCleaningSummary(beforeCounts, afterCounts, groups),
+          beforeCounts,
+          afterCounts,
+          autoSeedDisabled: disableAutoSeed,
+          createdUsersCount,
+          updatedCashAccountsCount,
+        });
+      }
+
+      await db.transaction(async (tx) => {
+        if (groups.salesPos) {
+          await tx.delete(schema.payments);
+          await tx.delete(schema.orderItems);
+          await tx.delete(schema.orders);
+          await tx.delete(schema.salesTransactions);
+          await tx.delete(schema.dailySalesRecaps);
+          await tx.delete(schema.salesImportLogs);
+          await tx.delete(schema.shifts);
+          await tx.delete(schema.managerApprovalRequests);
+        }
+        if (groups.financeCash) {
+          await tx.delete(schema.bankStatementLines);
+          await tx.delete(schema.bankReconciliations);
+          await tx.delete(schema.cashTransactions);
+          await tx.delete(schema.budgets);
+          await tx.delete(schema.closedPeriods);
+        }
+        if (groups.inventoryOps) {
+          await tx.delete(schema.stockOpnameItems);
+          await tx.delete(schema.stockOpnames);
+          await tx.delete(schema.stockMovements);
+          await tx.delete(schema.purchaseOrders);
+          if (!groups.catalogIngredients) {
+            await tx.update(schema.ingredients).set({ currentStock: 0 });
+          }
+        }
+        if (groups.hrAudit) {
+          await tx.delete(schema.dailyAttendances);
+          await tx.delete(schema.dailyChecklists);
+          await tx.delete(schema.attendanceRecords);
+          await tx.delete(schema.payrollRecords);
+          await tx.delete(schema.kpiRecords);
+          await tx.delete(schema.auditLogs);
+        }
+        if (groups.catalogMenu) {
+          await tx.delete(schema.batchPreparations);
+          await tx.delete(schema.recipes);
+          await tx.delete(schema.products);
+        }
+        if (groups.catalogIngredients) {
+          await tx.delete(schema.ingredients);
+        }
+        if (groups.hrSuppliers) {
+          await tx.delete(schema.employeeShifts);
+          await tx.delete(schema.employeeContracts);
+          await tx.delete(schema.employees);
+          await tx.delete(schema.suppliers);
+        }
+        if (groups.promotions) {
+          await tx.delete(schema.promotions);
+        }
+        if (groups.dummyUsers) {
+          const keepArr = Array.from(keepUserIds);
+          if (keepArr.length > 0) {
+            await tx.delete(schema.users).where(notInArray(schema.users.id, keepArr));
+          }
+        }
+        if (groups.devicesPrinters) {
+          await tx.delete(schema.posPrinters);
+          if (currentSessionId) {
+            await tx
+              .delete(schema.deviceSessions)
+              .where(ne(schema.deviceSessions.id, currentSessionId));
+          } else {
+            await tx.delete(schema.deviceSessions);
+          }
+        }
+        if (groups.kpiTemplates) {
+          await tx.delete(schema.kpiTasks);
+          await tx.delete(schema.kpiBonusRules);
+        }
+        if (groups.customExpenseCategories) {
+          await tx
+            .delete(schema.expenseCategories)
+            .where(notInArray(schema.expenseCategories.id, Array.from(CORE_EXPENSE_CATEGORY_IDS)));
+          await tx
+            .insert(schema.expenseCategories)
+            .values(defaultCategories.map(sanitizeExpenseCategory))
+            .onConflictDoNothing();
+        }
+
+        // Update settings (profil klien + flag __autoSeedDisabled & __lastCleanedAt)
+        const existingSettingsRows = await tx.select().from(schema.settings).limit(1);
+        const existingSt: any = existingSettingsRows[0] || initialSettings;
+        let existingDiv: Record<string, any> = {};
+        try {
+          existingDiv =
+            typeof existingSt.divisionKpiBonusTarget === "string"
+              ? JSON.parse(existingSt.divisionKpiBonusTarget)
+              : existingSt.divisionKpiBonusTarget &&
+                  typeof existingSt.divisionKpiBonusTarget === "object"
+                ? { ...existingSt.divisionKpiBonusTarget }
+                : {};
+        } catch {
+          existingDiv = {};
+        }
+        if (groups.salesPos) {
+          delete existingDiv.__dailySalesRecaps;
+        }
+        const mergedSettingsInput: any = {
+          ...existingSt,
+          divisionKpiBonusTarget: existingDiv,
+          ...(clientSetup.applyProfile && clientSetup.profile ? clientSetup.profile : {}),
+          autoSeedDisabled: disableAutoSeed,
+          lastCleanedAt: cleanedAt,
+        };
+        const sanitizedSettingsRow = sanitizeSettings(
+          mergedSettingsInput,
+          existingSt,
+          true,
+          true
+        );
+        await tx
+          .insert(schema.settings)
+          .values([sanitizedSettingsRow])
+          .onConflictDoUpdate({
+            target: schema.settings.id,
+            set: sanitizedSettingsRow,
+          });
+
+        // Update Pos Kas / Rekening klien bila diaktifkan
+        if (clientSetup.applyCashAccounts && clientSetup.cashAccounts.length > 0) {
+          const sanitizedAccounts = clientSetup.cashAccounts.map(sanitizeCashAccount);
+          if (groups.financeCash) {
+            await tx.delete(schema.cashAccounts);
+            await tx.insert(schema.cashAccounts).values(sanitizedAccounts);
+          } else {
+            const remainingTxRefs = await tx
+              .select({ accountId: schema.cashTransactions.accountId })
+              .from(schema.cashTransactions);
+            const protectedIds = new Set<string>([
+              ...sanitizedAccounts.map((a) => a.id),
+              ...remainingTxRefs.map((r) => String(r.accountId || "")).filter(Boolean),
+            ]);
+            if (protectedIds.size > 0) {
+              await tx
+                .delete(schema.cashAccounts)
+                .where(notInArray(schema.cashAccounts.id, Array.from(protectedIds)));
+            }
+            for (const acc of sanitizedAccounts) {
+              await tx
+                .insert(schema.cashAccounts)
+                .values([acc])
+                .onConflictDoUpdate({
+                  target: schema.cashAccounts.id,
+                  set: acc,
+                });
+            }
+          }
+          updatedCashAccountsCount = sanitizedAccounts.length;
+        }
+
+        // Tambahkan akun user baru klien bila ada
+        if (clientSetup.newUsers.length > 0) {
+          const remainingUsers = await tx
+            .select({ username: schema.users.username })
+            .from(schema.users);
+          const existingUsernamesSet = new Set(
+            remainingUsers.map((u) => String(u.username || "").toLowerCase())
+          );
+          const usersToInsert = clientSetup.newUsers
+            .filter((nu) => !existingUsernamesSet.has(nu.username.toLowerCase()))
+            .map((nu) =>
+              sanitizeUserForInsert(
+                {
+                  id: `usr-${crypto.randomUUID().slice(0, 8)}`,
+                  username: nu.username,
+                  name: nu.name,
+                  role: nu.role,
+                  department: nu.department || nu.role,
+                  pin: nu.pin,
+                },
+                nu.pin
+              )
+            );
+          if (usersToInsert.length > 0) {
+            await tx.insert(schema.users).values(usersToInsert);
+            createdUsersCount = usersToInsert.length;
+          }
+        }
+
+        await tx.insert(schema.auditLogs).values(cleanAudit);
+      });
+
+      const afterCounts = await getDatabaseTableCounts();
+      bumpDataVersion();
+      res.json({
+        success: true,
+        summary: buildCleaningSummary(beforeCounts, afterCounts, groups),
+        beforeCounts,
+        afterCounts,
+        autoSeedDisabled: disableAutoSeed,
+        createdUsersCount,
+        updatedCashAccountsCount,
+      });
+    } catch (err: any) {
+      console.error("Gagal menjalankan pembersihan data klien:", err);
+      res.status(500).json({ error: err?.message || "Gagal membersihkan data klien" });
     }
   });
 
