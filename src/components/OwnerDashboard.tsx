@@ -824,68 +824,31 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* ─── Header & Strategic Filters ───────────────────────────────────── */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
-        <div className="space-y-1.5 max-w-2xl">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200/60 shadow-2xs">
-              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-              Executive Suite
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              {netProfitMargin >= 20 ? "Operasional Prima (Sehat)" : "Kondisi Stabil"}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Executive Owner Dashboard
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Kesehatan finansial, profitabilitas riil, efisiensi rasio biaya, dan laporan kinerja terpadu Julia's.
-          </p>
-        </div>
-
-        {/* Action & Period Selector */}
-        <div className="flex flex-col items-stretch xl:items-end gap-2 shrink-0">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            {/* Animated Sliding Pill Period Tabs */}
-            <div className="bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-xs p-1 rounded-2xl flex items-center border border-slate-200/80 dark:border-slate-700 text-xs shadow-inner overflow-x-auto no-scrollbar shrink-0">
-              {[
-                { id: "today", label: "Hari Ini" },
-                { id: "7_days", label: "7 Hari" },
-                { id: "this_month", label: "Bulan Ini" },
-                { id: "last_month", label: "Bulan Lalu" },
-                { id: "this_year", label: "Tahun Ini" },
-                { id: "month", label: "Pilih Bulan" },
-                { id: "custom", label: "Rentang Hari" },
-              ].map((p) => {
-                const isActive = period === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPeriod(p.id as any)}
-                    className={`relative px-2.5 sm:px-3 py-1.5 rounded-xl font-semibold transition-colors duration-200 cursor-pointer whitespace-nowrap ${
-                      isActive
-                        ? "text-slate-900 dark:text-slate-100"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="ownerPeriodTab"
-                        className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/60 dark:border-slate-700"
-                        transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                      />
-                    )}
-                    <span className="relative z-10">{p.label}</span>
-                  </button>
-                );
-              })}
+      <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-coffee-sm space-y-4">
+        {/* Baris 1: Judul, Badge & Tombol Aksi Eksekutif */}
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1 max-w-2xl">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-500/30 shadow-2xs whitespace-nowrap">
+                <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300" />
+                Executive Suite
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-500/30 shadow-2xs whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                {netProfitMargin >= 20 ? "Operasional Prima (Sehat)" : "Kondisi Stabil"}
+              </span>
             </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+              Executive Owner Dashboard
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Kesehatan finansial, profitabilitas riil, efisiensi rasio biaya, dan laporan kinerja terpadu Julia's.
+            </p>
+          </div>
 
-            {/* 1-Click Master Executive Report Exports & Jumps */}
-            <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+          {/* 1-Click Master Executive Report Exports & Jumps */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={handleExportExecutivePDF}
               disabled={isExporting !== null}
@@ -905,28 +868,65 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
               <span>{isExporting === "xlsx" ? "Memproses..." : "Excel Master"}</span>
             </button>
 
-            {/* Quick Jump Buttons for Owner */}
             <button
               onClick={() => onNavigate("finance_reports")}
-              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
             >
-              <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <span>Laporan P&L</span>
+              <FileText className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+              <span>Laporan P&amp;L</span>
             </button>
 
             <button
               onClick={() => handleOpenCopilot("insights")}
-              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200/80 hover:bg-brand-100 hover:text-brand-900 shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+              className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-brand-50 dark:bg-brand-500/20 text-brand-700 dark:text-brand-200 border border-brand-200/80 dark:border-brand-500/30 hover:bg-brand-100 dark:hover:bg-brand-500/30 hover:text-brand-900 dark:hover:text-white shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
               title="Buka Audit & Rekomendasi Eksekutif Toko"
             >
-              <Sparkles className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+              <Sparkles className="w-3.5 h-3.5 text-brand-600 dark:text-brand-300 shrink-0" />
               <span>Ringkasan Eksekutif AI</span>
             </button>
           </div>
+        </div>
+
+        {/* Baris 2: Toolbar Filter Periode Inset (Lapisan 3) */}
+        <div className="rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 p-2 sm:p-2.5 flex flex-wrap items-center justify-between gap-2.5">
+          {/* Animated Sliding Pill Period Tabs */}
+          <div className="max-w-full bg-white/90 dark:bg-slate-900/80 backdrop-blur-xs p-1 rounded-xl flex items-center border border-slate-200/80 dark:border-slate-700 text-xs shadow-inner overflow-x-auto no-scrollbar">
+            {[
+              { id: "today", label: "Hari Ini" },
+              { id: "7_days", label: "7 Hari" },
+              { id: "this_month", label: "Bulan Ini" },
+              { id: "last_month", label: "Bulan Lalu" },
+              { id: "this_year", label: "Tahun Ini" },
+              { id: "month", label: "Pilih Bulan" },
+              { id: "custom", label: "Rentang Hari" },
+            ].map((p) => {
+              const isActive = period === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPeriod(p.id as any)}
+                  className={`relative px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold transition-colors duration-200 cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="ownerPeriodTab"
+                      className="absolute inset-0 bg-brand-50 dark:bg-brand-500/20 rounded-lg shadow-2xs border border-brand-200/70 dark:border-brand-500/30"
+                      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                    />
+                  )}
+                  <span className="relative z-10">{p.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {period === "month" && (
-            <div className="flex items-center justify-end gap-2 text-xs">
+            <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-500 dark:text-slate-400 font-semibold">
                 Bulan Terpilih:
               </span>
@@ -940,7 +940,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ onNavigate }) =>
           )}
 
           {period === "custom" && (
-            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="text-slate-500 dark:text-slate-400 font-semibold">
                 Rentang Hari:
               </span>

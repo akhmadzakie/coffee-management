@@ -1014,7 +1014,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ onNavigate }
           {currentUser?.role === "FINANCE" || currentUser?.role === "SUPER_ADMIN" ? (
             <button
               onClick={() => onNavigate("bank_reconciliation")}
-              className="w-full mt-4 py-2.5 rounded-2xl bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full mt-4 py-2.5 rounded-2xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-500/20 dark:hover:bg-brand-500/30 text-brand-700 dark:text-brand-200 border border-brand-200/70 dark:border-brand-500/30 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>Buka Rekonsiliasi Bank</span>
               <ArrowRight className="w-3.5 h-3.5" />
